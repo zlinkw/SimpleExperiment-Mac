@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005x-yaml（passed，待提交）
+## 当前批次 mac-doc-020（passed，YAML 候选使用说明/发布门禁）
+- 7 文件以内：两仓 README、包内配置说明、prepare/门禁测试/配置说明测试、本文档；同步 Mac 结果路径的 YAML 引号用法与当前验证范围，保留更新入口及 M5 边界。
+- mac-005x-yaml `17ba8b376231633cdd062306b287f46b26d68078` 已普通推送并 fetch 核对 origin/master。
+- passed build/221 闭包/面板 2/vm.Script、macSetupGuide 1、macRelease 4 串行、三份文档 UTF8/更新入口/验收范围及 diff；新增 macPlanResultCandidates/jsonConfigOnboarding 门禁。下一批版本元数据和本机配套发布，不安装扩展。
+
+### 前批 mac-005x-yaml（passed）
 - 4 文件：PlanBuilder.legacy.ts、mac/ResultCandidateYaml.ts、新 macPlanResultCandidates.test.js、本文档。
 - 结果 single-line YAML scalar 单次解码：单双引号/转义、hash/逗号/实际空格；块/flow 列表与对象路径、命令目标保持真实 POSIX 拼写。Mac 候选完整路径去重，保留占位符，不借用另一目录同名文件；错误路径不修复。非 Mac 原契约折叠保留。
 - passed npm run build：221 模块清单、面板脚本 2；npm run verify:package-runtime：221 闭包；vm.Script 与 git diff --check。

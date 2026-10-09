@@ -25,4 +25,5 @@ test("Mac configuration button opens the bundled Mac guide without saved-session
   assert.doesNotMatch(guide,/Windows \+ VS Code|安装最新版 `simple-local\.simple-sftp`|配置 Xshell 本地隧道并保存/);
   for (const text of ["首尾空格", "不当作空格解码", "区分大小写", "非空非法行会拒绝保存", "只读目录浏览", "完整绝对路径"])
     assert.ok(guide.includes(text), text);
+  for (const text of ["YAML 引号", "解码一次", "多行 scalar"]) assert.ok(guide.includes(text), text);
 });
