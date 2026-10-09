@@ -1,0 +1,9 @@
+{
+  "name": "results-import-export-profile",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "importStrategy": "merge",
+    "exportIncludesSchema": true
+  }
+}

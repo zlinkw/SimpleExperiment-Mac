@@ -1,0 +1,19 @@
+{
+  "name": "delete-sync-race",
+  "servers": ["hub", "nwpu5"],
+  "steps": [
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 6,
+        "type": "experiment_traces",
+        "generatedAt": "2026-01-01T00:00:06Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "payload": { "experimentTraces": [{ "runKey": "deleted", "status": "delete_failed" }] }
+      }
+    }
+  ],
+  "expect": { "deletedNotArchived": true }
+}

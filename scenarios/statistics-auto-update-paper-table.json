@@ -1,0 +1,9 @@
+{
+  "name": "statistics-auto-update-paper-table",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "statistics": true,
+    "paperTableUpdated": true
+  }
+}

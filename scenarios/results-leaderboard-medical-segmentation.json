@@ -1,0 +1,2 @@
+{"name":"results-leaderboard-medical-segmentation","servers":["hub"],"steps":[],"expect":{"aggregate":"mean_std","metrics":["DSC","ASD","HD95"]}}
+

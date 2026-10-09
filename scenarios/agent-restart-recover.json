@@ -1,0 +1,20 @@
+{
+  "name": "agent-restart-recover",
+  "servers": ["hub"],
+  "steps": [
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 5,
+        "type": "agent_heartbeat",
+        "generatedAt": "2026-01-01T00:00:05Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "payload": { "agentVersion": "0.3.0" }
+      }
+    }
+  ],
+  "expect": { "agentStatus": "streaming" }
+}
+

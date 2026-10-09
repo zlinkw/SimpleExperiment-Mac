@@ -1,0 +1,8 @@
+{
+  "name": "tunnel manual refresh",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "refreshProfile": "manual_only"
+  }
+}

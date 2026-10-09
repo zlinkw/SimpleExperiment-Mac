@@ -1,0 +1,9 @@
+{
+  "name": "output-contract-missing-case-csv",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "contract": "simple_standard_ai_output",
+    "missing": "metrics_case.csv"
+  }
+}

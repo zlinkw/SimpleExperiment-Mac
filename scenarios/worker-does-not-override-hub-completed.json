@@ -1,0 +1,8 @@
+{
+  "name": "worker-does-not-override-hub-completed",
+  "servers": ["hub", "worker-a"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "scheduler_snapshot", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "payload": { "schedulerStates": [{ "runKey": "r1", "status": "completed" }] } } }
+  ],
+  "expect": { "hubTerminalAuthoritative": true }
+}

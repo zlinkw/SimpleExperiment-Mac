@@ -1,0 +1,8 @@
+{
+  "name": "hub-up-one-worker-down",
+  "servers": ["hub", "worker-a", "worker-b"],
+  "steps": [
+    { "action": "serverOffline", "serverId": "worker-b" }
+  ],
+  "expect": { "workerFailureIsolated": true }
+}

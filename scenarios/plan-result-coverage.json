@@ -1,0 +1,9 @@
+{
+  "name": "plan-result-coverage",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "coverage": true,
+    "primaryMetric": "DSC"
+  }
+}

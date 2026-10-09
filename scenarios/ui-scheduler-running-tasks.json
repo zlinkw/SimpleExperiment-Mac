@@ -1,0 +1,8 @@
+{
+  "name": "ui scheduler running tasks",
+  "servers": ["hub", "worker-a"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "scheduler_snapshot", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "payload": { "schedulerStates": [ { "plan": "plan-a", "running_experiments": [ { "run_key": "run-1", "case": "train", "worker_id": "worker-a", "gpu_ids": [0] } ], "pending_experiments": [ { "run_key": "run-2", "case": "queued" } ], "completed_experiments": [ { "run_key": "run-3", "case": "done" } ], "failed_experiments": [ { "run_key": "run-4", "case": "bad" } ] } ] } } }
+  ],
+  "expect": { "running": 1, "queued": 1, "completed": 1, "failed": 1 }
+}

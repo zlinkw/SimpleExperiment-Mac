@@ -1,0 +1,9 @@
+{
+  "name": "subgroup-analysis-missing-modality",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "subgroup": "missing_pattern",
+    "warningOnSmallGroup": true
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "output-capability-matrix",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "output_capability_matrix",
+    "capabilities": ["leaderboard", "paper_table", "case_level_analysis", "patient_leakage_check"]
+  },
+  "steps": []
+}

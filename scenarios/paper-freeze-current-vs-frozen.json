@@ -1,0 +1,9 @@
+{
+  "name": "paper-freeze-current-vs-frozen",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "paper_freeze",
+    "diff": ["resultIds changed", "markdown changed"]
+  },
+  "steps": []
+}

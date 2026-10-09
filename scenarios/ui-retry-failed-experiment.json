@@ -1,0 +1,9 @@
+{
+  "name": "ui retry failed experiment",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "scheduler_snapshot", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "hubId": "hub", "payload": { "schedulerStates": [ { "runKey": "run-failed", "status": "failed" } ] } } },
+    { "action": "tunnelAction", "tunnelAction": "retry-experiment", "opId": "op-retry" }
+  ],
+  "expect": { "action": "retry-experiment" }
+}

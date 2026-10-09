@@ -1,0 +1,10 @@
+{
+  "name": "tunnel-quality-statistics-paper-table-no-ssh",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "run-quality-gate", "opId": "quality-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "run-statistics", "opId": "statistics-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "export-paper-table", "opId": "paper-table-no-ssh" }
+  ],
+  "expect": { "transport": "xshell_tunnel_realtime" }
+}

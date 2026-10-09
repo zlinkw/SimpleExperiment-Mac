@@ -1,0 +1,6 @@
+{
+  "name": "realtime result parsed paper table update",
+  "servers": [],
+  "steps": [],
+  "expect": { "events": [ "result_parsed", "paper_table_updated" ] }
+}

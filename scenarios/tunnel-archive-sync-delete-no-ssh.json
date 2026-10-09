@@ -1,0 +1,10 @@
+{
+  "name": "tunnel-archive-sync-delete-no-ssh",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "archive-artifacts", "opId": "archive-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "sync-artifacts", "opId": "sync-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "delete-artifacts", "opId": "delete-no-ssh" }
+  ],
+  "expect": { "transport": "xshell_tunnel_realtime" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "ui parse results quality statistics",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "parse-results", "opId": "op-parse" },
+    { "action": "tunnelAction", "tunnelAction": "run-quality-gate", "opId": "op-quality" },
+    { "action": "tunnelAction", "tunnelAction": "run-statistics", "opId": "op-stats" }
+  ],
+  "expect": { "results": "updated" }
+}

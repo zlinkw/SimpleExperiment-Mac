@@ -1,0 +1,11 @@
+{
+  "name": "tunnel-output-contract-case-analysis-no-ssh",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "check-output-contract", "opId": "contract-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "parse-case-level", "opId": "case-parse-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "run-leakage-check", "opId": "leakage-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "run-subgroup-analysis", "opId": "subgroup-no-ssh" }
+  ],
+  "expect": { "transport": "xshell_tunnel_realtime" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "ui archive sync delete",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "archive-artifacts", "opId": "op-archive" },
+    { "action": "tunnelAction", "tunnelAction": "sync-artifacts", "opId": "op-sync" },
+    { "action": "tunnelAction", "tunnelAction": "delete-artifacts", "opId": "op-delete" }
+  ],
+  "expect": { "danger": "confirmed" }
+}

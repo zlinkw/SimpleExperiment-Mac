@@ -1,0 +1,8 @@
+{
+  "name": "realtime scheduler update",
+  "servers": [],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "scheduler_snapshot", "generatedAt": "2026-01-01T00:00:00Z", "source": "hub_agent", "hubId": "hub", "payload": { "schedulerStates": [ { "runKey": "r1", "status": "running" } ] } } }
+  ],
+  "expect": { "runKey": "r1" }
+}

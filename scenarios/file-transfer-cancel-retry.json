@@ -1,0 +1,10 @@
+{
+  "name": "file transfer cancel retry",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "cancel": true,
+    "retry": true,
+    "transport": "http_over_xshell_tunnel"
+  }
+}

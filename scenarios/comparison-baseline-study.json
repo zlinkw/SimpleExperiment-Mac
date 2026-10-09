@@ -1,0 +1,9 @@
+{
+  "name": "comparison-baseline-study",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "comparisonType": "baseline_comparison",
+    "methods": ["ours", "baseline"]
+  }
+}

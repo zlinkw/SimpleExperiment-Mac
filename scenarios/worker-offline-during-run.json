@@ -1,0 +1,36 @@
+{
+  "name": "worker-offline-during-run",
+  "servers": ["hub", "nwpu5", "nwpu2"],
+  "steps": [
+    { "action": "serverOffline", "serverId": "nwpu5" },
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 3,
+        "type": "worker_health",
+        "generatedAt": "2026-01-01T00:00:03Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "workerId": "nwpu5",
+        "partialFailure": true,
+        "payload": { "status": "degraded" }
+      }
+    },
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 4,
+        "type": "gpu_snapshot",
+        "generatedAt": "2026-01-01T00:00:04Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "workerId": "nwpu2",
+        "payload": { "workerId": "nwpu2", "gpus": [{ "index": 0, "memoryUsedMb": 1 }] }
+      }
+    }
+  ],
+  "expect": { "healthyWorkerGpu": "nwpu2" }
+}
+

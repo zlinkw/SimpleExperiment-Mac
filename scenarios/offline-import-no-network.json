@@ -1,0 +1,9 @@
+{
+  "name": "offline import no network",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "connectionMode": "offline_import",
+    "network": "disabled"
+  }
+}

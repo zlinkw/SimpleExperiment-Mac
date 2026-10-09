@@ -1,0 +1,9 @@
+{
+  "name": "manual-review-paper-ready",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "manual_review",
+    "state": "paper_ready"
+  },
+  "steps": []
+}

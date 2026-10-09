@@ -1,0 +1,20 @@
+{
+  "name": "stream-journal-gap",
+  "servers": ["hub"],
+  "steps": [
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 100,
+        "type": "agent_warning",
+        "generatedAt": "2026-01-01T00:00:10Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "payload": { "code": "journal_gap" }
+      }
+    }
+  ],
+  "expect": { "agentStatus": "streaming" }
+}
+

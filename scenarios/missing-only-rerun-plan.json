@@ -1,0 +1,9 @@
+{
+  "name": "missing-only-rerun-plan",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "missing_only_rerun",
+    "expectedReruns": 3
+  },
+  "steps": []
+}

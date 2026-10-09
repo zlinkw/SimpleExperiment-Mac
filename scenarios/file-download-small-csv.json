@@ -1,0 +1,10 @@
+{
+  "name": "file download small csv",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "fileApi": "download",
+    "remotePath": "results/metrics.csv",
+    "sha256": "verified"
+  }
+}

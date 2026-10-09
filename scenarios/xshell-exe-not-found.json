@@ -1,0 +1,11 @@
+{
+  "name": "xshell exe not found",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "integrationStatus": "failed",
+    "errorCode": "XSHELL_NOT_FOUND",
+    "suggestion": "select_xshell_exe"
+  }
+}
+

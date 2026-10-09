@@ -1,0 +1,9 @@
+{
+  "name": "comparison-missing-modality-robustness",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "template": "multimodal_missing_modality_comparison",
+    "robustness": true
+  }
+}

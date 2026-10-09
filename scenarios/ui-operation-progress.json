@@ -1,0 +1,9 @@
+{
+  "name": "ui operation progress",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "operation_started", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "operationId": "op-1", "payload": { "type": "runPlan", "status": "running", "progress": 5 } } },
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 2, "type": "operation_progress", "generatedAt": "2026-07-01T00:00:01Z", "source": "hub_agent", "operationId": "op-1", "payload": { "type": "runPlan", "status": "running", "progress": 50, "message": "dispatching" } } }
+  ],
+  "expect": { "operationId": "op-1", "progress": 50 }
+}

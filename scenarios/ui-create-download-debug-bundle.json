@@ -1,0 +1,9 @@
+{
+  "name": "ui create download debug bundle",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "create-debug-bundle", "opId": "op-debug" },
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "operation_completed", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "hubId": "hub", "operationId": "op-debug", "payload": { "type": "create-debug-bundle", "status": "completed", "bundlePath": "simple_cluster/debug/debug-bundle.zip" } } }
+  ],
+  "expect": { "bundlePath": "simple_cluster/debug/debug-bundle.zip" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "tunnel-legacy-config-migrated",
+  "servers": ["hub"],
+  "metadata": {
+    "legacyFields": ["sshTransportMode", "controlMaster", "workerSsh"],
+    "connectionMode": "xshell_tunnel_realtime"
+  },
+  "steps": [],
+  "expect": { "legacySshIgnored": true }
+}

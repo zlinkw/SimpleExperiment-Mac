@@ -1,0 +1,12 @@
+{
+  "name": "ui offline snapshot gpu tasks",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "offlineSnapshot": {
+      "gpu": { "worker-a": [ { "index": 0, "name": "RTX 4090" } ] },
+      "schedulerStates": [ { "runKey": "offline-run", "status": "completed" } ],
+      "experimentTraces": [ { "runKey": "offline-run", "status": "archived" } ]
+    }
+  }
+}

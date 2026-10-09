@@ -1,0 +1,9 @@
+{
+  "name": "comparison-reproduce-gap-report",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "reproductionGap": true,
+    "report": "markdown"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "tunnel-stop-experiment-no-ssh",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "stop-experiment", "opId": "stop-no-ssh" }
+  ],
+  "expect": { "transport": "xshell_tunnel_realtime" }
+}

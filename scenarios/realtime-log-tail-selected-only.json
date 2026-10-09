@@ -1,0 +1,6 @@
+{
+  "name": "realtime log tail selected only",
+  "servers": [],
+  "steps": [],
+  "expect": { "logTailOnlyForSelectedExperiment": true }
+}

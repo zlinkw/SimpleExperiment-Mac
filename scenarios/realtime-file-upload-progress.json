@@ -1,0 +1,6 @@
+{
+  "name": "realtime file upload progress",
+  "servers": [],
+  "steps": [],
+  "expect": { "direction": "upload", "progress": true }
+}

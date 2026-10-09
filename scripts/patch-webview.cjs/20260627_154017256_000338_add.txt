@@ -1,0 +1,56 @@
+const fs = require("fs");
+
+const file = "src/extension.ts";
+let text = fs.readFileSync(file, "utf8");
+const start = text.indexOf("    function renderServers() {");
+const end = text.indexOf("    function renderArtifact() {", start);
+if (start < 0 || end < 0) throw new Error("render block not found");
+
+const replacement = String.raw`    function renderServers() {
+      const servers = state.cluster?.servers || [];
+      const roleOptions = role => ['gpu_worker','artifact_hub','manual_gateway'].map(r => '<option value="' + r + '"' + (role === r ? ' selected' : '') + '>' + r + '</option>').join('');
+      const field = (id, key, value, type = 'text') => '<label class="muted">' + key + '</label><input id="srv-' + id + '-' + key + '" data-server-input="' + id + '" data-key="' + key + '" type="' + type + '" value="' + esc(value || '') + '">';
+      return '<h2>服务器</h2><button id="addServer">添加服务器</button>' + servers.map(s => '<div class="row">' +
+        '<b>' + esc(s.name) + '</b> <span class="muted">' + esc(s.user ? s.user + '@' + s.host : s.host) + '</span>' +
+        '<div class="grid">' +
+        field(s.id, 'name', s.name) +
+        field(s.id, 'host', s.host) +
+        field(s.id, 'user', s.user) +
+        field(s.id, 'port', s.port, 'number') +
+        field(s.id, 'sshConfigHost', s.sshConfigHost) +
+        field(s.id, 'identityFile', s.identityFile) +
+        '<label class="muted">role</label><select id="srv-' + s.id + '-role" data-server-input="' + s.id + '" data-key="role">' + roleOptions(s.role) + '</select>' +
+        field(s.id, 'remoteProjectDir', s.remoteProjectDir) +
+        field(s.id, 'artifactRoot', s.artifactRoot) +
+        field(s.id, 'condaEnv', s.condaEnv) +
+        field(s.id, 'gpuCount', s.gpuCount, 'number') +
+        field(s.id, 'maxGpus', s.maxGpus, 'number') +
+        '</div>' +
+        '<div class="' + (s.loginStatus === 'ok' ? 'ok' : 'bad') + '">login=' + esc(s.loginStatus || 'unknown') + '</div>' +
+        (s.lastError ? '<div class="bad">' + esc(s.lastError) + '</div>' : '') +
+        '<button data-save-server="' + esc(s.id) + '">保存服务器参数</button>' +
+        '<button data-test-login="' + esc(s.id) + '">测试登录</button>' +
+        '<button data-set-hub="' + esc(s.id) + '">设为 Hub</button>' +
+        '<button data-sync-worker="' + esc(s.id) + '">同步到 Hub</button>' +
+        '<button data-delete-server="' + esc(s.id) + '">删除</button>' +
+      '</div>').join('');
+    }
+    function renderGpu() {
+      const cluster = state.cluster || {};
+      const servers = cluster.servers || [];
+      return '<h2>GPU 状态 <span class="muted">仅手动刷新</span></h2><button id="scanGpu">手动刷新 GPU</button>' + servers.map(s => {
+        const gpus = cluster.gpu?.[s.id] || [];
+        if (!gpus.length) return '<div class="row"><b>' + esc(s.name) + '</b><div class="muted">暂无 GPU 数据</div></div>';
+        return '<div class="row"><b>' + esc(s.name) + '</b>' + gpus.map(g => '<div class="gpu">' +
+          '<div>GPU ' + esc(g.index) + ' ' + esc(g.name) + '</div>' +
+          '<div>显存 ' + esc(g.memoryUsedMb) + '/' + esc(g.memoryTotalMb) + ' MB，利用率 ' + esc(g.utilizationGpu) + '%</div>' +
+          '<div class="muted">进程：' + esc((g.processes || []).map(p => p.pid + ':' + p.processName + '(' + p.usedMemoryMb + 'MB)').join(', ') || '无') + '</div>' +
+        '</div>').join('') + '</div>';
+      }).join('');
+    }
+`;
+
+text = text.slice(0, start) + replacement + text.slice(end);
+text = text.replace(/\r?\n\s*<button id="scanGpu">.*?GPU<\/button>/, "");
+text = text.replace(/\r?\n\s*document\.getElementById\('scanGpu'\)\.onclick = \(\) => post\('scanGpu'\);/, "");
+fs.writeFileSync(file, text, "utf8");

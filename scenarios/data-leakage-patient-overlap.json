@@ -1,0 +1,9 @@
+{
+  "name": "data-leakage-patient-overlap",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "leakage": "patient_overlap",
+    "status": "failed"
+  }
+}

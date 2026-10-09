@@ -1,0 +1,9 @@
+{
+  "name": "plan-reproduce-paper-candidate",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "reproduceMode": "rerun_all",
+    "tag": "paper-candidate"
+  }
+}

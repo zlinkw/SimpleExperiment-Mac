@@ -1,0 +1,9 @@
+{
+  "name": "case-level-error-analysis-classification",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "caseLevel": true,
+    "errorType": "false_positive"
+  }
+}

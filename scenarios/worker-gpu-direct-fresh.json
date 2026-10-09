@@ -1,0 +1,8 @@
+{
+  "name": "worker-gpu-direct-fresh",
+  "servers": ["hub", "worker-a"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "gpu_snapshot", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "workerId": "worker-a", "payload": { "gpus": [{ "index": 0, "source": "worker_direct" }] } } }
+  ],
+  "expect": { "workerGpuPreferred": true }
+}

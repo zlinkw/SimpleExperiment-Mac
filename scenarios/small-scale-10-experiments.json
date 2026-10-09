@@ -1,0 +1,32 @@
+{
+  "name": "small-scale-10-experiments",
+  "servers": ["hub"],
+  "steps": [
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 1,
+        "type": "scheduler_snapshot",
+        "generatedAt": "2026-01-01T00:00:00Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "payload": {
+          "schedulerStates": [
+            { "runKey": "exp1", "status": "running" },
+            { "runKey": "exp2", "status": "running" },
+            { "runKey": "exp3", "status": "running" },
+            { "runKey": "exp4", "status": "running" },
+            { "runKey": "exp5", "status": "running" },
+            { "runKey": "exp6", "status": "running" },
+            { "runKey": "exp7", "status": "running" },
+            { "runKey": "exp8", "status": "running" },
+            { "runKey": "exp9", "status": "running" },
+            { "runKey": "exp10", "status": "running" }
+          ]
+        }
+      }
+    }
+  ],
+  "expect": { "schedulerStatus": "running" }
+}

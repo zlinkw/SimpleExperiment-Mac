@@ -1,0 +1,6 @@
+{
+  "name": "realtime journal gap snapshot",
+  "servers": [],
+  "steps": [],
+  "expect": { "snapshotRecovery": true }
+}

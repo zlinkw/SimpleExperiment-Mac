@@ -1,0 +1,9 @@
+{
+  "name": "plan-constraint-filtering",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "constraints": true,
+    "filtered": true
+  }
+}

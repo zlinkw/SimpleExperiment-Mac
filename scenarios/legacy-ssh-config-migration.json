@@ -1,0 +1,8 @@
+{
+  "name": "legacy ssh config migration",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "migratedToTunnel": true
+  }
+}

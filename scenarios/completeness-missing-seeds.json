@@ -1,0 +1,9 @@
+{
+  "name": "completeness-missing-seeds",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "completeness_matrix",
+    "missing": [{ "method": "ours", "dataset": "VinDr", "split": "test", "seed": 43 }]
+  },
+  "steps": []
+}

@@ -1,0 +1,8 @@
+{
+  "name": "tunnel-run-plan-no-ssh",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "run-plan", "opId": "run-plan-no-ssh" }
+  ],
+  "expect": { "transport": "xshell_tunnel_realtime" }
+}

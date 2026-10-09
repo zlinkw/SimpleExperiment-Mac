@@ -1,0 +1,70 @@
+{
+  "name": "full-workflow-fake-acceptance",
+  "servers": ["hub", "worker-a", "worker-b"],
+  "metadata": {
+    "scope": [
+      "plan_registry",
+      "scheduler_lifecycle",
+      "agent_stream",
+      "result_registry",
+      "comparison_study",
+      "quality_gate",
+      "statistics",
+      "output_contract"
+    ],
+    "requiresRealSsh": false
+  },
+  "steps": [
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 1,
+        "type": "scheduler_snapshot",
+        "generatedAt": "2026-01-01T00:00:00Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "payload": {
+          "schedulerStates": [
+            { "runKey": "study:ours:VinDr:test:seed42", "status": "running", "workerId": "worker-a", "sessionId": "s1" },
+            { "runKey": "study:baseline:VinDr:test:seed42", "status": "queued", "workerId": "worker-b", "sessionId": "s2" }
+          ]
+        }
+      }
+    },
+    {
+      "action": "serverOffline",
+      "serverId": "worker-b"
+    },
+    {
+      "action": "agentEvent",
+      "event": {
+        "schemaVersion": 1,
+        "seq": 2,
+        "type": "scheduler_snapshot",
+        "generatedAt": "2026-01-01T00:00:05Z",
+        "source": "hub_agent",
+        "hubId": "hub",
+        "payload": {
+          "schedulerStates": [
+            { "runKey": "study:ours:VinDr:test:seed42", "status": "completed", "workerId": "worker-a", "sessionId": "s1" },
+            { "runKey": "study:baseline:VinDr:test:seed42", "status": "failed", "workerId": "worker-b", "sessionId": "s2" }
+          ]
+        }
+      }
+    },
+    {
+      "action": "serverOnline",
+      "serverId": "worker-b"
+    },
+    {
+      "action": "remoteCommand",
+      "serverId": "worker-b",
+      "command": "retry missing-only plan"
+    }
+  ],
+  "expect": {
+    "schedulerStatus": "completed_or_failed",
+    "fakeRuntime": true
+  }
+}

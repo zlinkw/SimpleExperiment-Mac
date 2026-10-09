@@ -1,0 +1,9 @@
+{
+  "name": "ui export paper table download",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "export-paper-table", "opId": "op-paper" },
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "operation_completed", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "hubId": "hub", "operationId": "op-paper", "payload": { "type": "export-paper-table", "status": "completed", "path": "exports/paper_table.csv" } } }
+  ],
+  "expect": { "path": "exports/paper_table.csv" }
+}

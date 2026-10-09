@@ -1,0 +1,6 @@
+{
+  "name": "worker-gpu-stale-hub-fallback",
+  "servers": ["hub", "worker-a"],
+  "steps": [],
+  "expect": { "hubGpuFallback": true }
+}

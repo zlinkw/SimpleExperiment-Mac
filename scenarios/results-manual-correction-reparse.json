@@ -1,0 +1,9 @@
+{
+  "name": "results-manual-correction-reparse",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "lockedResult": true,
+    "manualOverridePreserved": true
+  }
+}

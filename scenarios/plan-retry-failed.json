@@ -1,0 +1,9 @@
+{
+  "name": "plan-retry-failed",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "reproduceMode": "retry_failed",
+    "skipCompleted": true
+  }
+}

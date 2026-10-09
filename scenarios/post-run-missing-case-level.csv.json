@@ -1,0 +1,9 @@
+{
+  "name": "post-run-missing-case-level-csv",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "post_run_checklist",
+    "warning": "metrics_case.csv missing"
+  },
+  "steps": []
+}

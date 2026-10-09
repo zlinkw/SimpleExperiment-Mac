@@ -1,0 +1,9 @@
+{
+  "name": "results-paper-template-missing-modality",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "template": "missing_modality_robustness_table",
+    "formats": ["markdown", "latex_booktabs"]
+  }
+}

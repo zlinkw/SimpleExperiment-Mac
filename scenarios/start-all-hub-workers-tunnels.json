@@ -1,0 +1,8 @@
+{
+  "name": "start-all-hub-workers-tunnels",
+  "servers": ["hub", "worker-a", "worker-b"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "start-all-tunnels", "opId": "op-start-all" }
+  ],
+  "expect": { "hubFirst": true, "workerFailureIsolated": true }
+}

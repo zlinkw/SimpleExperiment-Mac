@@ -1,0 +1,9 @@
+{
+  "name": "results-relative-improvement-baseline",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "aggregation": "relative_improvement",
+    "baseline": "baseline"
+  }
+}

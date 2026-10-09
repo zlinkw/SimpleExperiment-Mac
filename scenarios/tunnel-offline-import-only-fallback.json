@@ -1,0 +1,10 @@
+{
+  "name": "tunnel-offline-import-only-fallback",
+  "servers": [],
+  "metadata": {
+    "connectionMode": "offline_import",
+    "networkAccess": false
+  },
+  "steps": [],
+  "expect": { "fallback": "offline_import" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "file transfer sha256 mismatch",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "status": "failed",
+    "errorCode": "SHA256_MISMATCH",
+    "retryable": false
+  }
+}

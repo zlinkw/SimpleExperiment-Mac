@@ -1,0 +1,9 @@
+{
+  "name": "ui gpu all servers",
+  "servers": ["hub", "worker-a", "worker-b"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "gpu_snapshot", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "workerId": "worker-a", "payload": { "gpus": [ { "index": 0, "name": "RTX 4090" }, { "index": 1, "name": "RTX 4090" } ] } } },
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 2, "type": "gpu_snapshot", "generatedAt": "2026-07-01T00:00:01Z", "source": "hub_agent", "workerId": "worker-b", "payload": { "gpus": [ { "gpu_index": 0, "gpu_name": "A6000" } ] } } }
+  ],
+  "expect": { "servers": 2, "gpus": 3 }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "ui remote file browser download upload",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "file_transfer_progress", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "hubId": "hub", "transferId": "download-1", "payload": { "direction": "download", "remotePath": "results/a.csv", "status": "completed", "transferredBytes": 10, "totalBytes": 10 } } },
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 2, "type": "file_transfer_progress", "generatedAt": "2026-07-01T00:00:01Z", "source": "hub_agent", "hubId": "hub", "transferId": "upload-1", "payload": { "direction": "upload", "remotePath": "simple_cluster/a.txt", "status": "completed", "transferredBytes": 5, "totalBytes": 5 } } }
+  ],
+  "expect": { "fileBrowser": "download-upload" }
+}

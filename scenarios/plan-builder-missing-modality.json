@@ -1,0 +1,9 @@
+{
+  "name": "plan-builder-missing-modality",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "template": "missing_modality_experiment",
+    "matrix": true
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "realtime gpu update",
+  "servers": [],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "gpu_snapshot", "generatedAt": "2026-01-01T00:00:00Z", "source": "hub_agent", "hubId": "hub", "workerId": "w1", "payload": { "gpus": [ { "index": 0 } ] } } }
+  ],
+  "expect": { "workerId": "w1" }
+}

@@ -1,0 +1,1 @@
+{"name":"delete-recycle-view","servers":["hub"],"steps":[],"expect":{"recycleStates":["deleted","delete_failed"]}}

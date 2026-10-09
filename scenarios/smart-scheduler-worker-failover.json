@@ -1,0 +1,2 @@
+{"name":"smart-scheduler-worker-failover","servers":["hub","bad","ok"],"steps":[{"action":"serverOffline","serverId":"bad"}],"expect":{"schedulerDecision":"ok"}}
+

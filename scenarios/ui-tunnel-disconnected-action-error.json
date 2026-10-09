@@ -1,0 +1,8 @@
+{
+  "name": "ui tunnel disconnected action error",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "serverOffline", "serverId": "hub" }
+  ],
+  "expect": { "error": "tunnel 未连接" }
+}

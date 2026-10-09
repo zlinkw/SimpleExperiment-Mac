@@ -1,0 +1,10 @@
+#!/usr/bin/env node
+import { runRecordedCli } from "./cli";
+
+try {
+    process.exitCode = runRecordedCli(process.argv.slice(2));
+}
+catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+}

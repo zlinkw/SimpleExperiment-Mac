@@ -1,0 +1,8 @@
+{
+  "name": "worker-task-telemetry-enriches-hub-scheduler",
+  "servers": ["hub", "worker-a"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "scheduler_snapshot", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "payload": { "schedulerStates": [{ "runKey": "r1", "status": "running", "workerId": "worker-a" }] } } }
+  ],
+  "expect": { "workerTaskEnrichment": true }
+}

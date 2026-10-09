@@ -1,0 +1,9 @@
+{
+  "name": "tunnel-runtime-self-check-no-ssh",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "self-check", "opId": "self-check-no-ssh" },
+    { "action": "tunnelAction", "tunnelAction": "create-debug-bundle", "opId": "debug-no-ssh" }
+  ],
+  "expect": { "transport": "xshell_tunnel_realtime" }
+}

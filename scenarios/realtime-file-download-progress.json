@@ -1,0 +1,6 @@
+{
+  "name": "realtime file download progress",
+  "servers": [],
+  "steps": [],
+  "expect": { "direction": "download", "progress": true }
+}

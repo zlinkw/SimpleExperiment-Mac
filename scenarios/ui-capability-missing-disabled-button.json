@@ -1,0 +1,6 @@
+{
+  "name": "ui capability missing disabled button",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": { "disabledReason": "需要升级 Hub Agent" }
+}

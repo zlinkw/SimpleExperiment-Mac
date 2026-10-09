@@ -1,0 +1,9 @@
+{
+  "name": "pre-run-output-contract-warning",
+  "servers": ["hub"],
+  "metadata": {
+    "feature": "pre_run_checklist",
+    "warning": "output_contract_missing"
+  },
+  "steps": []
+}

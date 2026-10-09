@@ -1,0 +1,9 @@
+{
+  "name": "comparison-noise-level-curve",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "template": "robustness_noise_level_curve",
+    "curve": "noise_level"
+  }
+}

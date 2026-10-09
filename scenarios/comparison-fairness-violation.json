@@ -1,0 +1,9 @@
+{
+  "name": "comparison-fairness-violation",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "fairness": "failed",
+    "deviation": true
+  }
+}

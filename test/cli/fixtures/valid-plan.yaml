@@ -1,0 +1,14 @@
+suite: smoke
+mode: train
+base_config: configs/base.yaml
+seeds: [0]
+paper:
+  result_csv: experiments/results/smoke.csv
+runner:
+  train_command: python train.py --result-csv experiments/results/smoke.csv
+naming:
+  sweep_dir: work_dirs/{suite}
+  job_name: '{index}_{case}_seed{seed}'
+cases:
+  - case: baseline
+    overrides: {}

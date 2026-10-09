@@ -1,0 +1,9 @@
+{
+  "name": "quality-gate-missing-primary-metric",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "qualityGate": "failed",
+    "missingMetric": "DSC"
+  }
+}

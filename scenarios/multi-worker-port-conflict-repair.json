@@ -1,0 +1,6 @@
+{
+  "name": "multi-worker-port-conflict-repair",
+  "servers": ["hub", "worker-a", "worker-b"],
+  "steps": [],
+  "expect": { "repairPortConflicts": true }
+}

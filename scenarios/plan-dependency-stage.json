@@ -1,0 +1,9 @@
+{
+  "name": "plan-dependency-stage",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "dependency": true,
+    "stage": true
+  }
+}

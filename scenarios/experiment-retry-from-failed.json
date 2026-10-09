@@ -1,0 +1,2 @@
+{"name":"experiment-retry-from-failed","servers":["hub","w1"],"steps":[{"action":"agentEvent","event":{"schemaVersion":1,"seq":7,"type":"scheduler_snapshot","generatedAt":"2026-01-01T00:00:07Z","source":"hub_agent","hubId":"hub","payload":{"schedulerStates":[{"runKey":"r","status":"failed"}]}}}],"expect":{"retryAttempt":"attempt-2"}}
+

@@ -1,0 +1,8 @@
+{
+  "name": "ui experiment traces",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "agentEvent", "event": { "schemaVersion": 1, "seq": 1, "type": "experiment_trace", "generatedAt": "2026-07-01T00:00:00Z", "source": "hub_agent", "payload": { "run_key": "run-1", "status": "archived", "parse_status": "parsed", "tags": ["baseline"], "hub_job_dir": "work_dirs/run-1", "results_csv": "results/run-1.csv" } } }
+  ],
+  "expect": { "runKey": "run-1", "status": "archived" }
+}

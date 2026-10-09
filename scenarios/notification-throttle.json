@@ -1,0 +1,2 @@
+{"name":"notification-throttle","servers":["hub"],"steps":[],"expect":{"throttled":true}}
+

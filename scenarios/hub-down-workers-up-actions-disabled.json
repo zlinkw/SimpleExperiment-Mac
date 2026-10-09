@@ -1,0 +1,8 @@
+{
+  "name": "hub-down-workers-up-actions-disabled",
+  "servers": ["hub", "worker-a"],
+  "steps": [
+    { "action": "serverOffline", "serverId": "hub" }
+  ],
+  "expect": { "actionsDisabled": true, "workerTelemetryVisible": true }
+}

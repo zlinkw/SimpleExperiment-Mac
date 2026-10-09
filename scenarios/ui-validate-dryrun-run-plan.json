@@ -1,0 +1,10 @@
+{
+  "name": "ui validate dryrun run plan",
+  "servers": ["hub"],
+  "steps": [
+    { "action": "tunnelAction", "tunnelAction": "validate-plan", "opId": "op-validate" },
+    { "action": "tunnelAction", "tunnelAction": "dry-run-plan", "opId": "op-dryrun" },
+    { "action": "tunnelAction", "tunnelAction": "run-plan", "opId": "op-run" }
+  ],
+  "expect": { "plan": "accepted" }
+}

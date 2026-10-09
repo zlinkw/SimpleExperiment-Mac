@@ -1,0 +1,9 @@
+{
+  "name": "comparison-paper-reproduction",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "comparisonType": "paper_reproduction",
+    "checklist": true
+  }
+}

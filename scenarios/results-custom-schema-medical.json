@@ -1,0 +1,9 @@
+{
+  "name": "results-custom-schema-medical",
+  "servers": ["hub"],
+  "steps": [],
+  "expect": {
+    "schema": "medical_segmentation",
+    "metrics": ["DSC", "ASD", "HD95"]
+  }
+}

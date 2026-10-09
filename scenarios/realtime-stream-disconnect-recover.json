@@ -1,0 +1,6 @@
+{
+  "name": "realtime stream disconnect recover",
+  "servers": [],
+  "steps": [],
+  "expect": { "reconnectSinceSeq": true }
+}

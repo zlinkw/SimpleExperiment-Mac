@@ -1,0 +1,10 @@
+{
+  "name": "file transfer safe path reject",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "status": "blocked",
+    "errorCode": "SAFE_PATH_REJECTED",
+    "networkRequest": false
+  }
+}

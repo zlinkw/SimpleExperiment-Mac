@@ -1,0 +1,10 @@
+{
+  "name": "file download large stream",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "fileApi": "stream_download",
+    "tmpThenRename": true,
+    "progress": true
+  }
+}

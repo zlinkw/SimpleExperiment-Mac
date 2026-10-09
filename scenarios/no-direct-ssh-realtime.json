@@ -1,0 +1,6 @@
+{
+  "name": "no direct ssh realtime",
+  "servers": [],
+  "steps": [],
+  "expect": { "directRemoteFallback": false }
+}

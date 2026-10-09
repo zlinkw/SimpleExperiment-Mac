@@ -1,0 +1,45 @@
+# Local GPT workspace data
+.local-gpt/
+
+# VS Code workspace settings (machine-local)
+.vscode/
+
+# Runtime scratch / build artifacts
+.runtime/
+
+# Transient scratch scripts/logs (ad-hoc one-off files)
+_*.py
+_*.js
+_*.txt
+_*.md
+_*.html
+_run_test_full.txt
+
+# Build artifacts
+dist/
+*.vsix
+simple-experiment-0.1.5*.vsix
+dist/runtime/__pycache__/
+
+# Temp / scratch
+.tmp/
+tmp/
+*.tmp
+*.log
+
+# Dependencies (never commit)
+node_modules/
+
+# Local development workflow only; never publish batch planning notes.
+docs/target-mode-plan.md
+
+# SimpleExperiment runtime caches (local only, never commit)
+simple_cluster/
+
+# Ad-hoc backups
+*.bak
+
+# Mac fork source archive and local release artifacts
+baseline-source.zip
+release-artifacts/
+!docs/target-mode-plan.md

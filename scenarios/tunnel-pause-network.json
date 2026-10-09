@@ -1,0 +1,8 @@
+{
+  "name": "tunnel pause network",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "pauseAllBackgroundTraffic": true
+  }
+}

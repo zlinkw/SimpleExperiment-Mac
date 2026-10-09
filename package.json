@@ -1,0 +1,845 @@
+{
+  "name": "simple-experiment",
+  "displayName": "SimpleExperiment",
+  "description": "面向科研实验的 Xshell 本地隧道实时集群编排面板。",
+  "version": "0.5.263",
+  "publisher": "simple-local",
+  "extensionKind": [
+    "ui"
+  ],
+  "extensionDependencies": [
+    "simple-local.simple-sftp"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zlinkw/SimpleExperiment.git"
+  },
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:simpleExperiment.panel",
+    "onCommand:simpleExperiment.openPanel",
+    "onCommand:simpleExperiment.copyPanelDiagnostics",
+    "onCommand:simpleExperiment.restorePanel",
+    "onCommand:simpleExperiment.quickSetup",
+    "onCommand:simpleExperiment.bootstrapProject",
+    "onCommand:simpleExperiment.prepareAgents",
+    "onCommand:simpleExperiment.openSetupGuide",
+    "onCommand:simpleExperiment.configureXshellSavedSessions",
+    "onCommand:simpleExperiment.writeXshellAgentStartupCommands",
+    "onCommand:simpleExperiment.configureWorkerTunnels",
+    "onCommand:simpleExperiment.configureTunnelPorts",
+    "onCommand:simpleExperiment.configureXshellRealtimeTunnel",
+    "onCommand:simpleExperiment.startHubTunnel",
+    "onCommand:simpleExperiment.startWorkerTunnel",
+    "onCommand:simpleExperiment.startXshellRealtimeTunnel",
+    "onCommand:simpleExperiment.startAllXshellRealtimeTunnels",
+    "onCommand:simpleExperiment.startAllXshellConnections",
+    "onCommand:simpleExperiment.testAllTunnels",
+    "onCommand:simpleExperiment.showTunnelEndpointRegistry",
+    "onCommand:simpleExperiment.testXshellTunnel",
+    "onCommand:simpleExperiment.restartRealtimeStream",
+    "onCommand:simpleExperiment.pauseRealtimeStream",
+    "onCommand:simpleExperiment.resumeRealtimeStream",
+    "onCommand:simpleExperiment.pauseAllNetworkActivity",
+    "onCommand:simpleExperiment.generateXshellTunnelScript",
+    "onCommand:simpleExperiment.openTunnelStatus",
+    "onCommand:simpleExperiment.runXshellRealIntegrationCheck",
+    "onCommand:simpleExperiment.manualRefresh",
+    "onCommand:simpleExperiment.importOfflineBundle",
+    "onCommand:simpleExperiment.openLastCheckStaticReport",
+    "onCommand:simpleExperiment.copyLastCheckStaticReport",
+    "onCommand:simpleExperiment.runCheckStatic",
+    "onCommand:simpleExperiment.setupGitBackup",
+    "onCommand:simpleExperiment.removeGitBackup",
+    "onCommand:simpleExperiment.showGitBackupStatus",
+    "onCommand:simpleExperiment.syncToGitHub",
+    "onCommand:simpleExperiment.publishToGitHub"
+  ],
+  "main": "./dist/extension.js",
+  "bin": {
+    "simpleex": "./dist/cli.js"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "simpleExperiment.syncToGitHub",
+        "title": "SimpleExperiment：同步到 GitHub",
+        "icon": "$(repo-push)"
+      },
+      {
+        "command": "simpleExperiment.publishToGitHub",
+        "title": "SimpleExperiment：发布到 GitHub",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "simpleExperiment.setupGitBackup",
+        "title": "SimpleExperiment：配置提交自动备份",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "simpleExperiment.removeGitBackup",
+        "title": "SimpleExperiment：移除提交自动备份",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "simpleExperiment.showGitBackupStatus",
+        "title": "SimpleExperiment：查看备份状态",
+        "icon": "$(info)"
+      },
+      {
+        "command": "simpleExperiment.openPanel",
+        "title": "SimpleExperiment：打开面板",
+        "icon": "$(server-environment)"
+      },
+      {
+        "command": "simpleExperiment.copyPanelDiagnostics",
+        "title": "SimpleExperiment：复制 Panel 诊断",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "simpleExperiment.restorePanel",
+        "title": "SimpleExperiment：恢复 Panel",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "simpleExperiment.quickSetup",
+        "title": "SimpleExperiment：检查服务器配置",
+        "icon": "$(wand)"
+      },
+      {
+        "command": "simpleExperiment.bootstrapProject",
+        "title": "SimpleExperiment：识别工作区",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "simpleExperiment.prepareAgents",
+        "title": "SimpleExperiment：准备 Agent 并启动",
+        "icon": "$(server-process)"
+      },
+      {
+        "command": "simpleExperiment.openSetupGuide",
+        "title": "SimpleExperiment：打开配置说明",
+        "icon": "$(book)"
+      },
+      {
+        "command": "simpleExperiment.configureXshellSavedSessions",
+        "title": "SimpleExperiment：配置 Xshell 会话文件",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "simpleExperiment.writeXshellAgentStartupCommands",
+        "title": "SimpleExperiment：写入 Agent 自启动 RemoteCommand",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "simpleExperiment.configureWorkerTunnels",
+        "title": "SimpleExperiment：配置 Worker 隧道",
+        "icon": "$(server-process)"
+      },
+      {
+        "command": "simpleExperiment.configureTunnelPorts",
+        "title": "SimpleExperiment：配置隧道端口",
+        "icon": "$(ports-view-icon)"
+      },
+      {
+        "command": "simpleExperiment.configureXshellRealtimeTunnel",
+        "title": "SimpleExperiment：旧自动隧道配置（不推荐）",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "simpleExperiment.startHubTunnel",
+        "title": "SimpleExperiment：启动 Hub 隧道",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "simpleExperiment.startWorkerTunnel",
+        "title": "SimpleExperiment：启动 Worker 隧道",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "simpleExperiment.startXshellRealtimeTunnel",
+        "title": "SimpleExperiment：启动 Hub Xshell 会话",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "simpleExperiment.startAllXshellRealtimeTunnels",
+        "title": "SimpleExperiment：启动全部 Xshell 会话",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "simpleExperiment.startAllXshellConnections",
+        "title": "SimpleExperiment：启动全部 Xshell 连接",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "simpleExperiment.testAllTunnels",
+        "title": "SimpleExperiment：检测全部隧道",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "simpleExperiment.showTunnelEndpointRegistry",
+        "title": "SimpleExperiment：显示隧道端点清单",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "simpleExperiment.testXshellTunnel",
+        "title": "SimpleExperiment：检测 Xshell 隧道",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "simpleExperiment.restartRealtimeStream",
+        "title": "SimpleExperiment：重启实时流",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "simpleExperiment.pauseRealtimeStream",
+        "title": "SimpleExperiment：暂停实时流",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "simpleExperiment.resumeRealtimeStream",
+        "title": "SimpleExperiment：恢复实时流",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "simpleExperiment.pauseAllNetworkActivity",
+        "title": "SimpleExperiment：暂停全部网络活动",
+        "icon": "$(circle-slash)"
+      },
+      {
+        "command": "simpleExperiment.generateXshellTunnelScript",
+        "title": "SimpleExperiment：生成 Xshell 会话启动脚本",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "simpleExperiment.openTunnelStatus",
+        "title": "SimpleExperiment：打开隧道状态",
+        "icon": "$(json)"
+      },
+      {
+        "command": "simpleExperiment.runXshellRealIntegrationCheck",
+        "title": "SimpleExperiment：运行 Xshell 真实对接检测",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "simpleExperiment.manualRefresh",
+        "title": "SimpleExperiment：手动快照",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "simpleExperiment.importOfflineBundle",
+        "title": "SimpleExperiment：导入离线包",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "simpleExperiment.clearCache",
+        "title": "SimpleExperiment：清除缓存",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "simpleExperiment.verifyAgentVersion",
+        "title": "SimpleExperiment：校验 Agent 版本",
+        "icon": "$(check)"
+      },
+      {
+        "command": "simpleExperiment.openLastCheckStaticReport",
+        "title": "SimpleExperiment：打开静态检查报告",
+        "icon": "$(file)"
+      },
+      {
+        "command": "simpleExperiment.copyLastCheckStaticReport",
+        "title": "SimpleExperiment：复制静态检查报告",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "simpleExperiment.runCheckStatic",
+        "title": "SimpleExperiment：检查项目接入",
+        "icon": "$(checklist)"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "simpleExperiment.writeXshellAgentStartupCommands",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.configureXshellRealtimeTunnel",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.startHubTunnel",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.startWorkerTunnel",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.startXshellRealtimeTunnel",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.startAllXshellRealtimeTunnels",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.showTunnelEndpointRegistry",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.testXshellTunnel",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.restartRealtimeStream",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.pauseRealtimeStream",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.resumeRealtimeStream",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.pauseAllNetworkActivity",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.generateXshellTunnelScript",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.openTunnelStatus",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.runXshellRealIntegrationCheck",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.manualRefresh",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        },
+        {
+          "command": "simpleExperiment.importOfflineBundle",
+          "when": "config.simpleExperiment.showAdvancedCommands"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "secondarySidebar": [
+        {
+          "id": "simpleExperiment",
+          "title": "SimpleExperiment",
+          "icon": "$(server-environment)"
+        }
+      ]
+    },
+    "views": {
+      "simpleExperiment": [
+        {
+          "type": "webview",
+          "id": "simpleExperiment.panel",
+          "name": "集群",
+          "icon": "$(server-environment)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "SimpleExperiment",
+      "properties": {
+        "simpleExperiment.panel.retainContextWhenHidden": {
+          "type": "boolean",
+          "default": false,
+          "description": "隐藏 SimpleExperiment 面板时保留整个 Webview 上下文会增加长期内存占用。默认隐藏后释放上下文，并在重新显示时恢复轻量界面状态；仅在需要隐藏期间保持页面运行时启用。"
+        },
+        "simpleExperiment.gitBackup.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用提交自动备份：打开项目时自动安装 post-commit hook，提交后推送当前分支到远程。"
+        },
+        "simpleExperiment.gitBackup.remote": {
+          "type": "string",
+          "default": "origin",
+          "description": "自动备份使用的 git remote 名称。"
+        },
+        "simpleExperiment.gitBackup.verifyRemoteAccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "安装前校验远程可达性与推送凭据；校验失败时不写入 hook。"
+        },
+        "simpleExperiment.topologyMode": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "single_worker",
+            "worker_pool",
+            "hub_worker"
+          ],
+          "enumDescriptions": [
+            "尚未明确选择；旧 Hub + Worker 项目只读推断为 Hub 可用模式，仅 Worker 项目需要先确认。",
+            "恰好一台 Worker 在本机调度和保存，不使用 Hub 或自动备份。",
+            "两台及以上 Worker 各自调度确定性分片，不使用 Hub 或跨节点备份。",
+            "Hub 全局调度，至少一台 Worker 执行，并由 Hub 汇总状态和结果。"
+          ],
+          "scope": "resource",
+          "description": "当前项目的服务器拓扑。模式与启用端点数量不一致时阻止新运行；模式切换不会迁移已有任务或结果。"
+        },
+        "simpleExperiment.workspaceHostRoot": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "可选 Windows 宿主工作区根目录。仅用于将 Dev Container 工作区映射到 UI Extension Host；普通 Windows 工作区无需配置。"
+        },
+        "simpleExperiment.workspaceContainerRoot": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "可选 Dev Container 工作区根目录，例如 /workspaces。远程工作区副作用操作必须同时配置宿主根。"
+        },
+        "simpleExperiment.showAdvancedCommands": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "在命令面板中显示旧兼容、单端点、实时流和诊断恢复命令。关闭时不删除命令或面板入口。"
+        },
+        "simpleExperiment.planDir": {
+          "type": "string",
+          "default": "experiments/plans",
+          "scope": "resource",
+          "description": "相对于工作区根目录的实验计划目录。"
+        },
+        "simpleExperiment.results.planOutputRetention": {
+          "type": "string",
+          "enum": [
+            "latest-complete",
+            "keep-history"
+          ],
+          "default": "latest-complete",
+          "scope": "resource",
+          "description": "分布式 Plan 产物保留方式。同代码与相同 Plan 配置的重复运行以最新完整结果替代；不同版本保留，超过5个代码/配置版本时提示前往审核清理。删除旧 attempt 仍须核对完整路径并两次确认；取消、失败、身份未知或仅补跑时保留旧结果。keep-history 不主动建议同版本替换，仍提示版本超限。"
+        },
+        "simpleExperiment.codeSync.includePaths": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "description": "旧版额外上传路径；首次打开同步范围树时自动纳入选择。"
+        },
+        "simpleExperiment.codeSync.scopePaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "description": "本机与服务器同步的完整项目相对路径范围；未设置时默认非产物、非预训练权重目录。"
+        },
+        "simpleExperiment.serverSync.paths": {
+          "type": "array",
+          "default": [
+            "."
+          ],
+          "items": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "description": "Worker 之间同步的项目相对路径；默认整个项目，机器状态目录除外。在面板文件树中勾选。"
+        },
+        "simpleExperiment.remote.allowedRoots": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "description": "可选的远端项目父目录允许前缀。留空表示不按服务器名限制；配置后每个 Hub/Worker 必须使用列表内根目录或其子目录。"
+        },
+        "simpleExperiment.remote.deniedRoots": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "resource",
+          "description": "禁止用作远端项目父目录的前缀。用户配置优先于内置推断；此列表只做额外安全边界，不提供任何默认服务器路径。"
+        },
+        "simpleExperiment.resultCsvDir": {
+          "type": "string",
+          "default": "experiments/results",
+          "scope": "resource",
+          "description": "相对于工作区根目录的实验结果 CSV 默认目录。新 Plan 和未显式声明结果路径的任务使用此目录；已有 Plan 的显式结果路径优先。"
+        },
+        "simpleExperiment.projectAdapterRules": {
+          "type": "object",
+          "default": {},
+          "scope": "resource",
+          "description": "当前工作区的结果捕获规则、指标别名及 CSV 列映射。通过 SimpleExperiment 面板交互式维护；插件同步到 Agent 自有状态目录，不要求项目存在 experiments/simple_project.yaml。"
+        },
+        "simpleExperiment.connectionMode": {
+          "type": "string",
+          "default": "xshell_tunnel_realtime",
+          "enum": [
+            "xshell_tunnel_realtime",
+            "offline_import"
+          ],
+          "scope": "application",
+          "description": "连接模式。Xshell 实时隧道模式只访问 127.0.0.1 本地端点。"
+        },
+        "simpleExperiment.tunnel.localForwardPort": {
+          "type": "number",
+          "default": 18765,
+          "minimum": 1024,
+          "maximum": 65535,
+          "scope": "application",
+          "description": "Xshell 会话在 127.0.0.1 上监听的本地转发端口。"
+        },
+        "simpleExperiment.tunnel.remoteAgentPort": {
+          "type": "number",
+          "default": 18765,
+          "minimum": 1024,
+          "maximum": 65535,
+          "scope": "application",
+          "description": "Hub 上 127.0.0.1 监听的 Hub Agent 端口。"
+        },
+        "simpleExperiment.tunnel.agentToken": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "可选 Hub Agent token。诊断信息会自动脱敏。"
+        },
+        "simpleExperiment.tunnel.hubDisplayName": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Hub 在插件面板中的显示名称。为空时使用 Xshell 会话名、SSH 别名或主机名。"
+        },
+        "simpleExperiment.tunnel.remoteTmuxSessionPrefix": {
+          "type": "string",
+          "default": "simple",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
+          "scope": "application",
+          "description": "远端 tmux 会话名前缀，用于多用户共用服务器时区分归属；仅允许小写字母、数字、点、下划线和连字符。"
+        },
+        "simpleExperiment.tensorboard.port": {
+          "type": "number",
+          "default": 6006,
+          "minimum": 1024,
+          "maximum": 65535,
+          "scope": "application",
+          "description": "TensorBoard 在远端监听的端口，点击“打开 TensorBoard”时会重启该端口上的 <prefix>_tb tmux 会话。"
+        },
+        "simpleExperiment.tensorboard.logdir": {
+          "type": "string",
+          "default": "work_dirs",
+          "scope": "application",
+          "description": "启动 TensorBoard 时优先使用的日志目录（相对于远端项目根目录）。留空或不存在时，agent 会自动探测 events.out.tfevents.* 目录并直接启动 tensorboard。"
+        },
+        "simpleExperiment.tensorboard.tmuxSession": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "TensorBoard 的 tmux 会话名。留空时自动取 <tunnel.remoteTmuxSessionPrefix>_tb，切勿写死具体服务器或用户名。"
+        },
+        "simpleExperiment.tunnel.condaEnv": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "远端 Agent 和计划任务使用的 Conda 环境。必须为绝对路径（精确到环境文件夹，如 /data/<user>/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾，以 / 开头）；留空时不激活 Conda，使用系统 Python。仅环境名（如 <env_name>）已废弃，请填写完整环境路径。"
+        },
+        "simpleExperiment.tunnel.workerRealtimeMode": {
+          "type": "string",
+          "default": "hub_only",
+          "enum": [
+            "hub_only",
+            "hub_plus_workers"
+          ],
+          "scope": "application",
+          "description": "实时数据来源模式。hub_plus_workers 会同时连接已配置的 Worker 本地隧道。"
+        },
+        "simpleExperiment.tunnel.workerTunnels": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "hubHost": {
+                "type": "string"
+              },
+              "hubUser": {
+                "type": "string"
+              },
+              "hubSshPort": {
+                "type": "number"
+              },
+              "localForwardPort": {
+                "type": "number"
+              },
+              "remoteAgentPort": {
+                "type": "number"
+              },
+              "sshConfigAlias": {
+                "type": "string"
+              },
+              "maxConcurrentGpus": {
+                "type": [
+                  "number",
+                  "string"
+                ],
+                "default": "auto"
+              },
+              "privateKeyPath": {
+                "type": "string"
+              },
+              "authMethod": {
+                "type": "string",
+                "enum": [
+                  "password",
+                  "key",
+                  "auto"
+                ]
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "gpuIdleUtilThreshold": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "gpuIdleMemThresholdMb": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 8192
+              },
+              "sessionCheckMinSeconds": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 60
+              },
+              "workerStatusTtlSeconds": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 7200
+              }
+            }
+          },
+          "description": "用于本地实时聚合的 Worker Xshell 隧道端点。"
+        },
+        "simpleExperiment.scheduler.dispatchMode": {
+          "type": "string",
+          "enum": [
+            "local_idle",
+            "server_prequeue"
+          ],
+          "default": "local_idle",
+          "enumDescriptions": [
+            "本机检测空卡后派发，断联时未派发任务等待本机重连。",
+            "按空卡及本人占用卡比例预派发至服务器持久队列，可在全部接收后关机。"
+          ],
+          "description": "新提交 Plan 的调度模式；已提交 Plan 保留原模式。"
+        },
+        "simpleExperiment.scheduler.pollSeconds": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "scope": "application",
+          "description": "调度轮询基准，默认10秒，最小5秒；任务结束事件立即触发检查。"
+        },
+        "simpleExperiment.scheduler.jitterSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "scope": "application",
+          "description": "随机抖动：0-30秒正向叠加到轮询间隔，避免多节点同时请求造成抖动。"
+        },
+        "simpleExperiment.scheduler.gpuIdleUtilThreshold": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "maximum": 100,
+          "scope": "application",
+          "description": "空卡判据（利用率）：GPU 利用率 < 该阈值（%）且 显存 < 显存阈值 时判为空卡/空闲，默认 5%，范围 0-100。与显存阈值为且关系，任一 ≥ 阈值即判为忙。"
+        },
+        "simpleExperiment.scheduler.gpuIdleMemThresholdMb": {
+          "type": "number",
+          "default": 200,
+          "minimum": 0,
+          "maximum": 8192,
+          "scope": "application",
+          "description": "空卡判据（显存）：GPU 显存占用 < 该阈值（MB）且 利用率 < 利用率阈值 时判为空卡/空闲，默认 200MB，范围 0-8192。与利用率阈值为且关系，任一 ≥ 阈值即判为忙。"
+        },
+        "simpleExperiment.scheduler.sessionCheckMinSeconds": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 60,
+          "scope": "application",
+          "description": "完成检测最小间隔：调度器轮询任务完成事件的最小间隔（秒），默认 5 秒，范围 1-60。越小越灵敏，不参与空卡与否判定。"
+        },
+        "simpleExperiment.scheduler.workerStatusTtlSeconds": {
+          "type": "number",
+          "default": 45,
+          "minimum": 10,
+          "scope": "application",
+          "description": "Worker 可用性证据有效期，默认45秒，最小10秒。"
+        },
+        "simpleExperiment.scheduler.localAvailabilityPushSeconds": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "scope": "application",
+          "description": "本机汇总可用性批量上报间隔，默认10秒，最小5秒。"
+        },
+        "simpleExperiment.scheduler.workerAvailabilityPushSeconds": {
+          "type": "number",
+          "default": 10,
+          "minimum": 5,
+          "scope": "application",
+          "description": "Worker 可用性上报间隔，默认10秒，最小5秒。"
+        },
+        "simpleExperiment.scheduler.operationEventMaxDelayMs": {
+          "type": "number",
+          "default": 200,
+          "minimum": 100,
+          "scope": "application",
+          "description": "事件合并延迟，默认200毫秒，最小100毫秒。"
+        },
+        "simpleExperiment.scheduler.workerActionMinIntervalMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 200,
+          "scope": "application",
+          "description": "旧版兼容参数；控制请求使用每Worker 4、全局8的独立并发预算。"
+        },
+        "simpleExperiment.scheduler.workerActionMaxConcurrent": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "scope": "application",
+          "description": "旧版兼容设置：请求限流已关闭，此值不再限制控制请求；GPU任务并发由调度策略控制。",
+          "deprecationMessage": "请求限流已关闭，此设置不再生效。"
+        },
+        "simpleExperiment.gpu.currentUser": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "用于在 GPU 状态面板高亮自己进程的服务器用户名。为空时不会按本机用户名自动判定。"
+        },
+        "simpleExperiment.gpu.currentUserAliases": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "application",
+          "description": "用于高亮自己 GPU 进程的服务器用户名别名。"
+        },
+        "simpleExperiment.gpu.myCommandKeywords": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "application",
+          "description": "按命令行关键词辅助高亮自己的 GPU 进程，例如实验目录、项目名、conda 环境名或脚本名。"
+        },
+        "simpleExperiment.gpu.myProcessMatchMode": {
+          "type": "string",
+          "default": "both",
+          "enum": [
+            "username",
+            "command_contains",
+            "both"
+          ],
+          "scope": "application",
+          "description": "GPU 进程归属高亮方式。username 按用户名，command_contains 按命令关键词，both 任一匹配。"
+        },
+        "simpleExperiment.ppt.chartType": {
+          "type": "string",
+          "default": "auto",
+          "scope": "application",
+          "description": "绘图类型。默认 auto，由 PPT 插件按结果契约自动选择。"
+        },
+        "simpleExperiment.ppt.styleMode": {
+          "type": "string",
+          "default": "activePpt",
+          "scope": "application",
+          "description": "绘图样式模式。默认 activePpt，使用 PPT 插件当前正在使用的绘图方案。"
+        },
+        "simpleExperiment.manualPanelLayout": {
+          "type": "boolean",
+          "default": false,
+          "scope": "application",
+          "description": "启用 SimpleExperiment 面板分区的手动排序。"
+        },
+        "simpleExperiment.panelSectionOrder": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "scope": "application",
+          "description": "SimpleExperiment 面板分区的手动顺序。"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run compact:plan && npm run typecheck && node scripts/bundle-semver.js && node scripts/write-agent-runtime.js && node scripts/write-panel-build-manifest.js && node -c dist/extension.js && node -c dist/ui/PanelHtml.js && node --test --test-force-exit --test-timeout 20000 test/features/panelWebviewScriptHealth.test.js",
+    "watch": "tsc -watch -p .",
+    "typecheck": "tsc -p . --pretty false",
+    "lint": "node scripts/lint-smoke.js",
+    "cleanup": "node scripts/compact-target-mode-plan.js && node scripts/clean-generated-dirs.js",
+    "test": "npm run build && node --test test/*.test.js test/**/*.test.js",
+    "test:features": "npm run build && node --test test/features/*.test.js",
+    "test:scenarios": "npm run test:features",
+    "test:no-direct-ssh": "npm run build && node --test test/tunnel/noDirectSsh.test.js",
+    "test:xshell-realtime": "npm run build && node --test test/tunnel/xshellRealtimeSetup.test.js test/tunnel/realtime*.test.js test/tunnel/reconnectSinceSeq.test.js test/tunnel/journalGapSnapshot.test.js test/tunnel/fileChangedEvent.test.js test/agent/realtimeGatewayApi.test.js",
+    "test:file-transfer": "npm run build && node --test test/tunnel/fileTransfer*.test.js test/tunnel/fileApiSafePath.test.js test/fileTransfer/*.test.js",
+    "test:xshell-integration": "npm run build && node --test test/tunnel/xshellCommandBuilder.test.js test/tunnel/xshellExecutableDetection.test.js test/tunnel/xshellPortProbe.test.js test/tunnel/xshellIntegrationCheck.test.js test/tunnel/agentCapabilities.test.js test/tunnel/apiVersionCompatibility.test.js",
+    "test:multi-tunnel": "npm run build && node --test test/tunnel/tunnelPortAllocator.test.js test/tunnel/tunnelPortConflict.test.js test/tunnel/tunnelEndpointRegistry.test.js test/tunnel/multiXshellCommandBuilder.test.js test/tunnel/startAllTunnelsPortCheck.test.js test/tunnel/multiWorkerReconnectIsolation.test.js test/tunnel/multiTunnelConfigMigration.test.js test/ui/multiTunnelPortAssignmentsRender.test.js test/ui/hubWorkerTelemetryStatusRender.test.js",
+    "test:port-allocation": "npm run build && node --test test/tunnel/tunnelPortAllocator.test.js test/tunnel/tunnelPortConflict.test.js",
+    "test:hub-worker-boundary": "npm run build && node --test test/tunnel/workerTelemetryApiContract.test.js test/tunnel/hubControlApiContract.test.js test/tunnel/workerTelemetryNoFileActionRequired.test.js test/tunnel/authorityMergeWorkerGpuPreferred.test.js test/tunnel/authorityMergeHubSchedulerAuthoritative.test.js test/tunnel/workerTaskTelemetryEnrichment.test.js",
+    "test:tunnel-migration": "npm run build && node --test test/migration/remainingRemoteFeatureAudit.test.js test/tunnel/capabilityDrivenUi.test.js test/tunnel/tunnelOnlyOperationQueue.test.js test/tunnel/noDirectRemoteActions.test.js test/tunnel/replaceGpuSchedulerLiveOutput.test.js test/tunnel/replaceRunPlanStopRetry.test.js test/tunnel/replaceArchiveSyncDelete.test.js test/tunnel/replaceRuntimeDiagnostics.test.js test/tunnel/replaceResultsAnalysis.test.js test/tunnel/legacyConfigMigration.test.js test/tunnel/noForbiddenSourceTerms.test.js",
+    "package": "npm run build && npm run compact:plan && npm run verify:package-runtime && vsce package --no-dependencies --allow-missing-repository",
+    "verify:package-runtime": "node scripts/verify-vsix-runtime.js",
+    "install:latest": "node scripts/install-latest.js",
+    "install:latest:dry-run": "node scripts/install-latest.js --dry-run",
+    "package:public": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-public.ps1",
+    "preview:gpu-history": "npm run build && node scripts/render-gpu-history-preview.js",
+    "smoke": "npm run build && npm run lint && node -c dist/extension.js && node -c dist/panel.js && node dist/cli.js status && npm run package",
+    "acceptance": "node scripts/acceptance.js",
+    "compact:plan": "node scripts/compact-target-mode-plan.js",
+    "check:tmux-guard": "node scripts/check-tmux-guard.js",
+    "check:static": "node scripts/check-static.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.100.0",
+    "@vscode/vsce": "4.0.0",
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "semver": "7.7.3"
+  }
+}

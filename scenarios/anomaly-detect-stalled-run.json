@@ -1,0 +1,2 @@
+{"name":"anomaly-detect-stalled-run","servers":["hub","w1"],"steps":[{"action":"agentEvent","event":{"schemaVersion":1,"seq":8,"type":"scheduler_snapshot","generatedAt":"2026-01-01T00:00:08Z","source":"hub_agent","hubId":"hub","payload":{"schedulerStates":[{"runKey":"r","status":"running"}]}}}],"expect":{"anomaly":"stalled_log"}}
+

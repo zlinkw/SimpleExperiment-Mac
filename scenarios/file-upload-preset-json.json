@@ -1,0 +1,10 @@
+{
+  "name": "file upload preset json",
+  "servers": [],
+  "steps": [],
+  "expect": {
+    "fileApi": "chunk_upload",
+    "remotePath": "experiments/presets/preset.json",
+    "completeVerify": true
+  }
+}

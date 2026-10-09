@@ -1,0 +1,3 @@
+mode: train
+runner:
+  train_command: python train.py

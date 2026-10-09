@@ -1,0 +1,6 @@
+{
+  "name": "multi-worker-port-allocation",
+  "servers": ["hub", "worker-a", "worker-b"],
+  "steps": [],
+  "expect": { "localPortsUnique": true }
+}

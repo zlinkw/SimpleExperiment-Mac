@@ -1,0 +1,6 @@
+{
+  "name": "worker-api-no-file-action-ok",
+  "servers": ["hub", "worker-a"],
+  "steps": [],
+  "expect": { "workerFileActionApiNotRequired": true }
+}
