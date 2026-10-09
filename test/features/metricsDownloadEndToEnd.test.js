@@ -6,16 +6,10 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const test = require("node:test");
 const ts = require("typescript");
-Module._extensions[".ts"] = (mod, file) => mod._compile(ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, file);
+const vm = require("node:vm");
 
 const repo = path.join(__dirname, "..", "..");
-const tablesPath = path.join(repo, "src", "results", "ProjectResultTables.ts");
-const tablesModule = new Module(tablesPath, module);
-tablesModule.filename = tablesPath;
-tablesModule.paths = Module._nodeModulePaths(path.dirname(tablesPath));
-tablesModule._compile(ts.transpileModule(fs.readFileSync(tablesPath, "utf8"), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-}).outputText, tablesPath);
+const tablesModule = { exports: require("../../dist/results/ProjectResultTables") };
 
 const uiNotices = [];
 const vscode = {
@@ -27,24 +21,20 @@ const vscode = {
   Uri: { file: (fsPath) => ({ fsPath }) }, ProgressLocation: { Notification: 1 },
 };
 const originalLoad = Module._load;
-const originalTsLoader = Module._extensions[".ts"];
-Module._extensions[".ts"] = (loadedModule, filename) => {
-  const source = fs.readFileSync(filename, "utf8") + (filename.endsWith(path.join("src", "extension", "legacy.ts"))
-    ? "\nexport { planValidationFromResult };\n" : "");
-  loadedModule._compile(ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-  }).outputText, filename);
-};
 Module._load = function (request, parent, isMain) {
   if (request === "vscode") return vscode;
-  if (request.startsWith("../vendor/semver/")) return originalLoad.call(this, path.join(repo, "dist/vendor/semver", request.slice("../vendor/semver/".length)), parent, isMain);
-  if (request === "../results/ProjectResultTables" && parent?.filename.endsWith(path.join("src", "extension", "legacy.ts"))) return tablesModule.exports;
   return originalLoad.call(this, request, parent, isMain);
 };
-const { __syncPendingResultMetricsForTest, RealtimeTunnelPanelProvider, planValidationFromResult } = require("../../src/extension/legacy.ts");
-Module._load = originalLoad;
-if (originalTsLoader) Module._extensions[".ts"] = originalTsLoader;
-else delete Module._extensions[".ts"];
+let __syncPendingResultMetricsForTest, RealtimeTunnelPanelProvider;
+try {
+  ({ __syncPendingResultMetricsForTest, RealtimeTunnelPanelProvider } = require("../../dist/extension/legacy.js"));
+} finally { Module._load = originalLoad; }
+// Extract only this pure parser from the same compiled artifact; never patch production exports.
+const actual = fs.readFileSync(path.join(repo, "dist/extension/legacy.js"), "utf8");
+const ast = ts.createSourceFile("actual.js", actual, ts.ScriptTarget.Latest, true);
+const parser = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "planValidationFromResult");
+assert.ok(parser, "the compiled plan validation parser must exist");
+const planValidationFromResult = vm.runInNewContext(parser.getText(ast) + "\nplanValidationFromResult;");
 
 const planFile = "experiments/plans/demo.yaml";
 const remoteCsv = "simple_cluster/results/worker-a/seed_metrics.csv";
@@ -186,6 +176,41 @@ test("conflicting raw aliases retain the previous published CSV and Markdown", a
   }
 });
 
+test("corrupt or unrequested memory responses keep the existing registry, CSV and Markdown", async () => {
+  const corruptions = [
+    entry => ({ ...entry, remotePath: "simple_cluster/results/other/seed_metrics.csv" }),
+    entry => ({ ...entry, sha256: "0".repeat(64) }),
+    entry => ({ ...entry, bytes: entry.bytes + 1 }),
+    entry => ({ ...entry, dataBase64: Buffer.from("invalid").toString("base64") }),
+  ];
+  for (const corrupt of corruptions) {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-metrics-reject-"));
+    const registry = seedRegistry(), prior = tablesModule.exports.buildTables(registry)["set/final"];
+    const outputs = {
+      "experiments/results/set/final/final.csv": tablesModule.exports.writeCsv(prior.header, prior.rows),
+      "experiments/results/set/final/final.md": prior.markdown,
+      "simple_cluster/results/project_table_registry.json": JSON.stringify(registry),
+    };
+    for (const [relative, contents] of Object.entries(outputs)) {
+      fs.mkdirSync(path.dirname(path.join(workspace, relative)), { recursive: true });
+      fs.writeFileSync(path.join(workspace, relative), contents, "utf8");
+    }
+    const provider = providerFor(workspace, csvFor([{ seed: 42, metric: "AUC", value: 0.9 }]), registry);
+    const api = provider.simpleSftpApiCall;
+    provider.simpleSftpApiCall = async (...args) => {
+      const response = await api(...args);
+      return args[0] === "sync.downloadMappedPaths"
+        ? { ...response, entries: response.entries.map(corrupt) } : response;
+    };
+    const report = await __syncPendingResultMetricsForTest(provider);
+    assert.equal(report.included.length, 0);
+    assert.ok(report.skipped.some(issue => /指纹不一致|未声明或超限文件/.test(issue)));
+    assert.equal(provider.calls.filter(([method]) => method === "sync.downloadMappedPaths").length, 1);
+    for (const [relative, contents] of Object.entries(outputs))
+      assert.equal(fs.readFileSync(path.join(workspace, relative), "utf8"), contents, relative);
+  }
+});
+
 test("completed plans stay untouched until manual metrics sync downloads and publishes their results", async () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-postprocess-chain-"));
   try {
@@ -252,7 +277,7 @@ test("late local lock ACK is fenced before the captured Worker client can send",
   try {
     vscode.workspace.workspaceFolders = [{ uri: { scheme: "file", path: workspace.replace(/\\/g, "/"),
       fsPath: workspace, toString: () => "file://" + workspace.replace(/\\/g, "/") } }];
-    let sends = 0;
+    let sends = 0, locks = 0;
     const provider = providerFor(workspace, "");
     provider.context.globalStorageUri.fsPath = workspace;
     provider.client = { postWorkerAction: async () => { sends += 1; return { status: "queued" }; } };
@@ -260,15 +285,21 @@ test("late local lock ACK is fenced before the captured Worker client can send",
     provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
     const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
     host.distributedQueueGeneration = 7;
-    host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => {
+    host.withRemoteActionResource = async (workerId, resource, request, callback) => {
+      locks += 1;
+      assert.equal(workerId, "worker-a");
+      assert.equal(resource, "start-worker-task");
+      assert.equal(request.executionMode, "test");
+      assert.equal(request.planFile, planFile);
       host.distributedQueueGeneration += 1;
       return callback();
     };
     const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
     await assert.rejects(() => host.sendDistributedJob(
-      { id: "plan-a", projectId: "project-a", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
+      { id: "plan-a", projectId: "project-a", executionMode: "test", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
       { index: 0, attempt: 1, case: "alpha", seed: 42, outputDir: "runs/a" }, "worker-a", undefined, "command-a",
     ), /提交已取消或项目已切换/);
+    assert.equal(locks, 1, "the fixture must pass Plan preflight and reach the actual local lock callback");
     assert.equal(sends, 0, "generation changed while awaiting the local resource lock must block the remote write");
   } finally {
     vscode.workspace.workspaceFolders = [];
@@ -289,4 +320,7 @@ test("actual plan validation parser prefers the latest complete 0.5.179 wrapped 
     { result: { validation: { jobs: rows } } },
     { validation: { jobs: rows } },
   ]) assert.deepEqual(planValidationFromResult(wrapper).jobs.map((job) => job.index), [0, 1, 2]);
+  for (const validation of [null, [], "bad"]) assert.equal(planValidationFromResult({
+    latestEvent: { payload: { validation } }, payload: { validation: { ok: true, jobs: rows } },
+  }), undefined, "a malformed latest receipt must not borrow stale validation");
 });

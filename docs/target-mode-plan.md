@@ -10,61 +10,21 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-028（passed，0.5.291/0.2.85）
-- 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本元数据验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新核验；无 Actions/安装。
-- mac-doc-023 Experiment `21b43698021ed95314cdbf7059ec87d47f9610c0`、SFTP `b75ce34e24e7fb4a7fb5a0d8b157a9a1300fa906` 已普通推送/fetch 核对。验证两仓 build/闭包/面板/runtimeManifest/UTF8，完整串行 prepare，实际读取/映射与前批包能力、匿名下载；M5 延后。
-- passed 元数据：两仓 build、223/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致与 UTF8/diff；已普通推送/fetch 核对。
-- passed 完整 release:prepare：两仓 build/223 与 26 闭包/面板 2，66 个单文件串行/20 秒目标门禁（Experiment feature 51/core 1、SFTP 14），含读取 7/映射 11/wrapper 22/pending 指标 39/浅深高对比实际渲染，完整日志 release-artifacts/prepare-0.5.291.log。publish 核验完整三附件草稿后公开，无 Actions/安装。
-- passed .291 实际 VSIX：受检读取 7、映射/复制/磁盘补读 11、摘要 7、YAML 候选 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8，八份包证据 JSON 有效。本机文件/模拟 API/POSIX/AST，无真实科研/SSH/远端启动/停止/删除。
-- passed .290/.84→.291/.85 实际匿名 updater：31 次公开请求完成 prerelease/清单/大小/hash/CRC/身份/平台核验，下载字节等于测试包，新 ResultFiles/WrapperResultBundle/业务模块、两仓 README/包内说明匹配来源；同版本跳过/不降级通过。不实际安装/M5。
-- 第二十八版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.291 已公开：Experiment 来源 `5b43362749404eec5c68750d082278bbfbc646e6`、SFTP 来源 `be6fb9478d467f9dd1e721f9d856e46c70ab1e36` 已普通推送/fetch 核对。历史附件保留，不覆盖。下一批限真实编译结果回归 fixture 与相关结果调用的一组问题，最多 8 文件；完整原子发布、回执来源/解析/Agent/归档/M5 仍待后续，使用说明与更新持续同步。
+## 当前批次 mac-005ab-compiled（passed）
+- 范围至多 7 文件：真实编译 metricsDownloadEndToEnd fixture、发布门禁/对应测试、两仓 README/Mac 配置说明与计划。修复 TS 源码加载 Worker.js 和缺少执行模式的 fixture 前置条件，保留实际编译 Worker/解析/注册表/CSV/Markdown 与提交世代门禁；不放松生产判断。
+- 当前两仓干净且 master 同步：Experiment `e9e4a6c8e20505fbc10d3cce767e7db47971c4c0`，SFTP `be6fb9478d467f9dd1e721f9d856e46c70ab1e36`。保护原入口、API/Plan/三拓扑；不运行真实科研/SSH/远端操作/安装/删除。
+- passed 两仓 build/223 与 26 闭包/面板 2/vm.Script；实际 dist 结果 fixture 6（模拟 API、真实本机文件/编译 Worker）、pending 指标 39、执行模式 9、配置说明 1、发布门禁 4，单文件串行/20 秒无超时。拒绝四类错误响应并逐字节保留旧注册表和 CSV/Markdown；迟到锁测试确认实际进入锁回调后未发送。三份文档 UTF8/更新入口/diff passed；无生产门禁放松。缺失来源/本地解析路径、完整原子写入与 M5 后续处理。
+- 下一批仅两仓补丁元数据/完整 prepare/publish、实际 VSIX 结果链 fixture 与前版能力/匿名下载；最多 6 文件，无安装/Actions。
 
-### 前批 mac-doc-023（passed）
-- 范围 6 文件：两仓 README、配置说明、prepare/发布门禁与计划。同步描述符读取、身份变化处理、暂存/分发失败保留旧结果、更新入口及验收边界；不扩大源代码范围。
-- mac-005aa-read `1fd09da53283b579a72552e06e48195cf845e674` 已普通推送/fetch 核对 origin/master。回归 build/闭包/面板、配置说明/发布脚本单文件串行、三份文档 UTF8/diff；下一批元数据及实际包/匿名配套发布。
-
-- passed build/223 闭包/面板 2/vm.Script、macSetupGuide 1/macRelease 4 单文件串行、三份使用说明 UTF8/身份变化与更新入口/diff；prepare 新增读取/wrapper 持久化门禁。下一批版本元数据与完整配套发布、实际 VSIX/匿名更新。
-
-### 前批 mac-005aa-read（passed）
-- 本批至多 6 文件：新 Mac 结果物理读取模块、wrapper/后台、新读取测试、映射测试与计划。复用/磁盘补读绑定真实路径和打开文件身份；本机分发从受检描述符复制，暂存文件在身份核对前不截断。保护原入口、API/Plan/租约/确认，不执行真实科研/SSH/传输/删除。
-- 前版交付 `faf3c228d6b543d8ba3bf02a075a723a27f65ce6`、SFTP `6d55583cd93743583934d0e554481ac2f5be493b` 均 origin/master 相等。回归真实编译读取/映射/现有 wrapper 与结果工作流、build/闭包/面板语法；单文件串行 20 秒。真实编译旧端到端 fixture 下一批；完整父目录原子写入/M5 仍待验证，说明与更新继续同步。
-- passed 6 文件：ResultFiles/后台/wrapper/读取测试/映射测试/计划。Mac wrapper 复用、磁盘补读、hash 和本机复制绑定描述符、文件内容及完整目录 inode 链，读后重核验；错误路径/磁盘别名/符号链接/特殊文件/超限不读。暂存打开不截断原文件，身份或已有硬链接异常先拒绝；短写补齐、零进展失败，来源变化/错误 hash 保留旧最终文件并关闭句柄。
-- passed build/223 闭包/面板 2/vm.Script/UTF8/diff；macResultFiles 7、macMappedResultIdentity 11、wrapperResultPersistence 22、pendingResultMetricSync 39、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13，单文件串行 20 秒，无超时。真实本机文件/模拟 POSIX 不敏感磁盘与 API；不代表服务器/原子写入/M5 验收。
-- 下一批两仓使用说明/配置与发布门禁，最多 8 文件；再元数据递增与 prepare/publish、实际包/匿名更新。旧 metricsDownloadEndToEnd fixture、最终路径原子发布及 Agent/解析/归档仍后续。
-
-### 前批 mac-release-027（passed，0.5.290/0.2.84）
-- 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新核验；无 Actions/安装。
-- mac-doc-022 Experiment `0145e4fc3e1bb8ee1ccd68058ae88b970ec6a47c`、SFTP `99ae1fc1941642c520112d064f923c07abe58796` 已普通推送/fetch 核对。
-- 验证两仓 build/闭包/面板语法/runtimeManifest/元数据 UTF8；完整串行 prepare，实际 VSIX 映射身份及前批能力、匿名新版下载；M5 延后。
-- passed 元数据：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；元数据已普通推送/fetch 核对。
-- passed 完整 release:prepare：两仓 build/222 与 26 闭包/面板 2，64 个单文件串行/20 秒目标门禁（Experiment feature 49/core 1、SFTP 14），含映射 7/pending 指标 39/浅深高对比真实渲染。完整日志 release-artifacts/prepare-0.5.290-attempt3.log；publish 核验完整三附件草稿后公开，无 Actions/安装。
-- 初次 prepare 的旧源码抽取测试因工作文件 CRLF 找不到 ;+LF 边界；恢复仓库指定 LF，过滤后 Git blob 与已提交源码完全相同，缓存 6 通过。第二次由 Git 旧工作文件 stat 误报 dirty，重新登记相同 blob 后干净；没有改生产逻辑/覆盖版本。三个日志保留，无超时。
-- passed .290 实际 VSIX：映射 7、摘要 7、YAML 候选 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8，七份包证据 JSON 有效。本机文件分发与模拟 API/磁盘/AST；无真实科研/SSH/远端启动/停止/删除。
-- passed .289/.83→.290/.84 实际匿名 updater：30 次公开请求、prerelease/清单/大小/hash/CRC/身份/平台、下载字节等于实际测试包，业务模块/两仓 README/包内说明匹配同步来源；同版本跳过/不降级通过。不实际安装/M5。
-- 第二十七版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.290 已公开：Experiment 来源 `1611211fc2e903df729dc1c62ae3e2f8551dd5f1`、SFTP 来源 `6d55583cd93743583934d0e554481ac2f5be493b` 已普通推送/fetch 核对。历史附件保留，不覆盖。下一批限映射物理复用/发布及相关真实编译回归 fixture 的一组问题，最多 8 文件，使用说明和配套更新持续同步。
-
-### 前批 mac-doc-022（passed）
-- 范围 6 文件：两仓 README、配置说明、prepare/门禁测试、本文档。同步映射原始来源、大小/hash/缓存/分块及磁盘别名冲突用法和验证边界；保留更新入口。不扩大业务代码范围。
-- mac-005z-mapped `963ee809e8d0449d0eb56d3387a37eaa119023ac` 已普通推送/fetch 核对 origin/master。
-- 验证 build/闭包/面板语法、配置说明/发布脚本单文件串行 20 秒、三份文档 UTF8/diff；下一批版本元数据及配套发布，实际包/匿名更新核验。
-- passed build/222 闭包/面板 2/vm.Script，macSetupGuide 1/macRelease 4 串行，三份说明 UTF8/更新入口/磁盘别名冲突操作与 diff；prepare 新增映射身份及 pendingResultMetricSync 门禁。探索旧 fixture 失败与后续修复范围在发布说明区分标记。下一批仅补丁元数据、完整配套发布及实际包/匿名更新。
-
-### 前批 mac-005z-mapped（passed）
-- 范围至多 3 文件：后台、真实编译函数测试、计划。Mac 映射来源/目标去重、大小/hash 清单、缓存/分块/发布关联使用原始 POSIX 身份；跨 Plan 合批校验冲突并避免分隔符碰撞。本机已存在条目核对真实名称，拒绝磁盘大小写/Unicode 别名；保留非 Mac 兼容入口。
-- 保护三拓扑/API/Plan/远端实验/确认/租约；不执行真实科研、SSH、传输、删除。验证 build/闭包/面板语法、新测试及相邻映射工作流，逐文件串行 20 秒。物理写入原子锁、完整来源回执与 Agent/解析/归档在后续批次，文档/更新继续同步。
-- 前版交付记录 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 已普通推送/fetch 核对 origin/master。
-- passed 3 文件：后台统一 Mac 原始来源/目标键、合批大小/hash 冲突、缓存/清单/分块/发布对应和暂存 key；确认缺失/复用/发布前的已存在磁盘条目核对真实名称，不借用大小写或 Unicode 别名。非 Mac 折叠入口保留。
-- passed build/222 闭包/面板 2/vm.Script/UTF8/diff；macMappedResultIdentity 7、pendingResultMetricSync 39、manualDistributedResultSync 25、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13，单文件串行/20 秒。本机真实文件分发与模拟 POSIX/不敏感磁盘，无科研/SSH/真实 API 传输。初始新 fixture 的路径构造和 SafeRequestRetry 导入修正后通过，无超时。
-- exploratory failed metricsDownloadEndToEnd 4/5；旧源码 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 只读 preload 隔离重现相同 4 失败：源码 TS loader 找不到编译 Worker.js，旧锁 fixture 未先核验 Plan 执行模式。不是本批新增回归，不作为本批完成或发布证据；待后续真实编译链 fixture 批次修复，不为测试放松生产门禁。
-- 下一批仅两仓说明/配置与发布门禁，最多 8 文件；再版本递增、prepare/publish、实际包/匿名更新。完整物理原子写入、回执/解析/Agent/归档及上述探索 fixture 留后续。
-
-### 压缩前批（完整记录见 Git）
-- mac-005y-summary `173bd71c476d36b7e6038a394ba4e2f96153da3f` 已推送：ResultSummaryScope/后台完整原始 Plan 别名/provenance/Worker/数据集/job/claim 授权；匿名/混合分析路径隐藏，明确归属记录保留，缓存元组避免分隔符碰撞。build/222 闭包/面板 2 与摘要 7/缓存 6/结果 8/浅查看 13/同步 18/分布式 25 串行通过；不代表实际解析/Agent/科研/M5。
-- mac-doc-021 Exp `134dec12ca34adb9e65c6324b4a64a75db21bce8`、SFTP `72b0ce05b0a11e92cf3f3e4d3c367c2cc3968c2e`；.289/.83 来源 `d31223805cc3a201ce0c37b4772238e236b40e20`/`28a85dd829e7e61799066621e3ac096570acd2f0`，交付 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 已推送/fetch 相等。完整 prepare 62 文件/build/222 与 26 闭包/面板 2；实际包摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8、匿名 29 请求通过，不安装/M5。
-
-### 压缩历史（完整证据见 Git）
-- mac-005x-yaml `17ba8b376231633cdd062306b287f46b26d68078` 已推送：单行结果 YAML 引号/转义仅解码一次，原始 POSIX 候选与实际面板/后台联动 7、相邻 8 文件串行通过；build/221 闭包/面板 2/vm.Script。不是完整 YAML loader，锚点/多行/其他字段 pending。
-- mac-doc-020 Experiment `466f9651324ec905ac01a57d210e45e93048b807`/SFTP `a3c763e6f9eaec56c2c3cb213fd089c8dab781e9`；.288/.82 来源 `33fe795f88ac8e50c035dac7b452b2faf652be9f`/`1a87364fc251e9dbdcf8267ebdeadf614298e2ab`，交付 `2ff50131c2204fce96fffc21c78fc6353f55dd40`，均普通推送/fetch 相等。完整 prepare 60 文件/build/221 与 26 闭包；实际包 YAML 7/候选 6/结果 8/CLI 2/启动 8、匿名 28 请求通过，不安装/M5。
+### 前批与最近发布（passed；完整记录见 Git）
+- mac-release-028 0.5.291/0.2.85 已公开 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.291 。来源 Experiment `5b43362749404eec5c68750d082278bbfbc646e6`、SFTP `be6fb9478d467f9dd1e721f9d856e46c70ab1e36`；交付 `e9e4a6c8e20505fbc10d3cce767e7db47971c4c0`，普通推送/fetch 相等。完整 prepare 两仓 build/223 与 26 闭包/面板 2、66 文件串行；实际包读取 7/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8，匿名 .290/.84→.291/.85 的 31 公开请求/字节/身份/hash/CRC/源码/说明通过，不安装/M5。日志和八份包证据保留 release-artifacts/preview-v0.5.291。
+- mac-doc-023 Exp `21b43698021ed95314cdbf7059ec87d47f9610c0`、SFTP `b75ce34e24e7fb4a7fb5a0d8b157a9a1300fa906`；使用说明/配置/读取门禁、build/UTF8/对应测试 passed，已推送。
+- mac-005aa-read `1fd09da53283b579a72552e06e48195cf845e674`：ResultFiles 描述符及全目录 inode 链读取、wrapper 复用/磁盘补读/hash/复制、暂存不提前截断/硬链接校验/短写循环/失败保留旧最终结果。build/223 闭包/面板 2，读取 7/映射 11/wrapper 22/pending 指标 39/同步 18/浅查看 13 串行 passed。仅本机真实文件/模拟 POSIX 与 API，完整原子发布未验收。
+- mac-release-027 .290/.84 来源 Exp `1611211fc2e903df729dc1c62ae3e2f8551dd5f1`、SFTP `6d55583cd93743583934d0e554481ac2f5be493b`，交付 `faf3c228d6b543d8ba3bf02a075a723a27f65ce6`；64 文件/build/222 与 26 闭包、七份实际包证据/30 匿名请求 passed，已推送。prepare 两次前置失败分别为旧源码抽取边界 CRLF 和 Git stat 误报，恢复指定 LF/同 blob 后通过，无生产改写或超时；日志保留。
+- mac-doc-022 Exp `0145e4fc3e1bb8ee1ccd68058ae88b970ec6a47c`、SFTP `99ae1fc1941642c520112d064f923c07abe58796` passed/已推送。
+- mac-005z-mapped `963ee809e8d0449d0eb56d3387a37eaa119023ac`：原始路径/Plan/大小/hash 合批、缓存/清单/分块关联和真实名称核验；build/222 闭包，映射 7/pending 39/分布式 25/同步 18/浅查看 13 passed。探索 metricsDownloadEndToEnd 4/5 failed，与旧源码 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 隔离重现相同失败；未记为发布证据，当前批仅修 fixture。
+- mac-005y-summary `173bd71c476d36b7e6038a394ba4e2f96153da3f`：完整 Plan 别名/provenance/Worker/job/claim 授权、隐藏匿名/混合摘要、缓存元组；摘要 7/缓存 6/结果 8/浅查看 13/同步 18/分布式 25/build passed，已推送。mac-doc-021 Exp `134dec12ca34adb9e65c6324b4a64a75db21bce8`、SFTP `72b0ce05b0a11e92cf3f3e4d3c367c2cc3968c2e`；.289/.83 来源 `d31223805cc3a201ce0c37b4772238e236b40e20`/`28a85dd829e7e61799066621e3ac096570acd2f0`，交付 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df`；62 文件/六份实际包/29 匿名请求 passed，已推送。
+- mac-005x-yaml `17ba8b376231633cdd062306b287f46b26d68078`：单行 YAML 解码一次、候选和实际面板/后台 7/相邻 8 文件 passed；完整 YAML pending。mac-doc-020 Exp `466f9651324ec905ac01a57d210e45e93048b807`/SFTP `a3c763e6f9eaec56c2c3cb213fd089c8dab781e9`；.288/.82 来源 `33fe795f88ac8e50c035dac7b452b2faf652be9f`/`1a87364fc251e9dbdcf8267ebdeadf614298e2ab`，交付 `2ff50131c2204fce96fffc21c78fc6353f55dd40`；60 文件/实际包/28 匿名请求 passed，已推送。
 
 ## 已交付与证据
 - passed mac-002/003/004：独立身份/命名空间/AppSupport 发现文件，独立启动更新入口；preview 列表、缓存/限流、完整包验证、SFTP→Experiment、回执补装/不降级、本地业务门禁。双仓提交绑定，本机发布完整三附件，不用 Actions/安装。
