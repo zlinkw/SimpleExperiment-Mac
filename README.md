@@ -100,6 +100,8 @@ CLI 为 `simpleex-mac`、`simple-sftp-mac-api`。VSIX 在受支持 Mac 激活时
 
 两款 CLI 的业务 RPC 已自动读取当前 Mac 发现文件并检查 `/api/v1/capabilities`。未知方法、监听实例或版本变化、非本机地址以及错误响应会停止本次调用；不会自动重试业务或替用户补上确认参数。出现预检失败时，先打开对应 VS Code 扩展并重新自检，核对实时 API 契约与参数后再主动调用。直接使用 HTTP API 时仍需自行读取发现文件和实时契约。此预检通过本机监听与真实 CLI 测试，科研运行命令及 M5 验收继续分批。
 
+正式 Plan 从项目终端使用 `simpleex-mac experiment run "experiments/plans/基线.yaml" --check --dry-run --json` 检查路线；VS Code API 工作区必须与终端项目一致，Plan 必须是项目内的真实文件。在线预检检查实时 `workflow.plan`，离线结果明确为 `validation: local_only`、`ready: false`，不能作为科研就绪证据。去掉 `--check --dry-run` 后才申请标准运行路线，并在 VS Code 人工确认。初始 `requested: true`、`submitted: false` 和 `waiting_confirmation` 表示已创建等待确认的本地操作；按返回的 `operationId` 通过实时 API `operations.list` 查看后续证据。CLI 不代替实际远端预演和提交证明；标准插件路线继续负责校验、预演、同步与提交。旧 `run --name … -- command` 仅为手工本地记录器，正式实验使用已保存的 Plan。真实科研及 CLI seed 参数仍在后续核验。
+
 ## 本机发布与验收
 
 两仓源码验证、提交并同步 origin/master 后，在 SimpleExperiment-Mac 执行：

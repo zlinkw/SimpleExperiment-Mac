@@ -20,13 +20,14 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005p（passed，CLI Plan 运行绑定与回执）
+## 当前批次：mac-doc-011（passed，Plan CLI 使用说明与发布门禁）
 ### 边界
 
-- CLI Plan 运行核对当前 API 工作区、项目内 Plan 与实时 workflow.plan 路由，再申请 workflow.run；等待 VS Code 确认回执不冒充远端已提交。离线预览标明 local_only，保留旧 run/API/Plan 入口与格式、中文和真实空格参数。最多 8 文件。
-- 最小回归：build/包闭包/面板脚本、真实 CLI 本机 mock、旧 CLI 预览与发现、固定入口/契约。无实际科研/传输/服务器操作；文档、配套发布与其余 Windows 业务依赖后续批次。
+- 两仓 README/配置说明补充正式 Plan CLI、预检/离线/等待确认回执与 operations.list 入口，测试纳入发布门禁；共 6 文件。下一版 Experiment 0.5.279/SFTP 0.2.73，之后审核服务端工作区/seed 与科研主流程。M5 pending。
 
 ### 验证清单
+
+- passed mac-doc-011：两仓 README/配置说明补充正式 Plan CLI、预检/离线/等待确认回执与 operations.list，macCliWorkflow 纳入发布门禁并更新发布说明。UTF8 回读、build/217 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，共 6 文件。配套下一版 0.5.279/0.2.73，服务端 workspace/seed/完整科研仍待后续核验。
 
 - passed mac-005p：CLI Plan 限制当前项目内真实文件并拒绝链接逃逸，保留中文/真实首尾空格；在线运行核对 API workspace、workflow.plan 就绪/选择，再复核 workspace 申请 workflow.run。等待 VS Code 确认只报告 requested/operationId，不冒充远端已提交；HTTP/业务阻塞返回失败且不重试。离线预览标明 local_only/ready=false，保留旧手工 recorder，帮助改用 Mac 命令名。7 文件。
 - passed 本地：build/217 模块闭包/面板脚本 2、包闭包/vm.Script、真实 CLI 本机 mock 5（含三种返回拓扑、工作区变化、失败/离线/确认/路径）、旧 CLI 预览与发现 3/帮助 1、CLI 契约 8/固定入口 5 逐文件串行通过。无实际科研、传输或服务器调用。
@@ -76,6 +77,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005p CLI 来源 `e95e099132427d2ffe4dedaa7f628d0d49854724` 已普通推送并 fetch 核对。
 - 第十五版 preview-v0.5.278 已发布：Experiment 来源 `56fb77d4fbed95eb3fa6874b2808f986b7e2840d`、SFTP 0.2.72 来源 `56cfd11be0f66bb33dfda5184e5662ad601538b6` 均已普通推送并 fetch 核对。实时 CLI 契约、实际包启动/RPC 和匿名下载通过，CLI 科研运行/完整主流程/真实 SSH/M5 pending。
 - mac-doc-010 Experiment 说明/门禁 `1c4f0d5423aa617e3147cf5d2c71bb9d51322ec5`、SFTP README `fead4c440e8b8dbc10bdad7ab4ad07042a42604b` 均已同步 origin/master。
 - mac-005o SFTP CLI 契约来源 `7322bf06e0d63405e71023d58fb0bb860affedb3` 已普通推送并 fetch 核对。

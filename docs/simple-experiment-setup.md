@@ -240,6 +240,16 @@ API 每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/
 
 两款 CLI 的业务 RPC 自动重读当前发现文件、获取 `/api/v1/capabilities` 并核对方法与监听身份，再发送原参数。若方法不可用、预检期间扩展重载或监听变化、发现地址不是本机、HTTP/JSON 响应错误，调用失败且不会自动重试业务。先打开对应扩展并执行自检，核对实时契约后再主动调用；不要复用旧 token 或改发现文件来绕过失败。`confirm`、`pathConfirmed` 保持调用者提供的值，仍须遵守原路径确认规则。自行使用 HTTP API 时仍需自行完成发现与契约查询；CLI 自检仅访问 health，不能代替科研就绪检测。
 
+Plan CLI 先在终端进入与当前 VS Code 窗口相同的项目目录，然后使用已保存的 Plan：
+
+```sh
+"$HOME/Library/Application Support/SimpleExperimentMac/cli/simpleex-mac" experiment run "experiments/plans/基线.yaml" --check --dry-run --json
+```
+
+在线检查读取当前工作区与 `workflow.plan` 路由；未就绪、Plan 选择不符或工作区变化会阻止运行。离线只预览本地信息，输出 `validation: local_only`、`ready: false`，不能证明服务器或科研任务就绪。此 CLI 检查不执行完整远端预演；正式插件路线仍负责 validate → dry-run → upload → submit。
+
+去掉 `--check --dry-run` 才申请 `workflow.run`，随后在 VS Code 确认。初始 `requested: true`、`submitted: false`、`waiting_confirmation` 和 `operationId` 是等待确认的本地回执，不表示实验已在远端运行；使用实时契约中的 `operations.list` 核对后续操作状态与提交证据，取消或失败时不要盲目重复运行。项目外或链接逃逸的 Plan 拒绝，中文/真实首尾空格保留。旧 `run --name … -- command` 入口继续保留为手工本地记录器，正式科研使用配置和 Plan；CLI seed 参数与真实科研三拓扑仍待后续验证。
+
 | 现象 | 操作 |
 | --- | --- |
 | 业务面板打不开 | 使用底部 Mac preview 状态栏或命令面板检查更新 |
