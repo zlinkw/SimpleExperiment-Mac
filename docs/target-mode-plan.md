@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005z-mapped（passed）
+## 当前批次 mac-doc-022（passed）
+- 范围 6 文件：两仓 README、配置说明、prepare/门禁测试、本文档。同步映射原始来源、大小/hash/缓存/分块及磁盘别名冲突用法和验证边界；保留更新入口。不扩大业务代码范围。
+- mac-005z-mapped `963ee809e8d0449d0eb56d3387a37eaa119023ac` 已普通推送/fetch 核对 origin/master。
+- 验证 build/闭包/面板语法、配置说明/发布脚本单文件串行 20 秒、三份文档 UTF8/diff；下一批版本元数据及配套发布，实际包/匿名更新核验。
+- passed build/222 闭包/面板 2/vm.Script，macSetupGuide 1/macRelease 4 串行，三份说明 UTF8/更新入口/磁盘别名冲突操作与 diff；prepare 新增映射身份及 pendingResultMetricSync 门禁。探索旧 fixture 失败与后续修复范围在发布说明区分标记。下一批仅补丁元数据、完整配套发布及实际包/匿名更新。
+
+### 前批 mac-005z-mapped（passed）
 - 范围至多 3 文件：后台、真实编译函数测试、计划。Mac 映射来源/目标去重、大小/hash 清单、缓存/分块/发布关联使用原始 POSIX 身份；跨 Plan 合批校验冲突并避免分隔符碰撞。本机已存在条目核对真实名称，拒绝磁盘大小写/Unicode 别名；保留非 Mac 兼容入口。
 - 保护三拓扑/API/Plan/远端实验/确认/租约；不执行真实科研、SSH、传输、删除。验证 build/闭包/面板语法、新测试及相邻映射工作流，逐文件串行 20 秒。物理写入原子锁、完整来源回执与 Agent/解析/归档在后续批次，文档/更新继续同步。
 - 前版交付记录 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 已普通推送/fetch 核对 origin/master。
