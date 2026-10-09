@@ -20,13 +20,17 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-014（passed，固定 CLI preview）
+## 当前批次：mac-005n（passed，Experiment CLI 实时契约）
 ### 边界
 
-- Experiment 0.5.277/SFTP 0.2.71，只改版本及计划，最多 8 文件。完整本机 prepare/publish，草稿全附件大小/hash 核验后公开；匿名 updater 验证两包身份/版本/平台/源码/说明，真实 VSIX 中 CLI 使用本地 shell/Node/health mock 启动。
-- 不安装插件/修改 PATH/Actions/覆盖历史附件/真实 SSH/研究操作，保留旧入口。CLI 业务契约和完整科研主流程/M5 后续批次。
+- Experiment CLI 每次业务调用读取当前发现文件及 capabilities，限制本机监听地址、核对实时方法、阻止预检期间身份变化，保留 API/CLI 入口及参数。新增有界 HTTP/JSON-RPC 响应处理；只访问本地测试监听，不执行科研或服务器操作。最多 8 文件。
+- 最小回归：build/包闭包/面板脚本、新 CLI 契约测试、CLI 启动器；旧 CLI 测试发现文件变量与 mock 同步。SFTP 同规则、CLI 科研运行契约及配套发布后续分批，M5 pending。
 
 ### 验证清单
+
+- passed mac-005n：每次 CLI RPC 重读 Mac 发现文件、GET 实时 capabilities 并核对方法/身份/版本，再复核监听实例发送 RPC；未知方法、监听变化、外部地址/异常 token、错误 HTTP/JSON/envelope 均拒绝。保留 confirm/pathConfirmed，错误不重试业务；请求/响应有界并使用总时限，self-check 同步有界 health。5 文件。
+- passed 本地：build/216 模块闭包/面板脚本 2、包运行时闭包、vm.Script、CLI 实时契约 8、旧 CLI 项目根发现 1、固定入口 5，逐文件串行通过。首次超大响应测试揭示 Node 已结束 socket 上传递 destroy(error) 会产生未处理 error，改为明确 reject 并无错误销毁请求/响应后通过。无超时/服务器操作/科研实验。
+- pending mac-005o：SFTP 同规则 CLI 契约，随后文档/门禁与新配套 preview；CLI 科研运行和三拓扑仍需后续适配，M5 pending。
 
 - passed mac-release-014：`npm run release:prepare` 完整本机门禁通过，Experiment build/215 模块闭包、SFTP build/25 文件闭包、面板脚本 2、逐文件串行更新/CLI/路径/认证/中转与浅/深/高对比渲染通过。`npm run release:publish` 核验三个草稿附件后发布 preview-v0.5.277；未安装插件或使用 Actions。
 - passed preview-v0.5.277：实际 VSIX 解包后，两款固定入口通过真实本地 POSIX shell/Node、中文发现文件与本机 health mock 自检（2 项），LF/源码版本匹配。真实匿名 updater 从 0.5.276/0.2.70 筛出两组件，17 次请求完成清单和包校验；下载字节与已通过 CLI 自检的本地 VSIX 完全一致，两仓源码/README/配置说明匹配。同版本跳过、禁止降级通过；无真实 SSH 或 M5 验收。

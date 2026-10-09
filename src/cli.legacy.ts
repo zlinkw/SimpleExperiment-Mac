@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import * as fs from "fs";
-import * as http from "http";
 import * as os from "os";
 import * as path from "path";
 import { buildExperimentMatrix } from "./features/PlanBuilder";
@@ -15,6 +14,7 @@ import {
   leaderboardToCsv,
   parseResultFile,
 } from "./features/Results";
+import { callLocalRpc, readLocalDiscovery, requestLocalJson } from "./cli/LocalApiClient";
 import { parseSimpleRunArgs, runRecordedExperiment } from "./features/ExperimentRunner";
 
 const APPDATA = require("./mac/MacPaths").applicationDataRoot();
@@ -152,38 +152,14 @@ async function runSelfCheck(): Promise<number> {
   return ok ? 0 : 1;
 }
 
-function checkListener(discovery: Record<string, unknown>): Promise<SelfCheckItem> {
-  const url = new URL("/api/v1/health", String(discovery.baseUrl));
-  return new Promise((resolve) => {
-    const req = http.request({
-      hostname: url.hostname,
-      port: url.port || 80,
-      path: url.pathname,
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${String(discovery.token)}`,
-      },
-      timeout: 3_000,
-    }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => {
-        try {
-          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { ok?: unknown; name?: unknown; version?: unknown };
-          if (res.statusCode === 200 && body.ok === true) {
-            resolve({ name: "listener", ok: true, detail: `${String(body.name || discovery.name)} ${String(body.version || discovery.version)}` });
-          } else {
-            resolve({ name: "listener", ok: false, detail: `missing listener: HTTP ${res.statusCode}` });
-          }
-        } catch {
-          resolve({ name: "listener", ok: false, detail: `missing listener: invalid health response (HTTP ${res.statusCode})` });
-        }
-      });
-    });
-    req.on("timeout", () => req.destroy(new Error("health request timed out")));
-    req.on("error", (error) => resolve({ name: "listener", ok: false, detail: `missing listener: ${error.message}` }));
-    req.end();
-  });
+async function checkListener(discovery: Record<string, unknown>): Promise<SelfCheckItem> {
+  try {
+    const body = await requestLocalJson(discovery, "/api/v1/health", undefined, 64 * 1024, 3000);
+    if (body.ok !== true) throw new Error("invalid health response");
+    return { name: "listener", ok: true, detail: `${String(body.name || discovery.name)} ${String(body.version || discovery.version)}` };
+  } catch (error) {
+    return { name: "listener", ok: false, detail: `missing listener: ${error instanceof Error ? error.message : String(error)}` };
+  }
 }
 
 export function readApiDiscovery(): Record<string, unknown> {
@@ -191,48 +167,11 @@ export function readApiDiscovery(): Record<string, unknown> {
   if (!fs.existsSync(file)) {
     throw new Error(`SimpleExperiment API discovery not found: ${file}. Open VS Code once to start the extension host.`);
   }
-  const discovery = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
-  if (!discovery.baseUrl || !discovery.token) {
-    throw new Error(`SimpleExperiment API discovery is invalid: ${file}`);
-  }
-  return discovery;
+  return readLocalDiscovery(file);
 }
 
-export function apiRequest(discovery: Record<string, unknown>, method: string, params: Record<string, unknown> = {}): Promise<Record<string, any>> {
-  const url = new URL("/api/v1/rpc", String(discovery.baseUrl));
-  const body = Buffer.from(JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method,
-    params,
-  }), "utf8");
-  return new Promise((resolve, reject) => {
-    const req = http.request({
-      hostname: url.hostname,
-      port: url.port || 80,
-      path: url.pathname,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Content-Length": body.length,
-        Authorization: `Bearer ${String(discovery.token)}`,
-      },
-      timeout: 15_000,
-    }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => {
-        try {
-          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
-        } catch (error) {
-          reject(new Error(`invalid API response: ${error instanceof Error ? error.message : String(error)}`));
-        }
-      });
-    });
-    req.on("timeout", () => req.destroy(new Error("SimpleExperiment API request timed out")));
-    req.on("error", reject);
-    req.end(body);
-  });
+export function apiRequest(_discovery: Record<string, unknown>, method: string, params: Record<string, unknown> = {}): Promise<Record<string, any>> {
+  return callLocalRpc(readApiDiscovery, method, params);
 }
 
 export function runRecordedCli(argv: string[]): number {

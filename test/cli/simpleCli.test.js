@@ -16,7 +16,7 @@ function runCli(args, extra = {}) {
     const child = spawn(process.execPath, [cli, ...args], {
       cwd: extra.cwd || root,
       windowsHide: true,
-      env: { ...process.env, SIMPLE_EXPERIMENT_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
+      env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
     });
     let stdout = "";
     let stderr = "";
@@ -85,6 +85,11 @@ test("project root uses Local API workspace from unrelated cwd and explicit env 
   writeProject(project, { "experiments/plans/plan.yaml": "name: test\n" });
   writeProject(override, { "experiments/plans/plan.yaml": "name: override\n" });
   const server = http.createServer((req, res) => {
+    if (req.url === "/api/v1/capabilities") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status"] }));
+      return;
+    }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => {
