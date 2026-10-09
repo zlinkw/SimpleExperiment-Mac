@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-009（passed，CLI 说明与门禁）
+## 当前批次：mac-release-014（running，固定 CLI preview）
 ### 边界
 
-- 两仓 README/配置说明补全实际 CLI 命令、固定路径、Node 20+/PATH/自检边界和错误处理；两仓 CLI 测试进入本机发布门禁。最多 8 文件。
-- 不修改 PATH/自动装插件/执行实验或真实服务器/删除旧入口；保护更新、API/Plan 与删除父目录/两次确认。完成后发布配套 preview，CLI 业务契约与科研主流程/M5 后续。
+- Experiment 0.5.277/SFTP 0.2.71，只改版本及计划，最多 8 文件。完整本机 prepare/publish，草稿全附件大小/hash 核验后公开；匿名 updater 验证两包身份/版本/平台/源码/说明，真实 VSIX 中 CLI 使用本地 shell/Node/health mock 启动。
+- 不安装插件/修改 PATH/Actions/覆盖历史附件/真实 SSH/研究操作，保留旧入口。CLI 业务契约和完整科研主流程/M5 后续批次。
 
 ### 验证清单
 
