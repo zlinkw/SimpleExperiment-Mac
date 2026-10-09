@@ -350,7 +350,7 @@ async function writeLeaseTimestamp(handle: import("fs/promises").FileHandle, tex
     await handle.write(bytes, 0, bytes.length, offset);
 }
 
-export function defaultHostOperationLeasePath(localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local")): string {
+export function defaultHostOperationLeasePath(localAppData = require("../mac/MacPaths").macComponentDirectory("SimpleLocalMac")): string {
     return path.join(localAppData, HOST_OPERATION_LEASE_DIRECTORY, HOST_OPERATION_LEASE_FILENAME);
 }
 

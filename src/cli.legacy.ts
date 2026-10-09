@@ -17,8 +17,8 @@ import {
 } from "./features/Results";
 import { parseSimpleRunArgs, runRecordedExperiment } from "./features/ExperimentRunner";
 
-const APPDATA = process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
-const API_DISCOVERY_PATH = () => process.env.SIMPLE_EXPERIMENT_API_FILE || path.join(APPDATA, "SimpleExperiment", "api.json");
+const APPDATA = require("./mac/MacPaths").applicationDataRoot();
+const API_DISCOVERY_PATH = () => process.env.SIMPLE_EXPERIMENT_MAC_API_FILE || path.join(APPDATA, "SimpleExperimentMac", "api.json");
 
 export async function main(argv: string[]): Promise<number> {
   const [cmd, sub, ...rest] = argv;
@@ -82,14 +82,14 @@ export async function main(argv: string[]): Promise<number> {
     console.log(result.yaml);
     return 0;
   }
-  console.error("Usage: simpleex status | agent health | self-check | experiments list --file x | metrics leaderboard --file x | results parse --file x | results paper-table --file registry.json | plan build | run --name x -- command");
+  console.error("Usage: simpleex-mac status | agent health | self-check | experiments list --file x | metrics leaderboard --file x | results parse --file x | results paper-table --file registry.json | plan build | run --name x -- command");
   return 2;
 }
 
 async function runApiCommand(argv: string[]): Promise<number> {
   const [method, ...rest] = argv;
   if (!method || method.startsWith("-")) {
-    console.error("Usage: simpleex api <method> --json <params.json>");
+    console.error("Usage: simpleex-mac api <method> --json <params.json>");
     return 2;
   }
   const paramsFile = option(rest, "--json") || option(rest, "--params");

@@ -232,7 +232,7 @@ type WebviewActionCommand =
     | "reviewDraft"
     | "cleanupDrafts";
     // Update commands are intentionally local-only and do not enter the remote action map.
-const viewId = "simpleExperiment.panel";
+const viewId = "simpleExperimentMac.panel";
 // 输出门禁/拓扑失败默认硬阻断：仅显式开关（环境变量 SIMPLE_EXPERIMENT_LENIENT_RUN=1）才软通过，
 // 且软通过必须落盘原因（simple_cluster/tmp/lenient-soft-pass.log + recordActionError）。
 const LENIENT_RUN = typeof process !== "undefined" && (process.env.SIMPLE_EXPERIMENT_LENIENT_RUN === "1" || process.env.LENIENT_RUN === "1");
@@ -312,30 +312,30 @@ function recordLenientSoftPass(host: any, scope: string, reason: string): void {
     } catch { /* Best-effort bounded audit; the action error remains durable. */ }
 }
 const LOCAL_API_PREFERRED_PORT = 19765;
-const API_DISCOVERY_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "SimpleExperiment");
+const API_DISCOVERY_DIR = path.join(require("../mac/MacPaths").applicationDataRoot(), "SimpleExperimentMac");
 const API_DISCOVERY_PATH = path.join(API_DISCOVERY_DIR, "api.json");
 const keys = {
-    tunnelConfig: "simpleExperiment.tunnelGatewayConfig",
-    setupConfig: "simpleExperiment.xshellRealtimeTunnelConfig",
-    migrationShown: "simpleExperiment.legacyRemoteMigrationShown",
-    offlineBundle: "simpleExperiment.offlineBundle",
-    uiLayout: "simpleExperiment.uiLayout",
-    uiProjectActions: "simpleExperiment.uiProjectActions",
-    uiProjectLayout: "simpleExperiment.uiProjectLayout",
-    hiddenLegacyTaskUiKeys: "simpleExperiment.hiddenLegacyTaskUiKeys",
-    executionHistoryCutoffs: "simpleExperiment.executionHistoryCutoffs",
-    executionHistoryHiddenOperationIds: "simpleExperiment.executionHistoryHiddenOperationIds",
-    pptPlotConfig: "simpleExperiment.pptPlotConfig",
-    firstRunSetupPrompt: "simpleExperiment.firstRunSetupPromptVersion",
-    projectOnboardingPrompt: "simpleExperiment.projectOnboardingPromptVersion",
-    projectOnboardingCompleted: "simpleExperiment.projectOnboardingCompleted",
-    projectSessionPrefixPrompt: "simpleExperiment.projectSessionPrefixPromptVersion",
-    legacySftpNoticeShown: "simpleExperiment.legacySftpNoticeShown",
-    pendingWorkspaceContinuation: "simpleExperiment.pendingWorkspaceContinuation",
-    pluginUpdateStatus: "simpleExperiment.pluginUpdateStatus",
-    setupConfigurationSignature: "simpleExperiment.setupConfigurationSignature",
+    tunnelConfig: "simpleExperimentMac.tunnelGatewayConfig",
+    setupConfig: "simpleExperimentMac.xshellRealtimeTunnelConfig",
+    migrationShown: "simpleExperimentMac.legacyRemoteMigrationShown",
+    offlineBundle: "simpleExperimentMac.offlineBundle",
+    uiLayout: "simpleExperimentMac.uiLayout",
+    uiProjectActions: "simpleExperimentMac.uiProjectActions",
+    uiProjectLayout: "simpleExperimentMac.uiProjectLayout",
+    hiddenLegacyTaskUiKeys: "simpleExperimentMac.hiddenLegacyTaskUiKeys",
+    executionHistoryCutoffs: "simpleExperimentMac.executionHistoryCutoffs",
+    executionHistoryHiddenOperationIds: "simpleExperimentMac.executionHistoryHiddenOperationIds",
+    pptPlotConfig: "simpleExperimentMac.pptPlotConfig",
+    firstRunSetupPrompt: "simpleExperimentMac.firstRunSetupPromptVersion",
+    projectOnboardingPrompt: "simpleExperimentMac.projectOnboardingPromptVersion",
+    projectOnboardingCompleted: "simpleExperimentMac.projectOnboardingCompleted",
+    projectSessionPrefixPrompt: "simpleExperimentMac.projectSessionPrefixPromptVersion",
+    legacySftpNoticeShown: "simpleExperimentMac.legacySftpNoticeShown",
+    pendingWorkspaceContinuation: "simpleExperimentMac.pendingWorkspaceContinuation",
+    pluginUpdateStatus: "simpleExperimentMac.pluginUpdateStatus",
+    setupConfigurationSignature: "simpleExperimentMac.setupConfigurationSignature",
 };
-const API_CONFIG_NAMESPACE = "simpleExperiment";
+const API_CONFIG_NAMESPACE = "simpleExperimentMac";
 const API_CONFIG_PREFIX = `${API_CONFIG_NAMESPACE}.`;
 const API_SECRET_CONFIG_KEYS = new Set([`${API_CONFIG_NAMESPACE}.tunnel.agentToken`]);
 const API_STATE_KEYS = {
@@ -413,12 +413,12 @@ function redactApiStateValue(name, value) {
 }
 const FIRST_RUN_SETUP_PROMPT_VERSION = 4;
 const WORKSPACE_CONTINUATION_MAX_AGE_MS = 10 * 60_000;
-const SIMPLE_SFTP_EXTENSION_ID = "simple-local.simple-sftp";
-const LEGACY_SFTP_EXTENSION_ID = "simple-local.simple-sftp-manager";
+const SIMPLE_SFTP_EXTENSION_ID = "simple-local.simple-sftp-mac";
+const LEGACY_SFTP_EXTENSION_ID = "simple-local.simple-sftp-mac-manager";
 const SIMPLE_SFTP_REQUIRED_COMMANDS = [
-    "simpleSftp.uploadWorkspace",
-    "simpleSftp.uploadFiles",
-    "simpleSftp.configureDownloadScope",
+    "simpleSftpMac.uploadWorkspace",
+    "simpleSftpMac.uploadFiles",
+    "simpleSftpMac.configureDownloadScope",
 ];
 const AGENT_READY_HEALTH_STATES = new Set(["agent_ok", "file_api_unavailable"]);
 const ENDPOINT_READY_PROBE_STATUSES = new Set(["ok", "file_api_unavailable"]);
@@ -477,7 +477,7 @@ const SCHEDULER_ACTIVE_BUCKET_LIMIT = 160;
 const SCHEDULER_TERMINAL_BUCKET_LIMIT = 80;
 const UI_ACTION_ERROR_RECORD_LIMIT = 8;
 const PANEL_LIFECYCLE_DIAGNOSTIC_LIMIT = 24;
-const PANEL_INCIDENT_STORAGE_KEY = "simpleExperiment.panelIncidentSlots.v1";
+const PANEL_INCIDENT_STORAGE_KEY = "simpleExperimentMac.panelIncidentSlots.v1";
 const PANEL_INCIDENT_SLOT_MAX_BYTES = 256 * 1024;
 const UI_ACTION_ERROR_MESSAGE_LIMIT = 480;
 const UI_ACTION_ERROR_SUGGESTION_LIMIT = 240;
@@ -730,43 +730,43 @@ async function activateExtension(context) {
     const hostCommand = (commandId, actionType, actionLabel, operation) => vscode.commands.registerCommand(commandId, (...args) => provider?.withHostOperationLease(actionType, actionLabel, () => operation(...args)));
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(viewId, provider, { webviewOptions: { retainContextWhenHidden: retainPanelContext } }),
-        vscode.commands.registerCommand("simpleExperiment.openPanel", () => vscode.commands.executeCommand(`${viewId}.focus`)),
-        vscode.commands.registerCommand("simpleExperiment.copyPanelDiagnostics", () => provider?.copyPanelDiagnosticsFromUi()),
-        vscode.commands.registerCommand("simpleExperiment.restorePanel", () => provider?.restorePanelFromUi()),
-        hostCommand("simpleExperiment.quickSetup", "quick-setup", "检查服务器配置", () => provider?.quickSetup()),
-        hostCommand("simpleExperiment.configureXshellSavedSessions", "configure-xshell-sessions", "配置 Xshell 会话", () => provider?.configureXshellSavedSessions()),
-        hostCommand("simpleExperiment.configureXshellAgentSessions", "configure-agent-sessions", "配置 Agent 会话", () => provider?.configureXshellAgentSessions()),
-        hostCommand("simpleExperiment.writeXshellAgentStartupCommands", "write-agent-commands", "写入 Agent 启动命令", () => provider?.writeXshellAgentStartupCommands()),
-        hostCommand("simpleExperiment.configureWorkerTunnels", "configure-worker-tunnels", "配置 Worker 隧道", () => provider?.configureWorkerTunnels()),
-        hostCommand("simpleExperiment.configureTunnelPorts", "configure-tunnel-ports", "配置隧道端口", () => provider?.configureTunnelPorts()),
-        hostCommand("simpleExperiment.configureXshellRealtimeTunnel", "configure-xshell-tunnel", "配置 Xshell 隧道", () => provider?.configureXshellRealtimeTunnel()),
-        hostCommand("simpleExperiment.startHubTunnel", "start-hub-tunnel", "启动 Hub 隧道", () => provider?.startHubTunnel()),
-        hostCommand("simpleExperiment.startWorkerTunnel", "start-worker-tunnel", "启动 Worker 隧道", () => provider?.startWorkerTunnel()),
-        hostCommand("simpleExperiment.startXshellRealtimeTunnel", "start-xshell-tunnel", "启动 Xshell 隧道", () => provider?.startXshellRealtimeTunnel()),
-        hostCommand("simpleExperiment.startAllXshellRealtimeTunnels", "start-all-tunnels", "启动全部 Xshell 隧道", () => provider?.startAllXshellRealtimeTunnels()),
-        hostCommand("simpleExperiment.startAllXshellAgentSessions", "start-agent-sessions", "启动全部 Agent 会话", () => provider?.startAllXshellAgentSessions()),
-        hostCommand("simpleExperiment.startAllXshellConnections", "start-all-connections", "启动全部 Xshell 连接", () => provider?.startAllXshellConnections()),
-        vscode.commands.registerCommand("simpleExperiment.testAllTunnels", () => provider?.testTunnel(true)),
-        vscode.commands.registerCommand("simpleExperiment.showTunnelEndpointRegistry", () => provider?.showTunnelEndpointRegistry()),
-        vscode.commands.registerCommand("simpleExperiment.testXshellTunnel", () => provider?.testTunnel(true)),
-        hostCommand("simpleExperiment.restartRealtimeStream", "restart-realtime-stream", "重启实时流", () => provider?.restartRealtimeStream()),
-        hostCommand("simpleExperiment.pauseRealtimeStream", "pause-realtime-stream", "暂停实时流", () => provider?.pauseRealtimeStream()),
-        hostCommand("simpleExperiment.resumeRealtimeStream", "resume-realtime-stream", "恢复实时流", () => provider?.resumeRealtimeStream()),
-        hostCommand("simpleExperiment.pauseAllNetworkActivity", "pause-network", "暂停网络活动", () => provider?.pauseAllNetworkActivity()),
-        hostCommand("simpleExperiment.generateXshellTunnelScript", "write-tunnel-script", "生成 Xshell 启动脚本", () => provider?.generateTunnelScript()),
-        vscode.commands.registerCommand("simpleExperiment.openTunnelStatus", () => provider?.openTunnelStatus()),
-        vscode.commands.registerCommand("simpleExperiment.runXshellRealIntegrationCheck", () => provider?.runXshellRealIntegrationCheck()),
-        vscode.commands.registerCommand("simpleExperiment.manualRefresh", () => provider?.manualSnapshot()),
-        hostCommand("simpleExperiment.importOfflineBundle", "import-offline-bundle", "导入离线包", () => provider?.importOffline()),
-        vscode.commands.registerCommand("simpleExperiment.clearCache", () => provider?.clearCacheFromUi()),
-        vscode.commands.registerCommand("simpleExperiment.openLastCheckStaticReport", () => provider?.openLastCheckStaticReportFromUi()),
-        vscode.commands.registerCommand("simpleExperiment.copyLastCheckStaticReport", () => provider?.copyLastCheckStaticReportFromUi()),
-        vscode.commands.registerCommand("simpleExperiment.runCheckStatic", () => provider?.runCheckStaticFromUi()),
+        vscode.commands.registerCommand("simpleExperimentMac.openPanel", () => vscode.commands.executeCommand(`${viewId}.focus`)),
+        vscode.commands.registerCommand("simpleExperimentMac.copyPanelDiagnostics", () => provider?.copyPanelDiagnosticsFromUi()),
+        vscode.commands.registerCommand("simpleExperimentMac.restorePanel", () => provider?.restorePanelFromUi()),
+        hostCommand("simpleExperimentMac.quickSetup", "quick-setup", "检查服务器配置", () => provider?.quickSetup()),
+        hostCommand("simpleExperimentMac.configureXshellSavedSessions", "configure-xshell-sessions", "配置 Xshell 会话", () => provider?.configureXshellSavedSessions()),
+        hostCommand("simpleExperimentMac.configureXshellAgentSessions", "configure-agent-sessions", "配置 Agent 会话", () => provider?.configureXshellAgentSessions()),
+        hostCommand("simpleExperimentMac.writeXshellAgentStartupCommands", "write-agent-commands", "写入 Agent 启动命令", () => provider?.writeXshellAgentStartupCommands()),
+        hostCommand("simpleExperimentMac.configureWorkerTunnels", "configure-worker-tunnels", "配置 Worker 隧道", () => provider?.configureWorkerTunnels()),
+        hostCommand("simpleExperimentMac.configureTunnelPorts", "configure-tunnel-ports", "配置隧道端口", () => provider?.configureTunnelPorts()),
+        hostCommand("simpleExperimentMac.configureXshellRealtimeTunnel", "configure-xshell-tunnel", "配置 Xshell 隧道", () => provider?.configureXshellRealtimeTunnel()),
+        hostCommand("simpleExperimentMac.startHubTunnel", "start-hub-tunnel", "启动 Hub 隧道", () => provider?.startHubTunnel()),
+        hostCommand("simpleExperimentMac.startWorkerTunnel", "start-worker-tunnel", "启动 Worker 隧道", () => provider?.startWorkerTunnel()),
+        hostCommand("simpleExperimentMac.startXshellRealtimeTunnel", "start-xshell-tunnel", "启动 Xshell 隧道", () => provider?.startXshellRealtimeTunnel()),
+        hostCommand("simpleExperimentMac.startAllXshellRealtimeTunnels", "start-all-tunnels", "启动全部 Xshell 隧道", () => provider?.startAllXshellRealtimeTunnels()),
+        hostCommand("simpleExperimentMac.startAllXshellAgentSessions", "start-agent-sessions", "启动全部 Agent 会话", () => provider?.startAllXshellAgentSessions()),
+        hostCommand("simpleExperimentMac.startAllXshellConnections", "start-all-connections", "启动全部 Xshell 连接", () => provider?.startAllXshellConnections()),
+        vscode.commands.registerCommand("simpleExperimentMac.testAllTunnels", () => provider?.testTunnel(true)),
+        vscode.commands.registerCommand("simpleExperimentMac.showTunnelEndpointRegistry", () => provider?.showTunnelEndpointRegistry()),
+        vscode.commands.registerCommand("simpleExperimentMac.testXshellTunnel", () => provider?.testTunnel(true)),
+        hostCommand("simpleExperimentMac.restartRealtimeStream", "restart-realtime-stream", "重启实时流", () => provider?.restartRealtimeStream()),
+        hostCommand("simpleExperimentMac.pauseRealtimeStream", "pause-realtime-stream", "暂停实时流", () => provider?.pauseRealtimeStream()),
+        hostCommand("simpleExperimentMac.resumeRealtimeStream", "resume-realtime-stream", "恢复实时流", () => provider?.resumeRealtimeStream()),
+        hostCommand("simpleExperimentMac.pauseAllNetworkActivity", "pause-network", "暂停网络活动", () => provider?.pauseAllNetworkActivity()),
+        hostCommand("simpleExperimentMac.generateXshellTunnelScript", "write-tunnel-script", "生成 Xshell 启动脚本", () => provider?.generateTunnelScript()),
+        vscode.commands.registerCommand("simpleExperimentMac.openTunnelStatus", () => provider?.openTunnelStatus()),
+        vscode.commands.registerCommand("simpleExperimentMac.runXshellRealIntegrationCheck", () => provider?.runXshellRealIntegrationCheck()),
+        vscode.commands.registerCommand("simpleExperimentMac.manualRefresh", () => provider?.manualSnapshot()),
+        hostCommand("simpleExperimentMac.importOfflineBundle", "import-offline-bundle", "导入离线包", () => provider?.importOffline()),
+        vscode.commands.registerCommand("simpleExperimentMac.clearCache", () => provider?.clearCacheFromUi()),
+        vscode.commands.registerCommand("simpleExperimentMac.openLastCheckStaticReport", () => provider?.openLastCheckStaticReportFromUi()),
+        vscode.commands.registerCommand("simpleExperimentMac.copyLastCheckStaticReport", () => provider?.copyLastCheckStaticReportFromUi()),
+        vscode.commands.registerCommand("simpleExperimentMac.runCheckStatic", () => provider?.runCheckStaticFromUi()),
     );
     context.subscriptions.push(
-        hostCommand("simpleExperiment.bootstrapProject", "bootstrap-project", "识别工作区", () => provider?.bootstrapProjectFromUi()),
-        hostCommand("simpleExperiment.prepareAgents", "prepare-agents", "准备 Agent 并启动", () => provider?.prepareAgentsForFirstRun()),
-        hostCommand("simpleExperiment.verifyAgentVersion", "verify-agent-version", "校验 Agent 版本", () => provider?.verifyAgentVersionManually()),
+        hostCommand("simpleExperimentMac.bootstrapProject", "bootstrap-project", "识别工作区", () => provider?.bootstrapProjectFromUi()),
+        hostCommand("simpleExperimentMac.prepareAgents", "prepare-agents", "准备 Agent 并启动", () => provider?.prepareAgentsForFirstRun()),
+        hostCommand("simpleExperimentMac.verifyAgentVersion", "verify-agent-version", "校验 Agent 版本", () => provider?.verifyAgentVersionManually()),
     );
     context.subscriptions.push(vscode.workspace.onDidChangeConfiguration((event) => void provider?.handleConfigurationChanged(event)));
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void provider?.handleWorkspaceFoldersChanged()));
@@ -788,7 +788,7 @@ async function activateExtension(context) {
     }, 8000);
     remoteVersionCheckTimer.unref?.();
     context.subscriptions.push({ dispose: () => clearTimeout(remoteVersionCheckTimer) });
-    context.subscriptions.push(vscode.commands.registerCommand("simpleExperiment.openSetupGuide", () => provider?.openSetupGuide()));
+    context.subscriptions.push(vscode.commands.registerCommand("simpleExperimentMac.openSetupGuide", () => provider?.openSetupGuide()));
 }
 export function deactivate() {
     const current = provider;
@@ -1215,7 +1215,7 @@ export class RealtimeTunnelPanelProvider {
         this.context = context;
         this.context.subscriptions.push(this.cacheCleanupContextChanged);
         this.startPanelHostEventLoopMonitor();
-        this.retainPanelContextWhenHidden = vscode.workspace.getConfiguration("simpleExperiment").get("panel.retainContextWhenHidden", false) === true;
+        this.retainPanelContextWhenHidden = vscode.workspace.getConfiguration("simpleExperimentMac").get("panel.retainContextWhenHidden", false) === true;
         const incidentSlots = this.context.workspaceState.get(PANEL_INCIDENT_STORAGE_KEY);
         if (incidentSlots && typeof incidentSlots === "object") {
             this.panelIncidentSlots = {
@@ -1268,13 +1268,13 @@ export class RealtimeTunnelPanelProvider {
             return this.localApiServerPromise;
         const pending = (async () => {
             const scope = String(workspaceRoot() || "");
-            const secretName = "simpleExperiment.scalarViewerSigningKey.v1." + crypto.createHash("sha256").update(scope.toLowerCase()).digest("hex").slice(0, 24);
+            const secretName = "simpleExperimentMac.scalarViewerSigningKey.v1." + crypto.createHash("sha256").update(scope.toLowerCase()).digest("hex").slice(0, 24);
             let signingKey = await this.context.secrets.get(secretName);
             if (!/^[a-f0-9]{64}$/i.test(String(signingKey || ""))) {
                 signingKey = crypto.randomBytes(32).toString("hex");
                 await this.context.secrets.store(secretName, signingKey);
             }
-            const preferredPort = Number(this.context.workspaceState.get("simpleExperiment.localApiPort")) || LOCAL_API_PREFERRED_PORT;
+            const preferredPort = Number(this.context.workspaceState.get("simpleExperimentMac.localApiPort")) || LOCAL_API_PREFERRED_PORT;
             const server = new LocalApiServerClass({
                 name: "SimpleExperiment",
                 version: String(this.context?.extension?.packageJSON?.version || ""),
@@ -1298,7 +1298,7 @@ export class RealtimeTunnelPanelProvider {
                 }
                 this.localApiServer = server;
                 this.context.subscriptions.push({ dispose: () => { void server.dispose().catch(() => undefined); } });
-                void this.context.workspaceState.update("simpleExperiment.localApiPort", discovery.port).then(undefined, () => undefined);
+                void this.context.workspaceState.update("simpleExperimentMac.localApiPort", discovery.port).then(undefined, () => undefined);
                 return server;
             } catch (error) {
                 await server.dispose().catch(() => undefined);
@@ -2333,7 +2333,7 @@ export class RealtimeTunnelPanelProvider {
         const folder = vscode.workspace.workspaceFolders?.[0];
         if (!folder)
             throw new Error("保存拓扑模式需要先打开工作区。");
-        const config = vscode.workspace.getConfiguration("simpleExperiment", folder.uri);
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri);
         await config.update("topologyMode", mode, vscode.ConfigurationTarget.WorkspaceFolder);
         this.topologyRuntimeMode = this.projectTopologyAssessment(mode).mode;
         this.postState();
@@ -3364,21 +3364,21 @@ export class RealtimeTunnelPanelProvider {
         return (0, TunnelGateway_1.isRealtimeConnectionMode)(this.effectiveConnectionMode());
     }
     async handleConfigurationChanged(event) {
-        if (!event?.affectsConfiguration?.("simpleExperiment"))
+        if (!event?.affectsConfiguration?.("simpleExperimentMac"))
             return;
-        if (event.affectsConfiguration("simpleExperiment.panel.retainContextWhenHidden")) {
-            const selected = vscode.workspace.getConfiguration("simpleExperiment").get("panel.retainContextWhenHidden", false) === true;
+        if (event.affectsConfiguration("simpleExperimentMac.panel.retainContextWhenHidden")) {
+            const selected = vscode.workspace.getConfiguration("simpleExperimentMac").get("panel.retainContextWhenHidden", false) === true;
             if (selected !== this.retainPanelContextWhenHidden)
                 void vscode.window.showInformationMessage("面板隐藏时的上下文保留策略将在 Reload Window 后生效。默认释放隐藏面板的 Webview 上下文以控制长期内存占用。");
         }
         const previousMode = this.effectiveConnectionMode();
-        const topologyChanged = event.affectsConfiguration("simpleExperiment.topologyMode");
-        const resultCsvDirChanged = event.affectsConfiguration("simpleExperiment.resultCsvDir");
-        const connectionChanged = event.affectsConfiguration("simpleExperiment.connectionMode")
-            || event.affectsConfiguration("simpleExperiment.tunnel");
+        const topologyChanged = event.affectsConfiguration("simpleExperimentMac.topologyMode");
+        const resultCsvDirChanged = event.affectsConfiguration("simpleExperimentMac.resultCsvDir");
+        const connectionChanged = event.affectsConfiguration("simpleExperimentMac.connectionMode")
+            || event.affectsConfiguration("simpleExperimentMac.tunnel");
         if (resultCsvDirChanged)
             this.refreshResultCsvDirectory();
-        if (event.affectsConfiguration("simpleExperiment.gpu"))
+        if (event.affectsConfiguration("simpleExperimentMac.gpu"))
             this.gpuOwnerConfigCache = undefined;
         if (connectionChanged) {
             this.tunnelConfig = this.loadTunnelConfig();
@@ -4062,7 +4062,7 @@ export class RealtimeTunnelPanelProvider {
         console.log("[diag] withHostOperationLease acquire", { actionType, actionLabel });
         try {
             const result = await this.hostOperationLease.run({
-                pluginId: "simple-local.simple-experiment",
+                pluginId: "simple-local.simple-experiment-mac",
                 workspaceUri: leaseContext.workspaceUri,
                 hostProjectPath: leaseContext.hostProjectPath,
                 actionType,
@@ -4118,7 +4118,7 @@ export class RealtimeTunnelPanelProvider {
     async migrateLegacyConfigOnce() {
         if (this.context.globalState.get(keys.migrationShown))
             return;
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const legacy = (0, TunnelOnlyPolicy_1.migrateLegacyRemoteConfig)({ ...config });
         await this.context.globalState.update(keys.migrationShown, true);
         if (legacy.removedFields.length)
@@ -4132,7 +4132,7 @@ export class RealtimeTunnelPanelProvider {
         const legacySftp = legacySftpInstallationState();
         const serverSetupComplete = initialServerSetupComplete(this.setupConfig, this.projectTopologyAssessment().hubAllowed);
         const enabledWorkerCount = this.enabledWorkerConfigs().length;
-        if (serverSetupComplete && simpleSftp.ready && enabledWorkerCount > 0) {
+        if (serverSetupComplete && simpleSftpMac.ready && enabledWorkerCount > 0) {
             const root = workspaceRoot();
             if (!root)
                 return;
@@ -4148,7 +4148,7 @@ export class RealtimeTunnelPanelProvider {
                 await this.context.workspaceState.update(keys.projectOnboardingPrompt, 1);
             return;
         }
-        if (simpleSftp.ready && legacySftp.installed && !this.context.globalState.get(keys.legacySftpNoticeShown)) {
+        if (simpleSftpMac.ready && legacySftp.installed && !this.context.globalState.get(keys.legacySftpNoticeShown)) {
             const choice = await vscode.window.showWarningMessage("检测到旧版 SFTP 插件仍已安装。新版 SimpleSFTP 已可用；若看到旧版状态栏按钮，请先卸载旧版，再执行 Developer: Reload Window。", "打开旧版扩展管理", "不再提示");
             if (choice === "打开旧版扩展管理")
                 await vscode.commands.executeCommand("workbench.extensions.search", `@id:${LEGACY_SFTP_EXTENSION_ID}`);
@@ -4158,10 +4158,10 @@ export class RealtimeTunnelPanelProvider {
         const shownVersion = Number(this.context.globalState.get(keys.firstRunSetupPrompt, 0));
         if (shownVersion >= FIRST_RUN_SETUP_PROMPT_VERSION)
             return;
-        const needsSftp = !simpleSftp.ready;
+        const needsSftp = !simpleSftpMac.ready;
         const needsWorker = !needsSftp && serverSetupComplete && enabledWorkerCount < 1;
         const message = needsSftp
-            ? `首次使用 SimpleExperiment：配套 SimpleSFTP 未就绪。${simpleSftp.message} 安装并重载窗口后再识别工作区。`
+            ? `首次使用 SimpleExperiment：配套 SimpleSFTP 未就绪。${simpleSftpMac.message} 安装并重载窗口后再识别工作区。`
             : needsWorker
                 ? "首次使用 SimpleExperiment：Hub 已配置，但正式运行、复现和批量运行还缺少至少一个启用的执行 Worker。请在“设置 > 服务器”手动添加。"
                 : "首次使用 SimpleExperiment：服务器相关配置不会通过弹窗从零填写。请前往“设置 > 服务器”配置 Xshell 会话和项目父目录；工作区识别时只确认会话前缀等项目参数。";
@@ -4200,7 +4200,7 @@ export class RealtimeTunnelPanelProvider {
     }
     async ensureSimpleSftpReadyForSetup(operation) {
         const simpleSftp = simpleSftpIntegrationReadiness();
-        if (simpleSftp.ready) {
+        if (simpleSftpMac.ready) {
             try {
                 const registered = new Set(await vscode.commands.getCommands(true));
                 const missing = SIMPLE_SFTP_REQUIRED_COMMANDS.filter((command) => !registered.has(command));
@@ -4222,7 +4222,7 @@ export class RealtimeTunnelPanelProvider {
                 return false;
             }
         }
-        const next = await vscode.window.showWarningMessage(`${operation}暂不能开始：${simpleSftp.message}`, "打开配置说明", "打开扩展管理", "稍后");
+        const next = await vscode.window.showWarningMessage(`${operation}暂不能开始：${simpleSftpMac.message}`, "打开配置说明", "打开扩展管理", "稍后");
         if (next === "打开配置说明")
             await this.openSetupGuide();
         else if (next === "打开扩展管理")
@@ -4569,9 +4569,9 @@ export class RealtimeTunnelPanelProvider {
             void vscode.window.showInformationMessage(`Agent 首次准备完成：${topologySummary} 已部署、启动并通过检测。下一步可直接识别工作区。`, "识别工作区", "打开面板")
                 .then((next) => {
                     if (next === "识别工作区")
-                        return vscode.commands.executeCommand("simpleExperiment.bootstrapProject");
+                        return vscode.commands.executeCommand("simpleExperimentMac.bootstrapProject");
                     if (next === "打开面板")
-                        return vscode.commands.executeCommand("simpleExperiment.openPanel");
+                        return vscode.commands.executeCommand("simpleExperimentMac.openPanel");
                     return undefined;
                 })
                 .catch((error) => console.warn("Agent 准备完成提示后续操作失败", error));
@@ -5504,7 +5504,7 @@ export class RealtimeTunnelPanelProvider {
                 await this.openSetupGuide();
                 break;
             case "openAdvancedCommandsSetting":
-                await vscode.commands.executeCommand("workbench.action.openSettings", "simpleExperiment.showAdvancedCommands");
+                await vscode.commands.executeCommand("workbench.action.openSettings", "simpleExperimentMac.showAdvancedCommands");
                 break;
             case "configurePorts":
                 await this.configureTunnelPorts();
@@ -6908,8 +6908,8 @@ export class RealtimeTunnelPanelProvider {
             const enabledWorkers = this.enabledWorkerConfigs();
             const simpleSftp = simpleSftpIntegrationReadiness();
             const next = setupGuideNextStep({
-                simpleSftpReady: simpleSftp.ready,
-                simpleSftpMessage: simpleSftp.message,
+                simpleSftpReady: simpleSftpMac.ready,
+                simpleSftpMessage: simpleSftpMac.message,
                 setupComplete: initialServerSetupComplete(this.setupConfig, this.projectTopologyAssessment().hubAllowed),
                 workerCount: enabledWorkers.length,
                 workspaceOpen: Boolean(workspaceRoot()),
@@ -6924,7 +6924,7 @@ export class RealtimeTunnelPanelProvider {
                 return;
             }
             if (choice === "打开扩展管理") {
-                await vscode.commands.executeCommand("workbench.extensions.search", "@id:simple-local.simple-sftp");
+                await vscode.commands.executeCommand("workbench.extensions.search", "@id:simple-local.simple-sftp-mac");
                 return;
             }
             if (choice === "添加 Worker") {
@@ -6941,7 +6941,7 @@ export class RealtimeTunnelPanelProvider {
                 return;
             }
             if (choice === "打开面板")
-                await vscode.commands.executeCommand("simpleExperiment.openPanel");
+                await vscode.commands.executeCommand("simpleExperimentMac.openPanel");
             return;
         }
     }
@@ -7490,7 +7490,7 @@ export class RealtimeTunnelPanelProvider {
     async uploadProjectToHub() {
         if (!this.projectTopologyAssessment().hubAllowed)
             throw new Error("当前拓扑不使用 Hub，已阻止上传到 Hub。请使用 Worker 上传入口。");
-        await this.prepareSftpTargets("uploadProjectToHub", "simpleSftp.uploadWorkspace");
+        await this.prepareSftpTargets("uploadProjectToHub", "simpleSftpMac.uploadWorkspace");
         await this.syncCodeTargets([this.hubCodeSyncTarget()], "hub", {
             startedAction: { title: "首次上传到 Hub", detail: "正在通过 SimpleSFTP 同步本地轻量代码到 Hub。" },
         });
@@ -7498,7 +7498,7 @@ export class RealtimeTunnelPanelProvider {
     async uploadProjectToWorkers(confirm = true, progressOptions = {}) {
         const progressReport = typeof progressOptions.progressReport === "function" ? progressOptions.progressReport : undefined;
         if (progressReport) progressReport("正在准备 SFTP 目标…", 0);
-        await this.prepareSftpTargets("uploadProjectToWorkers", "simpleSftp.uploadWorkspace");
+        await this.prepareSftpTargets("uploadProjectToWorkers", "simpleSftpMac.uploadWorkspace");
         if (progressReport) progressReport("SFTP 目标已就绪，开始核对本地代码清单…", 0);
         const result = await this.syncManualWorkerCode({ ...progressOptions, hashCompare: true, ...(confirm ? {
             startedAction: { title: "上传到 Worker", detail: "正在核对各 Worker 占用并上传代码，占用或未核实的 Worker 保留原版本。" },
@@ -7507,7 +7507,7 @@ export class RealtimeTunnelPanelProvider {
         return result;
     }
     async distributeCodeToWorkers() {
-        await this.prepareSftpTargets("distributeCodeToWorkers", "simpleSftp.uploadWorkspace");
+        await this.prepareSftpTargets("distributeCodeToWorkers", "simpleSftpMac.uploadWorkspace");
         const result = await this.syncManualWorkerCode({ hashCompare: true,
             startedAction: { title: "分发代码到 Worker", detail: "正在核对各 Worker 占用并分发代码，占用或未核实的 Worker 保留原版本。" },
         });
@@ -7527,7 +7527,7 @@ export class RealtimeTunnelPanelProvider {
     async deployLatestAgentRuntime(showMessage = true, pathConfirmed = false, serverIds = [], deferVerification = false) {
         console.log("[diag] deployLatestAgentRuntime entry", { showMessage, pathConfirmed, serverIds });
         console.log("[diag] prepareSftpTargets before", { serverIds });
-        await this.prepareSftpTargets("deployLatestAgentRuntime", "simpleSftp.uploadFiles", serverIds);
+        await this.prepareSftpTargets("deployLatestAgentRuntime", "simpleSftpMac.uploadFiles", serverIds);
         console.log("[diag] prepareSftpTargets after", { transportTargets: this.sftpSharedTargets().length });
         const targets = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.agentRuntimeUploadTargets(), serverIds);
         if (!targets.length)
@@ -7563,8 +7563,8 @@ export class RealtimeTunnelPanelProvider {
         }
         const failures = [];
         for (const target of targets) {
-            console.log("[diag] simpleSftp.uploadFiles invoke", target.id, target.remotePath);
-            const result = await vscode.commands.executeCommand("simpleSftp.uploadFiles", {
+            console.log("[diag] simpleSftpMac.uploadFiles invoke", target.id, target.remotePath);
+            const result = await vscode.commands.executeCommand("simpleSftpMac.uploadFiles", {
                 apiMode: true,
                 confirm: true,
                 pathConfirmed: true,
@@ -7579,7 +7579,7 @@ export class RealtimeTunnelPanelProvider {
                 ],
                 manifest: { ...manifest, targetId: target.id, targetRole: target.role, targetLabel: target.label },
             });
-            console.log("[diag] simpleSftp.uploadFiles result", JSON.stringify(result)?.slice(0,500));
+            console.log("[diag] simpleSftpMac.uploadFiles result", JSON.stringify(result)?.slice(0,500));
             const record = result && typeof result === "object" ? result : {};
             if (!sftpUploadFilesSucceeded(record))
                 failures.push(`${target.label}（id=${target.id}, host=${target.host}, networkHost=${target.networkHost || target.displayHost || "-"}）: ${stringFromRecord(record, ["error", "message", "status"]) || "上传失败"}`);
@@ -8058,7 +8058,7 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     async configureDownloadScope() {
-        await this.prepareSftpTargets("configureDownloadScope", "simpleSftp.configureDownloadScope");
+        await this.prepareSftpTargets("configureDownloadScope", "simpleSftpMac.configureDownloadScope");
         const root = workspaceRoot();
         if (!root)
             throw new Error("请先打开一个工作区，再设置下载文件范围。");
@@ -8075,7 +8075,7 @@ export class RealtimeTunnelPanelProvider {
             return;
         await this.confirmRemoteWriteTargets("确认下载范围对应的服务器项目目录", [selected]);
         await this.writeSftpManagerServerProfiles([selected.id]);
-        const result = await vscode.commands.executeCommand("simpleSftp.configureDownloadScope", {
+        const result = await vscode.commands.executeCommand("simpleSftpMac.configureDownloadScope", {
             localPath: root,
             targetId: selected.id,
             targetRole: selected.role,
@@ -8092,7 +8092,7 @@ export class RealtimeTunnelPanelProvider {
         if (!folder || vscode.workspace.workspaceFolders?.length !== 1)
             throw new Error("请先单独打开一个项目工作区，再查看项目同步范围。");
         const root = folder.uri.fsPath;
-        const config = vscode.workspace.getConfiguration("simpleExperiment", folder.uri);
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri);
         const savedScope = config.get<string[]>("codeSync.scopePaths");
         const legacyExtra = config.get<string[]>("codeSync.includePaths", []) || [];
         const localSelected = [...new Set(Array.isArray(savedScope) ? savedScope : legacyExtra)].sort();
@@ -8246,7 +8246,7 @@ export class RealtimeTunnelPanelProvider {
                 ? statuses
                 : Object.fromEntries(Object.entries(statuses).filter(([file]) => selectedPaths.some((scope) => file === scope || file.startsWith(`${scope}/`)) || file === relative));
             const planned = planLatestWorkerMerge(scoped, targets.map((target) => target.id));
-            const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+            const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
             const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
             const skipped = [...planned.skipped];
             const work = planned.items.filter((item) => {
@@ -8312,7 +8312,7 @@ export class RealtimeTunnelPanelProvider {
         let destinationIds = [];
         if (action === "sync") {
             if (!targets.length) throw new Error("没有已启用的 Worker，无法批量同步。");
-            const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+            const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
             const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
             let commonSources;
             for (const entry of entries) {
@@ -8371,7 +8371,7 @@ export class RealtimeTunnelPanelProvider {
             }
             if (action === "delete") {
                 report(`正在一次性保存 ${work.length} 条自动同步暂停记录`);
-                const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+                const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
                 const includes = config.get<string[]>("codeSync.includePaths", []), scopes = config.get<string[]>("codeSync.scopePaths");
                 await this.updateSyncScopeHolds(root, (holds) => {
                     const deletedAt = new Date().toISOString();
@@ -8421,7 +8421,7 @@ export class RealtimeTunnelPanelProvider {
         const mirrorLocal = endpointId !== "local" && destinationIds.includes("local");
         if (mirrorLocal) await this.simpleSftpCapability("sync.downloadPaths");
         const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const includes = config.get<string[]>("codeSync.includePaths", []);
         const scopes = config.get<string[]>("codeSync.scopePaths");
         for (const item of work) {
@@ -8476,7 +8476,7 @@ export class RealtimeTunnelPanelProvider {
                 const batchNote = group.batchCount > 1 ? ` · 批次 ${group.batch}/${group.batchCount}` : "";
                 report(`${row.id}：打包传输 ${group.files.length} 个文件${batchNote}`);
                 if (endpointId === "local") {
-                    const result = await vscode.commands.executeCommand("simpleSftp.uploadWorkspace", {
+                    const result = await vscode.commands.executeCommand("simpleSftpMac.uploadWorkspace", {
                         apiMode: true, confirm: true, pathConfirmed: true,
                         localPath: root, targetId: row.id, targetRole: row.role, stateFileMode: "virtual",
                         manifest: group.manifest, transientManifest: true, preComparedManifest: true,
@@ -8611,7 +8611,7 @@ export class RealtimeTunnelPanelProvider {
             const entry = listing.entries?.find((row) => row.path === relative);
             if (!entry || Boolean(entry.directory) !== directory) throw new Error(`${target.id} 目标已变化；禁止删除，请刷新文件树。`);
         }
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const codeOwned = isLocalCodeOwnedPath(relative, directory, config.get<string[]>("codeSync.includePaths", []), config.get<string[]>("codeSync.scopePaths"));
         report("正在保存自动同步暂停记录");
         await this.updateSyncScopeHolds(root, (holds) => { holds[relative] = { endpointId, deletedAt: new Date().toISOString(), directory, codeOwned }; });
@@ -8651,7 +8651,7 @@ export class RealtimeTunnelPanelProvider {
             report("等待核对全部完整路径并两次确认");
             if (!await confirmSyncScopePaths("删除所有 Worker 副本", `永久删除 ${present.length} 台 Worker 的${directory ? "整个目录及其内容" : "文件"}。本机不会删除。该路径暂停自动补回，直到手动选定保留版本。`,
                 present.map(({ target, server }) => ({ label: `${target.id} (${server.user}@${server.host}:${server.port})`, path: path.posix.join(server.remotePath, relative) })), "永久删除所有 Worker 副本")) return false;
-            const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+            const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
             const codeOwned = isLocalCodeOwnedPath(relative, directory, config.get<string[]>("codeSync.includePaths", []), config.get<string[]>("codeSync.scopePaths"));
             report("正在保存自动同步暂停记录");
             await this.updateSyncScopeHolds(root, (holds) => { holds[relative] = { endpointId: "allWorkers", deletedAt: new Date().toISOString(), directory, codeOwned }; });
@@ -8683,7 +8683,7 @@ export class RealtimeTunnelPanelProvider {
         if (endpointId !== "local" && !sourceRow) throw new Error("来源 Worker 未连接或未启用。");
         const mirrorLocal = endpointId !== "local" && (!destinationIds || destinationIds.includes("local"));
         if (mirrorLocal) await this.simpleSftpCapability("sync.downloadPaths");
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const codeOwned = isLocalCodeOwnedPath(relative, directory, config.get<string[]>("codeSync.includePaths", []), config.get<string[]>("codeSync.scopePaths"));
         if (endpointId !== "local" && (holds[relative]?.codeOwned || codeOwned)) throw new Error("代码以本机为准；请选择本机版本。");
         if (directory) {
@@ -8723,7 +8723,7 @@ export class RealtimeTunnelPanelProvider {
                 }
                 const files = directory ? sourceInventory : { [relative]: sourceInventory[relative] };
                 const manifest = Object.fromEntries(Object.entries(files).map(([file, info]: [string, any]) => [file, { size: info.size, sha256: info.sha256 }]));
-                const result = await vscode.commands.executeCommand("simpleSftp.uploadWorkspace", { apiMode: true, confirm: true, pathConfirmed: true,
+                const result = await vscode.commands.executeCommand("simpleSftpMac.uploadWorkspace", { apiMode: true, confirm: true, pathConfirmed: true,
                     localPath: root, targetId: row.id, targetRole: row.role, stateFileMode: "virtual",
                     manifest, transientManifest: true, server: this.sftpServerOptions(row) });
                 if (!result || result.ok === false) throw new Error(`上传 ${row.id} 失败：${resultError(result)}`);
@@ -8805,7 +8805,7 @@ export class RealtimeTunnelPanelProvider {
                         confirmedAbsolutePath: absolute, confirm: true, pathConfirmed: true, secondConfirmation: true });
                     if (Object.keys(sourceFiles).length) {
                         const manifest = Object.fromEntries(Object.entries(sourceFiles).map(([file, info]: [string, any]) => [file, { sha256: info.sha256, size: info.size }]));
-                        const result = await vscode.commands.executeCommand("simpleSftp.uploadWorkspace", { apiMode: true, confirm: true, pathConfirmed: true,
+                        const result = await vscode.commands.executeCommand("simpleSftpMac.uploadWorkspace", { apiMode: true, confirm: true, pathConfirmed: true,
                             localPath: root, targetId: target.id, targetRole: target.role, stateFileMode: "virtual", transientManifest: true,
                             manifest, server: destination });
                         if (!result || result.ok === false) throw new Error(`上传 ${target.id} 失败：${resultError(result)}`);
@@ -8828,7 +8828,7 @@ export class RealtimeTunnelPanelProvider {
     }
     async ensureCodeReadyForRun(projectContext = this.captureProjectContext(), bodies = [], reportStage = (_text: string) => {}) {
         reportStage("正在准备运行前代码同步…");
-        await this.prepareSftpTargets("ensureCodeReadyForRun", "simpleSftp.uploadWorkspace");
+        await this.prepareSftpTargets("ensureCodeReadyForRun", "simpleSftpMac.uploadWorkspace");
         if (!this.projectContextIsCurrent(projectContext))
             throw new UiCommandCancelled("工作区已切换，运行前代码同步已取消。");
         try { await this.ensureRemoteAgentVersionConsistent(); } catch {}
@@ -8855,7 +8855,7 @@ export class RealtimeTunnelPanelProvider {
     }
     async ensureHubCodeReadyForPlanCheck(body, reportStage = (_text: string) => {}) {
         reportStage("正在准备校验所需代码…");
-        await this.prepareSftpTargets("ensureHubCodeReadyForPlanCheck", "simpleSftp.uploadWorkspace");
+        await this.prepareSftpTargets("ensureHubCodeReadyForPlanCheck", "simpleSftpMac.uploadWorkspace");
         const topology = this.assertPlanTopologyReady("Plan 校验");
         const selectedWorkerId = this.planSchedulerWorkerId(body);
         const targets = topology.mode === "hub_worker"
@@ -8880,7 +8880,7 @@ export class RealtimeTunnelPanelProvider {
                 throw new UiCommandCancelled("工作区已切换，代码同步已取消。");
         };
         assertCurrent();
-        await this.ensureSftpManagerCommand("simpleSftp.uploadWorkspace");
+        await this.ensureSftpManagerCommand("simpleSftpMac.uploadWorkspace");
         assertCurrent();
         const root = projectContext?.root || workspaceRoot();
         if (!root)
@@ -8888,7 +8888,7 @@ export class RealtimeTunnelPanelProvider {
         let enabledTargets = targets.filter(Boolean);
         if (!enabledTargets.length)
             throw new Error("没有可用于代码同步的 Hub/Worker 目标。");
-        const codeSyncConfig = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const codeSyncConfig = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const includePaths = codeSyncConfig.get<string[]>("codeSync.includePaths", []);
         const scopePaths = codeSyncConfig.get<string[]>("codeSync.scopePaths");
         const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
@@ -9005,7 +9005,7 @@ export class RealtimeTunnelPanelProvider {
                 if (progressReport) progressReport(`正在传输 ${target.label || target.id} 的 ${Object.keys(uploadManifest).length} 个变化文件…`);
                 const transferStarted = Date.now();
                 syncStats.uploads += 1;
-                const result = await vscode.commands.executeCommand("simpleSftp.uploadWorkspace", {
+                const result = await vscode.commands.executeCommand("simpleSftpMac.uploadWorkspace", {
                     apiMode: true,
                     confirm: true,
                     pathConfirmed: true,
@@ -9234,7 +9234,7 @@ export class RealtimeTunnelPanelProvider {
         this.assertTopologyActualWorkRoots("写入 SimpleSFTP 服务器配置");
         const requestedIds = new Set((Array.isArray(targetIds) ? targetIds : []).map((item) => String(item || "").trim()).filter(Boolean));
         const targets = this.sftpSharedTargets().filter((target) => !requestedIds.size || requestedIds.has(target.id));
-        const dir = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "SimpleSFTP", "server-profiles");
+        const dir = path.join(require("../mac/MacPaths").applicationDataRoot(), "SimpleSFTPMac", "server-profiles");
         const file = path.join(dir, "servers.json");
         if (!targets.length)
             return { targetCount: 0, file };
@@ -9507,7 +9507,7 @@ export class RealtimeTunnelPanelProvider {
     }
     projectTopologyAssessment(configuredModeOverride) {
         const folder = vscode.workspace.workspaceFolders?.[0];
-        const config = vscode.workspace.getConfiguration("simpleExperiment", folder?.uri);
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder?.uri);
         const configuredMode = configuredModeOverride === undefined
             ? String(config.get("topologyMode", "") || "").trim()
             : String(configuredModeOverride || "").trim();
@@ -9629,7 +9629,7 @@ export class RealtimeTunnelPanelProvider {
         return normalizeDistributedProjectContract(this.localPlanMetadata.detectedProject?.adapterRules?.distributed || {});
     }
     async localDistributedCodeFingerprint(root, signal?: AbortSignal) {
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
         const includePaths = config.get<string[]>("codeSync.includePaths", []);
         const scopePaths = config.get<string[]>("codeSync.scopePaths");
@@ -9914,7 +9914,7 @@ export class RealtimeTunnelPanelProvider {
     async withQueueWriteResource(root, work) {
         if (!this.hostOperationLease) return work();
         const file = DistributedPlanQueue.distributedQueuePath(this.context.globalStorageUri.fsPath, root);
-        return this.hostOperationLease.run({ pluginId: "simple-local.simple-experiment", workspaceUri: String(root),
+        return this.hostOperationLease.run({ pluginId: "simple-local.simple-experiment-mac", workspaceUri: String(root),
             hostProjectPath: path.dirname(file), actionType: "queue-write", actionLabel: "写入调度队列", waitForConflict: true,
             resources: [{ server: "local", project: path.dirname(file), target: file }] }, work);
     }
@@ -10390,7 +10390,7 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     async buildDistributedJobCodeManifest(root) {
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
         return filterHeldFiles(await buildLocalCodeManifest(root,
             config.get<string[]>("codeSync.includePaths", []), config.get<string[]>("codeSync.scopePaths"),
@@ -11413,7 +11413,7 @@ export class RealtimeTunnelPanelProvider {
         if (publish) await this.retainLatestDistributedPlanOutputs(root, selected.map((plan) => plan.id));
     }
     planOutputRetentionMode(root) {
-        return vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root)).get("results.planOutputRetention", "latest-complete");
+        return vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root)).get("results.planOutputRetention", "latest-complete");
     }
     private notifyPlanOutputVersionReview(root, queue): void {
         if (workspaceRoot() !== root || this.distributedQueueStorageDiagnostics?.status === "stale") return;
@@ -12166,7 +12166,7 @@ export class RealtimeTunnelPanelProvider {
         ].join("\n"), { modal: true }, "保存拓扑");
         if (answer !== "保存拓扑")
             throw new UiCommandCancelled("拓扑模式修改已取消。");
-        const config = vscode.workspace.getConfiguration("simpleExperiment", folder.uri);
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri);
         await config.update("topologyMode", requestedMode, vscode.ConfigurationTarget.WorkspaceFolder);
         await this.applyTopologyRuntimeMode(requestedMode, "topology saved from UI");
         this.postState();
@@ -12278,7 +12278,7 @@ export class RealtimeTunnelPanelProvider {
     }
     async saveSchedulerConfigFromUi(message) {
         const patch = recordField(message, "patch");
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const settings = this.schedulerSettings();
         const updates = [
             config.update("scheduler.dispatchMode", DistributedSchedulingPolicy.schedulingMode(patch.dispatchMode ?? settings.dispatchMode), vscode.ConfigurationTarget.Global),
@@ -12426,7 +12426,7 @@ export class RealtimeTunnelPanelProvider {
         const resources = (paths.length ? paths : [project]).map(value => ({ server, project,
             target: path.posix.resolve(project, value.replace(/\\/g, "/")) }));
         if (!this.hostOperationLease) return work();
-        return this.hostOperationLease.run({ pluginId: "simple-local.simple-experiment", workspaceUri: String(workspaceRoot() || project),
+        return this.hostOperationLease.run({ pluginId: "simple-local.simple-experiment-mac", workspaceUri: String(workspaceRoot() || project),
             hostProjectPath: project, actionType: action, actionLabel: action, resources }, work);
     }
     async postTunnelAction(action, body, options = {}) {
@@ -13632,9 +13632,9 @@ export class RealtimeTunnelPanelProvider {
     workerActionTargets() {
         const configs = new Map(this.setupConfig.workerTunnels.map((worker) => [worker.id, worker]));
         const sched = this.schedulerSettings() as unknown as { gpuIdleUtilThreshold?: number; gpuIdleMemThresholdMb?: number; sessionCheckMinSeconds?: number; workerStatusTtlSeconds?: number };
-        const globalUtil = Number(sched.gpuIdleUtilThreshold ?? Number(vscode.workspace.getConfiguration("simpleExperiment").get("scheduler.gpuIdleUtilThreshold", 5)) ?? 5);
-        const globalMem = Number(sched.gpuIdleMemThresholdMb ?? Number(vscode.workspace.getConfiguration("simpleExperiment").get("scheduler.gpuIdleMemThresholdMb", 200)) ?? 200);
-        const globalSession = Number(sched.sessionCheckMinSeconds ?? Number(vscode.workspace.getConfiguration("simpleExperiment").get("scheduler.sessionCheckMinSeconds", 5)) ?? 5);
+        const globalUtil = Number(sched.gpuIdleUtilThreshold ?? Number(vscode.workspace.getConfiguration("simpleExperimentMac").get("scheduler.gpuIdleUtilThreshold", 5)) ?? 5);
+        const globalMem = Number(sched.gpuIdleMemThresholdMb ?? Number(vscode.workspace.getConfiguration("simpleExperimentMac").get("scheduler.gpuIdleMemThresholdMb", 200)) ?? 200);
+        const globalSession = Number(sched.sessionCheckMinSeconds ?? Number(vscode.workspace.getConfiguration("simpleExperimentMac").get("scheduler.sessionCheckMinSeconds", 5)) ?? 5);
         const globalTtl = Number(sched.workerStatusTtlSeconds ?? 180);
         return this.workerCodeSyncTargets().map((worker) => {
             const config = configs.get(worker.id);
@@ -14032,7 +14032,7 @@ export class RealtimeTunnelPanelProvider {
     }
 
     async syncDraftFilesForRun(body, record) {
-        await this.prepareSftpTargets("runDraftDebug", "simpleSftp.uploadFiles");
+        await this.prepareSftpTargets("runDraftDebug", "simpleSftpMac.uploadFiles");
         const topology = this.assertPlanTopologyReady("草稿 Debug 运行");
         const selectedWorkerId = this.planSchedulerWorkerId(body);
         const targets = topology.mode === "hub_worker"
@@ -14063,7 +14063,7 @@ export class RealtimeTunnelPanelProvider {
         await this.writeSftpManagerServerProfiles(enabledTargets.map((target) => target.id));
         const failures = [];
         for (const target of enabledTargets) {
-            const result = await vscode.commands.executeCommand("simpleSftp.uploadFiles", {
+            const result = await vscode.commands.executeCommand("simpleSftpMac.uploadFiles", {
                 apiMode: true,
                 confirm: true,
                 pathConfirmed: true,
@@ -15139,7 +15139,7 @@ export class RealtimeTunnelPanelProvider {
             realtimeMode: this.isRealtimeMode(),
             setupComplete: initialServerSetupComplete(this.setupConfig, this.projectTopologyAssessment().hubAllowed),
             workerCount: enabledWorkers.length,
-            simpleSftpReady: simpleSftp.ready,
+            simpleSftpReady: simpleSftpMac.ready,
             activeRun: initialRunState.activeRun,
             finishedRun: initialRunState.finishedRun,
             endpointsReady: projectBootstrapEndpointProbeReusable(endpointReadiness, this.lastFullEndpointProbeAt),
@@ -15233,7 +15233,7 @@ export class RealtimeTunnelPanelProvider {
             return false;
         }
         if (next === "打开连接设置") {
-            await vscode.commands.executeCommand("workbench.action.openSettings", "simpleExperiment.connectionMode");
+            await vscode.commands.executeCommand("workbench.action.openSettings", "simpleExperimentMac.connectionMode");
             return false;
         }
         if (next === "恢复在线连接") {
@@ -15354,7 +15354,7 @@ export class RealtimeTunnelPanelProvider {
         const patch = recordField(message, "patch");
         const resultCsvDir = normalizeResultCsvDir(stringPatch(patch, "csvDirectory", this.resultCsvDirectory));
         safeWorkspaceChildPath(folder.uri.fsPath, resultCsvDir);
-        await vscode.workspace.getConfiguration("simpleExperiment", folder.uri).update("resultCsvDir", resultCsvDir, vscode.ConfigurationTarget.WorkspaceFolder);
+        await vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri).update("resultCsvDir", resultCsvDir, vscode.ConfigurationTarget.WorkspaceFolder);
         if (!this.projectContextIsCurrent(projectContext))
             return;
         this.resultCsvDirectory = resultCsvDir;
@@ -15374,7 +15374,7 @@ export class RealtimeTunnelPanelProvider {
             .filter((item) => Boolean(item));
         const allowedRoots = parseRootList(patch.allowedRoots);
         const deniedRoots = parseRootList(patch.deniedRoots);
-        const config = vscode.workspace.getConfiguration("simpleExperiment", folder.uri);
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri);
         await Promise.all([
             config.update("remote.allowedRoots", allowedRoots, vscode.ConfigurationTarget.WorkspaceFolder),
             config.update("remote.deniedRoots", deniedRoots, vscode.ConfigurationTarget.WorkspaceFolder),
@@ -15406,7 +15406,7 @@ export class RealtimeTunnelPanelProvider {
         const relative = path.relative(folder.uri.fsPath, selected[0].fsPath).replace(/\\/g, "/");
         const resultCsvDir = normalizeResultCsvDir(relative);
         safeWorkspaceChildPath(folder.uri.fsPath, resultCsvDir);
-        await vscode.workspace.getConfiguration("simpleExperiment", folder.uri).update("resultCsvDir", resultCsvDir, vscode.ConfigurationTarget.WorkspaceFolder);
+        await vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri).update("resultCsvDir", resultCsvDir, vscode.ConfigurationTarget.WorkspaceFolder);
         if (!this.projectContextIsCurrent(projectContext))
             return;
         this.resultCsvDirectory = resultCsvDir;
@@ -15662,7 +15662,7 @@ export class RealtimeTunnelPanelProvider {
         patch.csvColumnMapping = existingRules.csvColumnMapping || {};
         patch.derivedMetric = existingRules.derivedMetric || {};
         patch.planDatasetMapping = existingRules.planDatasetMapping || {};
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         await config.update("projectAdapterRules", patch, vscode.ConfigurationTarget.WorkspaceFolder);
         if (!this.projectContextIsCurrent(projectContext))
             return;
@@ -15708,7 +15708,7 @@ export class RealtimeTunnelPanelProvider {
             if (existing.kind !== "unassigned") throw new Error("该 Plan 已有可信结果数据集 " + existing.datasets.join("、") + "，不能用人工映射覆盖。");
             mappings[plan.planFile] = { datasets: [dataset], source: "manual", updatedAt: new Date().toISOString() };
         }
-        await vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root)).update("projectAdapterRules", { ...rules, planDatasetMapping: mappings }, vscode.ConfigurationTarget.WorkspaceFolder);
+        await vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root)).update("projectAdapterRules", { ...rules, planDatasetMapping: mappings }, vscode.ConfigurationTarget.WorkspaceFolder);
         const normalized = ProjectResultTables.applyPlanDatasetOverrides(registry, mappings);
         const changed = JSON.stringify(registry.plans || {}) !== JSON.stringify(normalized.plans || {});
         if (changed) await this.writeProjectTableRegistry(root, normalized);
@@ -15745,7 +15745,7 @@ export class RealtimeTunnelPanelProvider {
             throw new Error("派生指标倍率只允许 1 或 100。");
         const derivedMetric = hasDerived ? { metric: derivedValues[0], leftEndpoint: derivedValues[1], rightEndpoint: derivedValues[2], scale, outputName: derivedValues[3] } : {};
         const rules = { ...pluginProjectAdapterRules(context.root), csvColumnMapping: mapping, derivedMetric };
-        await vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(context.root)).update("projectAdapterRules", rules, vscode.ConfigurationTarget.WorkspaceFolder);
+        await vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(context.root)).update("projectAdapterRules", rules, vscode.ConfigurationTarget.WorkspaceFolder);
         if (!this.projectContextIsCurrent(context))
             return;
         const syncErrors = await this.syncProjectAdapterRulesToAgents(rules);
@@ -17715,7 +17715,7 @@ export class RealtimeTunnelPanelProvider {
         if (!this.hostOperationLease) return work();
         const resultTarget = path.resolve(root, resultDir);
         const registryTarget = path.resolve(root, "simple_cluster/results/project_table_registry.json");
-        return this.hostOperationLease.run({ pluginId: "simple-local.simple-experiment", workspaceUri: String(root),
+        return this.hostOperationLease.run({ pluginId: "simple-local.simple-experiment-mac", workspaceUri: String(root),
             hostProjectPath: root, actionType: "result-table-publication", actionLabel: "发布全项目结果表", waitForConflict: true,
             resources: [{ server: "local", project: root, target: resultTarget }, { server: "local", project: root, target: registryTarget }] }, work);
     }
@@ -17846,7 +17846,7 @@ export class RealtimeTunnelPanelProvider {
         if (!this.hostOperationLease) return work();
         const project = path.dirname(file);
         return this.hostOperationLease.run({
-            pluginId: "simple-local.simple-experiment",
+            pluginId: "simple-local.simple-experiment-mac",
             workspaceUri: String(root),
             hostProjectPath: root,
             actionType,
@@ -17893,7 +17893,7 @@ export class RealtimeTunnelPanelProvider {
         this.planSyncSummaryRetries.set(syncKey, { timer, attempt });
     }
     async simpleSftpCapability(method, timeoutMs = 0) {
-        const discoveryFile = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "SimpleSFTP", "api.json");
+        const discoveryFile = path.join(require("../mac/MacPaths").applicationDataRoot(), "SimpleSFTP", "api.json");
         const discovery = JSON.parse(await fs.readFile(discoveryFile, "utf8"));
         const endpoint = new URL(String(discovery.baseUrl || ""));
         if (endpoint.protocol !== "http:" || !["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))
@@ -17994,7 +17994,7 @@ export class RealtimeTunnelPanelProvider {
         const projectContext = this.captureProjectContext();
         await this.syncCodeTargets(targets, "workers", { projectContext });
         if (root !== workspaceRoot()) return;
-        const config = vscode.workspace.getConfiguration("simpleExperiment", vscode.Uri.file(root));
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
         const includePaths = config.get<string[]>("codeSync.includePaths", []);
         const scopePaths = config.get<string[]>("codeSync.scopePaths");
         const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
@@ -18513,7 +18513,7 @@ export class RealtimeTunnelPanelProvider {
         const endpoints = this.scalarEndpoints();
         if (!endpoints.length) throw new Error("没有配置 Worker Agent 隧道");
         if (!["catalog", "tags", "series"].includes(action)) throw new Error("未知标量操作");
-        const logdir = String(vscode.workspace.getConfiguration("simpleExperiment").get("tensorboard.logdir") || "work_dirs");
+        const logdir = String(vscode.workspace.getConfiguration("simpleExperimentMac").get("tensorboard.logdir") || "work_dirs");
         const groups = action === "series" ? (Array.isArray(params.groups) ? params.groups.slice(0, 20) : []) : [];
         const tags = action === "series" ? [...new Set((Array.isArray(params.tags) ? params.tags : [params.tag]).filter((tag: unknown) => typeof tag === "string" && tag.length > 0 && tag.length < 512))].slice(0, 32) : [];
         const payload = action === "series" ? { groups, tags, logdir } : { planFile: String(params.planFile || ""), case: String(params.case || ""), tag: "", logdir };
@@ -18573,7 +18573,7 @@ export class RealtimeTunnelPanelProvider {
         let remoteReady = false;
         const endpoint = (this.client as any)?.endpointById?.get?.(endpointId);
         if (!endpoint) throw new Error(`未找到 ${endpointId} 的 Agent 隧道配置`);
-        const cfg = vscode.workspace.getConfiguration("simpleExperiment");
+        const cfg = vscode.workspace.getConfiguration("simpleExperimentMac");
         const rawPrefix = String((this as any).setupConfig?.sessionPrefix || (this as any).setupConfig?.remoteTmuxSessionPrefix || cfg.get("sessionPrefix") || cfg.get("tunnel.remoteTmuxSessionPrefix") || "simple").trim() || "simple";
         // 统一归一：与 agent 侧 tb_tmux_session_name / write_snapshots 完全一致（小写、非法→-、截32）
         const normPrefix = (() => {
@@ -18635,7 +18635,7 @@ export class RealtimeTunnelPanelProvider {
     async getTensorBoardStatusFromUi(message: any) {
         const endpointId = String(message?.endpointId || "").trim();
         if (!endpointId) return;
-        const cfg = vscode.workspace.getConfiguration("simpleExperiment");
+        const cfg = vscode.workspace.getConfiguration("simpleExperimentMac");
         const sessionPrefix = String((this as any).setupConfig?.sessionPrefix || (this as any).setupConfig?.remoteTmuxSessionPrefix || cfg.get("sessionPrefix") || cfg.get("tunnel.remoteTmuxSessionPrefix") || "simple");
         try {
             const status = await this.postTensorboardAction(endpointId, "get-tensorboard-status", { sessionPrefix, port: Number(cfg.get("tensorboard.port") as any) || 6006 });
@@ -18647,7 +18647,7 @@ export class RealtimeTunnelPanelProvider {
     async stopTensorBoardFromUi(message: any) {
         const endpointId = String(message?.endpointId || "").trim();
         if (!endpointId) throw new Error("缺少服务器 ID");
-        const cfg = vscode.workspace.getConfiguration("simpleExperiment");
+        const cfg = vscode.workspace.getConfiguration("simpleExperimentMac");
         const sessionPrefix = String((this as any).setupConfig?.sessionPrefix || (this as any).setupConfig?.remoteTmuxSessionPrefix || cfg.get("sessionPrefix") || cfg.get("tunnel.remoteTmuxSessionPrefix") || "simple");
         const stopped = await this.postTensorboardAction(endpointId, "stop-tensorboard", { sessionPrefix });
         if (stopped?.status === "failed") throw new Error(String(stopped.message || "远端关闭失败"));
@@ -19389,7 +19389,7 @@ export class RealtimeTunnelPanelProvider {
         void this.persistProjectActionErrorsState().catch(() => undefined);
     }
     private extensionRuntimeVersionState() {
-        const extension = vscode.extensions.getExtension("simple-local.simple-experiment");
+        const extension = vscode.extensions.getExtension("simple-local.simple-experiment-mac");
         if (extension) this.extensionMissingConfirmed = false;
         const disk = this.readInstalledBuildIdentity(String(extension?.extensionPath || ""), String(extension?.packageJSON?.version || ""));
         const state = PanelBuildIdentity_1.classifyPanelBuildIdentity({
@@ -19417,7 +19417,7 @@ export class RealtimeTunnelPanelProvider {
         return this.latestPanelBuildIdentityState;
     }
     private readInstalledBuildIdentity(extensionPathHint = "", versionHint = "") {
-        const registered = vscode.extensions.getExtension("simple-local.simple-experiment");
+        const registered = vscode.extensions.getExtension("simple-local.simple-experiment-mac");
         const extensionPath = String(extensionPathHint || registered?.extensionPath || this.context?.extension?.extensionPath || "");
         if (extensionPath !== this.diskBuildIdentityPath) {
             this.diskBuildIdentity = undefined;
@@ -19429,7 +19429,7 @@ export class RealtimeTunnelPanelProvider {
     private stableExtensionIdentityProbe(): Promise<void> {
         if (this.extensionIdentityProbePromise) return this.extensionIdentityProbePromise;
         const pending = PanelBuildIdentity_1.stablePanelExtensionProbe({
-            getExtension: () => vscode.extensions.getExtension("simple-local.simple-experiment"),
+            getExtension: () => vscode.extensions.getExtension("simple-local.simple-experiment-mac"),
             delay: (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
             readDiskIdentity: () => this.readInstalledBuildIdentity(),
             debounceMs: 350,
@@ -19834,7 +19834,7 @@ export class RealtimeTunnelPanelProvider {
     }
     loadTunnelConfig() {
         const saved = this.context.globalState.get(keys.tunnelConfig) || {};
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         return (0, TunnelGateway_1.normalizeTunnelGatewayConfig)({
             ...TunnelGateway_1.defaultTunnelGatewayConfig,
             ...saved,
@@ -19846,7 +19846,7 @@ export class RealtimeTunnelPanelProvider {
     }
     loadSetupConfig() {
         const saved = this.context.globalState.get(keys.setupConfig) || {};
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const sessionDefaults = this.sessionDefaultInspections(config);
         const storedSignature = this.context.globalState.get(keys.setupConfigurationSignature);
         const hasStoredSignature = typeof storedSignature === "string";
@@ -19883,7 +19883,7 @@ export class RealtimeTunnelPanelProvider {
                 : nonEmptyWorkerTunnelConfig((0, ConfigurationSettings_1.explicitConfigurationValue)(config, "tunnel.workerTunnels", undefined)),
         });
     }
-    sessionDefaultInspections(config = vscode.workspace.getConfiguration("simpleExperiment")) {
+    sessionDefaultInspections(config = vscode.workspace.getConfiguration("simpleExperimentMac")) {
         return {
             remoteTmuxSessionPrefix: config.inspect("tunnel.remoteTmuxSessionPrefix"),
             condaEnv: config.inspect("tunnel.condaEnv"),
@@ -19908,7 +19908,7 @@ export class RealtimeTunnelPanelProvider {
     gpuOwnerConfig() {
         if (this.gpuOwnerConfigCache)
             return this.gpuOwnerConfigCache;
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const mode = config.get("gpu.myProcessMatchMode", "both");
         const value = {
             currentUser: config.get("gpu.currentUser", ""),
@@ -19924,7 +19924,7 @@ export class RealtimeTunnelPanelProvider {
         if (this.projectPptPlotConfig)
             return normalizePptPlotConfig(this.projectPptPlotConfig);
         // Target presentation is project-local. Global preferences may only seed non-path defaults.
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         return normalizePptPlotConfig({
             presentationPath: "",
             chartType: config.get("ppt.chartType", "auto") || "auto",
@@ -19956,7 +19956,7 @@ export class RealtimeTunnelPanelProvider {
             allowStreaming: true,
             refreshProfile: "realtime",
         });
-        const configuration = vscode.workspace.getConfiguration("simpleExperiment");
+        const configuration = vscode.workspace.getConfiguration("simpleExperimentMac");
         await Promise.all([
             configuration.update("tunnel.remoteTmuxSessionPrefix", next.remoteTmuxSessionPrefix, vscode.ConfigurationTarget.Global),
             configuration.update("tunnel.condaEnv", next.condaEnv, vscode.ConfigurationTarget.Global),
@@ -20190,7 +20190,7 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     schedulerSettings() {
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         return {
             dispatchMode: DistributedSchedulingPolicy.schedulingMode(config.get("scheduler.dispatchMode", "local_idle")),
             pollSeconds: Math.max(5, Math.min(3600, Number(config.get("scheduler.pollSeconds", 10)) || 10)),
@@ -20454,7 +20454,7 @@ export class RealtimeTunnelPanelProvider {
         const operationRows = state?.operations && typeof state.operations === "object"
             ? (Array.isArray(state.operations) ? state.operations : Object.values(state.operations))
             : [];
-        const persistedKey = "simpleExperiment.notifiedPlanFailures";
+        const persistedKey = "simpleExperimentMac.notifiedPlanFailures";
         const stored = this.context.workspaceState.get<string[]>(persistedKey, []);
         const acknowledged = new Set(Array.isArray(stored) ? stored : []);
         for (const row of rows) {
@@ -20842,7 +20842,7 @@ export class RealtimeTunnelPanelProvider {
         return state;
     }
     configurationSourceState() {
-        const config = vscode.workspace.getConfiguration("simpleExperiment");
+        const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const saved = this.context.globalState.get(keys.setupConfig) || {};
         const inspectedWorkers = config.inspect("tunnel.workerTunnels");
         const workspaceWorkers = inspectedWorkers?.workspaceFolderValue ?? inspectedWorkers?.workspaceValue ?? inspectedWorkers?.globalValue;
@@ -24029,7 +24029,7 @@ async function writeProjectDebugBundleState(root, debugBundlePath) {
 }
 const PROJECT_CODE_SYNC_PATH = "simple_cluster/ui/code_sync.json";
 const PROJECT_REMOTE_PATH_CONFIRMATIONS_PATH = "simple_cluster/ui/remote_path_confirmations.json";
-const REMOTE_PATH_CONFIRMATIONS_WORKSPACE_KEY = "simpleExperiment.remotePathConfirmations";
+const REMOTE_PATH_CONFIRMATIONS_WORKSPACE_KEY = "simpleExperimentMac.remotePathConfirmations";
 const PROJECT_LOCAL_OPERATIONS_PATH = "simple_cluster/ui/local_operations.json";
 const PROJECT_LOCAL_PLAN_METADATA_PATH = "simple_cluster/ui/local_plan_metadata.json";
 const normalizeRemoteWriteTargetsCache = new WeakMap();
@@ -27191,7 +27191,7 @@ function stringFromRecord(item, keys) {
 }
 function planDirSafe() {
     try {
-        return vscode.workspace.getConfiguration("simpleExperiment").get("planDir", "experiments/plans").replace(/\\/g, "/");
+        return vscode.workspace.getConfiguration("simpleExperimentMac").get("planDir", "experiments/plans").replace(/\\/g, "/");
     }
     catch {
         return "experiments/plans";
@@ -27211,7 +27211,7 @@ function normalizeResultCsvDir(value) {
 }
 function resultCsvDirSafe() {
     try {
-        const configured = vscode.workspace.getConfiguration("simpleExperiment").get("resultCsvDir", DEFAULT_RESULT_CSV_DIR);
+        const configured = vscode.workspace.getConfiguration("simpleExperimentMac").get("resultCsvDir", DEFAULT_RESULT_CSV_DIR);
         return normalizeResultCsvDir(configured);
     }
     catch {
@@ -27387,7 +27387,7 @@ function projectOnboardingStateForWebview(options) {
     const hasProject = Boolean(workspace.root) && workspace.singleProject === true;
     const missing = [
         ...serverSetupMissingItems(setup, hubRequired),
-        ...(simpleSftp.ready === true ? [] : [String(simpleSftp.message || "配套 SimpleSFTP 未就绪")]),
+        ...(simpleSftpMac.ready === true ? [] : [String(simpleSftpMac.message || "配套 SimpleSFTP 未就绪")]),
         ...(enabledWorkerCount > 0 ? [] : ["至少一个启用的执行 Worker"]),
     ];
     const missingItems = [...new Set(missing.filter(Boolean))];
@@ -27497,7 +27497,7 @@ function projectBootstrapNewProjectPrerequisite(options) {
     if (simpleSftp?.ready === false) {
         return {
             state: "simple_sftp_required",
-            message: `当前项目还没有 Plan。生成任何 Plan 或接入模板前，先完成配套插件安装：${String(simpleSftp.message || "SimpleSFTP 未就绪。")}`,
+            message: `当前项目还没有 Plan。生成任何 Plan 或接入模板前，先完成配套插件安装：${String(simpleSftpMac.message || "SimpleSFTP 未就绪。")}`,
             action: "打开配置说明",
         };
     }
@@ -27744,7 +27744,7 @@ function projectBootstrapCompletion(options) {
     if (simpleSftp?.ready === false) {
         return {
             state: "simple_sftp_required",
-            message: `Plan 与结果接入已完成，但文件传输依赖未就绪：${String(simpleSftp.message || "未安装或未启用配套 SimpleSFTP。")} 下一步：打开配置说明并使用配套离线包安装。`,
+            message: `Plan 与结果接入已完成，但文件传输依赖未就绪：${String(simpleSftpMac.message || "未安装或未启用配套 SimpleSFTP。")} 下一步：打开配置说明并使用配套离线包安装。`,
             action: "打开配置说明",
         };
     }
@@ -28634,7 +28634,7 @@ function emptyProjectAdapterRules() {
     };
 }
 function pluginProjectAdapterRules(root) {
-    const configured = vscode.workspace.getConfiguration("simpleExperiment", root ? vscode.Uri.file(root) : undefined).get("projectAdapterRules", {});
+    const configured = vscode.workspace.getConfiguration("simpleExperimentMac", root ? vscode.Uri.file(root) : undefined).get("projectAdapterRules", {});
     return configured && typeof configured === "object" && !Array.isArray(configured) ? configured : {};
 }
 
@@ -32685,7 +32685,7 @@ async function inputPort(title, value, options = {}) {
     return raw === undefined ? undefined : Number(raw);
 }
 async function runVsCodeShellTask(name, command, cwd) {
-    const task = new vscode.Task({ type: "shell", task: name }, vscode.TaskScope.Workspace, name, "simpleExperiment", new vscode.ShellExecution(command, { cwd }));
+    const task = new vscode.Task({ type: "shell", task: name }, vscode.TaskScope.Workspace, name, "simpleExperimentMac", new vscode.ShellExecution(command, { cwd }));
     const execution = await vscode.tasks.executeTask(task);
     await new Promise((resolve, reject) => {
         const disposable = vscode.tasks.onDidEndTaskProcess((event) => {
@@ -33047,7 +33047,7 @@ function persistedXshellSetupConfig(config) {
     };
 }
 function workspaceMappingConfig() {
-    const config = vscode.workspace.getConfiguration?.("simpleExperiment");
+    const config = vscode.workspace.getConfiguration?.("simpleExperimentMac");
     return {
         hostRoot: config?.get?.("workspaceHostRoot", "") || "",
         containerRoot: config?.get?.("workspaceContainerRoot", "") || "",
@@ -33212,7 +33212,7 @@ function remoteParentWorkRoot(value) {
     return normalizeRemoteWorkRoot(root.slice(0, separator));
 }
 function remoteRootPolicyConfig() {
-    const config = vscode.workspace.getConfiguration("simpleExperiment");
+    const config = vscode.workspace.getConfiguration("simpleExperimentMac");
     return {
         allowedRoots: stringArrayConfig(config.get("remote.allowedRoots", [])),
         deniedRoots: stringArrayConfig(config.get("remote.deniedRoots", [])),

@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-002a（passed）
+## 当前批次：mac-002b（passed）
 
 ### 边界
 
-- SimpleSFTP Mac 身份、命令/设置、发现及租约路径，8 个文件以内。
-- 保护传输实现与业务 API；下一批补充对应身份/路径测试，再迁移 Experiment。
+- SimpleExperiment Mac 元数据、发现/CLI/租约路径与主要 namespace，8 个文件以内。
+- 保护业务逻辑；后续分批迁移剩余 namespace 和启动入口。
 
 ### 验证清单
+
+- passed mac-002b build、typecheck、195 模块包闭包、身份/namespace/版本/路径断言及面板脚本。runtime 版本同步后再次 typecheck，保证编译版本一致。
 
 - passed 两仓源快照逐字节核对，公开 remote 与 master 核对。
 - passed Experiment build、面板 vm.Script、闭包 194 模块、计划压缩 3 测试；SFTP build、18 文件闭包。
@@ -44,4 +46,5 @@
 
 - mac-001 Experiment `2f11164d3f33ac979884519b239232c5d553bfe9`、SFTP `80cf31ab1d0a3a39579c9cfbd9bf99966bbc1f4b`，均已同步 origin/master。
 - SFTP 首次包列表校验 8 秒超时，独立测量 1218 ms，未改超时阈值，完整 build 再验证通过。
-- 下一批边界：身份、设置及发现目录迁移，不扩大到科研业务重构。
+- mac-002a SFTP `d71ff43ce679b8f9bb6fcde8dc0b2c75a5b3e5ce` 已同步，Experiment 记录提交 `d18945312019ae9c92ea538a032d961fd3a98c51`。
+- 下一批边界：剩余命名空间和独立最小启动。
