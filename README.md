@@ -2,7 +2,7 @@
 
 SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实验服务器，配套 SimpleSFTP Mac 传输文件。两个 Mac 扩展与 Windows 原版使用独立仓库、身份、设置、数据目录和更新源。
 
-**当前为 preview 测试版，更新发布优先；M5 真机更新及完整科研业务尚未验收。** 本地 POSIX 工作区适配已加入源码，Termius、认证、断连恢复及三拓扑仍在持续适配。旧 Xshell、Windows 安装脚本和 Dev Containers 说明不适用于 Mac 首版。
+**当前为 preview 测试版；M5 真机更新及完整科研业务尚未验收。** 已提供 Mac 安装、配套更新、手动 Termius 端点配置、Agent/tmux 操作指引及主题适配。独立 SFTP 认证、完整项目准备和断连恢复仍在持续适配。
 
 ## 系统要求
 
@@ -29,7 +29,8 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 2. 按 **⇧⌘P** 运行 **SimpleExperiment：打开面板**，点击顶部 **配置说明**；也可直接运行 **SimpleExperiment：打开配置说明**，阅读随插件打包的 [Mac 配置说明](docs/simple-experiment-setup.md)。
 3. 按 **⌘,** 打开设置，搜索 `simpleSftpMac`。填写真实的 `localBase` 本机项目父目录和 `remoteBase` Linux 项目父目录，首次配置可关闭 `uploadOnSave`，先核对目标再手动上传。设置中使用绝对 POSIX 路径，不使用盘符、`~` 或 `$HOME` 占位。
 4. 运行 **SimpleSFTP：打开共享服务器配置**，填写真实主机、账号、SSH 端口和路径，保存后 **选择服务器**、**查看当前目标**。格式及操作见 [SimpleSFTP Mac README](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。SSH 端口与 Agent 转发端口分别配置。
-5. Termius 手动登录 Linux 并启动本地端口转发，每台服务器的本机监听端口唯一。记录端点供后续接入；当前端点管理、Agent 指引及独立认证仍在适配，旧 Xshell 自动启动按钮暂不适用于 Mac。
+5. 在 Termius 手动登录 Linux 并启动本地端口转发，每个启用端点使用独立本机监听端口。在面板 **设置 → 服务器 → 配置手动端点**，或 **⇧⌘P → SimpleExperiment Mac：配置 Termius 手动端点**，打开 `simpleExperimentMac.tunnel.manualEndpoints` 设置。数组需在 **用户设置 JSON** 中编辑；[配置说明第 5 节](docs/simple-experiment-setup.md#5-termius-手动隧道与端点配置) 提供可替换的完整示例和字段对照。
+6. 在当前项目选择并 **保存拓扑**：单 Worker、多 Worker 或 Hub/Worker。打开 **Agent/tmux 指引**，部署 runtime 和项目后，在 Termius 终端按生成的指引接入会话；然后点击 **检测全部**。SSH 登录成功、隧道打开和 Agent 检测成功是不同步骤。
 
 配置说明包含单 Worker、多 Worker、Hub/Worker 的接入约定、数据目录及失败处理，并标明尚待交付的功能。打开 Mac 配置说明不会触发旧 Xshell 会话向导。
 
@@ -61,7 +62,7 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 
 保留 `single_worker`、`worker_pool`、`hub_worker` 三种拓扑和完整科研流程，真机验收仍待完成。
 
-目标接入顺序为：Termius 手动登录并启动端口转发 → 插件保存并检测端点 → 配置项目父目录 → SimpleSFTP Mac 部署 runtime → 按指引启动 Agent/tmux → 校验、预演并运行 Plan → 监控 → 收集结果。插件不读取 Termius 私有会话或密码。该适配仍在进行，当前不要使用旧 Xshell 自动启动按钮替代 Termius。
+目标接入顺序为：Termius 手动登录并启动端口转发 → 插件保存端点与项目父目录 → SimpleSFTP Mac 部署 runtime 和项目 → 按指引启动 Agent/tmux → 检测 → 校验、预演并运行 Plan → 监控 → 收集结果。**当前已接入端点保存、配置校验、HTTP 检测及文本操作指引；完整 Mac 项目准备、独立认证和科研主流程尚未验收。** “Agent/tmux 指引”只生成文本，不会部署文件或执行远端命令。旧自动启动入口在 Mac 引导至手动配置或指引，不能代替 Termius 登录和转发。
 
 远端项目为 `<用户配置的项目父目录>/<工作区名称>`。Plan 位于 `experiments/plans/`；官方运行必须依次调用 `validatePlan`、`dryRunPlan`、`runPlan`，不直接运行 train.py。API 方法和 Plan 格式沿用原契约，文件传输交给 SimpleSFTP Mac。永久删除要求精确路径、直接父目录核验和两次确认。
 

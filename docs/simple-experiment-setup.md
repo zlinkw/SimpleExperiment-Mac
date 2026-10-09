@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-**当前 preview 已交付独立安装与配套更新入口，完整科研业务仍在适配。** 本文区分可以立即使用的本机配置与后续 Termius 接入流程。M5 真机更新、认证传输和三拓扑尚未验收；界面中保留的 Xshell 自动配置、启动会话和“准备 Agent 并启动”入口暂不适用于 Mac。
+**当前 preview 已交付独立安装、配套更新、Termius 手动端点配置与 Agent/tmux 文本指引，完整科研业务仍在适配。** M5 真机更新、独立认证传输和三拓扑尚未验收。Mac 不使用 Xshell 会话文件；旧配置入口转至手动端点，旧启动/准备入口打开操作指引，不会自动部署或启动 Agent。
 
 ## 1. 首次安装与打开说明
 
@@ -91,27 +91,75 @@
 
 已有 `~/.ssh/config` 可运行 **SimpleSFTP：导入 VS Code SSH 配置** 导入连接描述；它读取本机 OpenSSH 配置，不读取 Termius 私有会话。当前传输仍依赖系统 SSH 配置，独立密钥、ssh-agent、密码和私钥口令的认证界面及 SecretStorage 记忆正在适配。**导入或选择配置不等于已验证认证成功。** Termius 登录也不会自动授权 SimpleSFTP。首次上传/下载及断连恢复请以后续版本说明和真机验证为准。
 
-## 5. Termius 手动隧道接入（后续业务适配）
+## 5. Termius 手动隧道与端点配置
 
-以下是 Mac 科研接入的操作约定，端点保存、Agent 部署和检测界面仍在适配；当前不要用旧 Xshell 自动启动功能执行这些步骤。
+在 [Termius](https://termius.com/) 中自行配置 Linux 主机、SSH 端口和认证，手动登录。为每个端点建立 **本地端口转发（Local port forwarding）**，本机监听使用 loopback，目标为该 SSH 主机上的 Agent 监听地址与端口。手动启动转发并保持 Termius 连接。
 
-1. 在 [Termius](https://termius.com/) 中自行配置 Linux 主机、SSH 端口和认证，手动登录。
-2. 为每台需要连接的服务器建立本地端口转发（Local port forwarding）：本机监听使用 loopback，目标是该服务器的 Agent 监听地址与端口。
-3. 手动启动转发并保持 Termius 连接；每个服务器使用不同的本机监听端口。记录真实端点，以后填入插件的对应服务器配置。
-4. SimpleSFTP 单独配置同一台服务器的 SSH 身份，用插件传输 runtime；Termius 的登录凭据不由插件读取。
-5. 在 Termius 终端按 Agent/tmux 指引启动或接入现有会话，再由插件检测版本、项目路径和 Worker 状态。
+### 保存端点
 
-端点记录示例仅用于理解，**不是固定探测端口**：
+打开 SimpleExperiment 面板 **设置 → 服务器 → 配置手动端点**，或按 **⇧⌘P → SimpleExperiment Mac：配置 Termius 手动端点**。在打开的设置页搜索结果中编辑 `tunnel.manualEndpoints`；数组在 JSON 中编辑。
 
-| 角色 | 本机监听 | 在对应 SSH 主机上的转发目标 |
-| --- | --- | --- |
-| Hub | `127.0.0.1:18765` | `127.0.0.1:18765` |
-| Worker A | `127.0.0.1:18766` | `127.0.0.1:18765` |
-| Worker B | `127.0.0.1:18767` | `127.0.0.1:18765` |
+这是全局应用设置，使用 **Preferences: Open User Settings (JSON)** 打开用户 `settings.json`，不要写入项目 `.vscode/settings.json`。将以下字段合并到已有 JSON，不覆盖其他设置。下面是单 Worker 示例，主机、用户、端口和路径都需替换为自己的实际配置：
 
-单 Worker 不需要 Hub；多 Worker 各自维护转发；Hub/Worker 模式同时记录 Hub 和所有启用 Worker 的端点。Agent 不启动时，单有 SSH 登录和转发不能使 Agent 检测通过。
+```json
+{
+  "simpleExperimentMac.tunnel.manualEndpoints": [
+    {
+      "id": "worker-a",
+      "role": "worker",
+      "displayName": "Worker A",
+      "host": "worker-a.example.org",
+      "user": "researcher",
+      "sshPort": 22,
+      "localForwardHost": "127.0.0.1",
+      "localForwardPort": 29101,
+      "remoteAgentHost": "127.0.0.1",
+      "remoteAgentPort": 29200,
+      "projectParentDir": "/data/researcher/实验项目",
+      "agentInstallDir": "/data/researcher/simple_agent",
+      "condaEnv": "/data/researcher/conda_envs/experiment",
+      "enabled": true,
+      "maxConcurrentGpus": "auto"
+    }
+  ]
+}
+```
 
-远端需要 Linux、可写的项目父目录、Python 3、tmux，以及实际执行环境中的 PyYAML。可在用户已登录的 Termius 终端查看 `python3 --version`、`tmux -V`；环境名、目录和会话名以你的服务器为准。恢复连接时重新启动手动转发并检查现有 tmux 会话，不因本机断线或插件更新停止远端实验。
+| 字段 | 应填写的内容 |
+| --- | --- |
+| `id` / `role` | Worker ID 唯一，含小写字母、数字、点、下划线或连字符；Hub 固定为 `id: "hub"`、`role: "hub"` |
+| `host` / `user` / `sshPort` | 真实 SSH 主机、登录用户和 SSH 端口；HTTP 检测只请求下方转发端点，不用这些字段自动登录 |
+| `localForwardHost` / `localForwardPort` | Termius 在 Mac 上实际监听的地址和端口；每个启用端点的端口唯一，可使用 `::1` |
+| `remoteAgentHost` / `remoteAgentPort` | Termius 转发目标及对应远端 Agent 的实际监听地址和端口 |
+| `projectParentDir` | Linux 实验项目父目录；最终项目为此目录加当前本机工作区名称 |
+| `agentInstallDir` | 可选 runtime 安装目录；省略时为 `<projectParentDir>/simple_agent` |
+| `condaEnv` | 可选完整环境目录，可精确到 `/bin/python`；显式空字符串用 `python3`，省略继承全局 `tunnel.condaEnv` |
+| `enabled` / `maxConcurrentGpus` | 默认启用；GPU 上限为 `"auto"` 或 1–64 的整数 |
+
+示例端口不是固定探测端口。插件按每个端点的真实值检测；无效端口、重复 ID/启用端口或非法路径会报配置错误，不回退到默认端口。路径保留中文、空格和大小写，不填 `~`、盘符、`.` 或 `..`。
+
+### 选择拓扑并检测
+
+在面板 **设置 → 服务器 → Mac 服务器拓扑** 选择模式，点击 **保存拓扑**；也可在当前项目工作区设置写 `simpleExperimentMac.topologyMode`：
+
+- `single_worker`：启用一个 Worker，当前模式不使用 Hub。
+- `worker_pool`：启用至少两个 Worker，当前模式不使用 Hub。
+- `hub_worker`：配置并启用 Hub，加至少一个 Worker。
+
+模式保存在当前项目；手动端点保存在用户设置。新增 Worker 时复制数组中的 Worker 对象，修改 ID、主机、账号、路径和本机端口。Hub 使用相同字段结构，ID/角色改为 `hub`，使用独立本机端口。停用端点可设 `enabled: false`。
+
+远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份，部署 runtime 与项目；Termius 的凭据不会被读取。**完整 Mac 项目准备与独立认证仍在适配，打开指引不会自动传输 runtime。**
+
+### Agent/tmux 操作指引
+
+先打开本机项目并保存有效拓扑。点击服务器卡片 **Agent/tmux 指引**，或运行 **SimpleExperiment Mac：打开 Agent/tmux 操作指引**。生成的文本按当前端点、项目名、runtime 目录和 Python 路径给出命令。
+
+1. 在对应服务器的 Termius 终端按指引接入已有 tmux 会话，或创建尚不存在的会话。
+2. 已有 Agent 正在运行时只检查；仅在新会话或确认 Agent 未启动时执行生成的启动命令。配置改变不会自动重启远端进程。
+3. 如设置了 `simpleExperimentMac.tunnel.agentToken`，在远端按指引交互输入同一 token；生成文本不会包含设置中的 token 值。
+4. 按 **Ctrl+B，再按 D** 分离远端 tmux，保留 Agent 和实验。回插件点击 **检测全部**，检查版本、项目路径及 Worker 能力。
+
+SSH 登录、转发打开和 Agent 可用分别核对；没有运行 Agent 时，SSH 成功并不代表检测通过。Mac 断线或插件更新后恢复 Termius 转发，先检查已有 tmux 会话；不因此停止或重复启动实验。
 
 ## 6. 科研主流程与三种拓扑
 
@@ -145,7 +193,8 @@ API 每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/
 | 业务面板打不开 | 使用底部 Mac preview 状态栏或命令面板检查更新 |
 | 找不到更新通知 | 手动检查，然后运行“安装 preview 配套更新” |
 | 配置说明 Markdown 预览不可用 | 插件回退为文本打开同一份说明 |
-| 仍看到 Xshell 字段或按钮 | 属于待适配的旧业务入口，不在 Mac 上配置 `.xsh` 文件 |
+| 仍看到 Xshell 字段或旧命令 | 使用“配置 Termius 手动端点”和“Agent/tmux 操作指引”；不在 Mac 上配置 `.xsh` 文件 |
+| 手动端点保存后报错 | 核对完整字段、整数端口、唯一 ID/启用端口及绝对 POSIX 路径；在用户设置 JSON 修改 |
 | 服务器列表为空 | 打开共享服务器配置填写真实目标，再选择服务器 |
 | Termius 已登录但传输失败 | SimpleSFTP 认证独立；核对自己的系统 SSH 配置，独立认证入口尚待交付 |
 | 隧道已打开但 Agent 不可达 | 核对记录的端点、远端 Agent 是否运行和实际环境；勿重启运行中的实验 |
