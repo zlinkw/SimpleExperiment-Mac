@@ -20,10 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-010（passed，CLI 实时预检说明与门禁）
+## 当前批次：mac-release-015（running，实时 CLI 契约 preview）
 ### 边界
 
-- 两仓 README/配置说明补充 CLI 自动实时预检与失败处理，新测试加入配套发布门禁，发布说明标记本地/M5 边界。共 6 文件；随后递增配套版本发布。CLI 科研运行和三拓扑/M5 后续。
+- Experiment 0.5.278/SFTP 0.2.72，只改版本与计划，共 6 文件。完整本机 prepare/publish，草稿三个附件核验后发布；实际包固定 CLI 自检与业务 RPC 本机 mock、公开匿名 updater 下载与源码/说明一致性校验。
+- 不安装插件、执行科研/服务器操作或使用 Actions。科研运行命令、三拓扑与 M5 仍在后续批次。
 
 ### 验证清单
 
