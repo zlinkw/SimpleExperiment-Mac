@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-003d（passed）
+## 当前批次：mac-003e（passed）
 
 ### 边界
 
-- 独立最小启动、30 分钟检查/手动入口/一次提醒、更新落盘/恢复、跨窗口共享租约及业务门禁，6 文件。
+- SFTP 独立启动/配套更新入口及业务门禁、等待现有传输退出，8 文件以内。
 - 保护入口，阻断 Mac 自动导入 Windows 扩展数据库；下批处理 UI/其余业务 namespace。
 
 ### 验证清单
+
+- passed mac-003e SFTP build、21 文件闭包、bootstrap/门禁 2、品牌/设置 2、API/CLI 19 测试，均逐文件串行。
 
 - passed mac-003d build/面板脚本、212 模块闭包、独立启动/检查失败/一次提醒 3 测试、跨窗口门禁与既有传输退出等待 1 测试。
 
@@ -57,6 +59,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。
 
 ## 本批记录
+
+- mac-003d Experiment `c1ab176b9130b9eb4522915a1be69eb82e43ecdb` 已同步 origin/master。
 
 - mac-003c Experiment `a54da0b933030a17c1a949a57cfe1d1402762320` 已同步 origin/master。
 
