@@ -40,6 +40,8 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 
 项目父目录、runtime、Python 环境和 SFTP 目标使用单根绝对 POSIX 路径。两插件保留目录名的中文、大小写及首尾空格，不解码字面 `%20`；禁止 `.`、`..`、反斜杠和控制字符。远端 `/Data/项目` 与 `/data/项目` 是不同目标，允许/禁止目录策略同样区分大小写。确认对话框里的完整路径必须与实际目录一致；不要删去目录名末尾真实存在的空格。非法策略行会拒绝保存，详见 [路径配置](docs/simple-experiment-setup.md#3-本机工作区与路径配置)。
 
+SimpleSFTP Mac 的上传清单、Worker 相对文件路径及映射下载保留中文、大小写、Unicode 拼写和文件名首尾空格。相对路径不得包含绝对路径、`..`/`.` 路径段、内部空路径段、反斜杠、冒号或控制字符。全部上传条目先通过校验再开始 SSH/tar；远端 `Model/a.json` 与 `model/a.json` 可分别映射到 `upper.json`、`lower.json`。本机映射仍拒绝只差大小写的目标名，避免默认磁盘上的别名覆盖。上述规则通过本地 tar/Python 协议及 Mac 模拟入口验证；下载范围界面和 CLI 继续分批适配，M5 验收仍待执行。
+
 在 Finder 按 **⇧⌘G** 可打开下文的 Application Support 目录。若需要终端中的 `code` 命令，在命令面板运行 **Shell Command: Install 'code' command in PATH** 后重新打开终端；见 [VS Code 官方 Mac 说明](https://code.visualstudio.com/docs/setup/mac)。安装 VSIX 不要求该命令。
 
 ## 更新按钮在哪里
