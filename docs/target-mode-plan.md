@@ -20,15 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-004（passed，独立认证说明与发布门禁）
+## 当前批次：mac-release-007（passed 本地版本门禁，配套发布待执行）
 
 ### 边界
 
-- 本批同步两仓 README 与包内配置说明的真实认证入口、默认会话记忆和显式 SecretStorage 勾选；增加认证/上传进度发布测试和 askpass 固定 LF 规则。最多 8 文件。
-- 不宣称真实 SSH/M5 已通过；保留后续跨服务器默认本机中转、大文件分块、完整 project.prepare 的适配边界。发布批随后递增双组件版本。
+- 本批递增 Experiment 0.5.270/SFTP 0.2.66，同步 lock/runtime 并在两仓源码同步后完整 prepare/publish 与匿名客户端下载验证。最多 8 文件。
+- 不安装本机扩展、不运行 Actions、不覆盖历史版本；不宣称真实 SSH/M5 已通过。下一批为跨服务器默认本机中转、大文件分块，完整 project.prepare 随后适配。
 
 ### 验证清单
 
+- passed mac-release-007：两仓 build/24 与 213 模块闭包、面板脚本 2、发布脚本 3 测试逐文件通过；版本/lock/runtime 一致、askpass LF 和 diff 核验通过。完整 prepare/publish 与匿名下载在同步后执行。
 - passed mac-doc-004：两仓 build/24 与 213 文件包闭包、面板脚本、配置说明 1、发布 3、认证 8 测试逐文件串行通过；三文档 UTF8 回读、命令标题、链接及 askpass LF 规则核验通过。下一批递增 Experiment 0.5.270/SFTP 0.2.66 并完整 prepare/publish。
 - passed mac-005d：SFTP build/24 文件闭包、独立认证 8、真实映射下载 26、API 19、跨服务器既有协议 13、上传进度 4、结算恢复 25、工作区 5 测试逐文件串行通过。真实本机 Node askpass IPC、服务器凭据隔离、未勾选不保存/读取、重载 SecretStorage、加密私钥、并发/取消/限次和 child.close 回执覆盖；未连接真实 SSH 服务器。
 - failed 旧上传进度 VM 回归：缺少已存在更新门禁的 require 注入，另需注入新的 SSH 包装器；修正测试依赖后 4 测试通过，非超时。为遵守 8 文件上限，README 修订已保存到系统暂存区，随后文档批恢复。
@@ -108,6 +109,8 @@
 
 ## 本批记录
 
+- mac-release-007 SimpleSFTP 0.2.66 来源 `f3fb8b6bfdbcdc010153470fbfebcea857ce68e6` 已普通推送并 fetch 核对。
+- mac-doc-004 Experiment `687be53d9ff5445b35de76ae10c0c8d63b262af1` 已普通推送并 fetch 核对。
 - mac-doc-004 SimpleSFTP `d74b1ea818b387e294e0c1b5840c4df249849211` 已普通推送并 fetch 核对；Experiment 同批提交见 Git。
 - mac-005d SimpleSFTP `9173f139491dbf62a152a81c5e00dc21b5df5bbe` 已同步 origin/master；独立认证和 askpass/SSH 包装器通过本地验证，真实 SSH 与 M5 尚未执行。
 
