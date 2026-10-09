@@ -93,10 +93,10 @@ export async function activateExtension(context: Record<string, unknown> & { sub
     try {
       const vscode = tryRequire<any>("vscode");
       if (vscode && vscode.window && typeof vscode.window.registerWebviewViewProvider === "function") {
-        console.log("[Activation] registerWebviewViewProvider", "simpleExperiment.panel");
+        console.log("[Activation] registerWebviewViewProvider", "simpleExperimentMac.panel");
         const retainContextWhenHidden = (provider as any).retainPanelContextWhenHidden === true;
         context.subscriptions.push(
-          vscode.window.registerWebviewViewProvider("simpleExperiment.panel", provider as any, { webviewOptions: { retainContextWhenHidden } })
+          vscode.window.registerWebviewViewProvider("simpleExperimentMac.panel", provider as any, { webviewOptions: { retainContextWhenHidden } })
         );
       } else {
         reportActivationFailure("webview registration", new Error("VS Code Webview API is unavailable."));

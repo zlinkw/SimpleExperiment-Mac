@@ -4,10 +4,10 @@ import { open as openFile } from "node:fs/promises";
 const semverCompare: (left: string, right: string) => number = require("../vendor/semver/functions/compare");
 const semverValid: (value: string) => string | null = require("../vendor/semver/functions/valid");
 
-export const EXPERIMENT_UPDATE_REPO = "zlinkw/SimpleExperiment";
-export const SFTP_UPDATE_REPO = "zlinkw/SimpleSFTP";
-export const EXPERIMENT_EXTENSION_ID = "simple-local.simple-experiment";
-export const SFTP_EXTENSION_ID = "simple-local.simple-sftp";
+export const EXPERIMENT_UPDATE_REPO = "zlinkw/SimpleExperiment-Mac";
+export const SFTP_UPDATE_REPO = "zlinkw/SimpleSFTP-Mac";
+export const EXPERIMENT_EXTENSION_ID = "simple-local.simple-experiment-mac";
+export const SFTP_EXTENSION_ID = "simple-local.simple-sftp-mac";
 
 export interface UpdateRelease {
   tagName?: unknown;

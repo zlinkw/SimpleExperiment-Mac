@@ -88,9 +88,9 @@ export async function updateWorkspaceState(ctx: ExtensionContextFacade, key: str
 export function extensionContextKeys(): Record<string, string> {
   // 搬运自 extension.ts 顶部 keys 常量的子集，保持兼容门面可运行
   return {
-    setupConfig: "simpleExperiment.setupConfig",
-    tunnelConfig: "simpleExperiment.tunnelConfig",
-    projectOnboardingPrompt: "simpleExperiment.projectOnboardingPrompt",
-    projectOnboardingCompleted: "simpleExperiment.projectOnboardingCompleted",
+    setupConfig: "simpleExperimentMac.setupConfig",
+    tunnelConfig: "simpleExperimentMac.tunnelConfig",
+    projectOnboardingPrompt: "simpleExperimentMac.projectOnboardingPrompt",
+    projectOnboardingCompleted: "simpleExperimentMac.projectOnboardingCompleted",
   };
 }

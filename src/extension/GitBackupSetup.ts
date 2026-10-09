@@ -17,18 +17,18 @@ import {
   type GitBackupInspection,
 } from "../features/GitBackup";
 
-const CONFIG_SECTION = "simpleExperiment";
+const CONFIG_SECTION = "simpleExperimentMac";
 const KEY_ENABLED = "gitBackup.enabled";
 const KEY_REMOTE = "gitBackup.remote";
 const KEY_VERIFY = "gitBackup.verifyRemoteAccess";
 
-const HINT_STATE_KEY = "simpleExperiment.gitBackup.hintedRepos";
+const HINT_STATE_KEY = "simpleExperimentMac.gitBackup.hintedRepos";
 
-export const CMD_SETUP = "simpleExperiment.setupGitBackup";
-export const CMD_REMOVE = "simpleExperiment.removeGitBackup";
-export const CMD_STATUS = "simpleExperiment.showGitBackupStatus";
-export const CMD_SYNC_GITHUB = "simpleExperiment.syncToGitHub";
-export const CMD_PUBLISH_GITHUB = "simpleExperiment.publishToGitHub";
+export const CMD_SETUP = "simpleExperimentMac.setupGitBackup";
+export const CMD_REMOVE = "simpleExperimentMac.removeGitBackup";
+export const CMD_STATUS = "simpleExperimentMac.showGitBackupStatus";
+export const CMD_SYNC_GITHUB = "simpleExperimentMac.syncToGitHub";
+export const CMD_PUBLISH_GITHUB = "simpleExperimentMac.publishToGitHub";
 
 interface GitBackupConfig {
   enabled: boolean;
