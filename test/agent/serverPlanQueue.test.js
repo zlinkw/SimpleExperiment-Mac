@@ -21,7 +21,7 @@ function makeFixtureScript(root) {
     "durable_plan_queue_path",
     "read_durable_plan_queue",
     "write_durable_plan_queue",
-    "durable_plan_value",
+    "durable_plan_path", "durable_plan_value",
     "durable_plan_identity",
     "durable_plan_public_task",
     "durable_plan_same_identity",
@@ -153,12 +153,14 @@ def resolve_durable_code_sync_proof(root, row):
         return {"proofId":"fixture-proof"}
     return REAL_RESOLVE_DURABLE_CODE_SYNC_PROOF(root, row)
 
+def verified_durable_execution_mode(root, command): return "train_test"
+
 def make_job(index, command_id=None):
     return {
         "projectId": r"D:\\workspace\\project",
         "workflowId": "workflow-1",
         "planFile": "experiments/plans/p.yaml",
-        "planRevision": "revision-a",
+        "executionMode": "train_test", "mode": "train_test", "planRevision": "revision-a",
         "codeFingerprint": "sha256-a",
         "experimentIndex": index,
         "case": "case-a",
@@ -366,7 +368,7 @@ test("server Agent durably accepts, drains, cancels, and fences Plan jobs", () =
     assert.equal(result.cancelled, "command-3");
     assert.equal(result.conflict, true);
   } finally {
-    fs.unlinkSync(scriptPath);
+    // Retain the exact generated fixture for review; no cleanup deletion.
   }
 });
 

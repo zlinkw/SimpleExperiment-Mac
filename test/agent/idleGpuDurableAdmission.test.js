@@ -19,7 +19,7 @@ function pythonDefinition(name) {
 function fixture(root) {
   const definitions = [
     "now_iso", "durable_plan_queue_path", "read_durable_plan_queue",
-    "write_durable_plan_queue", "durable_plan_value", "durable_plan_identity",
+    "write_durable_plan_queue", "durable_plan_path", "durable_plan_value", "durable_plan_identity",
     "durable_plan_same_identity", "gpu_row_busy", "_durable_gpu_busy_reason", "accept_durable_plan_job",
     "requeue_durable_plan_job", "release_distributed_gpu_reservation",
     "durable_plan_public_task", "fence_queued_idle_gpu_admission", "drain_durable_plan_queue_once",
@@ -97,9 +97,11 @@ def execute_worker_command(root, command, worker_id):
         return {"status":"running", "commandId":command.get("commandId")}
     return REAL_EXECUTE_WORKER_COMMAND(root, command, worker_id)
 
+def verified_durable_execution_mode(root, command): return "train_test"
+
 def make_job(command_id, gpu_id="0"):
     return {"projectId":"project-a", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
-        "planRevision":"rev-a", "codeFingerprint":"sha-a", "experimentIndex":0, "case":"case-a",
+        "executionMode":"train_test", "mode":"train_test", "planRevision":"rev-a", "codeFingerprint":"sha-a", "experimentIndex":0, "case":"case-a",
         "seed":44, "attempt":1, "outputDir":"experiments/runs/a/attempts/1", "runKey":command_id,
         "commandId":command_id, "workerId":"worker-a", "planJobCount":1, "durablePlanQueue":True,
         "codeSyncProofId":"proof-test", "manifestDigest":"sha-a",
@@ -291,6 +293,6 @@ test("Agent atomically admits explicit idle GPUs and proves queued-only release"
     assert.equal(run.status, 0, run.stderr || run.error?.message);
     assert.deepEqual(JSON.parse(run.stdout.trim()), { admission: true, release: true, fences: true });
   } finally {
-    fs.unlinkSync(scriptPath);
+    // Retain the exact generated fixture for review; no cleanup deletion.
   }
 });

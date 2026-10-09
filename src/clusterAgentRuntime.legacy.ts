@@ -2690,7 +2690,19 @@ def durable_plan_value(command, key):
             return int(value)
         except (TypeError, ValueError):
             return value
+    # Filesystem identity includes real whitespace, case and Unicode spelling.
+    # Preserve invalid types too: admission must reject them, never stringify them.
+    if key in ("planFile", "outputDir"):
+        return value if value is not None else ""
     return str(value).strip() if value is not None else ""
+
+def durable_plan_path(value, label):
+    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
+            or value.startswith("/") or ":" in value or chr(92) in value
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise ValueError(label + " 必须是保留真实拼写的项目内规范相对 POSIX 路径")
+    return value
 
 def durable_plan_identity(command):
     return {key: durable_plan_value(command, key) for key in DURABLE_PLAN_IDENTITY_FIELDS}
@@ -3060,12 +3072,8 @@ def accept_durable_plan_job(root, command, worker_id):
         full_count = count
     if not isinstance(full_count, int) or full_count < count:
         raise ValueError("fullPlanJobCount 不能少于本次提交任务数")
-    plan_file = str(identity["planFile"]).replace("\\", "/")
-    if plan_file.startswith("/") or any(part in ("", ".", "..") for part in plan_file.split("/")):
-        raise ValueError("planFile 必须是项目内规范相对路径")
-    output_dir = str(identity["outputDir"]).replace("\\", "/")
-    if output_dir.startswith("/") or any(part in ("", ".", "..") for part in output_dir.split("/")):
-        raise ValueError("outputDir 必须是项目内规范相对路径")
+    plan_file = durable_plan_path(identity["planFile"], "planFile")
+    output_dir = durable_plan_path(identity["outputDir"], "outputDir")
     if "/attempts/" not in output_dir:
         raise ValueError("outputDir 必须位于 attempts 路径下")
     identity["planFile"] = plan_file
@@ -3155,6 +3163,9 @@ def cancel_durable_plan_job(root, command):
         missing = [key for key, value in supplied.items() if value in (None, "")]
         if missing:
             raise ValueError("待启动任务取消缺少完整身份：" + ",".join(missing))
+        if any(not isinstance(value, str) or row.get(key) != value
+               for key, value in supplied.items() if key in ("planFile", "outputDir")):
+            raise ValueError("取消请求路径身份与持久队列 job 不匹配")
         if any(str(row.get(key) if row.get(key) is not None else "") != str(value) for key, value in supplied.items()):
             raise ValueError("取消请求身份与持久队列 job 不匹配")
         cancelled_at = now_iso()
@@ -3415,6 +3426,9 @@ def _legacy_recall_identity_matches(expected, actual):
                     return False
             except (TypeError, ValueError):
                 return False
+        elif field in ("planFile", "outputDir"):
+            if not isinstance(left[field], str) or not isinstance(right[field], str) or left[field] != right[field]:
+                return False
         elif str(left[field]).strip() != str(right[field]).strip():
             return False
     return True
@@ -3468,6 +3482,9 @@ def worker_task_matches_stop_identity(command, task):
                 if int(actual) != int(expected):
                     return False
             except (TypeError, ValueError):
+                return False
+        elif field in ("planFile", "outputDir"):
+            if not isinstance(actual, str) or not isinstance(expected, str) or actual != expected:
                 return False
         elif str(actual if actual is not None else "") != str(expected):
             return False
@@ -3566,6 +3583,8 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
         if str(row.get("status") or "").lower() != "queued" or str(row.get("workerId") or "") != worker_id:
             continue
         try:
+            durable_plan_path(durable_plan_value(row, "planFile"), "planFile")
+            durable_plan_path(durable_plan_value(row, "outputDir"), "outputDir")
             proof = resolve_durable_code_sync_proof(root, row)
             execution_mode = verified_durable_execution_mode(root, row)
         except Exception as exc:

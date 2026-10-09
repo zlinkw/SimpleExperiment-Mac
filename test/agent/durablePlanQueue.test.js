@@ -20,7 +20,7 @@ function fixture(root) {
   const definitions = [
     "atomic_write_file", "atomic_write",
     "durable_plan_queue_path", "read_durable_plan_queue", "write_durable_plan_queue",
-    "durable_plan_value", "durable_plan_identity", "durable_plan_public_task",
+    "durable_plan_path", "durable_plan_value", "durable_plan_identity", "durable_plan_public_task",
     "durable_plan_same_identity", "accept_durable_plan_job", "cancel_durable_plan_job",
     "durable_plan_queue_processor_key", "durable_plan_queue_wake_event", "signal_durable_plan_queue_processor",
     "start_durable_plan_queue_processor",
@@ -28,7 +28,8 @@ function fixture(root) {
   const identity = source.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m);
   assert.ok(identity, "missing durable identity contract");
   return String.raw`
-import hashlib, json, os, stat, threading, time
+import faulthandler, hashlib, json, os, stat, threading, time
+faulthandler.dump_traceback_later(3)
 ROOT = ${JSON.stringify(root.replace(/\\/g, "/"))}
 SCHEMA_VERSION = 1
 ATOMIC_WRITE_SLOT_COUNT = 32
@@ -56,9 +57,11 @@ def recalled_worker_command(root, identity): return None
 ${identity[0]}
 ${definitions.join("\n\n")}
 
+def verified_durable_execution_mode(root, command): return "train_test"
+
 def make_job(index, command_id):
     return {"projectId":"project-a", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
-        "planRevision":"revision-a", "codeFingerprint":"sha-a", "experimentIndex":index, "case":"case-a",
+        "executionMode":"train_test", "mode":"train_test", "planRevision":"revision-a", "codeFingerprint":"sha-a", "experimentIndex":index, "case":"case-a",
         "seed":40+index, "attempt":1, "outputDir":"experiments/runs/job-"+str(index)+"/attempts/1",
         "runKey":command_id, "commandId":command_id, "workerId":"worker-a", "planJobCount":3,
         "action":"start-worker-task", "durablePlanQueue":True}
@@ -172,6 +175,6 @@ test("durable Plan queue preserves legacy acceptance, cancellation, and restart 
     assert.equal(run.status, 0, run.stderr || run.error?.message);
     assert.deepEqual(JSON.parse(run.stdout.trim()), { legacyAccept: true, legacyCancel: true, restartFence: true });
   } finally {
-    fs.unlinkSync(scriptPath);
+    // Retain the exact generated fixture for review; no cleanup deletion.
   }
 });

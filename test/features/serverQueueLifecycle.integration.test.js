@@ -188,7 +188,7 @@ test("an older terminal receipt remains retry history and cannot satisfy a local
 
 test("source Agent durably accepts idempotent sparse job identity and drains FIFO within GPU capacity", () => {
   const definitions = ["durable_plan_queue_path", "read_durable_plan_queue", "write_durable_plan_queue",
-    "durable_plan_value", "durable_plan_identity", "durable_plan_public_task", "durable_plan_same_identity",
+    "durable_plan_path", "durable_plan_value", "durable_plan_identity", "durable_plan_public_task", "durable_plan_same_identity",
     "accept_durable_plan_job", "cancel_durable_plan_job", "durable_plan_task_status", "record_durable_plan_task_terminal",
     "sync_durable_plan_task_rows", "drain_durable_plan_queue_once", "release_distributed_gpu_reservation", "api_worker_tasks"]
     .map(pythonDefinition);
@@ -264,9 +264,11 @@ def gpu_row_id(gpu): return str(gpu.get("gpuId") or gpu.get("id") or "")
 def gpu_row_busy(gpu): return bool(gpu.get("busy"))
 ${identity[0]}
 ${definitions.join("\n\n")}
+def verified_durable_execution_mode(root, command): return "train_test"
+
 def make_job(index, count=1):
     return {"projectId":"p", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
-      "planRevision":"rev-a", "codeFingerprint":fingerprint, "codeManifest":manifest, "experimentIndex":index,
+      "executionMode":"train_test", "mode":"train_test", "planRevision":"rev-a", "codeFingerprint":fingerprint, "codeManifest":manifest, "experimentIndex":index,
       "case":"alpha", "seed":42+index, "attempt":1, "outputDir":"runs/a/attempts/job-"+str(index),
       "runKey":"cmd-"+str(index), "commandId":"cmd-"+str(index), "workerId":"worker-a",
       "planJobCount":count, "enqueuedAt":now_iso()}
@@ -323,6 +325,6 @@ print(json.dumps({"accepted":True,"fifo":calls,"durable":True}))
     assert.equal(result.status, 0, result.stderr || result.error?.message);
     assert.deepEqual(JSON.parse(result.stdout.trim()), { accepted: true, fifo: [["cmd-0", "0"], ["cmd-1", "1"]], durable: true });
   } finally {
-    fs.unlinkSync(scriptPath);
+    // Retain the exact generated fixture for review; no cleanup deletion.
   }
 });
