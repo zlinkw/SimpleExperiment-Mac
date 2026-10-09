@@ -20,10 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-019（passed，Mac 结果候选说明与门禁）
+## 当前批次：mac-release-024（running，0.5.287/0.2.81 配套发布）
 ### 边界
 
-- 本批 6 文件：两仓 README/包内配置说明同步候选实际匹配范围、明确 glob/占位符与大小写行为，保留更新入口和本地/M5 边界；新增候选与相邻缓存门禁，发布说明匹配本版变化。
+- 本批 6 文件，仅递增两仓 package/lock 与 Experiment runtime 版本，构建和版本检查后普通提交推送，prepare/publish 绑定同步源码提交。实际 VSIX 候选/CLI/结果/启动回归和匿名下载校验后记录交付；不 Actions/安装。YAML 提取、汇总授权/映射、Agent/物理发布及 M5 后续分批。
+- passed 版本元数据：两仓 build/220 与 26 闭包、面板脚本 2、vm.Script、runtimeManifest 1、package/lock 版本一致、UTF8/diff 检查通过。pending 完整 prepare/publish、实际 VSIX 与匿名更新；产物必须关联这些已同步源码，不覆盖旧版本。
 - passed build/220 闭包/面板 2、vm.Script、macSetupGuide 1、macRelease 4 串行通过，三份 Mac 说明 UTF8 回读/更新入口/候选范围/M5 标记通过；新增 7 个候选/缓存门禁文件。下一批版本递增与配套本机发布，原科研/解析/真机验证边界保持。
 - passed build/220 闭包/面板脚本 2、vm.Script，macResultCandidates 6、projectResultLocationClarity 6、backendOutputDerivationCaches 4、outputCandidateDedupRegression 3、planScopedResultCandidateCache 10、planSelectionPreviewAndWorkerEmptyState 5、planOutputEvidenceSignals 1、macResultIdentity 8、remoteResultInspectionWorkflow 13、macPanelTheme 1，逐文件串行 20 秒通过；UTF8/diff 检查通过。新 fixture 改为实际 legacy 渲染入口传平台后通过，无超时。
 - 原始大小写/首尾空格/Unicode/%20 与目录身份参与匹配，glob/占位符保留且区分大小写，坏路径/类型不会修成另一候选。下一批限定使用说明/门禁与配套发布；上游 YAML 候选提取、汇总授权/映射下载、Agent 读取、实际解析/物理发布及 M5 后续分批。
@@ -52,6 +53,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-doc-019 Experiment `2bcb6c752c0a5ef251482b008a087567d8e0bebe`、SFTP `a3c6bfdef7240035ba93e523932c2891fd9a802d` 已普通推送并 fetch 核对 origin/master；候选使用说明和新增门禁同步。
 - mac-005w-candidates `f59da55da05270aa346eddd65c03b12b1de7558d` 已普通推送并 fetch 核对 origin/master；后续 YAML/汇总授权/映射/Agent/物理发布仍分批。
 - mac-release-023 交付记录 `b76f3f1ce163221e90860bd9dc47dc990c9de88d` 已普通推送并 fetch 核对 origin/master。
 - 第二十三版 preview-v0.5.286 已公开：Experiment 来源 `c75f7675bfc13d473941315841d1c7530164ced1`、SFTP 0.2.80 来源 `b57db1a97c7db3cb630b449b95b5cf04667d235d` 已普通推送并 fetch 核对 origin/master；实际包结果身份与匿名更新通过。
