@@ -20,14 +20,18 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005l（passed，Experiment 稳定 CLI 入口）
+## 当前批次：mac-005m（passed，SFTP 稳定 CLI 入口）
 ### 边界
 
-- 增加 Experiment Mac 稳定 POSIX CLI 启动器与独立命令，更新/重载后指向当前 VSIX；LF、中文/空格/引号参数保持。本地真实 shell/Node/模拟本机 API 验证，最多 8 文件。
-- 只在受支持 Mac 激活时生成组件自己的 Application Support/cli 文件，不修改用户 PATH，不安装扩展，不执行研究/服务器操作，不删除旧入口。未知文件/链接拒绝覆盖；CLI 失败不影响更新或业务启动。
-- SFTP CLI、实时 API 契约/业务命令以及文档和发布后续独立批次；M5 pending。
+- SFTP 使用与 Experiment 一致的私有稳定 POSIX CLI、版本/包身份/链接保护和独立查看命令。支持 Mac 激活刷新，旧实例不降级，LF/Node 20+/参数/cwd 保持，最多 8 文件。
+- 测试真实本地 shell/Node/health mock，不上传下载/实验/真实服务器，不自动安装插件/改 PATH/删除旧入口。CLI 失败不阻塞业务或更新。
+- 双仓文档和发布门禁后续批次，再核对 CLI 实时 API/业务命令与科研主流程；M5 pending。
 
 ### 验证清单
+
+- passed mac-005m：SFTP 固定 Application Support/cli/simple-sftp-mac-api 与独立查看/复制自检命令；规则与 Experiment 一致，LF/Node 20+/完整参数/cwd、包身份/版本/链接/目录身份保护，受支持 Mac 激活刷新且不降级。未知文件拒绝覆盖，CLI 失败不阻塞业务或更新，保留旧 npm 入口。
+- passed mac-005m 本地：SFTP build/25 文件闭包，CLI 启动器 5、独立更新/退出证明 3 逐文件串行通过。真实本地 Git POSIX shell/Node、自检 health mock 与 Mac 命令入口覆盖，未安装扩展/修改 PATH/执行实验或服务器操作。5 文件。
+- pending mac-doc-009：双仓 README/配置说明与发布门禁接入 CLI 后发布配套 preview；CLI 实时 API 契约/业务命令和完整科研主流程/M5 后续。
 
 - passed mac-005l：Experiment 固定 Application Support/cli/simpleex-mac，LF/POSIX shell、Node 20+ 门禁、完整参数/cwd、命令面板入口及复制自检。支持 Mac 激活刷新，旧实例不降级；未知文件/链接/硬链接/异仓拒绝，CLI 失败不阻塞业务或独立更新。旧入口保留。
 - passed mac-005l 本地：build/215 模块闭包/面板脚本 2，CLI 启动器 5、独立更新 3 逐文件串行通过。真实本地 Git POSIX shell/Node、模拟本机 health API 与 Mac 命令入口覆盖；未安装扩展或执行实验/服务器操作。首次 Windows argv 引号被 shell 启动层改写，改用真实 shell stdin 引用；health fixture 补齐 ok 字段后通过，非超时。5 文件。
@@ -57,6 +61,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005m SimpleSFTP 稳定 CLI 源码已普通推送并 fetch 核对，真实提交见 Git；4 个 SFTP 文件与本计划共 5 文件。
+- mac-005l Experiment 来源 `6e656f2b1b962910147ea7796f4a1758ee05c415` 已普通推送并 fetch 核对，稳定 CLI 本地验证通过。
 - mac-005l Experiment 稳定 CLI 已完成本地验证，提交来源见 Git；SFTP 接入与配套发布后续批次。
 - 第十三版 preview-v0.5.276 已发布：Experiment 来源 `43ef53f3fe02b6f14f8d392486197a15c0470350`、SFTP 0.2.70 来源 `16e6ce87e98b2c61aef23cc93270734e000bc67b` 均已同步；Mac 下载范围/文件浏览、本地归档协议与真实匿名下载通过。CLI/完整科研主流程/真实 SSH/M5 pending。
 - mac-005k SimpleSFTP 源码 `ce60c041385374dabf9723b6aed0659049735832` 已普通推送并 fetch 核对；说明提交 `08595adc69ca73021e561663cce6644b085f3a81`。
