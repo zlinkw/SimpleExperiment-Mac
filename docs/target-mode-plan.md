@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ab-compiled（passed）
+## 当前批次 mac-release-029（running，0.5.292/0.2.86）
+- 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；两仓来源已普通推送/fetch 相等，先验证元数据，再完整 prepare/publish，绑定实际 VSIX 的结果链与前版能力、匿名更新。无 Actions/安装，历史附件保留，不覆盖。
+- mac-005ab-compiled Exp `4fe3c9cb4c10f84203fed4037123a87700fca926`、SFTP `8d7a7ddec754ad0219fff4829a5a1758782124b3` 已普通推送/fetch 核对。pending 两仓 build/闭包/面板/runtimeManifest/UTF8/diff、67 个串行 prepare 门禁、实际包及匿名检查。M5 延后，完整结果物理解析/来源与原子写入待后续。
+
+- passed 元数据子批：两仓 build/223 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff。完整 prepare/实际包/匿名发布 pending，必须先同步源码；没有把发布 pending 项记为通过。
+
+### 前批 mac-005ab-compiled（passed）
 - 范围至多 7 文件：真实编译 metricsDownloadEndToEnd fixture、发布门禁/对应测试、两仓 README/Mac 配置说明与计划。修复 TS 源码加载 Worker.js 和缺少执行模式的 fixture 前置条件，保留实际编译 Worker/解析/注册表/CSV/Markdown 与提交世代门禁；不放松生产判断。
 - 当前两仓干净且 master 同步：Experiment `e9e4a6c8e20505fbc10d3cce767e7db47971c4c0`，SFTP `be6fb9478d467f9dd1e721f9d856e46c70ab1e36`。保护原入口、API/Plan/三拓扑；不运行真实科研/SSH/远端操作/安装/删除。
 - passed 两仓 build/223 与 26 闭包/面板 2/vm.Script；实际 dist 结果 fixture 6（模拟 API、真实本机文件/编译 Worker）、pending 指标 39、执行模式 9、配置说明 1、发布门禁 4，单文件串行/20 秒无超时。拒绝四类错误响应并逐字节保留旧注册表和 CSV/Markdown；迟到锁测试确认实际进入锁回调后未发送。三份文档 UTF8/更新入口/diff passed；无生产门禁放松。缺失来源/本地解析路径、完整原子写入与 M5 后续处理。
