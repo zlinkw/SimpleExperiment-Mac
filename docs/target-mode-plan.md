@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-017（passed，Mac 使用说明与启动路径门禁）
+## 当前批次：mac-release-022（running，配套 preview-v0.5.285）
 ### 边界
 
-- 两仓 README、Mac 配置说明、发布脚本/测试与本计划共 6 文件，保留更新按钮入口，补充真实启动路径规则和手动 Agent 升级。用户已明确说明优先于配色；不新增配色修改。
-- passed UTF8 回读、build/219 闭包/面板 2、macSetupGuide 1 与 macRelease 4，逐文件串行 20 秒。源码已验证，说明随后配套发布；科研/结果归档/真实 SSH/M5 pending。
+- 两仓 package/lock、Experiment runtime 真值与本计划共 6 文件，升级 0.5.285/0.2.79，绑定已同步启动路径与 Mac 说明源码；本机 prepare/publish 不安装扩展。
+- passed 版本批次两仓 build/219 与 26 闭包/面板 2、runtimeManifest 1，逐文件串行 20 秒；完整 prepare/publish、实际包与匿名更新仍 running，M5 pending。
 
 ### 验证清单
 
@@ -44,6 +44,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-release-022 SFTP 0.2.79 来源 `0d96e4388f7e5b4e51eb63bba0ced62cd2f3224c` 已普通推送并 fetch 核对 origin/master。
+- mac-doc-017 Experiment `bcce84caf80ebe3fef0c763c52878c8afe73dc31`、SFTP `ce291edd7892cd8ae090f3a86c4aaceefdc052c3` 已普通推送并 fetch 核对 origin/master。
 - mac-doc-017 SFTP `ce291edd7892cd8ae090f3a86c4aaceefdc052c3` 已普通推送并 fetch 核对 origin/master。
 - mac-005u-launch 源码 `75cd40e65bd179797a660056e87398afc1778e6a` 已普通推送并 fetch 核对 origin/master。
 - mac-release-021 交付记录 `4d9c47df77d420eb350264d84649caa2dce9e5eb` 已普通推送并 fetch 核对 origin/master。
