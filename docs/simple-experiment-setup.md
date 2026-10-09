@@ -214,6 +214,14 @@ Mac 的版本/哈希检查只读，不会自动部署或重启。检查不一致
 
 若上传完成但 Agent 尚未手动启动或检测未通过，操作记录为 `status: "blocked"`、`phase: "manual_start"`，提供 `manualStart.guide` 和后续 `calls`，不标记科研准备成功。按指引在 Termius 处理后，可从记录中的预览调用重新确认，使用 `deployRuntime: false`、`uploadProject: false`、`autoTest: true` 再次执行 `project.bootstrap`。这会产生新的操作记录，重新检测当前端点与 runtime 版本/哈希，避免重复上传；旧阻塞记录保留供查阅。只有检测与 Plan 校验均通过才记录成功，不会自动运行实验。
 
+### Mac 结果路径与来源
+
+结果所属 Plan 使用完整项目相对路径，保持大小写、Unicode、字面 `%20` 与真实首尾空格；结果映射、已完成运行、attempt 输出和 SHA-256 文件清单按原拼写核对，另一 Plan 的运行不会用于本 Plan。TS 与新版 Agent 的 Plan 结果目录 key 使用同一规则。轻量查看确认保留原始来源路径，本机副本目录包含完整 Plan 路径的摘要；历史副本保留，不自动搬移或清理。
+
+按 **⌘,** 搜索 `simpleExperimentMac.resultCsvDir`，填写项目内相对目录，例如 `experiments/results` 或 `结果 A/汇总`，保留目录名真实空格。不填绝对路径、反斜杠、冒号、`.`、`..`、内部连续 `/` 或控制字符。非法配置会报错，不回退默认目录；业务面板无法加载时，仍可从 VS Code 设置修正，再重载，状态栏和命令面板更新入口保持可用。结果 Plan 目录使用实际 `simpleExperimentMac.planDir`，不要把不同目录或大小写的 Plan 当作同一项。
+
+上述映射、运行筛选、路径确认和目录 key 通过本地编译模块、后台方法与 Agent 隔离函数测试。完整结果候选 UI、Agent 结果读取、实际解析、物理发布/归档及 M5 仍继续适配。服务器需主动确认上传配套新版 Agent，并在 Termius 手动启动和检测；不为升级中断正在运行的实验。
+
 ## 7. 数据目录、API 与常见问题
 
 | 内容 | Finder 路径 |
