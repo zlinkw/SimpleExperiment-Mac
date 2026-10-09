@@ -14,13 +14,13 @@
 
 ## 后续优先级
 
-- pending mac-002：独立身份、命名空间、发现目录及最小启动，按文件组分批迁移。
-- pending mac-003：独立更新引擎、preview 筛选/缓存/限流、校验及更新事务、业务门禁。
-- pending mac-004：本机 prepare/publish、双仓提交绑定、包闭包与两版 preview 交付。
+- passed mac-002：独立身份、命名空间、发现目录及最小启动，本地门禁通过。
+- passed mac-003：独立更新引擎、preview 筛选/缓存/限流、校验及更新事务、业务门禁，本地测试通过；M5 安装链路仍待验收。
+- passed mac-004：本机 prepare/publish、双仓提交绑定、包闭包与多版 preview 交付，实际匿名客户端下载校验通过。
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-005（passed，发布源码门禁；包发布待执行）
+## 当前批次：mac-release-005（passed，主题修复已发布）
 
 ### 边界
 
@@ -29,6 +29,7 @@
 
 ### 验证清单
 
+- passed preview-v0.5.268 完整 prepare/publish、实际匿名客户端下载两包/hash/platform/CRC/包内 Mac 文档及主题源码核验。0.5.267/0.2.65 客户端只计划更新 Experiment；0.5.266/0.2.64 计划两组件更新；M5 未执行，不视为在线安装验收。
 - passed mac-release-005：Experiment build/面板脚本、闭包、版本/lock/runtime 一致、辅助脚本语法与发布 3 测试、真实三主题测试逐文件通过。完整 prepare/publish 在同步源码后执行。
 - passed mac-ui-002：真实 headless Chromium 三主题渲染，页面/设置/输入/规则/详情/状态/GPU 标识/按钮/说明对比均 ≥4.5；首次旧样式浅色错误状态 4.41，修复后通过。两张 1440×1100 浅色/深色截图确认无亮底混用，移动并核验系统 CodexUiCaptures/clean_dir 保存。
 - passed build/面板脚本、212 模块闭包、vm.Script、更新卡片测试；源码与渲染辅助脚本 UTF8/语法/diff 检查。下一批发布 Experiment 0.5.268，与已发布 SFTP 0.2.65 配套，随后 Termius/认证。
@@ -92,6 +93,7 @@
 
 ## 本批记录
 
+- 第五版 preview-v0.5.268 已发布：Experiment 来源 `e0b387adcd87aaec65cc8ae1b9db0a0090751b78`，SFTP 0.2.65 来源 `209615528e3a28bd420c89c681ee38e7874dfaf5`。当前使用说明和主题请求交付；下一批 mac-005c Termius 手动端点保存/检测及无私有会话依赖的 Agent/tmux 指引，最多 8 文件；独立认证随后分批。
 - mac-ui-002 Experiment `b4f39d112521e59028221bc0a73d8fb153bfb056` 已同步。
 - 第四版 preview-v0.5.267 已发布：Experiment 来源 `5fe898720083298c9439c01754c393f235310a08`，SFTP 来源 `209615528e3a28bd420c89c681ee38e7874dfaf5`；下一批深色模式修复，随后 Termius/认证。
 - mac-doc-002 Experiment `ef87f9dd8efd9a4ff2c61842322d0970ff05d041` 已同步。
