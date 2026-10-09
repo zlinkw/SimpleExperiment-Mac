@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-023（passed）
+## 当前批次 mac-release-028（running，0.5.291/0.2.85）
+- 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本元数据验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新核验；无 Actions/安装。
+- mac-doc-023 Experiment `21b43698021ed95314cdbf7059ec87d47f9610c0`、SFTP `b75ce34e24e7fb4a7fb5a0d8b157a9a1300fa906` 已普通推送/fetch 核对。验证两仓 build/闭包/面板/runtimeManifest/UTF8，完整串行 prepare，实际读取/映射与前批包能力、匿名下载；M5 延后。
+- passed 元数据：两仓 build、223/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致与 UTF8/diff。完整 prepare/publish 与实际包/匿名验证 pending，未作为完成证据。
+
+### 前批 mac-doc-023（passed）
 - 范围 6 文件：两仓 README、配置说明、prepare/发布门禁与计划。同步描述符读取、身份变化处理、暂存/分发失败保留旧结果、更新入口及验收边界；不扩大源代码范围。
 - mac-005aa-read `1fd09da53283b579a72552e06e48195cf845e674` 已普通推送/fetch 核对 origin/master。回归 build/闭包/面板、配置说明/发布脚本单文件串行、三份文档 UTF8/diff；下一批元数据及实际包/匿名配套发布。
 
