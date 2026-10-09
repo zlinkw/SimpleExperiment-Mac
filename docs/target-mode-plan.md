@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-021（passed，配套 preview-v0.5.284）
+## 当前批次：mac-005u-launch（passed，Agent 与 scheduler POSIX 启动路径）
 ### 边界
 
-- 两仓 package/lock、Experiment runtime 真值与本计划共 6 文件，升级 0.5.284/0.2.78；关联已同步代码与说明，完整配套发布不安装扩展。
-- passed 版本两仓 build/219 与 26 模块闭包/面板脚本 2、runtimeManifest 1 串行 20 秒；完整 prepare/publish、实际包与匿名下载 passed。真实科研/SSH/M5 pending。
+- 本批统一 Agent 启动路径字段、项目内 Plan 检查与模式读取，scheduler 输出/attempt 覆盖及状态 key 保留真实拼写，最多 8 源/测试/计划文件。仅编译函数、模拟 POSIX 文件系统与本机测试，不运行科研/远端启动/停止/删除/传输。
+- passed build/219 闭包/面板脚本 2 与 vm.Script；macPlanLaunchPaths 8、distributedPlanExecutionMode 9、planRunModeWorkflow 5、macAgentPlanIdentity 5、macPlanFiles 9、macWorkflowBinding 10，逐文件串行 20 秒。7 文件。结果/监控、归档 sidecar/写入和 M5 pending；说明/发布同通道交付。
 
 ### 验证清单
 
+- passed mac-005u-launch：Agent 的 projectDir/Plan/output/config/log/默认结果目录保留真实路径拼写，路径别名冲突与错误类型先拒绝；Plan、已有输出/日志父项按实际目录条目/类型校验并拒绝链接，依赖检查后复核。原 Plan revision 读取全文并复核模式；scheduler 的输出、工作目录、输入/输出、attempt 覆盖与状态 key 保留真实拼写，非法输出在 runtime/入队前拒绝。隔离 AST 编译函数与模拟 POSIX 文件系统，无实际科研/SSH/启动/停止/删除。
+- passed 本批：build/219 闭包/面板 2、vm.Script 与 6 个目标测试文件通过；旧模式 fixture 在 Windows 使用默认反斜杠 schedulerPath，改为明确的虚拟 POSIX 路径后通过，非超时。物理检查与启动/写入之间并非原子锁定，scheduler 结果/归档及 M5 仍 pending；下一批优先同步两仓 README/配置说明和门禁，再配套发布。
 - passed mac-release-016：完整本机 prepare/publish、两仓 build/217 与 26 文件闭包、面板脚本 2、逐文件串行更新/CLI/路径/认证/中转与浅/深/高对比真实渲染通过。三个完整草稿附件核验后发布，无 Actions/开发机安装。
 - passed preview-v0.5.279：实际两包固定 CLI 通过真实本地 shell/Node health/实时 RPC，Experiment 实际包以中文 Plan、本机 mock 完成工作区/路线预检与等待确认回执，submitted=false（2 项包测试）。真实匿名 updater 从 0.5.278/0.2.72 筛出两组件，19 次请求完成大小/hash/CRC/身份/平台校验；下载字节与已测试 VSIX 一致，新 CLI 模块、两仓 README/配置说明与来源一致。同版本跳过/禁止降级通过，无实际科研/服务器/M5。
 - passed mac-005q：服务端 Mac workflow 绑定当前物理工作区，异步准备/校验/标准 Plan 关键边界复核，晚到回执不写入另一工作区；精确保留 Plan 首尾空格。CLI/API seed override 显式拒绝，正式种子沿用保存的 Plan，离线预览不宣称应用 seed。Mac 提交不执行旧自动停止 fallback，活动运行在创建回执及提交前拦截。8 文件。
@@ -82,6 +84,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-release-021 交付记录 `4d9c47df77d420eb350264d84649caa2dce9e5eb` 已普通推送并 fetch 核对 origin/master。
 - 第二十一版 preview-v0.5.284 已发布：Experiment 来源 `98edc7016be5a3c184ddef78315418328c2f1f07`、SFTP 0.2.78 来源 `cc948773d51014069826fb628bfe9dd7a10df671` 已普通推送并 fetch 核对。实际包 CLI/Agent 身份与匿名下载通过；完整科研/SSH/M5 pending。
 - mac-doc-016 Experiment `5f9050682f1a6572c2168991893581e3daf85c9a`、SFTP `5ef5b48577c0d6053131436a94cb5bb0dc0fe18a` 已普通推送并 fetch 核对 origin/master。
 - mac-005u-identity 已验证源码 `9111947576b5f38d5b7b0368da235969e651ee9a` 已普通推送并 fetch 核对 origin/master。

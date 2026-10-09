@@ -533,6 +533,26 @@ def text_field(record: dict[str, Any], *keys: str) -> str:
             return str(value).strip()
     return ""
 
+def path_field(record: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = record.get(key)
+        if value is None or value == "":
+            continue
+        if not isinstance(value, str):
+            raise SystemExit(key + " 必须是路径字符串")
+        return value
+    return ""
+
+def posix_plan_relative_path(value: object, label: str, allow_root: bool = False) -> str:
+    if allow_root and value in (".", "./"):
+        return "."
+    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
+            or value.startswith("/") or ":" in value or chr(92) in value
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise SystemExit(label + " 必须是保留真实拼写的项目内相对 POSIX 路径")
+    return value
+
 
 def dict_field(record: dict[str, Any], *keys: str) -> dict[str, Any]:
     for key in keys:
@@ -815,7 +835,7 @@ def declared_path_values(value: Any) -> list[str]:
         if isinstance(item, str):
             values.append(item)
         elif isinstance(item, dict):
-            path = text_field(item, "path", "file", "directory", "dir")
+            path = path_field(item, "path", "file", "directory", "dir")
             if path:
                 values.append(path)
     return values
@@ -823,13 +843,8 @@ def declared_path_values(value: Any) -> list[str]:
 
 def safe_project_relative_path(root: Path, value: object, label: str, allow_root: bool = False,
                                require_exists: bool = False, require_directory: bool = False) -> str:
-    text = str(value or "").strip().replace("\\", "/")
-    if not text or text.startswith("/") or re.match(r"^[A-Za-z]:", text):
-        raise SystemExit(f"{label} 必须是项目内相对路径：{text or '<empty>'}")
-    parts = [part for part in text.split("/") if part and part != "."]
-    if any(part == ".." for part in text.split("/")):
-        raise SystemExit(f"{label} 不允许包含 ..：{text}")
-    normalized = "/".join(parts) or "."
+    text = posix_plan_relative_path(value, label, allow_root=allow_root)
+    normalized = text
     project_root = root.resolve()
     candidate = (project_root / normalized).resolve()
     try:
@@ -1103,14 +1118,7 @@ def runner_result_alias_fields(runner: dict[str, Any]) -> dict[str, str]:
 
 
 def normalize_default_result_csv_dir(value: Any) -> str:
-    text = str(value or "experiments/results").strip().replace("\\", "/")
-    if text.startswith("/") or re.match(r"^[A-Za-z]:", text):
-        raise SystemExit("--default-result-csv-dir 必须是项目内相对目录。")
-    text = text.strip("/")
-    parts = [part for part in text.split("/") if part and part != "."]
-    if not parts or any(part == ".." for part in parts):
-        raise SystemExit("--default-result-csv-dir 必须是项目内相对目录。")
-    return "/".join(parts)
+    return posix_plan_relative_path("experiments/results" if value in (None, "") else value, "--default-result-csv-dir")
 
 
 def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/results") -> tuple[dict[str, Any], list[Job]]:
@@ -1159,7 +1167,8 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
         case_name = case_label(case_item, index)
         case_config_value = case_item.get("config")
         case_base_config_value = case_item.get("base_config")
-        case_base_config_tpl = text_field(case_item, "base_config") or (str(case_config_value) if isinstance(case_config_value, str) else "") or base_config_path
+        case_base_config_tpl = path_field(case_item, "base_config") if isinstance(case_base_config_value, str) else ""
+        case_base_config_tpl = case_base_config_tpl or (case_config_value if isinstance(case_config_value, str) else "") or base_config_path
         case_config_patch: dict[str, Any] = {}
         if isinstance(case_base_config_value, dict):
             case_config_patch = deep_merge(case_config_patch, case_base_config_value)
@@ -1189,13 +1198,13 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
             job_name = render_template(job_name_tpl, values)
             experiment_name = render_template(str(naming.get("experiment_name") or "{suite}/{case}/seed_{seed}"), {**values, "job_name": job_name})
             values.update({"job_name": job_name, "experiment_name": experiment_name})
-            output_tpl = text_field(case_item, *OUTPUT_DIR_KEYS) or text_field(plan, *OUTPUT_DIR_KEYS)
+            output_tpl = path_field(case_item, *OUTPUT_DIR_KEYS) or path_field(plan, *OUTPUT_DIR_KEYS)
             output_dir = render_template(output_tpl, values) if output_tpl else (Path(render_template(sweep_dir_tpl, values)) / job_name).as_posix()
-            output_dir = output_dir.replace("\\\\", "/")
+            output_dir = safe_project_relative_path(Path.cwd(), output_dir, "output_dir")
             values.update({"output_dir": output_dir, "outputDir": output_dir})
             for alias_key in OUTPUT_TEMPLATE_ALIAS_KEYS:
                 values[alias_key] = output_dir
-            working_dir_tpl = text_field(local_runner, "working_directory", "workingDirectory", "cwd") or "."
+            working_dir_tpl = path_field(local_runner, "working_directory", "workingDirectory", "cwd") or "."
             working_directory = safe_project_relative_path(
                 Path.cwd(), render_template(working_dir_tpl, values), "runner.working_directory",
                 allow_root=True, require_exists=True, require_directory=True,
@@ -1984,7 +1993,9 @@ def run_job_mode(args: argparse.Namespace) -> None:
     chosen = [job for job in jobs if int(job.index) == int(args.only_index)]
     if not chosen:
         raise SystemExit(f"No job selected for index {args.only_index}.")
-    output_override = str(getattr(args, "output_dir_override", "") or "").replace("\\", "/").strip("/")
+    output_override = getattr(args, "output_dir_override", "")
+    if output_override not in (None, ""):
+        output_override = safe_project_relative_path(Path.cwd(), output_override, "--output-dir-override")
     if output_override:
         parts = output_override.split("/")
         if os.path.isabs(output_override) or any(part in ("", ".", "..") for part in parts):
@@ -2186,7 +2197,7 @@ def slug(value: object, fallback: str = "unknown", limit: int = 48) -> str:
 
 
 def plan_runtime_key(plan: str | Path, fallback: str = "plan") -> str:
-    raw = str(plan or "").strip()
+    raw = str(plan or "")
     try:
         path = Path(raw)
         resolved = path.resolve()
@@ -2195,7 +2206,7 @@ def plan_runtime_key(plan: str | Path, fallback: str = "plan") -> str:
         except ValueError:
             identity = resolved.as_posix()
     except Exception:
-        identity = raw.replace("\\", "/")
+        identity = raw
     stem = Path(raw).stem if raw else fallback
     prefix = slug(stem, fallback, 34)
     digest = hashlib.sha1((identity or raw or fallback).encode("utf-8")).hexdigest()[:10]
@@ -3276,10 +3287,11 @@ def launch_experiment(worker: dict[str, Any], plan: str, experiment_index: int, 
     prefix = "dbg" if debug_mode else ("tst" if mode == "test" else "run")
     session = f"{prefix}{experiment_index}-{int(time.time() * 1000) % 1000000}-{random.randint(100, 999)}"
     project_dir = str(worker["project_dir"])
+    output_dir_text = posix_plan_relative_path(output_dir, "output_dir") if output_dir != "" else ""
+    default_result_csv_dir = normalize_default_result_csv_dir(default_result_csv_dir)
     runtime_path = ensure_worker_runtime(worker)
     raw_log = log_dir / f"{slug(worker['id'], 'worker')}_{experiment_index}_{gpu_id}_{slug(session, 'session')}.log"
     command_id = session
-    output_dir_text = str(output_dir or "").replace("\\", "/").strip()
     config_path_text = output_dir_text.rstrip("/") + "/job_config.yaml" if output_dir_text else ""
     enqueue_worker_command(worker, {
         "action": "start-worker-task",

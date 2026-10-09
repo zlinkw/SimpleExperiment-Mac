@@ -2704,6 +2704,53 @@ def durable_plan_path(value, label):
         raise ValueError(label + " 必须是保留真实拼写的项目内规范相对 POSIX 路径")
     return value
 
+def worker_path_value(command, options, keys, default=""):
+    values = [record[key] for record in (command, options) for key in keys
+              if key in record and record[key] is not None and record[key] != ""]
+    if not values:
+        return default
+    if any(not isinstance(value, str) for value in values) or any(value != values[0] for value in values):
+        raise ValueError(keys[0] + " 路径类型无效或别名不一致")
+    return values[0]
+
+def worker_plan_path(value, label, allow_absolute=False, allow_empty=False):
+    if value == "" and allow_empty:
+        return value
+    if allow_absolute and isinstance(value, str) and value.startswith("/") and not value.startswith("//"):
+        durable_plan_path(value[1:], label)
+        return value
+    return durable_plan_path(value, label)
+
+def worker_plan_project_path(root, value, require_file=False, directory=False):
+    worker_plan_path(value, "Worker Plan 路径", allow_absolute=True)
+    root_abs = os.path.abspath(root)
+    real_root = os.path.realpath(root_abs)
+    if not stat.S_ISDIR(os.stat(root_abs).st_mode):
+        raise ValueError("Worker 项目根目录不是现有目录")
+    full = os.path.abspath(os.path.join(root_abs, value))
+    relative = os.path.relpath(full, root_abs)
+    durable_plan_path(relative, "Worker 项目内路径")
+    if os.path.commonpath([real_root, os.path.realpath(full)]) != real_root:
+        raise ValueError("Worker Plan 路径越出项目")
+    current = root_abs
+    parts = relative.split(os.sep)
+    for index, part in enumerate(parts):
+        names = os.listdir(current)
+        target = os.path.join(current, part)
+        try:
+            info = os.lstat(target)
+        except FileNotFoundError:
+            if require_file:
+                raise
+            return full
+        if part not in names or stat.S_ISLNK(info.st_mode):
+            raise ValueError("Worker Plan 路径条目拼写不一致或包含符号链接")
+        want_directory = directory or index < len(parts) - 1
+        if not (stat.S_ISDIR(info.st_mode) if want_directory else stat.S_ISREG(info.st_mode)):
+            raise ValueError("Worker Plan 路径文件类型不符")
+        current = target
+    return full
+
 def durable_plan_identity(command):
     return {key: durable_plan_value(command, key) for key in DURABLE_PLAN_IDENTITY_FIELDS}
 
@@ -5246,27 +5293,32 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         except Exception as exc:
             return {"commandId": command_id, "status": "failed", "durableAccepted": False, "message": str(exc)}
     options = command.get("options") if isinstance(command.get("options"), dict) else {}
-    project_dir = str(command.get("projectDir") or options.get("projectDir") or root).strip()
-    scheduler_path = str(command.get("schedulerPath") or options.get("schedulerPath") or os.path.join(agent_install_dir(root), "simple_cluster", "runtime", "cluster_scheduler.py"))
-    plan = str(command.get("plan") or command.get("planFile") or options.get("plan") or options.get("planFile") or "").strip()
+    project_dir = worker_plan_path(worker_path_value(command, options, ("projectDir",), str(root)), "projectDir", allow_absolute=True)
+    scheduler_path = worker_plan_path(worker_path_value(command, options, ("schedulerPath",), os.path.join(agent_install_dir(root), "simple_cluster", "runtime", "cluster_scheduler.py")), "schedulerPath", allow_absolute=True)
+    plan = worker_path_value(command, options, ("planFile", "plan"))
     if not plan:
         result = {"commandId": command_id, "status": "failed", "message": "启动或重试 Worker 任务时必须提供 plan。"}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
         return result
+    worker_plan_project_path(project_dir, plan, require_file=True)
     experiment_index = int(command.get("experimentIndex") if command.get("experimentIndex") is not None else options.get("experimentIndex") or 0)
     gpu_id = str(command.get("gpuId") or options.get("gpuId") or "")
     case_name = str(command.get("case") or options.get("case") or "").strip()
     seed = command.get("seed") if command.get("seed") is not None else options.get("seed")
-    output_dir = str(command.get("outputDir") or command.get("output_dir") or options.get("outputDir") or options.get("output_dir") or "").replace("\\", "/").strip()
-    config_path = str(command.get("configPath") or command.get("config_path") or options.get("configPath") or options.get("config_path") or "").replace("\\", "/").strip()
+    output_dir = worker_plan_path(worker_path_value(command, options, ("outputDir", "output_dir")), "outputDir", allow_empty=True)
+    config_path = worker_plan_path(worker_path_value(command, options, ("configPath", "config_path")), "configPath", allow_absolute=True, allow_empty=True)
+    if output_dir:
+        worker_plan_project_path(project_dir, output_dir, directory=True)
+    if config_path:
+        worker_plan_project_path(project_dir, config_path)
     debug_mode = any(action_bool(value) for value in (command.get("debugMode"), command.get("debug_mode"), options.get("debugMode"), options.get("debug_mode")))
     if debug_mode:
         result = {"commandId": command_id, "status": "failed", "message": "Debug 运行模式已移除，请使用正式 Plan 运行。"}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
         return result
     debug_run_id = str(command.get("debugRunId") or command.get("debug_run_id") or options.get("debugRunId") or options.get("debug_run_id") or "").strip()
-    debug_output_dir = str(command.get("debugOutputDir") or command.get("debug_output_dir") or options.get("debugOutputDir") or options.get("debug_output_dir") or "").strip()
-    default_result_csv_dir = str(command.get("defaultResultCsvDir") or command.get("default_result_csv_dir") or options.get("defaultResultCsvDir") or options.get("default_result_csv_dir") or "experiments/results").strip()
+    debug_output_dir = worker_plan_path(worker_path_value(command, options, ("debugOutputDir", "debug_output_dir")), "debugOutputDir", allow_empty=True)
+    default_result_csv_dir = worker_plan_path(worker_path_value(command, options, ("defaultResultCsvDir", "default_result_csv_dir"), "experiments/results"), "defaultResultCsvDir")
     manual_reassignment = any(action_bool(value) for value in (command.get("manualReassignment"), command.get("manual_reassignment"), options.get("manualReassignment"), options.get("manual_reassignment")))
     source_worker_id = str(command.get("sourceWorkerId") or command.get("source_worker_id") or options.get("sourceWorkerId") or options.get("source_worker_id") or "").strip()
     original_run_key = str(command.get("originalRunKey") or command.get("original_run_key") or options.get("originalRunKey") or options.get("original_run_key") or "").strip()
@@ -5277,13 +5329,14 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         session = str(command.get("session"))
     else:
         session = worker_tmux_session_name(worker_id, gpu_id, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID"))
-    _raw_log = str(command.get("logPath") or f"tmp/tmux_logs/{session}.log")
+    _raw_log = worker_plan_path(worker_path_value(command, options, ("logPath",), f"tmp/tmux_logs/{session}.log"), "logPath", allow_absolute=True)
     if os.path.isabs(_raw_log):
-        rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir)).replace("\\", "/")
+        rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir))
     else:
-        rel_log = _raw_log.replace("\\", "/").lstrip("/")
-    log_path = safe_project_path(project_dir, rel_log)
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        rel_log = _raw_log
+    log_path = worker_plan_project_path(project_dir, rel_log)
+    if log_path != safe_project_path(project_dir, rel_log):
+        raise ValueError("Worker 日志路径身份不一致")
     env = simple_runtime_env(os.environ.copy())
     env["SIMPLE_EXPERIMENT_MANAGED_JOB"] = "1"
     distributed_results = options.get("distributedResults") is True or command.get("distributedResults") is True
@@ -5297,7 +5350,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             raise ValueError("分布式任务缺少有效 attempt") from exc
         if os.path.isabs(output_dir) or any(part in ("", ".", "..") for part in output_dir.split("/")):
             raise ValueError("分布式任务输出路径不安全")
-        safe_project_path(project_dir, output_dir)
+        worker_plan_project_path(project_dir, output_dir, directory=True)
         env["SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS"] = "1"
     conda_declared = any(key in command for key in ("condaEnv", "conda_env")) or any(key in options for key in ("condaEnv", "conda_env"))
     conda_env = str(command.get("condaEnv") or command.get("conda_env") or options.get("condaEnv") or options.get("conda_env") or "").strip()
@@ -5326,6 +5379,16 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         result = {"commandId": command_id, "status": "failed", "message": str(exc)}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
         return result
+    # Dependency probing may take time; reject changed path entries before launch.
+    worker_plan_project_path(project_dir, plan, require_file=True)
+    if command.get("projectId") and command.get("planRevision") and verified_durable_execution_mode(project_dir, command) != mode:
+        raise ValueError("Worker Plan 模式在依赖检查期间变化")
+    if output_dir:
+        worker_plan_project_path(project_dir, output_dir, directory=True)
+    if config_path:
+        worker_plan_project_path(project_dir, config_path)
+    worker_plan_project_path(project_dir, rel_log)
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     overwrite_existing = any(action_bool(value) for value in (command.get("overwriteExisting"), command.get("overwrite_existing"), command.get("overwrite"), options.get("overwriteExisting"), options.get("overwrite_existing"), options.get("overwrite")))
     args = [
         simple_runtime_python(env),
@@ -5552,7 +5615,7 @@ def worker_command_plan_mode(project_dir, plan, explicit=""):
     raw = str(explicit or "").strip()
     if not raw and plan:
         try:
-            text = pathlib.Path(safe_project_path(project_dir, plan)).read_text(encoding="utf-8", errors="replace")[:262144]
+            text = pathlib.Path(worker_plan_project_path(project_dir, plan, require_file=True)).read_text(encoding="utf-8", errors="replace")[:262144]
             match = re.search(r"(?m)^mode\s*:\s*([^#\r\n]+)", text)
             raw = str(match.group(1) if match else "").strip().strip("'\"")
         except Exception:
@@ -5561,9 +5624,9 @@ def worker_command_plan_mode(project_dir, plan, explicit=""):
 
 def verified_durable_execution_mode(project_dir, command):
     """Bind intended mode to the original PLAN revision, never a legacy hardcoded mode."""
-    plan_path = safe_project_path(project_dir, durable_plan_value(command, "planFile"))
+    plan_path = worker_plan_project_path(project_dir, durable_plan_value(command, "planFile"), require_file=True)
     raw = pathlib.Path(plan_path).read_bytes()
-    if len(raw) > 1048576 or hashlib.sha256(raw).hexdigest() != durable_plan_value(command, "planRevision"):
+    if hashlib.sha256(raw).hexdigest() != durable_plan_value(command, "planRevision"):
         raise ValueError("Original Plan revision unavailable; execution mode cannot be recovered safely")
     scheduler = scalar_scheduler_module()
     plan = scheduler.load_plan(plan_path)

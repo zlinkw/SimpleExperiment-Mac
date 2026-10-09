@@ -19,6 +19,7 @@ for mode in ("train", "test", "train_test"):
     raw = ("mode: " + mode + "\r\n").encode("utf-8")
     fake_scheduler = SimpleNamespace(load_plan=lambda _: {"mode": mode}, plan_execution_mode=scheduler.plan_execution_mode)
     with patch.object(agent, "safe_project_path", lambda *args: "virtual"), \
+         patch.object(agent, "worker_plan_project_path", lambda *args, **kwargs: "virtual"), \
          patch.object(agent, "scalar_scheduler_module", lambda: fake_scheduler), \
          patch.object(pathlib.Path, "read_bytes", lambda _: raw):
         legacy = {"planFile": "plan.yaml", "planRevision": hashlib.sha256(raw).hexdigest(), "mode": "train_test"}
@@ -36,7 +37,7 @@ for mode in ("train", "test", "train_test"):
         launched, saved = [], []
         command = dict(action="start-worker-task", commandId="launch", operationId="launch", planFile="plan.yaml", projectId="project",
                        planRevision=legacy["planRevision"], codeFingerprint="code", experimentIndex=0, attempt=1,
-                       case="case", seed=42, outputDir="work/job/attempts/run", mode=mode, executionMode=mode,
+                       case="case", seed=42, outputDir="work/job/attempts/run", schedulerPath="runtime/scheduler.py", mode=mode, executionMode=mode,
                        condaEnv="env", options={"distributedResults": True})
         ledger = {"jobs": []}
         durable_command = {**command, "workerId": "worker", "workflowId": "run", "runKey": "launch",

@@ -16,6 +16,7 @@ if kind == "agent":
     agent = extract_runtime_functions(str(runtime / "cluster_agent.py"), ["worker_command_plan_mode", "plan_output_capture_evidence"])
     text = "mode: train\nrunner:\n  train_command: python train.py\n  test_command: python stale_eval.py --result-csv work_dirs/metrics_summary.csv\n"
     with patch.object(agent, "safe_project_path", lambda root, plan: str(pathlib.Path(root) / plan)), \
+         patch.object(agent, "worker_plan_project_path", lambda root, plan, **kwargs: str(pathlib.Path(root) / plan)), \
          patch.object(pathlib.Path, "read_text", lambda *args, **kwargs: text), \
          patch("builtins.open", mock_open(read_data=text)), \
          patch.object(agent, "read_project_metric_policy", lambda root: {"explicitResultCandidates": []}):
