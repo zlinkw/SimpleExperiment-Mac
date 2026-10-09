@@ -266,6 +266,10 @@
         "icon": "$(checklist)"
       },
       {
+        "command": "simpleExperimentMac.showCliEntry",
+        "title": "SimpleExperiment Mac：查看 CLI 入口"
+      },
+      {
         "command": "simpleExperimentMac.checkPreviewUpdates",
         "title": "SimpleExperiment Mac：检查 preview 配套更新"
       },

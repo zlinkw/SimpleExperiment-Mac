@@ -20,13 +20,18 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-013（passed，下载范围 preview）
+## 当前批次：mac-005l（passed，Experiment 稳定 CLI 入口）
 ### 边界
 
-- Experiment 0.5.276/SFTP 0.2.70，只修改版本及计划，最多 8 文件。完整本机 prepare/publish，草稿全附件大小/hash 核验后公开；实际匿名 updater 验证配套版本/包身份/平台/源码与 Mac 说明。
-- 发布不安装/Actions/覆盖历史附件/真实 SSH。CLI、完整科研主流程与 M5 后续分批，保护原入口与删除父目录/双确认。
+- 增加 Experiment Mac 稳定 POSIX CLI 启动器与独立命令，更新/重载后指向当前 VSIX；LF、中文/空格/引号参数保持。本地真实 shell/Node/模拟本机 API 验证，最多 8 文件。
+- 只在受支持 Mac 激活时生成组件自己的 Application Support/cli 文件，不修改用户 PATH，不安装扩展，不执行研究/服务器操作，不删除旧入口。未知文件/链接拒绝覆盖；CLI 失败不影响更新或业务启动。
+- SFTP CLI、实时 API 契约/业务命令以及文档和发布后续独立批次；M5 pending。
 
 ### 验证清单
+
+- passed mac-005l：Experiment 固定 Application Support/cli/simpleex-mac，LF/POSIX shell、Node 20+ 门禁、完整参数/cwd、命令面板入口及复制自检。支持 Mac 激活刷新，旧实例不降级；未知文件/链接/硬链接/异仓拒绝，CLI 失败不阻塞业务或独立更新。旧入口保留。
+- passed mac-005l 本地：build/215 模块闭包/面板脚本 2，CLI 启动器 5、独立更新 3 逐文件串行通过。真实本地 Git POSIX shell/Node、模拟本机 health API 与 Mac 命令入口覆盖；未安装扩展或执行实验/服务器操作。首次 Windows argv 引号被 shell 启动层改写，改用真实 shell stdin 引用；health fixture 补齐 ok 字段后通过，非超时。5 文件。
+- pending mac-005m：SFTP 同规则稳定 CLI/独立入口，随后同步两仓文档与发布门禁。CLI 业务契约、完整科研主流程、真实 SSH/M5 pending。
 
 - passed mac-release-013：完整本机 prepare/publish；两仓 build/24 与 214 模块闭包、面板脚本 2、更新/POSIX/相对文件名/范围协议门禁逐文件串行通过，浅/深/高对比真实渲染通过，package/lock/runtime 一致。3 附件完整草稿大小/SHA-256 核验后发布，不使用 Actions 或自动安装。
 - passed preview-v0.5.276 真实匿名 updater：从 0.5.275/0.2.69 选择两个更新，16 次匿名请求取得清单与两包，大小/hash/CRC/平台/身份核验通过；SFTP 范围/路径/tar/传输源码与 LF askpass、Experiment 面板/更新代码、两仓 README/配置说明匹配已同步来源，README 标准 vsce 链接改写已核对。同版本跳过/禁止降级，无真实 SSH/M5。
@@ -52,6 +57,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005l Experiment 稳定 CLI 已完成本地验证，提交来源见 Git；SFTP 接入与配套发布后续批次。
 - 第十三版 preview-v0.5.276 已发布：Experiment 来源 `43ef53f3fe02b6f14f8d392486197a15c0470350`、SFTP 0.2.70 来源 `16e6ce87e98b2c61aef23cc93270734e000bc67b` 均已同步；Mac 下载范围/文件浏览、本地归档协议与真实匿名下载通过。CLI/完整科研主流程/真实 SSH/M5 pending。
 - mac-005k SimpleSFTP 源码 `ce60c041385374dabf9723b6aed0659049735832` 已普通推送并 fetch 核对；说明提交 `08595adc69ca73021e561663cce6644b085f3a81`。
 - mac-doc-008 SimpleSFTP README 已推送 origin/master；真实提交见 Git。配套下一版 Experiment 0.5.276/SFTP 0.2.70，不自动安装。

@@ -6,6 +6,7 @@ import { PreviewReleaseClient, PreviewPlan, parseManifest, planPreview } from ".
 import { UpdateTransaction, TRANSACTION_KEY, UpdateJournal } from "./UpdateTransaction";
 import { verifyVsix, ReleaseComponent } from "./Vsix";
 import { beginUpdateGate, endUpdateGate, waitForLocalOperations } from "./UpdateGate";
+import { registerMacCli } from "./CliLauncher";
 
 export const CHECK_COMMAND = "simpleExperimentMac.checkPreviewUpdates";
 export const INSTALL_COMMAND = "simpleExperimentMac.installPreviewUpdates";
@@ -103,6 +104,7 @@ export async function activate(context: any): Promise<void> {
   const vscode = require("vscode");
   // This entry does not import the panel or require any server configuration.
   updater = registerPreviewUpdater(context, vscode);
+  const cli = registerMacCli(context, vscode);
   if (process.platform !== "darwin" || process.arch !== "arm64") {
     await vscode.window.showWarningMessage("SimpleExperiment Mac preview 仅支持 Apple Silicon、macOS 26 及以上。");
     return;
@@ -112,6 +114,8 @@ export async function activate(context: any): Promise<void> {
     await vscode.window.showErrorMessage("SimpleExperiment Mac preview 需要 macOS 26 及以上。"); return;
   }
   void updater.resume().catch(() => undefined);
+  try { cli.refresh(); }
+  catch (error: any) { void vscode.window.showWarningMessage(`Mac CLI 入口暂不可用：${error.message}。独立更新入口保留。`); }
   try { business = require("../extension"); await business.activate(context); }
   catch (error: any) { await vscode.window.showErrorMessage(`业务面板启动失败，独立更新入口仍可用：${error.message}`); }
 }
