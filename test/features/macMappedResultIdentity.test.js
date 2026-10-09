@@ -1,6 +1,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
 const ts = require('typescript'), vm = require('node:vm');
+const { createRequire } = require('node:module');
 const root = path.resolve(__dirname, '../..');
 const paths = ['Results/A.csv', 'Results/a.csv', 'Results/ A.csv ', 'Results/A%20.csv', 'Results/é.csv', 'Results/e\u0301.csv'];
 const names = ['mappedResultPath', 'mappedResultPathKey', 'uniqueMappedTransfers', 'assertRealChildFile',
@@ -15,9 +16,16 @@ function backend(platform = 'darwin', filesystem = fs.promises, extra = {}) {
     ts.forEachChild(node, visit);
   }
   visit(ast);
-  const selected = ['collectMappedResultDownloadBatches', 'confirmMappedResultDownloads', 'downloadMappedResultBatch'];
+  const readFile = path.join(root, 'dist/mac/ResultFiles.js'), readModule = { exports: {} }, readRequire = createRequire(readFile);
+  vm.runInNewContext(fs.readFileSync(readFile, 'utf8'), { module: readModule, exports: readModule.exports, Buffer,
+    require: name => name === 'node:fs/promises' ? filesystem : readRequire(name) });
+  const wrapperFile = path.join(root, 'dist/results/WrapperResultBundle.js'), wrapperModule = { exports: {} }, wrapperRequire = createRequire(wrapperFile);
+  vm.runInNewContext(fs.readFileSync(wrapperFile, 'utf8'), { module: wrapperModule, exports: wrapperModule.exports, Buffer, TextDecoder, process: { platform },
+    require: name => name === '../mac/ResultFiles' ? readModule.exports : wrapperRequire(name) });
+  const selected = ['collectMappedResultDownloadBatches', 'confirmMappedResultDownloads', 'downloadMappedResultBatch', 'downloadMetricMemoryBatch'];
   const context = vm.createContext({ Buffer, Map, Set, path, crypto, process: { platform }, fs: filesystem, fsNode: fs,
     PosixPath_1: require('../../dist/mac/PosixPath'), ResultCandidatePath_1: require('../../dist/mac/ResultCandidatePath'),
+    MacResultFiles: readModule.exports, WrapperResultBundle: wrapperModule.exports, AbortController, AbortSignal, TextDecoder,
     safeWorkspaceChildPath: (base, relative) => path.join(base, ...relative.split('/')),
     methodResultArtifactLocalRelativePath: (remote, plan) => 'mapped/' + crypto.createHash('sha256').update(JSON.stringify([plan, remote])).digest('hex') + '.csv',
     isResultMetricFile: () => true, DEFAULT_RESULT_CSV_DIR: 'experiments/results',
@@ -154,4 +162,85 @@ test('simulated insensitive Mac disks reject case/Unicode aliases before reuse o
   const windows = backend('win32');
   assert.equal(windows.uniqueMappedTransfers([entry(paths[0]), entry(paths[1])]).length, 1);
   assert.equal(windows.mappedResultTemporaryRelativePath('out/A.csv'), windows.mappedResultTemporaryRelativePath('out/a.csv'));
+});
+
+test('real compiled staging open rejects swapped inode or hard link without truncating the retained file', async () => {
+  for (const fault of ['inode', 'hardlink']) {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-mapped-open-'));
+    fs.mkdirSync(path.join(workspace, 'out')); const relative = 'out/stage.tmp', full = path.join(workspace, relative);
+    fs.writeFileSync(full, 'retained original', 'utf8'); let flags, closed = false;
+    const filesystem = { ...fs.promises, open: async (...args) => {
+      flags = args[1]; const handle = await fs.promises.open(...args), stat = await handle.stat(), close = handle.close.bind(handle);
+      handle.stat = async () => Object.assign(Object.create(Object.getPrototypeOf(stat)), stat,
+        fault === 'inode' ? { ino: stat.ino + 100 } : { nlink: 2 });
+      handle.close = async () => { closed = true; await close(); }; return handle;
+    } };
+    const api = backend('darwin', filesystem);
+    await assert.rejects(() => api.openReusableMappedTemp(workspace, relative), /身份/);
+    assert.equal(flags & fs.constants.O_TRUNC, 0); assert.equal(flags & fs.constants.O_CREAT, 0);
+    assert.equal(fs.readFileSync(full, 'utf8'), 'retained original'); assert.equal(closed, true);
+  }
+});
+
+test('compiled physical source changes, missing descriptors and wrong hashes retain the old final file', async () => {
+  for (const fault of ['ctime', 'missing', 'sha']) {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-mapped-copy-'));
+    fs.mkdirSync(path.join(workspace, 'stage')); fs.mkdirSync(path.join(workspace, 'out'));
+    const source = path.join(workspace, 'stage', 'source.csv'), destination = path.join(workspace, 'out', 'final.csv');
+    fs.writeFileSync(source, 'downloaded', 'utf8'); fs.writeFileSync(destination, 'previous final', 'utf8');
+    let sourceStats = 0, sourceClosed = false, tempClosed = false;
+    const filesystem = { ...fs.promises, lstat: async (...args) => {
+      if (args[0] === source && ++sourceStats > 1 && fault === 'missing') throw Object.assign(Error('missing'), { code: 'ENOENT' });
+      return fs.promises.lstat(...args);
+    }, open: async (...args) => {
+      const handle = await fs.promises.open(...args), stat = handle.stat.bind(handle), close = handle.close.bind(handle); let stats = 0;
+      if (args[0] === source) handle.stat = async () => { const info = await stat(); if (++stats > 1 && fault === 'ctime') info.ctimeMs++; return info; };
+      handle.close = async () => { if (args[0] === source) sourceClosed = true; if (String(args[0]).endsWith('.tmp')) tempClosed = true; await close(); };
+      return handle;
+    } };
+    const api = backend('darwin', filesystem);
+    await assert.rejects(() => api.distributeMappedDownloads(workspace, [entry('Remote/A.csv', 'out/final.csv')],
+      [{ remotePath: 'Remote/A.csv', localRelativePath: 'stage/source.csv', ...(fault === 'sha' ? { sha256: 'f'.repeat(64) } : {}) }], true), /分发写入失败/);
+    assert.equal(fs.readFileSync(destination, 'utf8'), 'previous final'); assert.equal(tempClosed, true);
+    if (fault !== 'missing') assert.equal(sourceClosed, true);
+  }
+});
+
+test('actual compiled wrapper disk fallback verifies its physical original and rejects an insensitive alias before API transfer', async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-wrapper-disk-')), api = backend(), subject = new api.Provider(), client = {};
+  const localRelative = 'Results/指标 A.yaml', remotePath = 'Remote/指标 A.yaml', bytes = Buffer.from('result: 1\n');
+  const record = { ...entry(remotePath, localRelative), bytes: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+  subject.client = client; subject.projectContextIsCurrent = () => true; subject.mappedDownloadServerForSource = () => ({});
+  subject.simpleSftpCapability = async () => ({ methodOptions: { 'sync.downloadMappedPaths': { memoryOnly: true } } });
+  let downloads = 0;
+  subject.simpleSftpApiCall = async (method, params) => {
+    assert.equal(method, 'sync.downloadMappedPaths'); assert.equal(params.memoryOnly, false); downloads++;
+    fs.mkdirSync(path.join(workspace, 'Results'), { recursive: true }); fs.writeFileSync(path.join(workspace, localRelative), bytes);
+    return { fileCount: 1 };
+  };
+  const report = await subject.downloadMetricMemoryBatch({ root: workspace }, client, batch([record]), 'mock', { isCancellationRequested: false }, { report() {} });
+  assert.equal(report.metricFiles[0].text, bytes.toString()); assert.equal(report.metricFiles[0].remotePath, remotePath); assert.equal(downloads, 1);
+  const bad = { ...record, localRelative: 'results/指标 A.yaml' };
+  await assert.rejects(() => subject.downloadMetricMemoryBatch({ root: workspace }, client, batch([bad]), 'mock', { isCancellationRequested: false }, { report() {} }), /拼写/);
+  assert.equal(downloads, 1);
+});
+
+test('checked local streaming copy completes partial writes and rejects zero progress without replacing the final file', async () => {
+  for (const zero of [false, true]) {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-mapped-short-'));
+    fs.mkdirSync(path.join(workspace, 'stage')); fs.mkdirSync(path.join(workspace, 'out'));
+    const bytes = Buffer.from('完整中文 streaming result'), source = path.join(workspace, 'stage', 'source.csv'), destination = path.join(workspace, 'out', 'final.csv');
+    fs.writeFileSync(source, bytes); fs.writeFileSync(destination, 'old final', 'utf8'); let writes = 0;
+    const filesystem = { ...fs.promises, open: async (...args) => {
+      const handle = await fs.promises.open(...args), write = handle.write.bind(handle);
+      if (String(args[0]).endsWith('.tmp')) handle.write = async (buffer, offset, length, position) => {
+        writes++; return zero ? { bytesWritten: 0 } : write(buffer, offset, Math.min(length, 2), position);
+      };
+      return handle;
+    } };
+    const api = backend('darwin', filesystem), entries = [entry('Remote/source.csv', 'out/final.csv')],
+      transfers = [{ remotePath: 'Remote/source.csv', localRelativePath: 'stage/source.csv', sha256: crypto.createHash('sha256').update(bytes).digest('hex') }];
+    if (zero) { await assert.rejects(() => api.distributeMappedDownloads(workspace, entries, transfers, true), /没有进展/); assert.equal(fs.readFileSync(destination, 'utf8'), 'old final'); }
+    else { assert.equal(await api.distributeMappedDownloads(workspace, entries, transfers, true), 1); assert.deepEqual(fs.readFileSync(destination), bytes); assert.ok(writes > 1); }
+  }
 });

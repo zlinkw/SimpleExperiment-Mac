@@ -4,6 +4,8 @@ import * as fs from "node:fs/promises";
 import { readCsv, writeCsv, datasetPathKey, methodTableName, planDirectoryKey } from "./ProjectResultTables";
 import { validateFourStateMetricPair, type MetricJob, type MetricMemoryFile } from "./FourStateMetricBundle";
 import type { ProjectResultFile } from "./ProjectResultPublication";
+import { readMacResultBytes } from "../mac/ResultFiles";
+import { normalizePosixRelativePath } from "../mac/PosixPath";
 
 export const isWrapperResultFile = (file: string): boolean => /\.[A-Za-z0-9]+$/.test(file)
   && !/\.(pt|pth|ckpt|safetensors|onnx|bin|py|pyc|js|ts|sh|exe|dll|lock|pid)$/i.test(file)
@@ -14,6 +16,14 @@ export const resultHash = (text: string) => createHash("sha256").update(text, "u
 export async function readVerifiedLocalResult(root: string, entry: { remotePath: string; localRelativePath: string; sha256: string; bytes: number }): Promise<(MetricMemoryFile & { reused: true }) | undefined> {
   if (!Number.isSafeInteger(entry.bytes) || entry.bytes < 0 || entry.bytes > 4 * 1024 * 1024 || !/^[a-f0-9]{64}$/i.test(entry.sha256))
     throw new Error("wrapper 本机复用缺少大小和 SHA256");
+  if (process.platform === "darwin") {
+    normalizePosixRelativePath(entry.remotePath, "wrapper 来源路径");
+    const bytes = await readMacResultBytes(root, entry.localRelativePath, 4 * 1024 * 1024, entry.bytes);
+    if (!bytes || createHash("sha256").update(bytes).digest("hex") !== entry.sha256.toLowerCase()) return undefined;
+    return { remotePath: entry.remotePath, sha256: entry.sha256.toLowerCase(), bytes: bytes.length, reused: true,
+      ...(isWrapperTextFile(entry.remotePath) ? { text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes) }
+        : { text: bytes.toString("base64"), encoding: "base64" as const }) };
+  }
   const parts = entry.localRelativePath.replace(/\\/g, "/").split("/");
   if (parts.some(part => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part))) throw new Error("wrapper 本机复用路径不安全");
   let cursor = path.resolve(root);

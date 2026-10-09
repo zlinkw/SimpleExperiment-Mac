@@ -17,6 +17,7 @@ import * as MacPlanFiles_1 from "../mac/PlanFiles";
 import { normalizePosixRelativePath } from "../mac/PosixPath";
 import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
 import * as MacResultSummaryScope from "../mac/ResultSummaryScope";
+import * as MacResultFiles from "../mac/ResultFiles";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -17325,13 +17326,17 @@ export class RealtimeTunnelPanelProvider {
                 const diskChunk = pending.filter(file => !memoryChunk.includes(file)), diskCopies = new Map();
                 for (const file of diskChunk) {
                     const target = safeWorkspaceChildPath(context.root, file.localRelativePath);
-                    let cursor = context.root;
-                    for (const part of file.localRelativePath.split("/")) {
-                        cursor = path.join(cursor, part);
-                        const info = await fs.lstat(cursor).catch(error => { if (error?.code === "ENOENT") return undefined; throw error; });
-                        if (info?.isSymbolicLink()) throw new Error("wrapper 映射路径包含符号链接");
+                    let original;
+                    if (process.platform === "darwin") original = await MacResultFiles.readMacResultBytes(context.root, file.localRelativePath, 4 * 1024 * 1024);
+                    else {
+                        let cursor = context.root;
+                        for (const part of file.localRelativePath.split("/")) {
+                            cursor = path.join(cursor, part);
+                            const info = await fs.lstat(cursor).catch(error => { if (error?.code === "ENOENT") return undefined; throw error; });
+                            if (info?.isSymbolicLink()) throw new Error("wrapper 映射路径包含符号链接");
+                        }
+                        original = await fs.readFile(target).catch(error => { if (error?.code === "ENOENT") return undefined; throw error; });
                     }
-                    const original = await fs.readFile(target).catch(error => { if (error?.code === "ENOENT") return undefined; throw error; });
                     if (original && crypto.createHash("sha256").update(original).digest("hex") !== file.sha256)
                         throw new Error("同一 attempt 的历史结果变化，拒绝覆盖：" + file.localRelativePath);
                     if (original) diskCopies.set(file.remotePath, original);
@@ -17342,7 +17347,10 @@ export class RealtimeTunnelPanelProvider {
                 networkFiles += missingDisk.length; networkBytes += missingDisk.reduce((total, file) => total + file.bytes, 0);
                 check();
                 for (const file of diskChunk) {
-                    const original = diskCopies.get(file.remotePath) || await fs.readFile(safeWorkspaceChildPath(context.root, file.localRelativePath));
+                    const original = diskCopies.get(file.remotePath) || (process.platform === "darwin"
+                        ? await MacResultFiles.readMacResultBytes(context.root, file.localRelativePath, 4 * 1024 * 1024)
+                        : await fs.readFile(safeWorkspaceChildPath(context.root, file.localRelativePath)));
+                    if (!original) throw new Error("wrapper 下载结果不存在：" + file.remotePath);
                     if (original.length !== file.bytes || crypto.createHash("sha256").update(original).digest("hex") !== file.sha256)
                         throw new Error("wrapper 下载结果 SHA256 不符：" + file.remotePath);
                     metricFiles.push({ remotePath: file.remotePath, sha256: file.sha256, bytes: original.length,
@@ -17596,7 +17604,8 @@ export class RealtimeTunnelPanelProvider {
                     if (!entry.exists && entry.localRelative !== transfer.localRelativePath) continue;
                     try {
                         const candidate = await assertRealChildFile(root, entry.localRelative, "file");
-                        if (await sha256File(candidate.full) === transfer.sha256) {
+                        const hash = process.platform === "darwin" ? await MacResultFiles.hashMacResultFile(root, entry.localRelative, RESULT_ARTIFACT_MAX_BYTES) : await sha256File(candidate.full);
+                        if (hash === transfer.sha256) {
                             transfer.localRelativePath = entry.localRelative;
                             transfer.cached = true;
                             break;
@@ -31892,13 +31901,13 @@ async function assertRealChildFile(root, relative, leafMode) {
     }
     return { full: cursor, exists: true, identity: cursor };
 }
-async function streamCopyFile(source, destination, maxBytes, outputHandle) {
-    let input;
+async function streamCopyFile(source, destination, maxBytes, outputHandle, inputHandle?) {
+    let input = inputHandle;
     let output = outputHandle;
     let copied = 0;
     const buffer = Buffer.alloc(64 * 1024);
     try {
-        input = await fs.open(source, "r");
+        if (!input) input = await fs.open(source, "r");
         if (!output) output = await fs.open(destination, "r+");
         for (;;) {
             const read = await input.read(buffer, 0, buffer.length, copied);
@@ -31907,12 +31916,18 @@ async function streamCopyFile(source, destination, maxBytes, outputHandle) {
             copied += read.bytesRead;
             if (copied > maxBytes)
                 throw new Error(`本机映射文件超过 ${maxBytes} 字节。`);
-            await output.write(buffer, 0, read.bytesRead, copied - read.bytesRead);
+            let written = 0;
+            while (written < read.bytesRead) {
+                const result = await output.write(buffer, written, read.bytesRead - written, copied - read.bytesRead + written);
+                if (!result.bytesWritten) throw new Error("本机映射暂存写入没有进展。");
+                written += result.bytesWritten;
+            }
         }
         await output.truncate(copied);
+        return copied;
     }
     finally {
-        await input?.close().catch(() => undefined);
+        if (!inputHandle) await input?.close().catch(() => undefined);
         await output?.close().catch(() => undefined);
     }
 }
@@ -31921,14 +31936,19 @@ async function openReusableMappedTemp(root, relative) {
     const before = checked.exists ? await fs.lstat(checked.full) : undefined;
     if (before && (before.isSymbolicLink() || !before.isFile()))
         throw new Error(`本机映射暂存位置不是普通文件：${relative}`);
-    let flags = fsNode.constants.O_CREAT | fsNode.constants.O_WRONLY | fsNode.constants.O_TRUNC | (fsNode.constants.O_NOFOLLOW || 0);
-    if (!before) flags |= fsNode.constants.O_EXCL;
+    let flags = fsNode.constants.O_WRONLY | (fsNode.constants.O_NOFOLLOW || 0);
+    if (!before) flags |= fsNode.constants.O_CREAT | fsNode.constants.O_EXCL;
     const handle = await fs.open(checked.full, flags, 0o600);
     try {
         const opened = await handle.stat();
         const identityChanged = before && before.ino && opened.ino && (before.dev !== opened.dev || before.ino !== opened.ino);
-        if (!opened.isFile() || identityChanged)
+        if (!opened.isFile() || identityChanged || process.platform === "darwin" && opened.nlink !== 1)
             throw new Error(`本机映射暂存文件身份在打开时变化：${relative}`);
+        if (process.platform === "darwin") {
+            const current = await assertRealChildFile(root, relative, "file"), latest = await fs.lstat(current.full);
+            if (latest.dev !== opened.dev || latest.ino !== opened.ino || latest.nlink !== 1)
+                throw new Error(`本机映射暂存文件身份在打开后变化：${relative}`);
+        }
         return { full: checked.full, handle, identity: { dev: opened.dev, ino: opened.ino } };
     }
     catch (error) {
@@ -31997,9 +32017,16 @@ async function distributeMappedDownloads(root, entries, transfers, overwrite, ho
             const temporaryState = await openReusableMappedTemp(root, temporaryRelative);
             const temporary = temporaryState.full;
             try {
-                await streamCopyFile(source, temporary, RESULT_ARTIFACT_MAX_BYTES, temporaryState.handle);
+                if (process.platform === "darwin") {
+                    const copied = await MacResultFiles.withMacResultFile(root, sourceRelative, RESULT_ARTIFACT_MAX_BYTES,
+                        handle => streamCopyFile(source, temporary, RESULT_ARTIFACT_MAX_BYTES, temporaryState.handle, handle));
+                    if (copied === undefined) throw new Error("本机映射来源在复制前消失。");
+                    if (transfer.sha256 && await MacResultFiles.hashMacResultFile(root, temporaryRelative, RESULT_ARTIFACT_MAX_BYTES) !== transfer.sha256)
+                        throw new Error("本机分发内容与来源 SHA256 不符。");
+                } else await streamCopyFile(source, temporary, RESULT_ARTIFACT_MAX_BYTES, temporaryState.handle);
             }
             catch (error) {
+                await temporaryState.handle.close().catch(() => undefined);
                 residues.push(temporary);
                 throw new Error(`本机分发写入失败，暂存保留：${temporary}。${errorMessage(error)}`);
             }

@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-027（passed，0.5.290/0.2.84）
+## 当前批次 mac-005aa-read（passed）
+- 本批至多 6 文件：新 Mac 结果物理读取模块、wrapper/后台、新读取测试、映射测试与计划。复用/磁盘补读绑定真实路径和打开文件身份；本机分发从受检描述符复制，暂存文件在身份核对前不截断。保护原入口、API/Plan/租约/确认，不执行真实科研/SSH/传输/删除。
+- 前版交付 `faf3c228d6b543d8ba3bf02a075a723a27f65ce6`、SFTP `6d55583cd93743583934d0e554481ac2f5be493b` 均 origin/master 相等。回归真实编译读取/映射/现有 wrapper 与结果工作流、build/闭包/面板语法；单文件串行 20 秒。真实编译旧端到端 fixture 下一批；完整父目录原子写入/M5 仍待验证，说明与更新继续同步。
+- passed 6 文件：ResultFiles/后台/wrapper/读取测试/映射测试/计划。Mac wrapper 复用、磁盘补读、hash 和本机复制绑定描述符、文件内容及完整目录 inode 链，读后重核验；错误路径/磁盘别名/符号链接/特殊文件/超限不读。暂存打开不截断原文件，身份或已有硬链接异常先拒绝；短写补齐、零进展失败，来源变化/错误 hash 保留旧最终文件并关闭句柄。
+- passed build/223 闭包/面板 2/vm.Script/UTF8/diff；macResultFiles 7、macMappedResultIdentity 11、wrapperResultPersistence 22、pendingResultMetricSync 39、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13，单文件串行 20 秒，无超时。真实本机文件/模拟 POSIX 不敏感磁盘与 API；不代表服务器/原子写入/M5 验收。
+- 下一批两仓使用说明/配置与发布门禁，最多 8 文件；再元数据递增与 prepare/publish、实际包/匿名更新。旧 metricsDownloadEndToEnd fixture、最终路径原子发布及 Agent/解析/归档仍后续。
+
+### 前批 mac-release-027（passed，0.5.290/0.2.84）
 - 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新核验；无 Actions/安装。
 - mac-doc-022 Experiment `0145e4fc3e1bb8ee1ccd68058ae88b970ec6a47c`、SFTP `99ae1fc1941642c520112d064f923c07abe58796` 已普通推送/fetch 核对。
 - 验证两仓 build/闭包/面板语法/runtimeManifest/元数据 UTF8；完整串行 prepare，实际 VSIX 映射身份及前批能力、匿名新版下载；M5 延后。
