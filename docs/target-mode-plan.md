@@ -20,7 +20,7 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-019（running，配套 preview-v0.5.282）
+## 当前批次：mac-release-019（passed，配套 preview-v0.5.282）
 ### 边界
 
 - 两仓版本及 RuntimeManifest 对齐，发布 Experiment 0.5.282 / SFTP 0.2.76 同一 preview Release，绑定已同步来源；6 文件，生成产物不计。保护业务/旧入口/历史附件。
@@ -43,8 +43,10 @@
 - passed mac-005s：Mac 的后台 Plan 选择、保存/回执与身份锁/缓存、分布式队列与自动重试、真实生成面板的下拉选择和身份缓存保留大小写/Unicode/真实空格/字面 %20，不把不同完整路径或绝对/相对后缀合并。非 Mac 路线和 API/Plan 格式保留。6 文件。
 - passed 本地：build/218 闭包/面板脚本 2；macPlanIdentity 6、distributedPlanQueue 29、distributedJobAutoRetry 30、planSafeRetry 12、duplicatePlanSubmissionGuard 10、planFileEquivalenceCache 4、planSelectionPreview 5、planSelectorStatus 13、selectedPlanCardOrder 2、visiblePreflight 19、distributedRouting 5、macWorkflowBinding 10，逐文件串行通过，无真实科研/SSH/停止/删除。初次 fixture 使用 JS 文件名解析 TS、误用导出名/默认重试状态，及旧下拉 fixture 缺依赖，补齐真实契约后通过，非超时。
 - passed mac-doc-014：两仓 README 与 Mac 配置说明同步补充完整 Plan 路径、大小写/真实空格和错误路径处理，保留更新按钮入口；身份、队列、自动重试回归纳入发布门禁，6 文件。UTF8 回读、build/218 闭包/面板脚本 2、macSetupGuide 1、macRelease 4 通过。
-- passed mac-release-019 版本批次：0.5.282/0.2.76 两仓 build/218 与 26 模块闭包、面板脚本 2、runtimeManifest 1 通过，6 文件；配套打包/上传/实际包及匿名验证仍 pending。
-- pending 下一批 mac-005t：继续核验 Plan 元数据扫描、分布式入队及结果/监控残余 trim/Windows 路径分支；本批身份修复不代表所有文件读取/科研路线已验收。先补两仓说明与发布门禁，再配套 preview。真实 SSH/三拓扑/M5 pending。
+- passed mac-release-019 版本批次：0.5.282/0.2.76 两仓 build/218 与 26 模块闭包、面板脚本 2、runtimeManifest 1 通过，6 文件；完整配套打包/上传/实际包及匿名验证通过，见下条。
+- passed mac-release-019：完整本机 prepare/publish，两仓 build/218 与 26 模块闭包、面板脚本 2、逐文件串行更新/Plan 身份/队列/自动重试/工作区/CLI/路径/认证/中转及浅深高对比真实渲染通过，3 个完整草稿附件核验后公开。无 Actions/自动安装。
+- passed preview-v0.5.282：两包实际 CLI 经真实本地 shell/Node health/实时 RPC，Experiment 中文 Plan 等待确认回执与 seed 覆盖 RPC 前拒绝通过（2 包测试）；实际包编译队列在 Mac 模拟环境保留精确大小写/空格，包内 Mac 面板脚本语法通过。真实匿名 updater 从 0.5.281/0.2.75 筛出两组件，22 次请求完成大小/hash/CRC/身份/平台核验；下载字节与已测试 VSIX 一致，新编译队列、面板、业务模块及两仓 README/配置说明与来源匹配。同版本跳过/禁止降级通过，无真实科研/SSH/M5。
+- pending 下一批 mac-005t：继续核验 Plan 元数据扫描、分布式入队及结果/监控残余 trim/Windows 路径分支；本批身份修复不代表所有文件读取/科研路线已验收。两仓说明/门禁已同步并配套发布；真实 SSH/三拓扑/M5 pending。
 
 
 
@@ -69,6 +71,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- 第十九版 preview-v0.5.282 已发布：Experiment 来源 `c4c2bb163d667af2a582e6ff6d32b25ff7cf94d5`、SFTP 0.2.76 来源 `886c072b3e14452e880bc17a1c673e24031bc777` 已普通推送并 fetch 核对。实际包 CLI/编译身份模块与匿名下载通过；完整科研/SSH/M5 pending。
 - mac-doc-014 Experiment `1ae861d3f265777f5e80789c13b0decae42036ad`、SFTP `04a7a3a6d5b1d4b9f67c92179cb2af5827e60865` 已普通推送并 fetch 核对 origin/master。
 - mac-005s 已验证源码 `9aea7a1fc0b4260cc612b8248f43b0836f75e691` 已普通推送并 fetch 核对 origin/master。
 - 第十八版 preview-v0.5.281 已发布：Experiment 来源 `b5fdcd6e68b8601efc74246e4b84043448e41a20`、SFTP 0.2.75 来源 `9a1b956c4ece2eacef4669112829196eafa63b1c` 已普通推送并 fetch 核对，实际包 CLI、编译异步运行模块及匿名下载通过；完整科研/SSH/M5 pending。
