@@ -20,19 +20,20 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-001（passed，待同步）
+## 当前批次：mac-002a（passed）
 
 ### 边界
 
-- 从两仓已提交源码建立独立基线，建立公开仓库与 persistent plan。
-- 影响两仓 Git 和迁移事实文档；保护源项目及其工作区，暂不发布 VSIX。
+- SimpleSFTP Mac 身份、命令/设置、发现及租约路径，8 个文件以内。
+- 保护传输实现与业务 API；下一批补充对应身份/路径测试，再迁移 Experiment。
 
 ### 验证清单
 
 - passed 两仓源快照逐字节核对，公开 remote 与 master 核对。
 - passed Experiment build、面板 vm.Script、闭包 194 模块、计划压缩 3 测试；SFTP build、18 文件闭包。
 - passed 本批编辑 diff 检查。导入快照含原有空白错误，保留原内容，不混入格式改写。
-- pending 初始快照提交、普通推送和 fetch 后 HEAD 等于 origin/master。
+- passed 初始快照提交、普通推送和 fetch 后 HEAD 等于 origin/master。
+- passed SFTP 身份/路径断言、build、19 文件闭包、API/CLI 19 测试。首次 API 测试失败来自旧 namespace 与 CLI 环境变量，测试契约迁移后通过。
 
 ### 相邻回归风险
 
@@ -41,6 +42,6 @@
 
 ## 本批记录
 
-- 初始提交包含原已提交源快照及目标计划；真实哈希在下一批记录。
+- mac-001 Experiment `2f11164d3f33ac979884519b239232c5d553bfe9`、SFTP `80cf31ab1d0a3a39579c9cfbd9bf99966bbc1f4b`，均已同步 origin/master。
 - SFTP 首次包列表校验 8 秒超时，独立测量 1218 ms，未改超时阈值，完整 build 再验证通过。
 - 下一批边界：身份、设置及发现目录迁移，不扩大到科研业务重构。
