@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { patchPanelProgressDom } from "../features/PanelProgressDom";
-export function renderPanelHtml(): string {
+export function renderPanelHtml(platform: string = process.platform): string {
     const nonce = String(Date.now());
     const PLUGIN_VERSION: string = (() => { try { const pkg = require("../../package.json"); return String((pkg && pkg.version) || "").trim() || "unknown"; } catch { return "unknown"; } })();
     const panelProgressDomPatchSource = "(" + patchPanelProgressDom.toString() + ")";
@@ -3104,6 +3104,7 @@ export function renderPanelHtml(): string {
     const CURRENT_PLAN_RUN_EVIDENCE_CACHE_LIMIT = 64;
     const CURRENT_PLAN_WORKFLOW_RESULT_CACHE_LIMIT = 32;
     const PLAN_FILE_EQUIVALENCE_CACHE_LIMIT = 128;
+    const MAC_PLAN_IDENTITY = ${JSON.stringify(platform === "darwin")};
     const PLAN_ARCHIVE_READINESS_CACHE_LIMIT = 64;
     const PROJECT_OUTPUT_GATE_DIAGNOSTICS_VARIANT_LIMIT = 16;
     const EMPTY_PLAN_FILE_EQUIVALENCE_ENTRY = Object.freeze({ keys: Object.freeze([]), keySet: new Set() });
@@ -4208,7 +4209,7 @@ export function renderPanelHtml(): string {
         if (!item) continue;
         if (item.type === "uiCommandStatus") {
           if (String(item.command || "") === "stopAndClearPlan" && item.planStopClear && item.planStopClear.planFile && lastState) {
-            const stopKey = String(item.planStopClear.planFile).replaceAll(String.fromCharCode(92), "/").replace(/^\\.\\//, "").toLowerCase();
+            const stopKey = normalizePlanSelectionKey(item.planStopClear.planFile, true);
             lastState.planStopClearByFile = Object.assign({}, lastState.planStopClearByFile || {}, { [stopKey]: item.planStopClear });
             try { renderSectionIfVisible(lastState, "execution", { force: true }); } catch (e) {}
           }
@@ -5922,7 +5923,7 @@ export function renderPanelHtml(): string {
     function executionHistoryRowVisible(state, row, planFile, active) {
       if (active) return true;
       const cutoffs = (state && state.executionHistoryCutoffs) || {};
-      const key = normalizePlanSelectionKey(planFile).toLowerCase();
+      const key = normalizePlanSelectionKey(planFile, true);
       const cutoff = Math.max(Date.parse(cutoffs.all || "") || 0, Date.parse(cutoffs[key] || "") || 0);
       if (!cutoff) return true;
       // Start time remains stable when a remote snapshot refreshes old history.
@@ -10059,7 +10060,8 @@ export function renderPanelHtml(): string {
     // 当前选中的 plan 必须是 options[0]（闭合框/打开列表都看见它）；
     // 其余按工作区扫描的默认顺序排列。换选择时新选项上提、剩余恢复默认顺序。
     function planFileOf(plan) {
-      var raw = String((plan && (plan.file || plan.planFile || plan.path || plan.planId)) || "").trim();
+      var raw = normalizePlanSelectionKey((plan && (plan.file || plan.planFile || plan.path || plan.planId)) || "");
+      if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) return raw;
       return raw.split(String.fromCharCode(92)).join("/");
     }
     function collectPlanFileDefaultOrder(state) {
@@ -10082,7 +10084,8 @@ export function renderPanelHtml(): string {
       return defaultOrder;
     }
     function resolvePlanFileCurrent(sel, state) {
-      var raw = String((sel && sel.value) || (state && (state.planFileInput || (state.selection && state.selection.selectedPlanId))) || "").trim();
+      var raw = normalizePlanSelectionKey((sel && sel.value) || (state && (state.planFileInput || (state.selection && state.selection.selectedPlanId))) || "");
+      if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) return raw;
       return raw.split(String.fromCharCode(92)).join("/");
     }
     function matchPlanFileInOrder(current, defaultOrder) {
@@ -10099,8 +10102,9 @@ export function renderPanelHtml(): string {
     function planSelectorTrustedSummary(state, planFile, plan) {
       const revision = String((plan && plan.revision) || "");
       const planUpdatedAt = Date.parse(String((plan && plan.updatedAt) || ""));
-      const normalizedFile = String(planFile || "").trim().split(String.fromCharCode(92)).join("/");
+      const normalizedFile = normalizePlanSelectionKey(planFile);
       const normalizedKey = (value) => {
+        if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) return normalizePlanSelectionKey(value, true);
         const text = String(value || "").trim().split(String.fromCharCode(92)).join("/");
         return (text.startsWith("./") ? text.slice(2) : text).toLowerCase();
       };
@@ -10160,7 +10164,7 @@ export function renderPanelHtml(): string {
         const keys = planFileEquivalenceKeys(file);
         const found = new Set();
         keys.forEach((key) => (byAlias.get(key) || []).forEach((entry) => found.add(entry)));
-        const exact = Array.from(found).filter((entry) => normalizePlanSelectionKey(entry.file).toLowerCase() === normalizePlanSelectionKey(file).toLowerCase());
+        const exact = Array.from(found).filter((entry) => normalizePlanSelectionKey(entry.file, true) === normalizePlanSelectionKey(file, true));
         if (exact.length) return exact;
         const qualified = keys.filter((key) => key.includes("/"));
         const matches = Array.from(found).filter((entry) => !qualified.length || planFileEquivalenceKeys(entry.file).some((key) => qualified.includes(key)));
@@ -13425,7 +13429,7 @@ export function renderPanelHtml(): string {
     }
 
     function renderPlanCards(state, plans) {
-      const selectedFile = String(state.planFileInput || ((state.selection || {}).selectedPlanId) || "").trim();
+      const selectedFile = normalizePlanSelectionKey(state.planFileInput || ((state.selection || {}).selectedPlanId) || "");
       if (!selectedFile) return '<div class="muted">请从上方选择 Plan。</div>';
       const visible = planVisibleRows(state, plans);
       if (!visible.length) return '<div class="muted">当前 Plan 尚未出现在扫描结果中，请刷新识别：' + esc(selectedFile) + '</div>';
@@ -13455,7 +13459,7 @@ export function renderPanelHtml(): string {
 
     function planVisibleRows(state, plans) {
       const rows = asArray(plans || []).map((plan, index) => ({ plan, index }));
-      const selectedFile = String(state.planFileInput || ((state.selection || {}).selectedPlanId) || "").trim();
+      const selectedFile = normalizePlanSelectionKey(state.planFileInput || ((state.selection || {}).selectedPlanId) || "");
       if (!selectedFile) return [];
       const exact = rows.find((entry) => normalizePlanSelectionKey(entry.plan && (entry.plan.file || entry.plan.planFile || entry.plan.path)) === normalizePlanSelectionKey(selectedFile));
       const selected = exact || rows.find((entry) => planMatchesSelection(state, entry.plan));
@@ -13477,14 +13481,24 @@ export function renderPanelHtml(): string {
       return Boolean(selected && (samePlanSelection(selected, file) || samePlanSelection(selected, id)));
     }
 
-    function normalizePlanSelectionKey(value) {
+    function normalizePlanSelectionKey(value, identity = false) {
+      if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) return String(value || "");
       const normalized = String(value || "").trim().split(String.fromCharCode(92)).join("/");
-      return normalized.startsWith("./") ? normalized.slice(2) : normalized;
+      const key = normalized.startsWith("./") ? normalized.slice(2) : normalized;
+      return identity ? key.toLowerCase() : key;
     }
 
     function planFileEquivalenceEntry(value) {
       const raw = normalizePlanSelectionKey(value);
       if (!raw) return EMPTY_PLAN_FILE_EQUIVALENCE_ENTRY;
+      if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) {
+        if (planFileEquivalenceCache.has(raw)) return planFileEquivalenceCache.get(raw);
+        const keys = [raw];
+        const entry = { keys, keySet: new Set(keys) };
+        if (planFileEquivalenceCache.size >= PLAN_FILE_EQUIVALENCE_CACHE_LIMIT) planFileEquivalenceCache.clear();
+        planFileEquivalenceCache.set(raw, entry);
+        return entry;
+      }
       const lower = raw.toLowerCase();
       if (planFileEquivalenceCache?.has(lower)) return planFileEquivalenceCache?.get(lower);
       const relative = lower.startsWith("experiments/plans/") ? lower.slice("experiments/plans/".length)
@@ -13575,7 +13589,7 @@ export function renderPanelHtml(): string {
 
     function planArchiveUiReadiness(state, planFile) {
       const index = planArchiveUiReadinessIndexForState(state || {});
-      const cacheKey = normalizePlanSelectionKey(planFile).toLowerCase();
+      const cacheKey = normalizePlanSelectionKey(planFile, true);
       if (planArchiveReadinessCache?.has(cacheKey)) return planArchiveReadinessCache?.get(cacheKey);
       const resultIndices = planArchiveUiReadinessIndices(index.resultIndicesByKey, planFile);
       const activeTaskIndices = planArchiveUiReadinessIndices(index.activeTaskIndicesByKey, planFile);
@@ -14212,7 +14226,7 @@ export function renderPanelHtml(): string {
     }
 
     function executionPlanGroupKey(path) {
-      return normalizePlanSelectionKey(String(path || "").trim()).toLowerCase() || "unassigned";
+      return normalizePlanSelectionKey(path, true) || "unassigned";
     }
 
     function distributedPlanRecoveryView(plan) {
@@ -14278,7 +14292,7 @@ export function renderPanelHtml(): string {
       }
       const groups = new Map();
       const getGroup = (path) => {
-        const planFile = String(path || "").trim();
+        const planFile = normalizePlanSelectionKey(path);
         const key = executionPlanGroupKey(planFile);
         if (!groups.has(key)) groups.set(key, { key, planFile, operations: [], tasks: [], distributedJobs: [], distributedEnqueuedAt: "", deferredStatus: "", deferredNote: "" });
         return groups.get(key);
@@ -14324,7 +14338,7 @@ export function renderPanelHtml(): string {
       });
       const stopClearMap = state && state.planStopClearByFile && typeof state.planStopClearByFile === "object" ? state.planStopClearByFile : {};
       const stopClearForPlan = (planFile) => {
-        const key = String(planFile || "").replaceAll(String.fromCharCode(92), "/").replace(/^\\.\\//, "").toLowerCase();
+        const key = normalizePlanSelectionKey(planFile, true);
         return key && stopClearMap[key] ? stopClearMap[key] : null;
       };
       const stopClearNewerThan = (group, feedback) => {
@@ -14335,7 +14349,7 @@ export function renderPanelHtml(): string {
       Object.keys(stopClearMap).forEach((key) => {
         const feedback = stopClearMap[key];
         const outcome = String(feedback && feedback.outcome || "");
-        const planFile = String(feedback && feedback.planFile || key || "").trim();
+        const planFile = normalizePlanSelectionKey(feedback && feedback.planFile || key || "");
         if (!planFile || (outcome !== "failed" && outcome !== "partial")) return;
         if (groups.has(executionPlanGroupKey(planFile))) return;
         getGroup(planFile);

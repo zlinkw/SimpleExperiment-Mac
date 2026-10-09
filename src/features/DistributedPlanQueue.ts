@@ -590,8 +590,9 @@ export function workerCodeVersionAvailable(queue: DistributedQueue, workerId: st
 export const emptyDistributedQueue = (): DistributedQueue => ({ schemaVersion: 1, plans: [] });
 
 export function completedJobOutputs(queue: DistributedQueue, planFile: string, jobs: Array<Pick<QueuedJob, "index" | "case" | "seed">>) {
-  const key = String(planFile || "").replace(/\\/g, "/").replace(/^\.\//, "");
-  const matching = queue.plans.filter((plan) => String(plan.planFile || "").replace(/\\/g, "/").replace(/^\.\//, "") === key);
+  const normalize = (value: string) => process.platform === "darwin" ? value : value.replace(/\\/g, "/").replace(/^\.\//, "");
+  const key = normalize(String(planFile || ""));
+  const matching = queue.plans.filter((plan) => normalize(String(plan.planFile || "")) === key);
   return jobs.flatMap((job) => {
     const previous = matching.slice().reverse().flatMap((plan) => plan.jobs.slice().reverse())
       .find((item) => item.index === job.index && item.case === job.case && item.seed === job.seed
@@ -947,12 +948,17 @@ export function matchingActiveDeferred(queue: DistributedQueue, identity: { id?:
     && (item.status === "pending" || item.status === "blocked"));
 }
 
+export function planFileIdentityKey(value: string): string {
+  // POSIX spelling is an identity: case, whitespace and literal percent escapes matter.
+  return process.platform === "darwin" ? value : value.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+}
+
 function samePlanFile(left: string, right: string): boolean {
-  const normalize = (value: string) => value.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
-  const a = normalize(left);
-  const b = normalize(right);
+  const a = planFileIdentityKey(left);
+  const b = planFileIdentityKey(right);
   if (!a || !b) return false;
   if (a === b) return true;
+  if (process.platform === "darwin") return false;
   const absolute = (value: string) => /^(?:[a-z]:\/|\/)/i.test(value);
   return absolute(a) !== absolute(b) && (absolute(a) ? a.endsWith("/" + b) : b.endsWith("/" + a));
 }
@@ -987,7 +993,7 @@ export function jobClearableWithoutRemoteReceipt(job: { status?: string; workerI
 }
 
 export function distributedStopTargets(queue: DistributedQueue, planFile: string): DistributedStopTarget[] {
-  const selected = String(planFile || "").trim();
+  const selected = process.platform === "darwin" ? String(planFile || "") : String(planFile || "").trim();
   if (!selected) return [];
   const jobs = (queue?.plans || []).filter((plan) => samePlanFile(plan.planFile, selected)).flatMap((plan) => plan.jobs.map((job) => ({
     kind: "job" as const,
@@ -1021,7 +1027,7 @@ export function distributedStopTargets(queue: DistributedQueue, planFile: string
 /** Drop only confirmed plan runs. A partial stop keeps every unconfirmed job and deferred row. */
 export function removeConfirmedDistributedPlan(queue: DistributedQueue, planFile: string, confirmed: {
   jobKeys: ReadonlySet<string>; deferredIds: ReadonlySet<string>; projectId?: string }): DistributedQueue {
-  const selected = String(planFile || "").trim();
+  const selected = process.platform === "darwin" ? String(planFile || "") : String(planFile || "").trim();
   const clearedJobs = [...(queue.clearedJobs || [])];
   const clearedKeys = new Set(clearedJobs.map(entry => clearedJobIdentityKey(entry)));
   const clearedAt = new Date().toISOString();
@@ -1113,7 +1119,7 @@ export function scheduleAutomaticJobRetries(queue: DistributedQueue, snapshots: 
   const latest = new Map<string, QueuedPlan>();
   for (const plan of next.plans) {
     if (plan.projectId !== projectId || !Number.isFinite(Date.parse(plan.enqueuedAt))) continue;
-    const key = plan.planFile.replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase();
+    const key = planFileIdentityKey(plan.planFile);
     const prior = latest.get(key);
     if (!prior || Date.parse(plan.enqueuedAt) >= Date.parse(prior.enqueuedAt)) latest.set(key, plan);
   }

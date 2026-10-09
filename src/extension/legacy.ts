@@ -6114,7 +6114,7 @@ export class RealtimeTunnelPanelProvider {
             }
         }
         if (!PLAN_SUBMISSION_COMMANDS.has(command)) return await this.runActionCommandLeased(command, message);
-        const key = `${workspaceRoot()}\0${normalizePlanSelectionKey(operationResultPlanFile(this.actionBody(message))).toLowerCase()}`;
+        const key = `${workspaceRoot()}\0${normalizePlanSelectionKey(operationResultPlanFile(this.actionBody(message)), true)}`;
         if (this.planRetryInFlight.has(key)) throw new UiCommandCancelled("同一 Plan 正在确认或提交，请等待当前请求。");
         this.planRetryInFlight.add(key);
         try { return await this.runActionCommandLeased(command, message); }
@@ -6410,7 +6410,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     planSubmissionPlanFile(message, body) {
-        return String(operationResultPlanFile(body) || body?.planFile || body?.selectedPlanId || body?.options?.planFile || stringField(message, "planFile") || "").trim();
+        return normalizePlanSelectionKey(operationResultPlanFile(body) || body?.planFile || body?.selectedPlanId || body?.options?.planFile || stringField(message, "planFile") || "");
     }
     beginPlanSubmissionProgress(message, body) {
         const operationId = this.planSubmissionOperationId(message);
@@ -6478,7 +6478,7 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     revokePlanSubmissions(planFile) {
-        const selected = normalizePlanSelectionKey(planFile).toLowerCase();
+        const selected = normalizePlanSelectionKey(planFile, true);
         if (!selected) return;
         if (!this.distributedSubmissionEpochs) this.distributedSubmissionEpochs = new Map();
         for (const [operationId, record] of Object.entries(this.localOperations || {})) {
@@ -6487,7 +6487,7 @@ export class RealtimeTunnelPanelProvider {
             const localSubmission = record.localSubmissionProgress === true || operationIdText.startsWith("plan-submit-");
             if (!localSubmission) continue;
             if (["succeeded", "failed", "cancelled", "queued"].includes(String(record.status || ""))) continue;
-            if (normalizePlanSelectionKey(String(record.planFile || "")).toLowerCase() !== selected) continue;
+            if (normalizePlanSelectionKey(String(record.planFile || ""), true) !== selected) continue;
             this.distributedSubmissionEpochs.set(operationId, (this.distributedSubmissionEpochs.get(operationId) || 0) + 1);
             this.distributedSubmissionAborts?.get(operationId)?.abort();
             this.localOperations[operationId] = {
@@ -6536,7 +6536,7 @@ export class RealtimeTunnelPanelProvider {
         if (status === "succeeded") {
             for (const [id, previous] of Object.entries(this.localOperations)) {
                 if (id === operationId || previous.localSubmissionProgress !== true || previous.status !== "queued") continue;
-                if (normalizePlanSelectionKey(previous.planFile || "").toLowerCase() !== normalizePlanSelectionKey(current.planFile || "").toLowerCase()) continue;
+                if (normalizePlanSelectionKey(previous.planFile || "", true) !== normalizePlanSelectionKey(current.planFile || "", true)) continue;
                 this.localOperations[id] = { ...previous, status: "cancelled", message: "已由新的手动提交接续。", finishedAt: now, updatedAt: now, reconcileEvidenceActive: false };
                 this.distributedSubmissionAborts?.get(id)?.abort();
                 this.distributedSubmissionAborts?.delete(id);
@@ -6583,7 +6583,7 @@ export class RealtimeTunnelPanelProvider {
         const options = body?.options || {};
         const payload = {
             root,
-            planFile: normalizePlanSelectionKey(String(body?.planFile || body?.plan || body?.selectedPlanId || body?.options?.planFile || body?.options?.plan || "")).toLowerCase(),
+            planFile: normalizePlanSelectionKey(String(body?.planFile || body?.plan || body?.selectedPlanId || body?.options?.planFile || body?.options?.plan || ""), true),
             planRevision: String(body?.planRevision || body?.options?.planRevision || ""),
             codeFingerprint: String(this.lastCodeSyncState?.fingerprint || ""),
             adapterRules: pluginProjectAdapterRules(root), topology: { mode: topology.mode, hubAllowed: topology.hubAllowed },
@@ -7198,7 +7198,7 @@ export class RealtimeTunnelPanelProvider {
     assertRetryPlanContext(command, message) {
         if (command !== "retryExperiment")
             return;
-        const selectedPlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map(usableSelectionKey).filter(Boolean));
+        const selectedPlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map((value) => normalizePlanSelectionKey(value)).filter(Boolean));
         const selectedTaskCount = stringArrayField(message, "selectedRunKeys").length +
             stringArrayField(message, "selectedExperimentIds").length +
             stringArrayField(message, "selectedArchiveKeys").length +
@@ -13212,7 +13212,7 @@ export class RealtimeTunnelPanelProvider {
         ));
     }
     planStopClearKey(planFile) {
-        return normalizePlanSelectionKey(planFile).toLowerCase();
+        return normalizePlanSelectionKey(planFile, true);
     }
     publishPlanStopClear(planFile, input) {
         const feedback = planStopClearFeedback({ planFile, ...input });
@@ -13727,7 +13727,7 @@ export class RealtimeTunnelPanelProvider {
         const messageArchiveKeys = stringArrayField(message, "selectedArchiveKeys");
         const messageWorkerIds = stringArrayField(message, "selectedWorkerIds").map((id) => this.resolveWorkerEndpointId(id) || id);
         const messageTaskUiKeys = stringArrayField(message, "selectedTaskUiKeys");
-        const messagePlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map(usableSelectionKey).filter(Boolean));
+        const messagePlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map((value) => normalizePlanSelectionKey(value)).filter(Boolean));
         const selectedTaskTargets = taskActionTargetsField(message).map((target) => ({
             ...target,
             workerId: this.resolveWorkerEndpointId(target.workerId || "") || target.workerId,
@@ -13809,12 +13809,12 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     actionPlanTarget(message) {
-        const messagePlanFile = usableSelectionKey(stringField(message, "planFile") || stringField(message, "file"));
-        const messagePlanId = usableSelectionKey(stringField(message, "selectedPlanId") || stringField(message, "planId"));
-        const selectedPlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map(usableSelectionKey).filter(Boolean));
+        const messagePlanFile = normalizePlanSelectionKey(stringField(message, "planFile") || stringField(message, "file"));
+        const messagePlanId = normalizePlanSelectionKey(stringField(message, "selectedPlanId") || stringField(message, "planId"));
+        const selectedPlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map((value) => normalizePlanSelectionKey(value)).filter(Boolean));
         const suppressGlobalPlan = Boolean(message && typeof message === "object" && message.suppressGlobalPlan === true);
-        const inputPlan = usableSelectionKey(this.planFileInput || "");
-        const selectedPlan = usableSelectionKey(this.selectedPlanId || "");
+        const inputPlan = normalizePlanSelectionKey(this.planFileInput || "");
+        const selectedPlan = normalizePlanSelectionKey(this.selectedPlanId || "");
         const planFile = messagePlanFile || (selectedPlanFiles.length === 1 ? selectedPlanFiles[0] : "") || (!suppressGlobalPlan ? inputPlan || selectedPlan : "") || undefined;
         return {
             planFile,
@@ -13822,12 +13822,12 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     localPlanForActionBody(body) {
-        const planFile = usableSelectionKey(String(body.options?.planFile || ""));
-        const planId = usableSelectionKey(body.selectedPlanId || "");
+        const planFile = normalizePlanSelectionKey(body.options?.planFile || "");
+        const planId = normalizePlanSelectionKey(body.selectedPlanId || "");
         return (this.localPlanMetadata.plans || []).find((plan) => Boolean((planFile && (plan.planFile === planFile || plan.file === planFile)) || (planId && (plan.planId === planId || plan.planFile === planId || plan.file === planId))));
     }
     planVersionForFile(planFile = "") {
-        const target = usableSelectionKey(String(planFile || "").trim().replace(/\\/g, "/"));
+        const target = normalizePlanSelectionKey(planFile);
         const resolved = this.resolveSelectedPlanFile(target) || target;
         const plan = (this.localPlanMetadata.plans || []).find((item) => samePlanSelection(item?.planFile || item?.file || item?.planId || "", resolved));
         return {
@@ -14002,7 +14002,7 @@ export class RealtimeTunnelPanelProvider {
             await this.localPlanMetadataRefreshPromise;
         }
         const key = `${root}::${dir}`;
-        const planFile = usableSelectionKey(String(body?.options?.planFile || body?.selectedPlanId || ""));
+        const planFile = normalizePlanSelectionKey(body?.options?.planFile || body?.selectedPlanId || "");
         const actionRecent = this.localPlanMetadataActionUpdatedAt &&
             this.localPlanMetadataFullRefresh &&
             this.localPlanMetadataKey === key &&
@@ -16162,8 +16162,8 @@ export class RealtimeTunnelPanelProvider {
         this.planLocalChangeParseTimer = timer;
     }
     queueResultParseAfterProjectChange(reason, planFile, planId) {
-        const nextPlanFile = usableSelectionKey(planFile || this.planFileInput || "") || undefined;
-        const nextPlanId = usableSelectionKey(planId || this.selectedPlanId || "") || nextPlanFile;
+        const nextPlanFile = normalizePlanSelectionKey(planFile || this.planFileInput || "") || undefined;
+        const nextPlanId = normalizePlanSelectionKey(planId || this.selectedPlanId || "") || nextPlanFile;
         if (nextPlanFile || nextPlanId) {
             this.queuePlanScopedResultParse(reason, nextPlanFile, nextPlanId);
             return;
@@ -16303,7 +16303,7 @@ export class RealtimeTunnelPanelProvider {
         if (root !== workspaceRoot()) return;
         const saved = this.context.workspaceState.get(keys.executionHistoryCutoffs, {});
         const cutoffs = saved && typeof saved === "object" && !Array.isArray(saved) ? { ...saved as Record<string, string> } : {};
-        if (planFile) cutoffs[normalizePlanSelectionKey(planFile).toLowerCase()] = new Date().toISOString();
+        if (planFile) cutoffs[normalizePlanSelectionKey(planFile, true)] = new Date().toISOString();
         else cutoffs.all = new Date().toISOString();
         await this.context.workspaceState.update(keys.executionHistoryCutoffs, cutoffs);
         if (root !== workspaceRoot()) return;
@@ -16766,7 +16766,7 @@ export class RealtimeTunnelPanelProvider {
         if (clearable.length === targets.length && queueCleared && clearStillHere()) {
             const savedCutoffs = this.context.workspaceState.get(keys.executionHistoryCutoffs, {});
             const cutoffs = savedCutoffs && typeof savedCutoffs === "object" && !Array.isArray(savedCutoffs) ? { ...savedCutoffs as Record<string, string> } : {};
-            cutoffs[normalizePlanSelectionKey(planFile).toLowerCase()] = new Date().toISOString();
+            cutoffs[normalizePlanSelectionKey(planFile, true)] = new Date().toISOString();
             await this.context.workspaceState.update(keys.executionHistoryCutoffs, cutoffs);
         }
         const clearedSomething = clearable.length || confirmedJobs.size || confirmedDeferred.size;
@@ -16775,7 +16775,7 @@ export class RealtimeTunnelPanelProvider {
                 if (!record || typeof record !== "object") continue;
                 const operationIdText = String(record.operationId || record.opId || record.id || "");
                 if (record.localSubmissionProgress !== true && !operationIdText.startsWith("plan-submit-")) continue;
-                if (normalizePlanSelectionKey(String(record.planFile || "")).toLowerCase() !== normalizePlanSelectionKey(planFile).toLowerCase()) continue;
+                if (normalizePlanSelectionKey(String(record.planFile || ""), true) !== normalizePlanSelectionKey(planFile, true)) continue;
                 this.localOperations[operationId] = {
                     ...record,
                     status: "cancelled",
@@ -23621,7 +23621,8 @@ function operationResultPlanFile(record) {
     const item = record && typeof record === "object" ? record : {};
     const options = item.options && typeof item.options === "object" ? item.options : {};
     const payload = item.payload && typeof item.payload === "object" ? item.payload : {};
-    return usableSelectionKey(String(item.planFile || item.plan_file || item.plan || item.selectedPlanId || item.selected_plan_id || options.planFile || options.plan || options.selectedPlanId || payload.planFile || payload.plan || payload.selectedPlanId || ""));
+    const raw = String(item.planFile || item.plan_file || item.plan || item.selectedPlanId || item.selected_plan_id || options.planFile || options.plan || options.selectedPlanId || payload.planFile || payload.plan || payload.selectedPlanId || "");
+    return typeof process !== "undefined" && process.platform === "darwin" ? raw : usableSelectionKey(raw);
 }
 function debugModeFromRecord(record) {
     const item = record && typeof record === "object" ? record : {};
@@ -23677,8 +23678,8 @@ function mergeRecentPlans(...groups) {
     for (const row of groups.flat()) {
         if (!row || typeof row !== "object")
             continue;
-        const planId = String(row.planId || row.plan_id || row.id || "").trim();
-        const planFile = String(row.planFile || row.plan_file || row.file || "").trim();
+        const planId = normalizePlanSelectionKey(row.planId || row.plan_id || row.id || "");
+        const planFile = normalizePlanSelectionKey(row.planFile || row.plan_file || row.file || "");
         const key = planId || planFile;
         if (!key)
             continue;
@@ -23702,8 +23703,8 @@ async function readProjectPlanSelectionState(root) {
         if (!data || typeof data !== "object")
             return undefined;
         return {
-            selectedPlanId: usableSelectionKey(String(data.selectedPlanId || data.selected_plan_id || "")),
-            planFileInput: usableSelectionKey(String(data.planFileInput || data.plan_file || data.planFile || "")),
+            selectedPlanId: normalizePlanSelectionKey(data.selectedPlanId || data.selected_plan_id || ""),
+            planFileInput: normalizePlanSelectionKey(data.planFileInput || data.plan_file || data.planFile || ""),
             recentPlans: Array.isArray(data.recentPlans) ? data.recentPlans : Array.isArray(data.recent_plans) ? data.recent_plans : [],
             updatedAt: String(data.updatedAt || data.updated_at || ""),
         };
@@ -23719,8 +23720,8 @@ async function writeProjectPlanSelectionState(root, state) {
     await fs.mkdir(path.dirname(fullPath), { recursive: true });
     const payload = {
         schemaVersion: 1,
-        selectedPlanId: usableSelectionKey(String(state?.selectedPlanId || "")),
-        planFileInput: usableSelectionKey(String(state?.planFileInput || "")),
+        selectedPlanId: normalizePlanSelectionKey(state?.selectedPlanId || ""),
+        planFileInput: normalizePlanSelectionKey(state?.planFileInput || ""),
         recentPlans: mergeRecentPlans(state?.recentPlans || []),
         updatedAt: String(state?.updatedAt || new Date().toISOString()),
     };
@@ -24722,13 +24723,17 @@ function compactLocalPlanForWebview(plan, selected) {
     variants.set(selectedVariant, compacted);
     return compacted;
 }
-function normalizePlanSelectionKey(value) {
-    return usableSelectionKey(String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, ""));
+function normalizePlanSelectionKey(value, identity = false) {
+    const raw = String(value || "");
+    if (typeof process !== "undefined" && process.platform === "darwin") return raw === "-" ? "" : raw;
+    const normalized = usableSelectionKey(raw.trim().replace(/\\/g, "/").replace(/^\.\//, ""));
+    return identity ? normalized.toLowerCase() : normalized;
 }
 function planFileEquivalenceKeys(value) {
     const raw = normalizePlanSelectionKey(value);
     if (!raw)
         return [];
+    if (typeof process !== "undefined" && process.platform === "darwin") return [raw];
     const lower = raw.toLowerCase();
     // Qualified paths retain their directories. Basenames are display labels,
     // not identities shared by comparison and tuning plans.
@@ -26656,6 +26661,8 @@ function stringField(message, key) {
     if (!message || typeof message !== "object")
         return "";
     const value = message[key];
+    if (typeof process !== "undefined" && process.platform === "darwin" && ["planFile", "file", "plan", "planId", "selectedPlanId"].includes(key))
+        return typeof value === "string" ? value : "";
     return typeof value === "string" ? value.trim() : "";
 }
 function workerTaskSnapshotPayload(snapshot) {
@@ -26681,6 +26688,8 @@ function stringArrayField(message, key) {
     const value = message[key];
     if (!Array.isArray(value))
         return [];
+    if (typeof process !== "undefined" && process.platform === "darwin" && key === "selectedPlanFiles")
+        return Array.from(new Set(value.filter((item) => typeof item === "string" && item && item !== "-")));
     return Array.from(new Set(value.map((item) => usableSelectionKey(typeof item === "string" ? item.trim() : "")).filter(Boolean)));
 }
 function taskActionTargetsField(message) {

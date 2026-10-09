@@ -237,7 +237,7 @@ test("complete outputs cannot bypass a live guard, but reconciled inactive opera
 });
 
 test("selected Plan stays first in dropdown after switching", () => {
-  const names = ["planFileOf", "collectPlanFileDefaultOrder", "resolvePlanFileCurrent", "matchPlanFileInOrder", "refreshPlanFileOptions"];
+  const names = ["normalizePlanSelectionKey", "planFileOf", "collectPlanFileDefaultOrder", "resolvePlanFileCurrent", "matchPlanFileInOrder", "refreshPlanFileOptions"];
   const select = { innerHTML: "", value: "" };
   const sandbox = { planSelectorStatusIndex: () => ({}), planSelectorRunSummary: () => ({ status: "unknown", statusLabel: "待确认", totalCount: 0 }), planSelectorMatchesFilter: () => true, planSelectorSortEntries: rows => rows.slice(), planSelectorOptionLabel: file => file, el: id => id === "planFileInput" ? select : null, esc: (value) => value, escAttr: (value) => value, samePlanSelection };
   vm.createContext(sandbox);

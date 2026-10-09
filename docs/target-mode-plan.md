@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-018（passed，配套 preview-v0.5.281）
+## 当前批次：mac-005s（passed，Mac Plan 身份）
 ### 边界
 
-- 两仓版本与 RuntimeManifest 对齐，发布 Experiment 0.5.281 / SFTP 0.2.75 同一 preview Release，绑定已同步来源；6 文件，生成产物不计。保护业务/旧入口/历史附件。
-- 检查：两仓 build/包闭包/面板脚本、runtime manifest、完整 prepare 串行门禁、实际 VSIX CLI 与匿名 updater，核验草稿附件后公开。无 Actions/自动安装/真实科研/SSH/停止/删除；M5 待验收。
+- 关联问题：Mac Plan 选择/操作身份保留大小写与真实空格，分布式队列与自动重试不合并不同路径，面板选择/身份缓存采用同一规则。最多 8 文件；保护 API/Plan 格式、非 Mac 旧入口、远端实验及用户设置。
+- 检查：build/闭包/面板脚本，新编译模块与真实生成面板的 Mac 身份回归，队列/人工重试/重复提交/选择缓存相邻测试逐文件串行 20 秒。仅 VM/本机 mock，不执行真实科研、SSH、停止或删除；M5 待验收。
 
 ### 验证清单
 
@@ -40,7 +40,9 @@
 - passed mac-doc-013：两仓 README/配置说明补全等待回执、人工重试及多 Worker 项目变化的处理；原更新按钮入口保留，相邻 3 个 Plan 回归加入发布门禁并更新说明。UTF8 回读、build/218 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，6 文件。
 - passed mac-release-018：完整本机 prepare/publish，两仓 build/218 与 26 文件闭包、面板脚本 2、逐文件串行更新/工作区/重试/分布式预检/CLI/路径/认证/中转以及浅深高对比渲染通过。3 个完整草稿附件核验后公开，无 Actions/自动安装。
 - passed preview-v0.5.281：实际两包固定 CLI 经真实本地 shell/Node health/实时 RPC，Experiment 实际包中文 Plan 的工作区/路线预检、等待确认回执和 seed 覆盖 RPC 前拒绝通过（2 包测试）。真实匿名 updater 从 0.5.280/0.2.74 筛出两组件，21 次请求完成大小/hash/CRC/身份/平台核验；下载字节与已测试 VSIX 相同，编译重试/工作区/Plan/CLI 模块及两仓 README/配置说明与来源一致。同版本跳过/禁止降级通过，无真实科研/SSH/M5。
-- pending 下一批 mac-005s：Plan 标识的 Mac 大小写与真实空格规则。现存 DistributedPlanQueue.samePlanFile/automatic retry latest 和 legacy normalizePlanSelectionKey/planFileEquivalenceKeys 仍沿 Windows 折叠规则；核验实际选择、重试与队列身份并保留 API/Plan/旧入口。结果/监控/Windows 依赖和队列/同步写入边界后续继续；关键边界检查不是完整远端预演或物理原子保证，真实 SSH/三拓扑/M5 待验收。
+- passed mac-005s：Mac 的后台 Plan 选择、保存/回执与身份锁/缓存、分布式队列与自动重试、真实生成面板的下拉选择和身份缓存保留大小写/Unicode/真实空格/字面 %20，不把不同完整路径或绝对/相对后缀合并。非 Mac 路线和 API/Plan 格式保留。6 文件。
+- passed 本地：build/218 闭包/面板脚本 2；macPlanIdentity 6、distributedPlanQueue 29、distributedJobAutoRetry 30、planSafeRetry 12、duplicatePlanSubmissionGuard 10、planFileEquivalenceCache 4、planSelectionPreview 5、planSelectorStatus 13、selectedPlanCardOrder 2、visiblePreflight 19、distributedRouting 5、macWorkflowBinding 10，逐文件串行通过，无真实科研/SSH/停止/删除。初次 fixture 使用 JS 文件名解析 TS、误用导出名/默认重试状态，及旧下拉 fixture 缺依赖，补齐真实契约后通过，非超时。
+- pending 下一批 mac-005t：继续核验 Plan 元数据扫描、分布式入队及结果/监控残余 trim/Windows 路径分支；本批身份修复不代表所有文件读取/科研路线已验收。先补两仓说明与发布门禁，再配套 preview。真实 SSH/三拓扑/M5 pending。
 
 
 
