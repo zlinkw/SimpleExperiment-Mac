@@ -248,7 +248,11 @@ Plan CLI 先在终端进入与当前 VS Code 窗口相同的项目目录，然�
 
 在线检查读取当前工作区与 `workflow.plan` 路由；未就绪、Plan 选择不符或工作区变化会阻止运行。离线只预览本地信息，输出 `validation: local_only`、`ready: false`，不能证明服务器或科研任务就绪。此 CLI 检查不执行完整远端预演；正式插件路线仍负责 validate → dry-run → upload → submit。
 
-去掉 `--check --dry-run` 才申请 `workflow.run`，随后在 VS Code 确认。初始 `requested: true`、`submitted: false`、`waiting_confirmation` 和 `operationId` 是等待确认的本地回执，不表示实验已在远端运行；使用实时契约中的 `operations.list` 核对后续操作状态与提交证据，取消或失败时不要盲目重复运行。项目外或链接逃逸的 Plan 拒绝，中文/真实首尾空格保留。旧 `run --name … -- command` 入口继续保留为手工本地记录器，正式科研使用配置和 Plan；CLI seed 参数与真实科研三拓扑仍待后续验证。
+去掉 `--check --dry-run` 才申请 `workflow.run`，随后在 VS Code 确认。初始 `requested: true`、`submitted: false`、`waiting_confirmation` 和 `operationId` 是等待确认的本地回执，不表示实验已在远端运行；使用实时契约中的 `operations.list` 核对后续操作状态与提交证据，取消或失败时不要盲目重复运行。项目外或链接逃逸的 Plan 拒绝，中文/真实首尾空格保留。旧 `run --name … -- command` 入口继续保留为手工本地记录器，正式科研使用配置和 Plan；真实科研三拓扑仍待后续验证。
+
+Mac API 的 `workspace` 必须指向当前窗口已打开的同一个真实项目目录。服务端在准备、校验与提交的关键异步边界复核目录身份；切换窗口项目或替换目录后会拒绝继续，请重新打开正确项目并预检。晚到的运行回执不写入另一个项目。若检测到已有活动 Plan，会阻止新提交；Mac 路线不通过旧自动停止 fallback 停止原实验，用户主动选择“停止并重新运行”仍保留人工确认。
+
+在保存的 Plan 中配置正式种子列表 `seeds`，然后重新校验与预演。在线 `experiment run --seed …` 与 API `workflow.plan`/`workflow.run` 的 `seed` 参数会报“不支持 seed 覆盖”，不静默忽略；删去覆盖参数后再调用。离线预览不应用 `--seed`，返回 `seedApplied: false` 与 `seedWarning`。旧手工本地记录器 `run --seed` 保留，不能当作正式 Plan 运行。
 
 | 现象 | 操作 |
 | --- | --- |

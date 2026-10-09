@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005q（passed，服务端 workflow 工作区保护）
+## 当前批次：mac-doc-012（passed，工作区与 Plan seeds 使用说明）
 ### 边界
 
-- Mac workflow 在服务端绑定当前物理工作区，异步准备/校验及标准 Plan 动作前复核；CLI seed 不再静默无效，现有标准路线没有 seed override 契约，正式种子由保存的 Plan 定义。保留旧入口/Plan 格式/三拓扑，Mac 提交不触发旧自动停止 fallback。最多 8 文件。
-- 检查：build/包闭包/面板脚本、真实编译方法 VM、CLI 本机 mock、既有准备/标准路线回归。无真实科研、传输、停止实验、服务器或删除操作；说明与配套发布随后分批，M5 待验收。
+- 更新两仓 README/配置说明的服务端真实工作区保护、活动运行及 Plan seeds 参数边界，将 macWorkflowBinding 纳入发布门禁并更新发布说明。保留旧入口/Plan 格式/三拓扑和更新按钮入口。最多 6 文件。
+- 检查：文档 UTF8 回读、build/包闭包/面板脚本、配置说明与发布门禁测试。无真实科研、传输、停止实验、服务器或删除操作；配套发布下一批，M5 待验收。
 
 ### 验证清单
 
@@ -32,7 +32,8 @@
 - passed preview-v0.5.279：实际两包固定 CLI 通过真实本地 shell/Node health/实时 RPC，Experiment 实际包以中文 Plan、本机 mock 完成工作区/路线预检与等待确认回执，submitted=false（2 项包测试）。真实匿名 updater 从 0.5.278/0.2.72 筛出两组件，19 次请求完成大小/hash/CRC/身份/平台校验；下载字节与已测试 VSIX 一致，新 CLI 模块、两仓 README/配置说明与来源一致。同版本跳过/禁止降级通过，无实际科研/服务器/M5。
 - passed mac-005q：服务端 Mac workflow 绑定当前物理工作区，异步准备/校验/标准 Plan 关键边界复核，晚到回执不写入另一工作区；精确保留 Plan 首尾空格。CLI/API seed override 显式拒绝，正式种子沿用保存的 Plan，离线预览不宣称应用 seed。Mac 提交不执行旧自动停止 fallback，活动运行在创建回执及提交前拦截。8 文件。
 - passed 本地：build/218 模块闭包/面板脚本 2、macWorkflowBinding 6、macCliWorkflow 6、macProjectPrepare 16、localApi 标准路线相关 5 逐文件串行通过；测试为编译方法 VM/本机 mock，无真实科研/SSH/停止/删除。初次 VM fixture 缺少编译导入别名，补齐后通过，非超时。
-- pending 下一批：README/配置说明更新工作区绑定及 Plan seeds 边界，新增测试纳入发布门禁，再发布 0.5.280/0.2.74。后续继续完整 Plan/结果/监控与 Windows 执行依赖审计；当前关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据。真实 SSH/三拓扑/M5 保持待验收。
+- passed mac-doc-012：两仓 README/配置说明补全当前真实工作区、活动运行与保存 Plan seeds；在线覆盖明确报错、离线不应用、旧手工记录器边界，更新按钮入口保留。新工作区回归纳入发布门禁，发布说明区分本地/M5。UTF8 回读、build/218 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，6 文件。
+- pending 下一批：配套 0.5.280/0.2.74 本机发布。后续继续完整 Plan/结果/监控与 Windows 执行依赖审计；当前关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据。真实 SSH/三拓扑/M5 保持待验收。
 
 - passed mac-doc-011：两仓 README/配置说明补充正式 Plan CLI、预检/离线/等待确认回执与 operations.list，macCliWorkflow 纳入发布门禁并更新发布说明。UTF8 回读、build/217 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，共 6 文件。配套下一版 0.5.279/0.2.73，服务端 workspace/seed/完整科研仍待后续核验。
 
@@ -82,6 +83,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005q 已验证源码 `6a30a571502b697d70a40435a0c0e363246d0440` 已普通推送并 fetch 核对 origin/master。
 - 第十六版 preview-v0.5.279 已发布：Experiment 来源 `0c58484ae8df959ddb9f4ecf162437baf6ef08be`、SFTP 0.2.73 来源 `1ae3c9da45ddb1364f6a3ae1c16955bbf1e5ee55` 均已普通推送并 fetch 核对，真实包 Plan CLI 等待确认与匿名下载通过。完整科研/服务端 workspace/seed/SSH/M5 pending。
 - mac-doc-011 Experiment 说明/门禁 `a727df446ce723540bb954df7b276c698e3dd132`、SFTP README `31ba6088e9229373e1b24f77a2c4c5ca2316ba18` 已同步。
 - mac-005p CLI 来源 `e95e099132427d2ffe4dedaa7f628d0d49854724` 已普通推送并 fetch 核对。
