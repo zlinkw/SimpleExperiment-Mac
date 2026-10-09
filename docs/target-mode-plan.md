@@ -10,11 +10,16 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-027（running，0.5.290/0.2.84）
+## 当前批次 mac-release-027（passed，0.5.290/0.2.84）
 - 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新核验；无 Actions/安装。
 - mac-doc-022 Experiment `0145e4fc3e1bb8ee1ccd68058ae88b970ec6a47c`、SFTP `99ae1fc1941642c520112d064f923c07abe58796` 已普通推送/fetch 核对。
 - 验证两仓 build/闭包/面板语法/runtimeManifest/元数据 UTF8；完整串行 prepare，实际 VSIX 映射身份及前批能力、匿名新版下载；M5 延后。
-- passed 元数据批次：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、两仓 package/lock/runtime 一致与 UTF8/diff。完整 prepare/publish 与实际包/匿名验证 pending，未作为完成证据。
+- passed 元数据：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；元数据已普通推送/fetch 核对。
+- passed 完整 release:prepare：两仓 build/222 与 26 闭包/面板 2，64 个单文件串行/20 秒目标门禁（Experiment feature 49/core 1、SFTP 14），含映射 7/pending 指标 39/浅深高对比真实渲染。完整日志 release-artifacts/prepare-0.5.290-attempt3.log；publish 核验完整三附件草稿后公开，无 Actions/安装。
+- 初次 prepare 的旧源码抽取测试因工作文件 CRLF 找不到 ;+LF 边界；恢复仓库指定 LF，过滤后 Git blob 与已提交源码完全相同，缓存 6 通过。第二次由 Git 旧工作文件 stat 误报 dirty，重新登记相同 blob 后干净；没有改生产逻辑/覆盖版本。三个日志保留，无超时。
+- passed .290 实际 VSIX：映射 7、摘要 7、YAML 候选 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8，七份包证据 JSON 有效。本机文件分发与模拟 API/磁盘/AST；无真实科研/SSH/远端启动/停止/删除。
+- passed .289/.83→.290/.84 实际匿名 updater：30 次公开请求、prerelease/清单/大小/hash/CRC/身份/平台、下载字节等于实际测试包，业务模块/两仓 README/包内说明匹配同步来源；同版本跳过/不降级通过。不实际安装/M5。
+- 第二十七版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.290 已公开：Experiment 来源 `1611211fc2e903df729dc1c62ae3e2f8551dd5f1`、SFTP 来源 `6d55583cd93743583934d0e554481ac2f5be493b` 已普通推送/fetch 核对。历史附件保留，不覆盖。下一批限映射物理复用/发布及相关真实编译回归 fixture 的一组问题，最多 8 文件，使用说明和配套更新持续同步。
 
 ### 前批 mac-doc-022（passed）
 - 范围 6 文件：两仓 README、配置说明、prepare/门禁测试、本文档。同步映射原始来源、大小/hash/缓存/分块及磁盘别名冲突用法和验证边界；保留更新入口。不扩大业务代码范围。
@@ -52,27 +57,9 @@
 - passed build/222 闭包/面板 2/vm.Script/UTF8/diff；macResultSummaryScope 7、resultsSummaryWebviewCache 6、macResultIdentity 8、remoteResultInspectionWorkflow 13、projectResultSyncCompleteness 18、manualDistributedResultSync 25，单文件串行 20 秒，无超时。新 VM fixture 补齐实际 FileTransferTypes/WrapperResultBundle 导入后通过。
 - 下一批仅两仓说明/发布门禁，再版本递增/配套发布与实际 VSIX/匿名更新；后续映射去重与物理发布分批，不宣称传输/完整科研/M5 验收。
 
-### 前批 mac-release-025（passed，0.5.288/0.2.82）
-- 本批 6 文件以内：两仓 package/lock、Experiment runtime/本文档；版本验证后普通推送，prepare/publish 绑定同步源码，实际 VSIX/匿名更新核验后交付，不 Actions/安装。
-- passed 版本门禁：两仓 build、221/26 闭包/面板 2/vm.Script、runtimeManifest 1、元数据/diff 一致；最初测试文件目录误写未启动，改为实际 test/runtimeManifest.test.js 后通过。
-- passed 完整 npm run release:prepare：两仓 build、221/26 闭包/面板 2，60 个目标文件逐文件串行/20 秒门禁（Experiment feature 45/core 1，SFTP 14），包括新增 YAML 候选与浅深高对比真实渲染。npm run release:publish 核验完整三附件草稿后公开；无 Actions/安装。
-- passed .288 实际 VSIX：Plan YAML 候选/实际面板后台联动 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8。本机模拟/AST，无科研/SSH/启动/停止/删除。YAML 包证据 JSON 回读有效，不需要修写。
-- passed .287/.81→.288/.82 实际匿名 updater：28 次公开请求，preview 筛选、清单/大小/hash/CRC/身份/平台、下载字节等于实际测试包，新 ResultCandidateYaml/PlanBuilder 与业务模块、两仓 README/包内说明匹配来源。同版本跳过/不降级通过，不实际安装/M5。
-- 第二十五版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.288 已公开：Experiment 来源 `33fe795f88ac8e50c035dac7b452b2faf652be9f`、SFTP 来源 `1a87364fc251e9dbdcf8267ebdeadf614298e2ab`，已普通推送/fetch 相等；历史包保留不覆盖。下一批限结果汇总授权/映射下载的一组问题，最多 8 文件，README/配置与同一更新通道持续同步。
-- mac-doc-020 Experiment `466f9651324ec905ac01a57d210e45e93048b807`、SFTP `a3c763e6f9eaec56c2c3cb213fd089c8dab781e9` 已普通推送/fetch 核对。
-
-### 前批 mac-doc-020（passed）
-- 7 文件以内：两仓 README、包内配置说明、prepare/门禁测试/配置说明测试、本文档；同步 Mac 结果路径的 YAML 引号用法与当前验证范围，保留更新入口及 M5 边界。
-- mac-005x-yaml `17ba8b376231633cdd062306b287f46b26d68078` 已普通推送并 fetch 核对 origin/master。
-- passed build/221 闭包/面板 2/vm.Script、macSetupGuide 1、macRelease 4 串行、三份文档 UTF8/更新入口/验收范围及 diff；新增 macPlanResultCandidates/jsonConfigOnboarding 门禁。下一批版本元数据和本机配套发布，不安装扩展。
-
-### 前批 mac-005x-yaml（passed）
-- 4 文件：PlanBuilder.legacy.ts、mac/ResultCandidateYaml.ts、新 macPlanResultCandidates.test.js、本文档。
-- 结果 single-line YAML scalar 单次解码：单双引号/转义、hash/逗号/实际空格；块/flow 列表与对象路径、命令目标保持真实 POSIX 拼写。Mac 候选完整路径去重，保留占位符，不借用另一目录同名文件；错误路径不修复。非 Mac 原契约折叠保留。
-- passed npm run build：221 模块清单、面板脚本 2；npm run verify:package-runtime：221 闭包；vm.Script 与 git diff --check。
-- passed 串行 node --test --test-force-exit --test-timeout 20000：macPlanResultCandidates 7、macResultCandidates 6、outputCandidateDedupRegression 3、planOutputEvidenceSignals 1、backendOutputDerivationCaches 4、projectResultLocationClarity 6、planScopedResultCandidateCache 10、planSelectionPreviewAndWorkerEmptyState 5、jsonConfigOnboarding 1。
-- 编译真实 PlanBuilder 在 Mac/Windows 平台 VM 隔离、生成实际面板/后台匹配联动；不运行科研/SSH/启动/停止/删除。YAML 单行标量参考官方 1.2.2；不是完整 YAML loader，锚点/多行等未新增验收。
-- 下一批：两仓 README/配置说明更新本批范围并新增发布门禁，最多 8 文件；再补丁递增和配套 prepare/publish/实际 VSIX/匿名更新。后续仅结果汇总授权/映射下载一组相关问题。
+### 压缩历史（完整证据见 Git）
+- mac-005x-yaml `17ba8b376231633cdd062306b287f46b26d68078` 已推送：单行结果 YAML 引号/转义仅解码一次，原始 POSIX 候选与实际面板/后台联动 7、相邻 8 文件串行通过；build/221 闭包/面板 2/vm.Script。不是完整 YAML loader，锚点/多行/其他字段 pending。
+- mac-doc-020 Experiment `466f9651324ec905ac01a57d210e45e93048b807`/SFTP `a3c763e6f9eaec56c2c3cb213fd089c8dab781e9`；.288/.82 来源 `33fe795f88ac8e50c035dac7b452b2faf652be9f`/`1a87364fc251e9dbdcf8267ebdeadf614298e2ab`，交付 `2ff50131c2204fce96fffc21c78fc6353f55dd40`，均普通推送/fetch 相等。完整 prepare 60 文件/build/221 与 26 闭包；实际包 YAML 7/候选 6/结果 8/CLI 2/启动 8、匿名 28 请求通过，不安装/M5。
 
 ## 已交付与证据
 - passed mac-002/003/004：独立身份/命名空间/AppSupport 发现文件，独立启动更新入口；preview 列表、缓存/限流、完整包验证、SFTP→Experiment、回执补装/不降级、本地业务门禁。双仓提交绑定，本机发布完整三附件，不用 Actions/安装。
@@ -87,7 +74,7 @@
 - .287 交付记录 fcff4d065efaa0450455c27aeb5b998cdd4e00f9 已推送/fetch 相等；旧版本/附件保留，不覆盖。
 
 ## 未完成与下一边界
-- pending mac-005：命令回执来源授权、映射传输去重/物理下载发布、Webview 行字段序列化、Agent 结果读取、实际解析、归档、其余 Windows 专属业务依赖，逐批适配。新摘要范围门禁不代表这些链路已验收。
+- pending mac-005：命令回执来源授权、映射物理复用/原子下载发布、Webview 行字段序列化、Agent 结果读取、实际解析、归档、其余 Windows 专属业务依赖，逐批适配。新摘要范围门禁不代表这些链路已验收。
 - 物理检查与启动/写入间尚非原子锁定，完整 YAML 特性及 suite/config 等其他 scalar 不在本批证据内。
 - pending mac-006：真实 M5 首装→更新/设置保留/重载/部分失败补装；Termius、独立密钥/密码传输/中文路径/断连；单 Worker、多 Worker、Hub/Worker科研主流程。
 - 本地更新链路、VM/AST 与 headless 通过不能宣称完整科研或 M5 验收。用户延后真机验收，不阻塞可继续的本地适配。
