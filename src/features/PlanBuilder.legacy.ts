@@ -232,6 +232,8 @@ export interface PlanResultCoverage {
 }
 
 import { createHash } from "crypto";
+import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
+import { decodeMacResultYamlScalar } from "../mac/ResultCandidateYaml";
 
 export const PLAN_REGISTRY_PATH = "simple_cluster/plans/plan_registry.json";
 export const PLAN_REGISTRY_LOCAL_PATH = "simple_cluster/plans/plan_registry.local.json";
@@ -607,10 +609,10 @@ export function parsePlanOutputEvidence(yaml, commands = {}) {
         ...extractYamlResultListValues(clean, key),
         ...extractYamlFlowResultListValues(clean, key),
     ].map((value) => ({ key, value: normalizePlanCandidatePath(value) }))).filter((item) => isPlanParseableResultCandidate(item.value));
-    const declaredOutputs = uniquePlanStrings([
+    const declaredOutputs = (process.platform === "darwin" ? dedupOutputCandidates : uniquePlanStrings)([
         ...extractYamlResultListValues(clean, "outputs"),
         ...extractYamlFlowResultListValues(clean, "outputs"),
-    ].map((value) => stripYamlScalar(value).replace(/\\/g, "/"))
+    ].map((value) => process.platform === "darwin" ? normalizeMacResultCandidatePath(value) : stripYamlScalar(value).replace(/\\/g, "/"))
         .filter((value) => value && !/^(?:[A-Za-z]:|\/)/.test(value) && !value.split("/").includes("..")));
     const dirs = resultDirKeys.flatMap((key) => [
         ...extractYamlStringValues(clean, key),
@@ -680,10 +682,11 @@ export function parsePlanSummary(yaml) {
     const evidence = parsePlanOutputEvidence(clean, { mode, trainCommand, testCommand });
     const baseConfig = firstTopLevelPlanScalar(clean, anchors, "base_config", "config");
     const configSources = planConfigSources(clean);
-    const existingCandidates = new Set(evidence.outputCandidates.map((item) => String(item || "").trim()).filter(Boolean));
+    const existingCandidates = new Set(evidence.outputCandidates.map((item) => process.platform === "darwin" ? item : String(item || "").trim()).filter(Boolean));
     const existingCandidateKeys = new Set(evidence.outputCandidates.map((item) => normalizeOutputCandidateKey(String(item || ""))).filter(Boolean));
     const outputSignals = evidence.outputSignals.filter((signal) => {
-        const candidate = signal.match(/^结果文件:\s*[^=]+=([^=]+)$/)?.[1]?.trim();
+        const rawCandidate = signal.match(process.platform === "darwin" ? /^结果文件:\s*[^=]+=([\s\S]+)$/ : /^结果文件:\s*[^=]+=([^=]+)$/)?.[1];
+        const candidate = process.platform === "darwin" ? rawCandidate : rawCandidate?.trim();
         if (!candidate || existingCandidates.size === 0)
             return true;
         return existingCandidates.has(candidate) || existingCandidateKeys.has(normalizeOutputCandidateKey(candidate));
@@ -963,6 +966,11 @@ function isMeaningfulYamlValue(value) {
 }
 function extractYamlStringValues(text, key) {
     const values = [];
+    if (process.platform === "darwin" && [...directResultKeys, ...resultDirKeys].includes(key)) {
+        const pattern = new RegExp(`^[ \\t]*${escapeRegExp(key)}:[ \\t]*([^\\r\\n]*)`, "gm");
+        for (const match of text.matchAll(pattern)) values.push(decodeMacResultYamlScalar(match[1]));
+        return values;
+    }
     const pattern = new RegExp(`^\\s*${escapeRegExp(key)}:[ \\t]*["']?([^"'#\\r\\n]+)`, "gim");
     let match;
     while ((match = pattern.exec(text)))
@@ -1052,8 +1060,8 @@ function resultValuesFromYamlItem(item) {
     }
     const pair = text.match(/^([A-Za-z0-9_.-]+)\s*:\s*(.+)$/);
     if (pair)
-        return resultPathKey(pair[1]) ? [stripYamlScalar(pair[2])] : [];
-    return [stripYamlScalar(text)];
+        return resultPathKey(pair[1]) ? [process.platform === "darwin" ? decodeMacResultYamlScalar(pair[2]) : stripYamlScalar(pair[2])] : [];
+    return [process.platform === "darwin" ? decodeMacResultYamlScalar(text) : stripYamlScalar(text)];
 }
 function resultPathKey(key) {
     return objectResultPathKeys.has(key);
@@ -1062,7 +1070,7 @@ function extractYamlFlowMapValues(text, ...keys) {
     const keySet = new Set(keys);
     return yamlFlowMapPairs(text)
         .filter((item) => keySet.has(item.key))
-        .map((item) => stripYamlScalar(item.value))
+        .map((item) => process.platform === "darwin" && [...directResultKeys, ...resultDirKeys].includes(item.key) ? decodeMacResultYamlScalar(item.value) : stripYamlScalar(item.value))
         .filter(Boolean);
 }
 function extractYamlFlowResultListValues(text, key) {
@@ -1099,15 +1107,18 @@ function yamlFlowMapBodies(text) {
             if (escape) {
                 escape = false;
             }
-            else if (ch === "\\") {
+            else if (ch === "\\" && (process.platform !== "darwin" || quote === '"')) {
                 escape = true;
+            }
+            else if (process.platform === "darwin" && quote === "'" && ch === "'" && text[index + 1] === "'") {
+                index++;
             }
             else if (ch === quote) {
                 quote = "";
             }
             continue;
         }
-        if (ch === "\"" || ch === "'") {
+        if ((ch === "\"" || ch === "'") && (process.platform !== "darwin" || index === 0 || /[\s:,[{=]/.test(text[index - 1]))) {
             quote = ch;
             continue;
         }
@@ -1136,7 +1147,13 @@ function splitTopLevelYamlList(text) {
     let start = 0;
     for (let i = 0; i < text.length; i++) {
         const ch = text[i];
-        if ((ch === "\"" || ch === "'") && text[i - 1] !== "\\")
+        if (process.platform === "darwin" && quote) {
+            if (quote === '"' && ch === "\\") { i++; continue; }
+            if (quote === "'" && ch === "'" && text[i + 1] === "'") { i++; continue; }
+            if (ch === quote) quote = "";
+            continue;
+        }
+        if ((ch === "\"" || ch === "'") && text[i - 1] !== "\\" && (process.platform !== "darwin" || i === 0 || /[\s:,[{=]/.test(text[i - 1])))
             quote = quote === ch ? "" : quote || ch;
         if (!quote && (ch === "{" || ch === "["))
             depth++;
@@ -1157,9 +1174,15 @@ function stripYamlLineComment(value) {
     let quote = "";
     for (let i = 0; i < value.length; i++) {
         const ch = value[i];
-        if ((ch === "\"" || ch === "'") && value[i - 1] !== "\\")
+        if (process.platform === "darwin" && quote) {
+            if (quote === '"' && ch === "\\") { i++; continue; }
+            if (quote === "'" && ch === "'" && value[i + 1] === "'") { i++; continue; }
+            if (ch === quote) quote = "";
+            continue;
+        }
+        if ((ch === "\"" || ch === "'") && value[i - 1] !== "\\" && (process.platform !== "darwin" || i === 0 || /[\s:,[{=]/.test(value[i - 1])))
             quote = quote === ch ? "" : quote || ch;
-        if (ch === "#" && !quote)
+        if (ch === "#" && !quote && (process.platform !== "darwin" || i === 0 || /[ \t]/.test(value[i - 1])))
             return value.slice(0, i);
     }
     return value;
@@ -1240,14 +1263,15 @@ function hasCommandTextOutputTarget(command) {
         /\b(?:stdout|stderr)\.log\b/i.test(text);
 }
 function normalizePlanCandidateDir(value) {
-    const text = normalizePlanCandidatePath(value).replace(/\/+$/, "");
+    const text = process.platform === "darwin" ? normalizePlanCandidatePath(value) : normalizePlanCandidatePath(value).replace(/\/+$/, "");
     if (!text)
         return "";
-    if (/\.(csv|json|txt|log|out)$/i.test(text))
+    if (/\.(csv|json|txt|log|out)$/i.test(process.platform === "darwin" ? text.trimEnd() : text))
         return text.split("/").slice(0, -1).join("/") || ".";
     return text;
 }
 function normalizePlanCandidatePath(value) {
+    if (process.platform === "darwin") return normalizeMacResultCandidatePath(value);
     const text = stripYamlScalar(value).replace(/\\/g, "/");
     if (!text || /^(none|null|false)$/i.test(text))
         return "";
@@ -1269,19 +1293,20 @@ function expandPlanPathPlaceholders(value) {
         .replace(/^\/+/, "");
 }
 function isPlanParseableResultCandidate(value) {
-    const text = String(value || "").trim().replace(/\\/g, "/");
+    const text = process.platform === "darwin" ? normalizeMacResultCandidatePath(value) : String(value || "").trim().replace(/\\/g, "/");
     if (!text || isNonResultMetadataPath(text))
         return false;
-    return /\.(csv|json|txt|log|out)$/i.test(text) && isPlanAllowedResultCandidate(text);
+    return /\.(csv|json|txt|log|out)$/i.test(process.platform === "darwin" ? text.trimEnd() : text) && isPlanAllowedResultCandidate(text);
 }
 function isNonResultMetadataPath(value) {
-    const text = String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+    const text = process.platform === "darwin" ? normalizeMacResultCandidatePath(value).trimEnd() : String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
     const base = text.split("/").pop() || "";
     return /^simple_cluster\/results\//i.test(text)
         || /^(?:jobs\.csv|artifact_manifest\.json|checkpoint_manifest\.json|manifest\.json|metadata\.json|status\.json|state\.json|progress\.json|job\.json|jobs\.json|env_snapshot\.json|config_snapshot\.(?:json|ya?ml))$/i.test(base)
         || /(?:_snapshot|_manifest|_status|_state|_progress)\.json$/i.test(base);
 }
 function isPlanAllowedResultCandidate(value) {
+    if (process.platform === "darwin") return Boolean(normalizeMacResultCandidatePath(value));
     const text = expandPlanPathPlaceholders(String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, ""));
     const parts = text.split("/").filter((part) => part && part !== ".");
     if (!parts.length || parts.includes(".."))
@@ -1306,10 +1331,15 @@ function isPlanAllowedResultCandidate(value) {
 function uniquePlanStrings(values) {
     return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
 }
+// Mac 使用经校验的完整原始路径键；下列折叠仅为非 Mac 兼容。
 // 输出候选归一键（去重×2根因修复）：trim→反斜杠转正斜杠→占位符展开→小写；
 // 4种契约文件（metrics_summary.csv/metrics_case.csv/stdout.log/stderr.log）按小写basename折叠，
 // 大表（experiments/results/<method>.csv等）走全路径键，避免不同方法名被误折叠。
 export function normalizeOutputCandidateKey(value) {
+    if (process.platform === "darwin") {
+        const raw = normalizeMacResultCandidatePath(value);
+        return raw ? `path:${raw}` : "";
+    }
     const raw = String(value || "").trim().replace(/\\/g, "/");
     if (!raw)
         return "";
@@ -1326,7 +1356,7 @@ function dedupOutputCandidates(values) {
     const seen = new Set();
     const out = [];
     for (const raw of values || []) {
-        const text = String(raw || "").trim();
+        const text = process.platform === "darwin" ? normalizeMacResultCandidatePath(raw) : String(raw || "").trim();
         if (!text)
             continue;
         const key = normalizeOutputCandidateKey(text);
