@@ -20787,6 +20787,13 @@ export class RealtimeTunnelPanelProvider {
         return targets;
     }
     currentAgentPreparationBlockers() {
+        if (this.isMacVariant()) {
+            if (this.setupConfig.manualEndpointError) return [this.setupConfig.manualEndpointError];
+            try { ManualTunnel_1.endpointsFromSetup(this.setupConfig); }
+            catch (error) { return [errorMessage(error)]; }
+            const topology = this.projectTopologyAssessment();
+            return topology.valid ? [] : topology.issues;
+        }
         return uniqueStrings([
             ...this.currentTunnelLaunchBlockers(),
             ...agentSessionReuseBlockers(this.agentStartupTargets()),

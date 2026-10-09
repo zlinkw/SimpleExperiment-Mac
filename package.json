@@ -122,7 +122,7 @@
       },
       {
         "command": "simpleExperimentMac.prepareAgents",
-        "title": "SimpleExperiment：准备 Agent 并启动",
+        "title": "SimpleExperiment Mac：准备项目与 Agent（手动启动）",
         "icon": "$(server-process)"
       },
       {

@@ -6764,8 +6764,8 @@ export function renderPanelHtml(): string {
     }
 
     const COMMAND_HELP_TEXT = Object.freeze({
-        startAllConnections: "打开已配置的 Xshell 连接",
-        prepareAgents: "部署 Agent、写入受管自启动命令、启动会话并检测全部",
+        startAllConnections: "查看 Termius 手动启动与转发指引",
+        prepareAgents: "确认后通过 SimpleSFTP 上传项目和 runtime，再按指引手动启动 Agent",
         testAll: "检测全部",
         snapshot: "刷新快照",
         resetUiLayout: "恢复布局",
@@ -9027,6 +9027,18 @@ export function renderPanelHtml(): string {
     function renderSyncSection(state) {
       setHtmlIfChanged("syncChainOverview", renderServerChainOverview(state));
       setHtmlIfChanged("syncServerOverview", renderCheckStaticReports(state));
+      if ((state.setup || {}).manualProvider === "termius") {
+        document.querySelectorAll('[data-command="prepareAgents"]').forEach(button => {
+          if (button.classList?.contains("is-loading")) return;
+          button.textContent = "准备项目与 Agent";
+          button.title = "确认后通过 SimpleSFTP 上传项目和 runtime；再按指引在 Termius 手动启动 Agent，不会自动重启实验";
+        });
+        document.querySelectorAll('[data-command="startAll"], [data-command="startAllConnections"]').forEach(button => {
+          if (button.classList?.contains("is-loading")) return;
+          button.textContent = "Termius 手动启动指引";
+          button.title = "查看当前端点的操作指引；转发与 Agent 由用户在 Termius 手动启动";
+        });
+      }
     }
 
     function renderManualServerCards(state) {
@@ -9034,7 +9046,7 @@ export function renderPanelHtml(): string {
       const endpoints = [];
       if (setup.hubHost) endpoints.push({ id: "hub", label: setup.hubDisplayName || "Hub", host: setup.hubHost, user: setup.hubUser, localHost: setup.localForwardHost, localPort: setup.localForwardPort, remoteHost: setup.remoteAgentHost, remotePort: setup.remoteAgentPort, root: setup.agentProjectDir, enabled: topology.hubAllowed === true });
       asArray(setup.workerTunnels).forEach(worker => endpoints.push({ id: worker.id, label: worker.displayName || worker.id, host: worker.workerHost, user: worker.workerUser, localHost: worker.localForwardHost, localPort: worker.localForwardPort, remoteHost: worker.remoteAgentHost, remotePort: worker.remoteTelemetryPort || worker.remoteAgentPort, root: worker.agentProjectDir, enabled: worker.enabled !== false }));
-      const cards = '<div class="server-card" data-anchor="settings-topology"><h3>Mac 服务器拓扑</h3><div class="configGrid">' + configSelect("topology", "mode", "拓扑模式", topology.mode || "", [["", "请选择"], ["single_worker", "单 Worker"], ["worker_pool", "多 Worker"], ["hub_worker", "Hub/Worker"]]) + '</div><div class="toolbar"><button data-command="saveTopologyMode" data-config-scope="topology">保存拓扑</button><button class="secondary" data-command="configureSessions">配置手动端点</button><button class="secondary" data-command="writeAgentCommands">Agent/tmux 指引</button><button class="secondary" data-command="testAll">检测全部</button></div><div class="muted">在 Termius 手动登录并启动转发。插件仅保存你填写的端点，不读取私有会话或密码，不自动重启远端实验。端点编辑入口为 VS Code 设置 tunnel.manualEndpoints。</div>' + (setup.manualEndpointError ? '<div class="status-failed">配置错误：' + esc(setup.manualEndpointError) + '</div>' : '') + (asArray(topology.issues).length ? '<div class="status-warning">' + esc(asArray(topology.issues).join("；")) + '</div>' : '') + '</div>';
+      const cards = '<div class="server-card" data-anchor="settings-topology"><h3>Mac 服务器拓扑</h3><div class="configGrid">' + configSelect("topology", "mode", "拓扑模式", topology.mode || "", [["", "请选择"], ["single_worker", "单 Worker"], ["worker_pool", "多 Worker"], ["hub_worker", "Hub/Worker"]]) + '</div><div class="toolbar"><button data-command="saveTopologyMode" data-config-scope="topology">保存拓扑</button><button class="secondary" data-command="configureSessions">配置手动端点</button><button data-command="prepareAgents" title="确认后通过 SimpleSFTP 上传当前项目和 runtime；Agent 由用户手动启动">准备项目与 Agent</button><button class="secondary" data-command="writeAgentCommands">Agent/tmux 指引</button><button class="secondary" data-command="testAll">检测全部</button></div><div class="muted">准备完成后在 Termius 手动登录、启动转发和 Agent，再检测。插件不读取私有会话或密码，不自动重启远端实验。端点编辑入口为 VS Code 用户设置 tunnel.manualEndpoints。</div>' + (setup.manualEndpointError ? '<div class="status-failed">配置错误：' + esc(setup.manualEndpointError) + '</div>' : '') + (asArray(topology.issues).length ? '<div class="status-warning">' + esc(asArray(topology.issues).join("；")) + '</div>' : '') + '</div>';
       setHtmlIfChanged("serverSettingsCards", cards + endpoints.map(endpoint => '<div class="server-card"><h3>' + esc(endpoint.label) + ' · ' + esc(endpoint.id) + '</h3><div>' + esc(endpoint.user + "@" + endpoint.host) + '</div><div>手动转发：' + esc(endpoint.localHost + ":" + endpoint.localPort + " → " + endpoint.remoteHost + ":" + endpoint.remotePort) + '</div><div>项目父目录：' + esc(endpoint.root) + '</div><div class="muted">' + (endpoint.enabled ? "启用" : "当前拓扑不使用或已禁用") + '</div></div>').join(""));
     }
     function renderServerCardsV2(state) {
@@ -16672,7 +16684,7 @@ export function renderPanelHtml(): string {
         uploadProjectToWorkers: "上传 Worker",
         distributeCodeToWorkers: "分发 Worker",
         deployLatestAgent: "部署 Agent",
-        prepareAgents: "准备 Agent 并启动",
+        prepareAgents: "准备项目与 Agent",
         configureDownloadScope: "旧版下载范围",
         configureCodeSyncIncludes: "项目同步范围与状态",
         configureServerSyncScope: "项目同步范围与状态",
@@ -17042,7 +17054,7 @@ export function renderPanelHtml(): string {
       if (command === "startAll" && !hasAnyTunnelSession(state)) return "请先配置 Hub 或 Worker 的 Xshell 隧道会话";
       if (command === "startAgents" && !hasAnyTunnelSession(state)) return "请先配置 Hub 或 Worker 的 Xshell 隧道会话";
       if (command === "startAllConnections" && !hasAnyTunnelSession(state)) return "请先配置 Xshell 隧道会话";
-      if (command === "prepareAgents" && !serverSetupReadiness(state).ready) return "请先配置 Hub/Worker 的 Xshell 会话和项目父目录";
+      if (command === "prepareAgents" && !serverSetupReadiness(state).ready) return (state.setup || {}).manualProvider === "termius" ? serverSetupReadiness(state).summary : "请先配置 Hub/Worker 的 Xshell 会话和项目父目录";
       if (command === "prepareAgents") {
         const preparationBlockers = agentPreparationBlockersFromState(state);
         if (preparationBlockers.length) return preparationBlockers[0];
@@ -17098,6 +17110,7 @@ export function renderPanelHtml(): string {
     }
     function hasAnyTunnelSession(state) {
       const setup = state.setup || {};
+      if (setup.manualProvider === "termius") return serverSetupReadiness(state).ready;
       return Boolean(setup.savedSessionPath || asArray(setup.workerTunnels || []).some((worker) => worker.enabled !== false && worker.savedSessionPath));
     }
     function hasAnyAgentSession(state) {
@@ -17670,13 +17683,17 @@ export function renderPanelHtml(): string {
       const workers = enabledWorkerTunnelsForState(state);
       const topology = (state || {}).topology || {};
       const hubRequired = topology.mode ? topology.mode === "hub_worker" : true;
-      if (setup === serverSetupReadinessCacheSetup && workers === serverSetupReadinessCacheWorkers && serverSetupReadinessCacheValue && serverSetupReadinessCacheValue.hubRequired === hubRequired) return serverSetupReadinessCacheValue;
+      if (setup.manualProvider !== "termius" && setup === serverSetupReadinessCacheSetup && workers === serverSetupReadinessCacheWorkers && serverSetupReadinessCacheValue && serverSetupReadinessCacheValue.hubRequired === hubRequired) return serverSetupReadinessCacheValue;
       const missing = [];
-      if (hubRequired && !meaningfulValue(setup.savedSessionPath)) missing.push("Hub Xshell 会话");
+      const manual = setup.manualProvider === "termius";
+      if (manual && setup.manualEndpointError) missing.push(setup.manualEndpointError);
+      if (manual && topology.valid === false) missing.push.apply(missing, asArray(topology.issues));
+      if (manual && !workers.length) missing.push("执行 Worker 手动端点");
+      if (hubRequired && !(manual ? meaningfulValue(setup.hubHost) && Number.isInteger(setup.localForwardPort) : meaningfulValue(setup.savedSessionPath))) missing.push(manual ? "Hub 手动端点" : "Hub Xshell 会话");
       if (hubRequired && !meaningfulValue(setup.agentProjectDir)) missing.push("Hub 项目父目录");
       workers.forEach((worker) => {
         const label = String(worker.displayName || worker.id || "Worker");
-        if (!meaningfulValue(worker.savedSessionPath)) missing.push(label + " Xshell 会话");
+        if (!(manual ? meaningfulValue(worker.workerHost) && Number.isInteger(worker.localForwardPort) : meaningfulValue(worker.savedSessionPath))) missing.push(label + (manual ? " 手动端点" : " Xshell 会话"));
         if (!meaningfulValue(worker.agentProjectDir)) missing.push(label + " 项目父目录");
       });
       const workerLabel = workers.length ? "；" + workers.length + " 个 Worker" : "；Hub 模式";

@@ -73,8 +73,46 @@ test("manual server cards expose settings, guide and detection without session f
   let html = ""; const sandbox = { asArray: v => Array.isArray(v) ? v : [], esc: v => String(v).replace(/</g, "&lt;"), configSelect: () => "select", setHtmlIfChanged: (_, v) => { html = v; } };
   vm.createContext(sandbox); vm.runInContext(source.slice(start, end), sandbox);
   sandbox.renderManualServerCards({ setup: manual.setupFromManualEndpoints([{ ...endpoint(), displayName: "<script>" }]), topology: { mode: "single_worker", issues: [] } });
-  for (const text of ["configureSessions", "writeAgentCommands", "testAll", "29101", "29200", "研究 项目", "&lt;script>"]) assert.ok(html.includes(text), text);
+  for (const text of ["configureSessions", "prepareAgents", "准备项目与 Agent", "writeAgentCommands", "testAll", "29101", "29200", "研究 项目", "&lt;script>"]) assert.ok(html.includes(text), text);
   assert.doesNotMatch(html, /\.xsh|Xshell|<script>/);
+});
+
+test("actual Mac preparation blockers accept manual endpoints and report invalid topology without Xshell checks", () => {
+  const instance = compiledMethod("currentAgentPreparationBlockers");
+  instance.isMacVariant = () => true; instance.setupConfig = manual.setupFromManualEndpoints([endpoint()]);
+  instance.projectTopologyAssessment = () => ({ valid: true });
+  instance.currentTunnelLaunchBlockers = () => { throw Error("Xshell must not be inspected"); };
+  assert.equal(instance.currentAgentPreparationBlockers().length, 0);
+  instance.projectTopologyAssessment = () => ({ valid: false, issues: ["需要两个 Worker"] });
+  assert.equal(instance.currentAgentPreparationBlockers()[0], "需要两个 Worker");
+  instance.setupConfig.manualEndpointError = "无效端点";
+  assert.equal(instance.currentAgentPreparationBlockers()[0], "无效端点");
+});
+
+test("Mac UI readiness and toolbar follow saved endpoints rather than missing session files", () => {
+  const source = fs.readFileSync(path.resolve(__dirname, "../../src/ui/PanelHtml.legacy.ts"), "utf8");
+  const sandbox = { EMPTY_SERVER_SETUP: {}, serverSetupReadinessCacheSetup: null, serverSetupReadinessCacheWorkers: null, serverSetupReadinessCacheValue: null,
+    enabledWorkerTunnelsForState: state => state.setup.workerTunnels.filter(worker => worker.enabled), meaningfulValue: value => Boolean(value), asArray: value => Array.isArray(value) ? value : [],
+    setHtmlIfChanged() {}, renderServerChainOverview: () => "", renderCheckStaticReports: () => "" };
+  const prepare = {}, start = {};
+  sandbox.document = { querySelectorAll: selector => selector.includes('prepareAgents') ? [prepare] : [start] };
+  vm.createContext(sandbox);
+  for (const [name, next] of [["serverSetupReadiness", "executionWorkerReadiness"], ["hasAnyTunnelSession", "hasAnyAgentSession"], ["renderSyncSection", "renderManualServerCards"]]) {
+    vm.runInContext(source.slice(source.indexOf("    function " + name + "("), source.indexOf("    function " + next + "(")), sandbox);
+  }
+  for (const mode of ["single_worker", "worker_pool", "hub_worker"]) {
+    const points = mode === "single_worker" ? [endpoint()] : mode === "worker_pool" ? [endpoint(), endpoint("worker-b", 29102)] : [endpoint("hub", 29100), endpoint()];
+    const state = { setup: manual.setupFromManualEndpoints(points), topology: { mode, valid: true } };
+    assert.equal(sandbox.serverSetupReadiness(state).ready, true); assert.equal(sandbox.hasAnyTunnelSession(state), true);
+    sandbox.renderSyncSection(state); assert.equal(prepare.textContent, "准备项目与 Agent"); assert.equal(start.textContent, "Termius 手动启动指引");
+    state.setup.manualEndpointError = "配置错误"; assert.equal(sandbox.serverSetupReadiness(state).ready, false);
+  }
+  const pkg = require("../../package.json");
+  const title = pkg.contributes.commands.find(command => command.command === "simpleExperimentMac.prepareAgents").title;
+  for (const file of ["README.md", "docs/simple-experiment-setup.md"]) {
+    const doc = fs.readFileSync(path.resolve(__dirname, "../..", file), "utf8");
+    assert.ok(doc.includes(title)); assert.ok(doc.includes("确认上传并查看指引")); assert.ok(doc.includes("检查更新"));
+  }
 });
 
 test("actual endpoint registry uses each configured port and excludes an absent Hub", () => {

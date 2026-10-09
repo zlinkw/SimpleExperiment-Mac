@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-**当前 preview 已交付独立安装、配套更新、Termius 手动端点配置与 Agent/tmux 文本指引，完整科研业务仍在适配。** M5 真机更新、独立认证传输和三拓扑尚未验收。Mac 不使用 Xshell 会话文件；旧配置入口转至手动端点，旧启动/准备入口打开操作指引，不会自动部署或启动 Agent。
+**当前 preview 已交付独立安装、配套更新、Termius 手动端点配置、项目与 runtime 上传及 Agent/tmux 指引，完整科研业务仍在适配。** M5 真机更新、独立认证传输和三拓扑尚未验收。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，Agent 和隧道由用户在 Termius 手动启动。
 
 ## 1. 首次安装与打开说明
 
@@ -159,11 +159,21 @@
 
 模式保存在当前项目；手动端点保存在用户设置。新增 Worker 时复制数组中的 Worker 对象，修改 ID、主机、账号、路径和本机端口。Hub 使用相同字段结构，ID/角色改为 `hub`，使用独立本机端口。停用端点可设 `enabled: false`。
 
-远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份，部署 runtime 与项目；Termius 的凭据不会被读取。**独立认证入口已接入，完整 Mac 项目准备仍在适配；打开指引不会自动传输 runtime。**
+远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份；Termius 的凭据不会被读取。
+
+### 准备项目与 Agent
+
+1. 打开本机项目，保存有效拓扑与端点，在 SimpleSFTP 中配置各服务器认证。SSH 认证与 Agent HTTP 隧道分开，上传前无需 Agent 已运行。
+2. 点击 **设置 → 服务器 → 准备项目与 Agent**，或按 **⇧⌘P → SimpleExperiment Mac：准备项目与 Agent（手动启动）**。运行环境准备区域的同名按钮也可使用。
+3. 确认对话框列出每台服务器的 `用户名@主机:SSH端口`、最终项目目录及 runtime 安装目录。逐项核对后点击 **确认上传并查看指引**；取消不修改目标或上传。确认后端点/工作区变化会要求重新预览。
+4. 插件通过 SimpleSFTP 分别上传最新版 runtime 与当前本机项目。项目遵循现有上传忽略规则，不自动清理远端文件。默认 runtime 位于 `<项目父目录>/simple_agent/simple_cluster/runtime/`；最终项目位于 `<项目父目录>/<当前工作区名称>/`。
+5. 上传成功后打开下方的 Termius/tmux 指引。此时仅证明上传完成，尚未证明 Agent 就绪；不会自动登录、启动转发、重启 Agent 或停止远端实验。按指引手动操作后点击 **检测全部**。
+
+上传失败先核对 SimpleSFTP 的目标和认证、父目录权限及传输错误，再重试准备；已运行的实验保持原状态。这个准备流程已通过本地模拟测试，真实 SSH 和 M5 仍待验收。
 
 ### Agent/tmux 操作指引
 
-先打开本机项目并保存有效拓扑。点击服务器卡片 **Agent/tmux 指引**，或运行 **SimpleExperiment Mac：打开 Agent/tmux 操作指引**。生成的文本按当前端点、项目名、runtime 目录和 Python 路径给出命令。
+“准备项目与 Agent”成功后自动打开指引。需要再次查看时，点击服务器卡片 **Agent/tmux 指引**，或运行 **SimpleExperiment Mac：打开 Agent/tmux 操作指引**；单独打开这个入口只生成文本，不传输文件。命令按当前端点、项目名、runtime 目录和 Python 路径生成。
 
 1. 在对应服务器的 Termius 终端按指引接入已有 tmux 会话，或创建尚不存在的会话。
 2. 已有 Agent 正在运行时只检查；仅在新会话或确认 Agent 未启动时执行生成的启动命令。配置改变不会自动重启远端进程。
@@ -204,7 +214,8 @@ API 每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/
 | 业务面板打不开 | 使用底部 Mac preview 状态栏或命令面板检查更新 |
 | 找不到更新通知 | 手动检查，然后运行“安装 preview 配套更新” |
 | 配置说明 Markdown 预览不可用 | 插件回退为文本打开同一份说明 |
-| 仍看到 Xshell 字段或旧命令 | 使用“配置 Termius 手动端点”和“Agent/tmux 操作指引”；不在 Mac 上配置 `.xsh` 文件 |
+| 仍看到 Xshell 字段或旧命令 | 使用“配置 Termius 手动端点”“准备项目与 Agent”和“Agent/tmux 指引”；不在 Mac 上配置 `.xsh` 文件 |
+| 上传完成但 Agent 检测失败 | 在对应 Termius 终端核对实际 Python 环境、tmux 中的 Agent、端口和当前项目路径；上传不会自动启动 Agent |
 | 手动端点保存后报错 | 核对完整字段、整数端口、唯一 ID/启用端口及绝对 POSIX 路径；在用户设置 JSON 修改 |
 | 服务器列表为空 | 打开共享服务器配置填写真实目标，再选择服务器 |
 | Termius 已登录但传输失败 | 运行“SimpleSFTP Mac：配置服务器认证”，核对该目标的地址、用户名、SSH 端口与方式；两插件不读取 Termius 凭据 |
