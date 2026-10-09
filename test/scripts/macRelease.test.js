@@ -34,6 +34,6 @@ test("paired release gates include both repositories' POSIX path regressions", (
   assert.equal((prepare.match(/"macCliApi"/g) || []).length, 2);
   assert.match(prepare, /"macCliWorkflow"/);
   assert.match(prepare, /"macWorkflowBinding"/);
-  for (const file of ["macPlanIdentity", "macPlanFiles", "distributedProjectContract", "distributedPlanQueue", "distributedJobAutoRetry", "planSafeRetry", "distributedPlanSubmissionRouting", "planSubmissionVisiblePreflight"]) assert.ok(prepare.includes('"' + file + '"'));
+  for (const file of ["macPlanIdentity", "macPlanFiles", "macAgentPlanIdentity", "distributedPlanExecutionMode", "distributedProjectContract", "distributedPlanQueue", "distributedJobAutoRetry", "planSafeRetry", "distributedPlanSubmissionRouting", "planSubmissionVisiblePreflight"]) assert.ok(prepare.includes('"' + file + '"'));
   assert.match(prepare, /"--test-timeout", "20000"/);
 });

@@ -20,13 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005u-identity（passed，远端队列 Plan 路径身份）
+## 当前批次：mac-doc-016（passed，Agent 队列使用说明与门禁）
 ### 边界
 
-- 本批处理 Agent 持久队列的 Plan/outputDir 精确身份、接收/旧队列派发路径校验和 recall/停止身份匹配，共 8 文件（源码、隔离测试/fixture、4 个相邻队列 fixture 与计划）。不执行真实启动、停止、删除或传输。
-- passed build/219 闭包/面板脚本、隔离 Agent 队列路径回归 5、相邻模式 9/工作区 10/队列 29/旧 Agent 队列 1、idle admission 1、server Plan 队列 2、lifecycle 7，逐文件串行 20 秒。实际启动参数、scheduler 输出/状态、结果和归档写入仍列后批；说明与发布同步后交付 preview。
-
-- 相邻旧 fixture 补齐编译路径 helper 和已验证模式契约，生成的 Python fixture 保留供检查，不执行清理删除。
+- 两仓 README/包内说明补充配套 Agent 的手动升级与队列路径冲突处理，加入编译路径/模式发布门禁并同步发布说明，共 6 文件。更新按钮与旧入口保留。
+- passed UTF8 回读、build/219 闭包/面板脚本 2、配置说明 1/发布门禁 4 串行 20 秒；仅本地验证。真实启动/scheduler/结果/归档/M5 pending。
 
 ### 验证清单
 
@@ -56,6 +54,7 @@
 - passed preview-v0.5.283：两包实际 CLI 经真实本地 shell/Node health/实时 RPC，Experiment 中文 Plan 等待确认回执、seed 覆盖 RPC 前拒绝通过（2 包测试）；实际包编译 Mac 文件/相对路径模块、队列身份与 Mac 面板语法通过。真实匿名 updater 从 0.5.282/0.2.76 筛出两组件，23 次请求完成大小/hash/CRC/身份/平台核验；下载字节与已测试 VSIX 相同，新增 PlanFiles/PosixPath/分布式合同及既有业务模块和两仓 README/配置说明与来源匹配。同版本跳过/禁止降级通过，无真实科研/SSH/M5。
 - passed mac-005u-identity：Agent 持久接收、公共回执、旧队列派发和 recall/停止身份保留 Plan/outputDir 的大小写、Unicode、%20 与真实首尾空格；不把非字符串或反斜杠等坏相对路径改写后接收，非法旧 queued 行等待处理，active 行不修改。8 文件。编译函数隔离/本机队列与相邻模式、恢复、取消等回归通过，无真实科研/启动/停止/SSH/删除。
 - 本批校验：build/219 闭包/面板脚本 2、macAgentPlanIdentity 5、模式 9/工作区 10/队列 29、旧 durable 1/idle admission 1/server queue 2/lifecycle 7 串行通过。初次路径 fixture 使用带空格文件名作为 commandId，与非路径 ID 的既有 trim 冲突，改为独立 ID。旧 durable 文件一次 Python 子进程触发 10 秒超时，Node 在 20 秒内退出；保留 fixture、加入 3 秒 faulthandler 诊断后通过，原因未复现，不改生产代码或放宽时间限制。
+- passed mac-doc-016：两仓 README/配置说明补充配套 Agent 手动上传、Termius 启动/检测和精确队列身份冲突处理；原更新按钮/入口保留，隔离 Agent 路径/模式回归纳入发布门禁，6 文件。UTF8 回读、build/219 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过。
 - pending 下一批 mac-005u：远端 Agent 对 Plan/output_dir 的 strip 与 Windows 分隔符改写、结果/监控和归档 sidecar/写入边界继续适配；路径关键边界校验不是物理原子保证。先补说明与发布门禁，配套 preview。真实 SSH/三拓扑/M5 pending。
 
 
@@ -81,6 +80,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005u-identity 已验证源码 `9111947576b5f38d5b7b0368da235969e651ee9a` 已普通推送并 fetch 核对 origin/master。
 - mac-release-020 交付记录 `0a174e0cb58c8e2d957ffb9bfb558dc37cbeb275` 已普通推送并 fetch 核对 origin/master。
 - 第二十版 preview-v0.5.283 已发布：Experiment 来源 `abd30492c850836db7be79e3eb00c93f58686aa5`、SFTP 0.2.77 来源 `c228688e29701a1ab5e7dbcc4af57ed8e5a2ff4b` 已普通推送并 fetch 核对。实际包 CLI/编译文件模块与匿名下载通过；完整科研/SSH/M5 pending。
 - mac-doc-015 Experiment `9c0003371859033aaa8e674b0c5dbd83621f085d`、SFTP `3ae667adea74daa0b12e23ff795cc1275fb3820f` 已普通推送并 fetch 核对 origin/master。
