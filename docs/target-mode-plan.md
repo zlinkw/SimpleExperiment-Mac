@@ -20,12 +20,12 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-004e（running，第二版配套更新）
+## 当前批次：mac-005a（passed，mac 本地工作区路径）
 
 ### 边界
 
-- 第二版递增两组件，修复部分安装后的再次失败门禁；最多 8 个源/测试/文档文件。
-- 保护首版不可覆盖，准备第二版供 M5 首版到第二版升级验收；后续批次处理 mac 路径与认证。
+- 两插件本地 POSIX 工作区、中文/空格/大小写及 SFTP UI host 门禁；最多 8 个源/测试/文档文件。
+- 保留 Windows 旧入口与删除行为；Mac 不支持 Dev Containers；下一批共享租约路径规则及 Termius。
 
 ### 验证清单
 
@@ -33,6 +33,8 @@
 - passed SFTP 改用实际加载后的 API 导出断言，API/CLI 19 测试及 build/21 文件闭包通过；失败并非超时。
 - passed mac-004d prepare、完整草稿附件 SHA-256 核验后发布、实际匿名客户端下载并验证两包身份/版本/platform/CRC/hash；M5 真机验收仍 pending。
 - passed mac-004e 部分更新二次失败门禁 6 测试、两仓 build/闭包与面板脚本；第二版 prepare/publish 待同步后执行。
+- passed mac-004e 第二版 preview-v0.5.265 完整草稿附件核验后公开发布，两组件 0.5.265/0.2.63；真机升级待验证。
+- passed mac-005a Experiment 路径 7、SFTP 路径 6/工作区集成 5 测试，两仓 build/闭包/面板脚本；中文/空格/字面百分号/大小写、Mac 资源租约与 Containers 拒绝覆盖。SFTP 旧 namespace 错误提示修正后回归通过。
 
 - passed mac-004c 发布脚本语法及 3 测试：完整附件/hash、无安装/Actions/覆盖、已发布版本严格递增。实际 prepare/publish 随后执行。
 
@@ -70,6 +72,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+
+- 第二版 preview-v0.5.265 源码 Experiment `3b65c44085d66e1b0ab30db4e503c5fbc25eaddf`、SFTP `155d6e3605313bd0955b884202eef9a693160454`，两仓均已同步。
 
 - 首版 preview-v0.5.264 已公开发布，Experiment 0.5.264 来源 `bb831e32544c575b3a675e7fde5458c97d03a933`，SFTP 0.2.62 来源 `e755d8d62aae4c6f82fa7a549f9b4627012f1d6b`。完整附件及源码绑定已验证。
 
