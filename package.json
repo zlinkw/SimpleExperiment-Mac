@@ -504,7 +504,7 @@
             "offline_import"
           ],
           "scope": "application",
-          "description": "连接模式。Xshell 实时隧道模式只访问 127.0.0.1 本地端点。"
+          "description": "连接模式的兼容字段。Mac 使用 Termius 手动转发，端点管理仍在适配；当前不要使用旧 Xshell 自动会话入口。"
         },
         "simpleExperimentMac.tunnel.localForwardPort": {
           "type": "number",
@@ -512,7 +512,7 @@
           "minimum": 1024,
           "maximum": 65535,
           "scope": "application",
-          "description": "Xshell 会话在 127.0.0.1 上监听的本地转发端口。"
+          "description": "本机端口转发监听端口，应与用户手动启动的 Termius 转发一致。完整 Mac 端点接入仍在适配。"
         },
         "simpleExperimentMac.tunnel.remoteAgentPort": {
           "type": "number",

@@ -23,13 +23,25 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 
 首次安装与检查更新不需要服务器、Termius 隧道或成功加载业务面板。此后优先在插件内更新。
 
+## 在 Mac 上配置
+
+1. 在 VS Code 菜单 **File → Open Folder…** 打开本机项目，每个窗口只打开一个项目。路径使用 `/Users/实际用户名/Projects/项目名`，保留中文、空格和大小写。
+2. 按 **⇧⌘P** 运行 **SimpleExperiment：打开面板**，点击顶部 **配置说明**；也可直接运行 **SimpleExperiment：打开配置说明**，阅读随插件打包的 [Mac 配置说明](docs/simple-experiment-setup.md)。
+3. 按 **⌘,** 打开设置，搜索 `simpleSftpMac`。填写真实的 `localBase` 本机项目父目录和 `remoteBase` Linux 项目父目录，首次配置可关闭 `uploadOnSave`，先核对目标再手动上传。设置中使用绝对 POSIX 路径，不使用盘符、`~` 或 `$HOME` 占位。
+4. 运行 **SimpleSFTP：打开共享服务器配置**，填写真实主机、账号、SSH 端口和路径，保存后 **选择服务器**、**查看当前目标**。格式及操作见 [SimpleSFTP Mac README](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。SSH 端口与 Agent 转发端口分别配置。
+5. Termius 手动登录 Linux 并启动本地端口转发，每台服务器的本机监听端口唯一。记录端点供后续接入；当前端点管理、Agent 指引及独立认证仍在适配，旧 Xshell 自动启动按钮暂不适用于 Mac。
+
+配置说明包含单 Worker、多 Worker、Hub/Worker 的接入约定、数据目录及失败处理，并标明尚待交付的功能。打开 Mac 配置说明不会触发旧 Xshell 会话向导。
+
+在 Finder 按 **⇧⌘G** 可打开下文的 Application Support 目录。若需要终端中的 `code` 命令，在命令面板运行 **Shell Command: Install 'code' command in PATH** 后重新打开终端；见 [VS Code 官方 Mac 说明](https://code.visualstudio.com/docs/setup/mac)。安装 VSIX 不要求该命令。
+
 ## 更新按钮在哪里
 
 | 入口 | 操作 |
 | --- | --- |
 | **VS Code 底部右侧状态栏** | 点击 **Mac preview：…**，立即手动检查两组件。业务面板启动失败时此入口仍保留。 |
 | **命令面板 ⇧⌘P** | 运行 **SimpleExperiment Mac：检查 preview 配套更新**。 |
-| **SimpleExperiment 面板 → 设置** | 在 **插件配套更新** 一行点击 **检查更新**，发现新版后按通知操作。 |
+| **SimpleExperiment 面板 → 设置** | 在 **插件配套更新** 一行点击 **检查更新**，发现新版后点击 **更新并重载**。 |
 | **SimpleSFTP Mac 命令面板** | 运行 **SimpleSFTP Mac：检查 preview 配套更新**，交由 SimpleExperiment Mac 检查。 |
 
 发现新版本时点击通知中的 **更新并重载**。同一版本只主动提醒一次；关闭通知后，运行 **SimpleExperiment Mac：安装 preview 配套更新** 即可继续。

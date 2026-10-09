@@ -20,14 +20,19 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005b（passed，Mac 宿主与租约）
+## 当前批次：mac-doc-002（passed，苹果电脑配置说明）
 
 ### 边界
 
-- 放行 Apple Silicon 本地 UI host，修正两插件租约记录与进程内索引的 POSIX/大小写规则；最多 8 个源/测试/文档文件。
-- 保留 Windows 旧入口，拒绝 Linux/Intel Mac 宿主副作用；不改删除动作或实验契约。下一批 Termius 手动端点。
+- 用户追加优先级：面板“配置说明”和两仓 README 先按苹果电脑使用方式更新，随后深色配色，再恢复 Termius/认证主流程；本批最多 8 个文件。
+- Mac 配置说明不再触发旧 Xshell onboarding；明确现有操作入口与待适配能力。深色模式混合亮背景问题 pending，不在本批修改。
 
 ### 验证清单
+
+- passed mac-doc-002：两仓 build/包闭包/面板脚本通过；配置说明真实编译方法测试 1、SFTP 品牌测试 2 逐文件串行通过；UTF8、文档链接、JSON 示例和实际命令标题核对通过。两仓 README、包内配置说明、设置字段解释共 8 文件；Mac 打开说明不进入旧会话向导。
+- 下一批边界：版本递增并发布本批 Mac 说明，随后深色模式；Termius/认证继续保留待适配标记。
+- pending 深色模式：用户截图显示亮色页面/卡片与深色输入混用，文字对比不足。后续独立批次复现并验证浅色/深色/高对比。
+- 用户截图可证明 0.5.266/0.2.64 面板显示版本与成功检查状态；未证明从首版安装升级、设置保留或科研验收。
 
 - passed mac-005b 两仓 build/包闭包/面板脚本；Mac 宿主/租约路径 2、SFTP Mac 路径 1、SFTP 跨窗口资源租约 9、更新门禁 1 测试逐文件通过；大小写不同的 POSIX 根不共享进程内索引。
 
@@ -82,8 +87,9 @@
 
 ## 本批记录
 
+- mac-doc-002 SFTP `8d93015bdf4ee6870deb05eee388d37fd0cfc4cb` 已同步；Experiment 同批提交见 Git，发布批次记录真实提交。
 - 第三版 preview-v0.5.266 已发布，Experiment 来源 `9e45701bfe615c357ec407442e8a0ef688f63b1e`，SFTP 0.2.64 来源 `6172ae89b6a0da411c2219d6f9a9c0ce6b72ee81`。
-- 下一批边界：mac-005b Mac 宿主副作用入口及共享租约路径/大小写，最多 8 文件；随后 Termius 手动端点与独立认证。保持科研业务未验收标记。
+- mac-005b 已完成并同步：Experiment `c9649aecbe75364a03f3a21f88253398d32dc45d`、SFTP `e9056979e5eaef4070c0407add8076afc1dfefa0`。Termius 手动端点与独立认证待后续批次。
 
 - mac-ui-001 Experiment `0d7c786513fb1b45a9e758f9b1ef5079bb8b3785` 已同步。
 

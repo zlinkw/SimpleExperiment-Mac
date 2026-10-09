@@ -6905,6 +6905,9 @@ export class RealtimeTunnelPanelProvider {
             const document = await vscode.workspace.openTextDocument(uri);
             await vscode.window.showTextDocument(document, { preview: true, viewColumn: vscode.ViewColumn.Active });
         }
+        // Mac setup is documented around manual Termius forwarding. The legacy
+        // wizard assumes saved Windows sessions and must not run for this identity.
+        if (this.context.extension?.packageJSON?.name === "simple-experiment-mac") return;
         const seen = new Set();
         for (let step = 0; step < SETUP_GUIDE_MAX_STEPS; step += 1) {
             const enabledWorkers = this.enabledWorkerConfigs();
