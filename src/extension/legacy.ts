@@ -17422,7 +17422,7 @@ export class RealtimeTunnelPanelProvider {
         const destinations = new Map();
         const grouped = new Map();
         for (const item of planItems) {
-            const planFile = String(item.planFile || "");
+            const planFile = mappedResultPath(item.planFile);
             const summary = item.summary;
             const candidates = Array.isArray(item.candidates) ? item.candidates : [];
             if (candidates.length > 4096)
@@ -17430,7 +17430,7 @@ export class RealtimeTunnelPanelProvider {
             const workerTables = Array.isArray(summary?.workerResultTables) ? summary.workerResultTables : [];
             const availableWorkers = this.enabledWorkerConfigs().map((worker) => String(worker.id || "")).filter(Boolean);
             for (const candidate of candidates) {
-                const remotePath = String(candidate.remotePath || "").replace(/\\/g, "/");
+                const remotePath = process.platform === "darwin" ? mappedResultPath(candidate.remotePath) : String(candidate.remotePath || "").replace(/\\/g, "/");
                 if (!remotePath || remotePath.startsWith("/") || /^[A-Za-z]:/.test(remotePath) || remotePath.split("/").some((part) => !part || part === "." || part === ".."))
                     throw new Error(`远端结果路径不安全：${remotePath}`);
                 if (metricsOnly && !isResultMetricFile(remotePath))
@@ -17446,7 +17446,7 @@ export class RealtimeTunnelPanelProvider {
                 const sourceId = workerId || "hub";
                 const localRelative = methodResultArtifactLocalRelativePath(remotePath, planFile, summary, this.resultCsvDirectory || DEFAULT_RESULT_CSV_DIR, workerTables.length > 1 ? workerId : "");
                 const localPath = safeWorkspaceChildPath(root, localRelative);
-                const destinationKey = localRelative.toLowerCase();
+                const destinationKey = mappedResultPathKey(localRelative);
                 const previous = destinations.get(destinationKey);
                 if (previous && (previous.remotePath !== remotePath || previous.sourceId !== sourceId))
                     throw new Error(`多个指标文件对应同一本地路径：${localRelative}，已阻止覆盖。`);
@@ -17456,7 +17456,7 @@ export class RealtimeTunnelPanelProvider {
                 if (!grouped.has(sourceId))
                     grouped.set(sourceId, { sourceId, workerId, transfers: new Map(), entries: [] });
                 const batch = grouped.get(sourceId);
-                const remoteKey = remotePath.toLowerCase();
+                const remoteKey = mappedResultPathKey(remotePath);
                 const matchingTable = workerTables.find((table) => (!workerId || String(table.workerId || "").toLowerCase() === workerId.toLowerCase())
                     && [table.rawResultCsvPath, table.aggregateCsvPath, table.projectAggregateCsvPath, table.finalCsvPath, table.finalMarkdownPath, ...(table.metricPaths || [])].includes(remotePath));
                 const hintedBytes = candidate.bytes ?? candidate.size ?? matchingTable?.metricSizes?.[remotePath] ?? summary?.metricSizes?.[remotePath];
@@ -17488,7 +17488,8 @@ export class RealtimeTunnelPanelProvider {
         if (!entries.length)
             return { cancelled: false, overwrite: false, batches: [], skippedExisting: 0 };
         for (const entry of entries) {
-            const existing = await fs.stat(entry.localPath).catch(() => undefined);
+            const checked = process.platform === "darwin" ? await assertRealChildFile(root, entry.localRelative, "optional") : undefined;
+            const existing = checked ? checked.exists ? await fs.lstat(checked.full) : undefined : await fs.stat(entry.localPath).catch(() => undefined);
             if (existing && !existing.isFile())
                 throw new Error(`本地结果位置不是文件：${entry.localRelative}`);
             entry.exists = Boolean(existing);
@@ -17515,8 +17516,8 @@ export class RealtimeTunnelPanelProvider {
         }
         const selectedBatches = batches.map((batch) => {
             const entries = batch.entries.filter((entry) => overwrite || !entry.exists);
-            const selectedRemotes = new Set(entries.map((entry) => String(entry.remotePath || "").toLowerCase()));
-            const transfers = uniqueMappedTransfers(entries.filter((entry) => selectedRemotes.has(String(entry.remotePath || "").toLowerCase())));
+            const selectedRemotes = new Set(entries.map((entry) => mappedResultPathKey(entry.remotePath)));
+            const transfers = uniqueMappedTransfers(entries.filter((entry) => selectedRemotes.has(mappedResultPathKey(entry.remotePath))));
             return { ...batch, entries, transfers };
         }).filter((batch) => batch.entries.length);
         const selectedCount = selectedBatches.reduce((total, batch) => total + batch.entries.length, 0);
@@ -17590,7 +17591,7 @@ export class RealtimeTunnelPanelProvider {
             catch { /* The transfer path below reports an actionable source configuration error. */ }
             for (const transfer of transfers) {
                 if (!transfer.sha256) continue;
-                const destinations = entries.filter((entry) => String(entry.remotePath || "").toLowerCase() === String(transfer.remotePath || "").toLowerCase());
+                const destinations = entries.filter((entry) => mappedResultPathKey(entry.remotePath) === mappedResultPathKey(transfer.remotePath));
                 for (const entry of destinations) {
                     if (!entry.exists && entry.localRelative !== transfer.localRelativePath) continue;
                     try {
@@ -17608,8 +17609,8 @@ export class RealtimeTunnelPanelProvider {
             if (cachedTransfers.length) {
                 if (!isCurrent() || token.isCancellationRequested) { cancelled = true; return; }
                 try {
-                    const cachedPaths = new Set(cachedTransfers.map((entry) => String(entry.remotePath || "").toLowerCase()));
-                    const cachedEntries = entries.filter((entry) => cachedPaths.has(String(entry.remotePath || "").toLowerCase()));
+                    const cachedPaths = new Set(cachedTransfers.map((entry) => mappedResultPathKey(entry.remotePath)));
+                    const cachedEntries = entries.filter((entry) => cachedPaths.has(mappedResultPathKey(entry.remotePath)));
                     const delivered = await this.publishMappedResultDownloads(projectContext, client, cachedEntries, cachedTransfers, overwrite, token, `复用已校验的 ${batch.sourceId} 结果`);
                     completed += delivered;
                     cachedTransfers.forEach((entry) => { entry.delivered = true; });
@@ -17635,9 +17636,14 @@ export class RealtimeTunnelPanelProvider {
                         });
                         if (!isCurrent() || token.isCancellationRequested) { cancelled = true; return; }
                         const files = inventory?.files && typeof inventory.files === "object" ? inventory.files : {};
-                        const byPath = new Map(Object.entries(files).map(([name, value]) => [String(name).replace(/\\/g, "/").toLowerCase(), value]));
+                        const byPath = new Map();
+                        for (const [name, value] of Object.entries(files)) {
+                            // Malformed inventory paths cannot lend evidence to a requested file.
+                            if (process.platform === "darwin" && !normalizeMacResultCandidatePath(name)) continue;
+                            byPath.set(mappedResultPathKey(process.platform === "darwin" ? name : name.replace(/\\/g, "/")), value);
+                        }
                         for (const entry of candidates) {
-                            const evidence: any = byPath.get(String(entry.remotePath).toLowerCase());
+                            const evidence: any = byPath.get(mappedResultPathKey(entry.remotePath));
                             const size = Number(typeof evidence === "object" ? evidence?.size : NaN);
                             const hash = String(typeof evidence === "string" ? evidence : evidence?.sha256 || "").trim().toLowerCase();
                             if (Number.isSafeInteger(size) && size >= 0) entry.bytes = size;
@@ -17691,8 +17697,8 @@ export class RealtimeTunnelPanelProvider {
                     if (written !== chunk.length)
                         throw new Error(`映射下载返回 ${written} 个文件，期望 ${chunk.length} 个。`);
                     if (!isCurrent() || token.isCancellationRequested) { cancelled = true; break; }
-                    const chunkPaths = new Set(chunk.map((entry) => String(entry.remotePath || "").toLowerCase()));
-                    const chunkEntries = entries.filter((entry) => chunkPaths.has(String(entry.remotePath || "").toLowerCase()));
+                    const chunkPaths = new Set(chunk.map((entry) => mappedResultPathKey(entry.remotePath)));
+                    const chunkEntries = entries.filter((entry) => chunkPaths.has(mappedResultPathKey(entry.remotePath)));
                     const delivered = await this.publishMappedResultDownloads(projectContext, client, chunkEntries, chunk, overwrite, token, `发布 ${batch.sourceId} 的映射结果`);
                     completed += delivered;
                     chunk.forEach((entry) => { entry.delivered = true; });
@@ -31821,15 +31827,25 @@ function isBlockedResultScope(value) {
     const normalized = String(value || "").replace(/\\/g, "/").toLowerCase();
     return /(?:^|\/)(?:work_dirs|checkpoints?|weights?)(?:\/|$)/.test(normalized);
 }
+/** Mac paths are typed, raw POSIX identities; compatibility keys remain folded elsewhere. */
+function mappedResultPath(value) {
+    return process.platform === "darwin" ? normalizePosixRelativePath(value, "映射结果路径") : String(value || "");
+}
+function mappedResultPathKey(value) {
+    const relative = mappedResultPath(value);
+    return process.platform === "darwin" ? relative : relative.toLowerCase();
+}
 function uniqueMappedTransfers(entries) {
     const seen = new Map();
     for (const entry of entries) {
-        const key = String(entry.remotePath || "").toLowerCase();
+        const key = mappedResultPathKey(entry.remotePath);
+        const local = entry.localRelativePath ?? entry.localRelative;
+        const localRelativePath = local === undefined ? undefined : mappedResultPath(local);
         const bytes = Number(entry.bytes);
         const hintedHash = String(entry.sha256 || "").trim().toLowerCase();
         const sha256 = /^[a-f0-9]{64}$/.test(hintedHash) ? hintedHash : "";
         if (!seen.has(key)) {
-            seen.set(key, { remotePath: entry.remotePath, localRelativePath: entry.localRelativePath || entry.localRelative, bytes: entry.bytes != null && Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : null, sha256 });
+            seen.set(key, { remotePath: mappedResultPath(entry.remotePath), localRelativePath, bytes: entry.bytes != null && Number.isSafeInteger(bytes) && bytes >= 0 ? bytes : null, sha256 });
         }
         else {
             const previous = seen.get(key);
@@ -31842,10 +31858,11 @@ function uniqueMappedTransfers(entries) {
     return [...seen.values()];
 }
 async function assertRealChildFile(root, relative, leafMode) {
+    const parts = process.platform === "darwin" ? mappedResultPath(relative).split("/") : String(relative || "").split("/").filter(Boolean);
     const rootReal = await fs.realpath(root);
-    const parts = String(relative || "").split("/").filter(Boolean);
     let cursor = rootReal;
     for (const [index, part] of parts.entries()) {
+        const parent = cursor;
         cursor = path.join(cursor, part);
         const stat = await fs.lstat(cursor).catch((error) => {
             if (error?.code === "ENOENT") return undefined;
@@ -31857,6 +31874,8 @@ async function assertRealChildFile(root, relative, leafMode) {
                 throw new Error(`本机映射路径不存在：${relative}`);
             return { full: path.join(rootReal, ...parts), exists: false, identity: path.join(rootReal, ...parts) };
         }
+        if (process.platform === "darwin" && !(await fs.readdir(parent)).includes(part))
+            throw new Error(`本机映射路径拼写与已有磁盘条目不一致：${relative}`);
         if (stat.isSymbolicLink())
             throw new Error(`本机映射路径包含符号链接：${relative}`);
         const real = await fs.realpath(cursor);
@@ -31918,12 +31937,13 @@ async function openReusableMappedTemp(root, relative) {
     }
 }
 function mappedResultTemporaryRelativePath(relative) {
-    const token = crypto.createHash("sha256").update(String(relative).toLowerCase()).digest("hex").slice(0, 24);
+    const token = crypto.createHash("sha256").update(mappedResultPathKey(relative)).digest("hex").slice(0, 24);
     return path.posix.join(path.posix.dirname(relative), `.simple-mapped-${token}.tmp`);
 }
 function mappedResultPublicationResources(root, entries, transfers) {
     const targets = new Map();
     const add = (relative) => {
+        relative = mappedResultPath(relative);
         if (!relative || String(relative).split("/").some(part => !part || part === "." || part === ".."))
             throw new Error("本机指标发布路径不安全。");
         const target = safeWorkspaceChildPath(root, relative);
@@ -31932,12 +31952,12 @@ function mappedResultPublicationResources(root, entries, transfers) {
         targets.set(key, { server: "local", project: root, target });
     };
     for (const transfer of transfers) {
-        const matching = entries.filter(entry => String(entry.remotePath || "").toLowerCase() === String(transfer.remotePath || "").toLowerCase());
+        const matching = entries.filter(entry => mappedResultPathKey(entry.remotePath) === mappedResultPathKey(transfer.remotePath));
         if (!matching.length) continue;
-        const source = String(transfer.localRelativePath || matching[0].localRelative || "");
+        const source = mappedResultPath(transfer.localRelativePath || matching[0].localRelative);
         add(source);
         for (const entry of matching) {
-            const destination = String(entry.localRelative || "");
+            const destination = mappedResultPath(entry.localRelative);
             add(destination);
             if (path.resolve(safeWorkspaceChildPath(root, source)) !== path.resolve(safeWorkspaceChildPath(root, destination)))
                 add(mappedResultTemporaryRelativePath(destination));
@@ -31948,15 +31968,15 @@ function mappedResultPublicationResources(root, entries, transfers) {
 async function distributeMappedDownloads(root, entries, transfers, overwrite, hooks = {}) {
     let delivered = 0;
     const residues = [];
-    const byRemote = new Map(transfers.map((item) => [String(item.remotePath || "").toLowerCase(), item]));
+    const byRemote = new Map(uniqueMappedTransfers(transfers).map((item) => [mappedResultPathKey(item.remotePath), item]));
     for (const [remoteKey, transfer] of byRemote) {
-        const matching = entries.filter((entry) => String(entry.remotePath || "").toLowerCase() === remoteKey);
+        const matching = entries.filter((entry) => mappedResultPathKey(entry.remotePath) === remoteKey);
         if (!matching.length) continue;
-        const sourceRelative = String(transfer.localRelativePath || matching[0].localRelative || "");
+        const sourceRelative = mappedResultPath(transfer.localRelativePath || matching[0].localRelative);
         const source = (await assertRealChildFile(root, sourceRelative, "file")).full;
         for (const entry of matching) {
             hooks.assertCurrent?.();
-            const destinationRelative = String(entry.localRelative || "");
+            const destinationRelative = mappedResultPath(entry.localRelative);
             const destinationInfo = await assertRealChildFile(root, destinationRelative, "optional");
             const destination = destinationInfo.full;
             if (path.resolve(source) === path.resolve(destination)) {
@@ -31997,6 +32017,7 @@ async function distributeMappedDownloads(root, entries, transfers, overwrite, ho
                 residues.push(temporary);
                 throw new Error(`本机映射暂存文件身份在发布前变化，暂存保留：${temporary}`);
             }
+            if (process.platform === "darwin") await assertRealChildFile(root, destinationRelative, "optional");
             const latest = await fs.lstat(destination).catch((error) => error?.code === "ENOENT" ? undefined : Promise.reject(error));
             if (latest?.isSymbolicLink()) {
                 residues.push(temporary);
@@ -32233,18 +32254,17 @@ function collapseMappedDownloadBatches(batches) {
         if (!grouped.has(sourceId))
             grouped.set(sourceId, { ...batch, transfers: new Map(), entries: [] });
         const target = grouped.get(sourceId);
-        for (const [key, value] of batch.transfers || []) {
-            if (!target.transfers.has(key)) target.transfers.set(key, value);
-            else if (target.transfers.get(key).bytes == null && value?.bytes != null) target.transfers.get(key).bytes = value.bytes;
-        }
+        const incoming = batch.transfers instanceof Map ? [...batch.transfers.values()] : batch.transfers || [];
+        for (const value of uniqueMappedTransfers([...target.transfers.values(), ...incoming]))
+            target.transfers.set(mappedResultPathKey(value.remotePath), value);
         for (const entry of batch.entries || []) {
-            const localKey = String(entry.localRelative || "").toLowerCase();
+            const localKey = mappedResultPathKey(entry.localRelative);
             const previous = destinations.get(localKey);
             if (previous && (previous.remotePath !== entry.remotePath || previous.sourceId !== sourceId))
                 throw new Error("多个指标文件对应同一本地路径：" + entry.localRelative + "，Plan " + previous.planFile + " 与 " + entry.planFile + " 冲突，已阻止覆盖。下一步：分开这些 Plan 的结果目录。");
             destinations.set(localKey, { remotePath: entry.remotePath, sourceId, planFile: entry.planFile });
-            const key = String(entry.planFile || "") + "|" + String(entry.remotePath || "").toLowerCase() + "|" + localKey;
-            if (!target.entries.some((item) => String(item.planFile || "") + "|" + String(item.remotePath || "").toLowerCase() + "|" + String(item.localRelative || "").toLowerCase() === key))
+            const key = JSON.stringify([mappedResultPath(entry.planFile), mappedResultPathKey(entry.remotePath), localKey]);
+            if (!target.entries.some((item) => JSON.stringify([mappedResultPath(item.planFile), mappedResultPathKey(item.remotePath), mappedResultPathKey(item.localRelative)]) === key))
                 target.entries.push(entry);
         }
     }

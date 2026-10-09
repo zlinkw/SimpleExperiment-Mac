@@ -10,7 +10,16 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-026（passed，0.5.289/0.2.83）
+## 当前批次 mac-005z-mapped（passed）
+- 范围至多 3 文件：后台、真实编译函数测试、计划。Mac 映射来源/目标去重、大小/hash 清单、缓存/分块/发布关联使用原始 POSIX 身份；跨 Plan 合批校验冲突并避免分隔符碰撞。本机已存在条目核对真实名称，拒绝磁盘大小写/Unicode 别名；保留非 Mac 兼容入口。
+- 保护三拓扑/API/Plan/远端实验/确认/租约；不执行真实科研、SSH、传输、删除。验证 build/闭包/面板语法、新测试及相邻映射工作流，逐文件串行 20 秒。物理写入原子锁、完整来源回执与 Agent/解析/归档在后续批次，文档/更新继续同步。
+- 前版交付记录 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 已普通推送/fetch 核对 origin/master。
+- passed 3 文件：后台统一 Mac 原始来源/目标键、合批大小/hash 冲突、缓存/清单/分块/发布对应和暂存 key；确认缺失/复用/发布前的已存在磁盘条目核对真实名称，不借用大小写或 Unicode 别名。非 Mac 折叠入口保留。
+- passed build/222 闭包/面板 2/vm.Script/UTF8/diff；macMappedResultIdentity 7、pendingResultMetricSync 39、manualDistributedResultSync 25、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13，单文件串行/20 秒。本机真实文件分发与模拟 POSIX/不敏感磁盘，无科研/SSH/真实 API 传输。初始新 fixture 的路径构造和 SafeRequestRetry 导入修正后通过，无超时。
+- exploratory failed metricsDownloadEndToEnd 4/5；旧源码 `a50acfbe3dc99e043e0e9ba024199ca8f7a653df` 只读 preload 隔离重现相同 4 失败：源码 TS loader 找不到编译 Worker.js，旧锁 fixture 未先核验 Plan 执行模式。不是本批新增回归，不作为本批完成或发布证据；待后续真实编译链 fixture 批次修复，不为测试放松生产门禁。
+- 下一批仅两仓说明/配置与发布门禁，最多 8 文件；再版本递增、prepare/publish、实际包/匿名更新。完整物理原子写入、回执/解析/Agent/归档及上述探索 fixture 留后续。
+
+### 前批 mac-release-026（passed，0.5.289/0.2.83）
 - 本批 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新再验证，无 Actions/安装。
 - mac-doc-021 Experiment `134dec12ca34adb9e65c6324b4a64a75db21bce8`、SFTP `72b0ce05b0a11e92cf3f3e4d3c367c2cc3968c2e` 已普通推送/fetch 核对。
 - passed 版本门禁：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff。

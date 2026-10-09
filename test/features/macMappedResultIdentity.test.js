@@ -1,0 +1,157 @@
+const test = require('node:test'), assert = require('node:assert/strict');
+const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
+const ts = require('typescript'), vm = require('node:vm');
+const root = path.resolve(__dirname, '../..');
+const paths = ['Results/A.csv', 'Results/a.csv', 'Results/ A.csv ', 'Results/A%20.csv', 'Results/é.csv', 'Results/e\u0301.csv'];
+const names = ['mappedResultPath', 'mappedResultPathKey', 'uniqueMappedTransfers', 'assertRealChildFile',
+  'streamCopyFile', 'openReusableMappedTemp', 'mappedResultTemporaryRelativePath', 'mappedResultPublicationResources',
+  'distributeMappedDownloads', 'collapseMappedDownloadBatches', 'partitionMappedDownloadTransfers'];
+function backend(platform = 'darwin', filesystem = fs.promises, extra = {}) {
+  const source = fs.readFileSync(path.join(root, 'dist/extension/legacy.js'), 'utf8');
+  const ast = ts.createSourceFile('actual.js', source, ts.ScriptTarget.Latest, true), funcs = new Map(), methods = new Map();
+  function visit(node) {
+    if (ts.isFunctionDeclaration(node) && node.name) funcs.set(node.name.text, node.getText(ast));
+    if (ts.isMethodDeclaration(node)) methods.set(node.name.getText(ast), node.getText(ast));
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  const selected = ['collectMappedResultDownloadBatches', 'confirmMappedResultDownloads', 'downloadMappedResultBatch'];
+  const context = vm.createContext({ Buffer, Map, Set, path, crypto, process: { platform }, fs: filesystem, fsNode: fs,
+    PosixPath_1: require('../../dist/mac/PosixPath'), ResultCandidatePath_1: require('../../dist/mac/ResultCandidatePath'),
+    safeWorkspaceChildPath: (base, relative) => path.join(base, ...relative.split('/')),
+    methodResultArtifactLocalRelativePath: (remote, plan) => 'mapped/' + crypto.createHash('sha256').update(JSON.stringify([plan, remote])).digest('hex') + '.csv',
+    isResultMetricFile: () => true, DEFAULT_RESULT_CSV_DIR: 'experiments/results',
+    RESULT_ARTIFACT_MAX_BYTES: 128 * 1024 * 1024, MAPPED_RESULT_DOWNLOAD_MAX_ENTRIES: 1,
+    MAPPED_RESULT_DOWNLOAD_MAX_BATCH_BYTES: 128 * 1024 * 1024,
+    sha256File: async filename => crypto.createHash('sha256').update(await filesystem.readFile(filename)).digest('hex'),
+    SafeRequestRetry_1: { retryRequestSignal: () => undefined }, errorMessage: error => error.message, UiCommandCancelled: class extends Error {},
+    vscode: { ProgressLocation: { Notification: 1 }, window: { showInformationMessage() {}, showWarningMessage() {},
+      withProgress: async (_options, action) => action({ report() {} }, { isCancellationRequested: false }) } }, ...extra,
+  });
+  vm.runInContext(names.map(name => { assert.ok(funcs.has(name), name); return funcs.get(name); }).join('\n') +
+    '\nclass Provider {' + selected.map(name => { assert.ok(methods.has(name), name); return methods.get(name); }).join('\n') +
+    '}\nthis.api = {' + names.join(',') + ', Provider};', context);
+  return context.api;
+}
+const plain = value => JSON.parse(JSON.stringify(value));
+function entry(remote, local = 'mapped/' + crypto.createHash('sha256').update(remote).digest('hex') + '.csv') {
+  return { planFile: 'Plans/ Plan 中文 .yaml ', remotePath: remote, localRelative: local, localPath: '/root/' + local };
+}
+function batch(entries) { return { sourceId: 'Worker', workerId: 'Worker', entries,
+  transfers: new Map(entries.map(value => [value.remotePath, { ...value, localRelativePath: value.localRelative }])) }; }
+
+test('actual compiled Mac transfer and Plan batches keep all raw identities and merge only identical evidence', () => {
+  const api = backend(), entries = paths.map((remote, i) => ({ ...entry(remote), bytes: i + 1, sha256: String(i).repeat(64) }));
+  assert.deepEqual(plain(api.uniqueMappedTransfers(entries)).map(value => value.remotePath), paths);
+  const subject = new api.Provider(); subject.enabledWorkerConfigs = () => [{ id: 'Worker' }];
+  const collected = subject.collectMappedResultDownloadBatches({ root: '/root' }, [{ planFile: entries[0].planFile,
+    summary: {}, candidates: entries.map(value => ({ ...value, workerId: 'Worker' })) }]);
+  assert.equal(collected[0].transfers.size, paths.length); assert.equal(collected[0].entries.length, paths.length);
+  const merged = api.collapseMappedDownloadBatches([batch(entries), batch(entries)]);
+  assert.equal(merged[0].entries.length, paths.length); assert.equal(merged[0].transfers.size, paths.length);
+  const duplicate = { ...entries[0], localRelative: 'other/copy.csv' };
+  assert.equal(api.uniqueMappedTransfers([entries[0], duplicate]).length, 1);
+  for (const change of [{ bytes: 999 }, { sha256: 'f'.repeat(64) }]) {
+    assert.throws(() => api.uniqueMappedTransfers([entries[0], { ...duplicate, ...change }]), /不一致/);
+    assert.throws(() => api.collapseMappedDownloadBatches([batch([entries[0]]), batch([{ ...duplicate, ...change }])]), /不一致/);
+  }
+});
+test('bad typed paths fail before collection, deduplication, resource locking or physical access', async () => {
+  let reads = 0;
+  const api = backend('darwin', { realpath: async () => { reads++; return '/root'; } });
+  const subject = new api.Provider(); subject.enabledWorkerConfigs = () => [{ id: 'Worker' }];
+  const invalid = [null, 3, {}, [], '', '/a.csv', 'a\\b.csv', './a.csv', 'a//b.csv', 'a/../b.csv', 'a\0.csv', 'a:csv', '中'.repeat(1400)];
+  for (const value of invalid) {
+    assert.throws(() => api.uniqueMappedTransfers([{ ...entry('valid.csv'), remotePath: value }]), /相对路径/);
+    assert.throws(() => api.uniqueMappedTransfers([{ ...entry('valid.csv'), localRelative: value }]), /相对路径/);
+    assert.throws(() => api.mappedResultPublicationResources('/root', [{ ...entry('valid.csv'), remotePath: value }], [{ remotePath: value }]), /相对路径/);
+    assert.throws(() => subject.collectMappedResultDownloadBatches({ root: '/root' }, [{ planFile: 'Plans/A.yaml', candidates: [{ remotePath: value }] }]), /相对路径/);
+    assert.throws(() => subject.collectMappedResultDownloadBatches({ root: '/root' }, [{ planFile: value, candidates: [] }]), /相对路径/);
+    await assert.rejects(() => api.assertRealChildFile('/root', value, 'optional'), /相对路径/);
+  }
+  assert.equal(reads, 0); // No physical access occurs for malformed paths.
+});
+test('tuple keys do not collapse separator-bearing Plan/source pairs; destination collisions still stop', () => {
+  const api = backend(), local = 'mapped/shared.csv';
+  const a = { ...entry('r.csv'), planFile: 'p|q.yaml' }, b = { ...a, planFile: 'p', remotePath: 'q.yaml|r.csv' };
+  // Same tuple suffix/local: the legacy concatenated key collided. Distinct destinations below are deliberate.
+  b.localRelative = a.localRelative;
+  assert.throws(() => api.collapseMappedDownloadBatches([batch([a, b])]), /同一本地路径/);
+  const one = { ...entry('a|b.csv', local), planFile: 'plans/A' }, two = { ...one, planFile: 'plans/A|a', remotePath: 'b.csv' };
+  assert.throws(() => api.collapseMappedDownloadBatches([batch([one, two])]), /同一本地路径/);
+  const distinctPlans = [one, { ...one, planFile: 'plans/A ' }];
+  assert.equal(api.collapseMappedDownloadBatches([batch(distinctPlans)])[0].entries.length, 2);
+  const conflict = { ...one, remotePath: 'other.csv' };
+  assert.throws(() => api.collapseMappedDownloadBatches([batch([one]), { ...batch([conflict]), sourceId: 'other' }]), /同一本地路径/);
+});
+test('inventory evidence and one-file chunks bind only exact source; failures do not deliver a case neighbour', async () => {
+  const api = backend(), subject = new api.Provider(), calls = [], publications = [], client = {};
+  const entries = paths.map(remote => entry(remote));
+  subject.client = client; subject.projectContextIsCurrent = () => true;
+  subject.mappedDownloadServerForSource = () => ({ host: 'mock', remotePath: '/mock' });
+  subject.simpleSftpApiCall = async (method, params) => {
+    calls.push([method, plain(params)]);
+    if (method === 'sync.projectInventory') return { files: Object.fromEntries(paths.map((remote, i) => [remote, { size: i + 10, sha256: String(i).repeat(64) }]).concat([
+      ['Results\\A.csv', { size: 777, sha256: 'f'.repeat(64) }], ['RESULTS/A.CSV', { size: 888, sha256: 'e'.repeat(64) }]])) };
+    if (method === 'sync.downloadMappedPaths') { if (params.entries[0].remotePath === paths[1]) throw Error('fixture failure'); return { fileCount: params.entries.length }; }
+    throw Error('unexpected API');
+  };
+  subject.publishMappedResultDownloads = async (_context, _client, selected, transfers) => {
+    publications.push([selected.map(value => value.remotePath), transfers.map(value => value.remotePath)]); return selected.length;
+  };
+  const report = await subject.downloadMappedResultBatch({ root: '/root' }, client, batch(entries), 'mock', { notify: false });
+  const downloads = calls.filter(([method]) => method === 'sync.downloadMappedPaths').map(([,params]) => params.entries[0]);
+  assert.deepEqual(downloads.map(value => value.remotePath), paths);
+  assert.deepEqual(downloads.map(value => value.bytes), paths.map((_,i) => i + 10));
+  assert.deepEqual(downloads.map(value => value.sha256), paths.map((_,i) => String(i).repeat(64)));
+  assert.deepEqual(plain(report.deliveredEntries).map(value => value.remotePath), paths.filter(value => value !== paths[1]));
+  assert.equal(report.failures.length, 1); assert.equal(report.completed, paths.length - 1);
+  for (const [selected, transfers] of publications) assert.deepEqual(Array.from(selected), Array.from(transfers));
+});
+test('real compiled hash reuse only publishes its own raw source and sends the other case to the API', async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-mapped-cache-'));
+  const api = backend(), subject = new api.Provider(), client = {}, hash = crypto.createHash('sha256').update('cached').digest('hex');
+  fs.mkdirSync(path.join(workspace, 'mapped')); fs.writeFileSync(path.join(workspace, 'mapped', 'cached.csv'), 'cached', 'utf8');
+  const upper = { ...entry(paths[0], 'mapped/cached.csv'), bytes: 6, sha256: hash, exists: true };
+  const lower = { ...entry(paths[1], 'mapped/uncached.csv'), bytes: 6, sha256: hash };
+  const publications = [], downloads = [];
+  subject.client = client; subject.projectContextIsCurrent = () => true; subject.mappedDownloadServerForSource = () => ({});
+  subject.publishMappedResultDownloads = async (_ctx, _client, selected) => { publications.push(Array.from(selected, value => value.remotePath)); return selected.length; };
+  subject.simpleSftpApiCall = async (method, params) => { assert.equal(method, 'sync.downloadMappedPaths'); downloads.push(...params.entries); return { fileCount: params.entries.length }; };
+  const report = await subject.downloadMappedResultBatch({ root: workspace }, client, batch([upper, lower]), 'mock', { notify: false });
+  assert.deepEqual(publications, [[paths[0]], [paths[1]]]); assert.deepEqual(downloads.map(value => value.remotePath), [paths[1]]);
+  assert.equal(report.completed, 2);
+});
+test('real local publication writes each exact source content and distinct staging/lease identities', async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-mapped-publish-')), api = backend();
+  fs.mkdirSync(path.join(workspace, 'stage')); fs.writeFileSync(path.join(workspace, 'stage', 'one.csv'), 'UPPER', 'utf8');
+  fs.writeFileSync(path.join(workspace, 'stage', 'two.csv'), 'lower', 'utf8');
+  const entries = [entry(paths[0], 'out/one.csv'), entry(paths[1], 'out/two.csv')];
+  const transfers = [{ remotePath: paths[0], localRelativePath: 'stage/one.csv' }, { remotePath: paths[1], localRelativePath: 'stage/two.csv' }];
+  assert.equal(await api.distributeMappedDownloads(workspace, entries, transfers, true), 2);
+  assert.equal(fs.readFileSync(path.join(workspace, 'out', 'one.csv'), 'utf8'), 'UPPER');
+  assert.equal(fs.readFileSync(path.join(workspace, 'out', 'two.csv'), 'utf8'), 'lower');
+  assert.notEqual(api.mappedResultTemporaryRelativePath('out/A.csv'), api.mappedResultTemporaryRelativePath('out/a.csv'));
+  const resources = plain(api.mappedResultPublicationResources(workspace, entries, [transfers[0]]));
+  assert.equal(resources.length, 3); assert.ok(resources.every(value => !value.target.endsWith('two.csv')));
+});
+test('simulated insensitive Mac disks reject case/Unicode aliases before reuse or missing-only skip', async () => {
+  const stored = ['/root', '/root/Results', '/root/Results/é.csv'];
+  const alias = value => value.normalize('NFD').toLowerCase();
+  const filesystem = {
+    realpath: async value => stored.find(item => alias(item) === alias(value)) || value,
+    lstat: async value => { const actual = stored.find(item => alias(item) === alias(value)); if (!actual) throw Object.assign(Error('missing'), { code: 'ENOENT' });
+      return { isSymbolicLink: () => false, isFile: () => actual.endsWith('.csv'), isDirectory: () => !actual.endsWith('.csv') }; },
+    readdir: async value => stored.filter(item => path.posix.dirname(item) === value && item !== value).map(item => path.posix.basename(item)),
+  };
+  const api = backend('darwin', filesystem, { path: path.posix });
+  assert.equal((await api.assertRealChildFile('/root', 'Results/é.csv', 'file')).exists, true);
+  for (const relative of ['results/é.csv', 'Results/É.csv', 'Results/e\u0301.csv']) {
+    await assert.rejects(() => api.assertRealChildFile('/root', relative, 'optional'), /拼写/);
+    const subject = new api.Provider(), client = {}; subject.client = client; subject.projectContextIsCurrent = () => true;
+    await assert.rejects(() => subject.confirmMappedResultDownloads({ root: '/root' }, client, [batch([entry('source.csv', relative)])], 'mock', { missingOnly: true }), /拼写/);
+  }
+  const windows = backend('win32');
+  assert.equal(windows.uniqueMappedTransfers([entry(paths[0]), entry(paths[1])]).length, 1);
+  assert.equal(windows.mappedResultTemporaryRelativePath('out/A.csv'), windows.mappedResultTemporaryRelativePath('out/a.csv'));
+});
