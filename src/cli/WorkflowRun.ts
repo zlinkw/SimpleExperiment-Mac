@@ -20,6 +20,7 @@ export function assertProjectPlan(root: string, planFile: string): string {
 }
 
 export async function requestWorkflowRun(root: string, planFile: string, flags: Pick<CliFlags, "seed" | "dryRun" | "check">): Promise<{ code: number; payload: Record<string, unknown> }> {
+  if (flags.seed !== undefined) throw businessError("workflow 不支持 seed 覆盖；请在已保存的 Plan 中配置 seeds，移除 --seed 后重新预检。");
   const canonicalRoot = assertProjectPlan(root, planFile);
   const verifyWorkspace = async () => {
     const status = record(await callApi("status"));

@@ -109,3 +109,12 @@ test("Plan path spelling is retained and outside files or linked escapes are rej
   fs.symlinkSync(outside, path.join(f.root, "linked"), process.platform === "win32" ? "junction" : "dir");
   assert.throws(() => assertProjectPlan(f.root, "linked/outside.yaml"), /inside/);
 });
+
+test("online CLI seed override is rejected before any API call; offline preview does not claim it was applied", async t => {
+  const f = await fixture(t);
+  const online = await f.run(["--seed", "42"]);
+  assert.equal(online.code, 3); assert.match(online.payload.error.message, /seed/);
+  assert.equal(f.calls.length, 0);
+  const offline = await f.run(["--seed", "42", "--dry-run"], true);
+  assert.equal(offline.code, 0); assert.equal(offline.payload.seedApplied, false); assert.match(offline.payload.seedWarning, /seed/);
+});

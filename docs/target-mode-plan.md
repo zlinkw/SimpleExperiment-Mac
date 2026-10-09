@@ -20,16 +20,19 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-016（passed，Plan CLI 绑定/回执 preview）
+## 当前批次：mac-005q（passed，服务端 workflow 工作区保护）
 ### 边界
 
-- Experiment 0.5.279/SFTP 0.2.73 版本与计划，共 6 文件。完整本机 prepare/publish；实际 VSIX CLI health/RPC、Plan 等待确认本机 mock 与匿名 updater 包/源码/说明校验。无实际科研、服务器、安装或 Actions；服务端 workspace/seed/完整科研与 M5 后续核验。
+- Mac workflow 在服务端绑定当前物理工作区，异步准备/校验及标准 Plan 动作前复核；CLI seed 不再静默无效，现有标准路线没有 seed override 契约，正式种子由保存的 Plan 定义。保留旧入口/Plan 格式/三拓扑，Mac 提交不触发旧自动停止 fallback。最多 8 文件。
+- 检查：build/包闭包/面板脚本、真实编译方法 VM、CLI 本机 mock、既有准备/标准路线回归。无真实科研、传输、停止实验、服务器或删除操作；说明与配套发布随后分批，M5 待验收。
 
 ### 验证清单
 
 - passed mac-release-016：完整本机 prepare/publish、两仓 build/217 与 26 文件闭包、面板脚本 2、逐文件串行更新/CLI/路径/认证/中转与浅/深/高对比真实渲染通过。三个完整草稿附件核验后发布，无 Actions/开发机安装。
 - passed preview-v0.5.279：实际两包固定 CLI 通过真实本地 shell/Node health/实时 RPC，Experiment 实际包以中文 Plan、本机 mock 完成工作区/路线预检与等待确认回执，submitted=false（2 项包测试）。真实匿名 updater 从 0.5.278/0.2.72 筛出两组件，19 次请求完成大小/hash/CRC/身份/平台校验；下载字节与已测试 VSIX 一致，新 CLI 模块、两仓 README/配置说明与来源一致。同版本跳过/禁止降级通过，无实际科研/服务器/M5。
-- pending 下一批 mac-005q：服务端 workflow workspace 绑定与 CLI seed 参数审计，实际标准 Plan 校验/预演/提交链路及 Windows 执行依赖继续分批；CLI 当前检查不是完整远端预演，等待确认不是远端提交证明。真实 SSH/三拓扑/M5 保持待验收。
+- passed mac-005q：服务端 Mac workflow 绑定当前物理工作区，异步准备/校验/标准 Plan 关键边界复核，晚到回执不写入另一工作区；精确保留 Plan 首尾空格。CLI/API seed override 显式拒绝，正式种子沿用保存的 Plan，离线预览不宣称应用 seed。Mac 提交不执行旧自动停止 fallback，活动运行在创建回执及提交前拦截。8 文件。
+- passed 本地：build/218 模块闭包/面板脚本 2、macWorkflowBinding 6、macCliWorkflow 6、macProjectPrepare 16、localApi 标准路线相关 5 逐文件串行通过；测试为编译方法 VM/本机 mock，无真实科研/SSH/停止/删除。初次 VM fixture 缺少编译导入别名，补齐后通过，非超时。
+- pending 下一批：README/配置说明更新工作区绑定及 Plan seeds 边界，新增测试纳入发布门禁，再发布 0.5.280/0.2.74。后续继续完整 Plan/结果/监控与 Windows 执行依赖审计；当前关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据。真实 SSH/三拓扑/M5 保持待验收。
 
 - passed mac-doc-011：两仓 README/配置说明补充正式 Plan CLI、预检/离线/等待确认回执与 operations.list，macCliWorkflow 纳入发布门禁并更新发布说明。UTF8 回读、build/217 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，共 6 文件。配套下一版 0.5.279/0.2.73，服务端 workspace/seed/完整科研仍待后续核验。
 

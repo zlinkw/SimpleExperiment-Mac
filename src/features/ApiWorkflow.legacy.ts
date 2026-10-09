@@ -155,24 +155,25 @@ export interface WorkflowPlanSelection {
   missing: MissingStep[];
 }
 
-function planIdentityValues(plan: Record<string, unknown>): string[] {
+function planIdentityValues(plan: Record<string, unknown>, platform: string): string[] {
   return [plan.planFile, plan.file, plan.planId]
-    .map((value) => String(value || "").trim())
+    .map((value) => platform === "darwin" ? String(value || "") : String(value || "").trim())
     .filter(Boolean);
 }
 
 export function selectWorkflowPlan(
   plans: readonly Record<string, unknown>[],
   selection: Record<string, unknown> = {},
+  platform: string = process.platform,
 ): WorkflowPlanSelection {
   const list = Array.isArray(plans) ? plans.filter((item) => item && typeof item === "object") : [];
-  const requestedFile = String(selection.planFile || selection.file || "").trim();
-  const requestedId = String(selection.planId || "").trim();
+  const requestedFile = platform === "darwin" ? String(selection.planFile || selection.file || "") : String(selection.planFile || selection.file || "").trim();
+  const requestedId = platform === "darwin" ? String(selection.planId || "") : String(selection.planId || "").trim();
   let plan: Record<string, unknown> | undefined;
   if (requestedFile) {
-    plan = list.find((item) => planIdentityValues(item).includes(requestedFile));
+    plan = list.find((item) => planIdentityValues(item, platform).includes(requestedFile));
   } else if (requestedId) {
-    plan = list.find((item) => planIdentityValues(item).includes(requestedId));
+    plan = list.find((item) => planIdentityValues(item, platform).includes(requestedId));
   } else if (list.length === 1) {
     plan = list[0];
   }

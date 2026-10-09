@@ -12,6 +12,7 @@ import * as OperationOutcome_1 from "../core/OperationOutcome";
 import { atomicWriteText } from "../state/StateStore";
 import { LatestSnapshotWriter } from "../core/LatestSnapshotWriter";
 import * as ManualTunnel_1 from "../mac/ManualTunnel";
+import * as WorkflowBinding_1 from "../mac/WorkflowBinding";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -1976,7 +1977,7 @@ export class RealtimeTunnelPanelProvider {
         const targets = this.apiPrepareServerTargets(topology, serverIds, params.workerTunnels, setup);
         const manualGuide = manual && topology.valid && targets.length ? ManualTunnel_1.manualAgentGuide(setup, topology.mode, remoteProjectName(), Boolean(this.tunnelConfig.token), targets.map(target => target.id)) : "";
         const simpleSftp = simpleSftpIntegrationReadiness();
-        const planSelection = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], params);
+        const planSelection = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], params, this.isMacVariant() ? "darwin" : process.platform);
         const infrastructureMissing = ApiWorkflow_1.structuredMissingInventory({
             workspace: root,
             setup,
@@ -2736,15 +2737,20 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     async apiWorkflowPlan(params = {}) {
-        const root = String(params.workspace || workspaceRoot() || "").trim();
+        const binding = this.isMacVariant() ? WorkflowBinding_1.bindWorkflowWorkspace(params.workspace, workspaceRoot()) : undefined;
+        if (binding) WorkflowBinding_1.assertPlanSeedContract(params);
+        const assertCurrent = () => { if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot()); };
+        const root = binding ? binding.root : String(params.workspace || workspaceRoot() || "").trim();
         if (!root)
             throw new Error("workflow.plan 需要已打开工作区，或传入 workspace 参数。");
         assertSingleProjectWorkspace("workflow.plan");
         await this.reconcileStalePlanRunOperations({ reason: "workflow.plan" });
+        assertCurrent();
         await this.refreshLocalPlanMetadata({ post: false, force: true }).catch((error) => {
             this.localPlanMetadata = { ...this.localPlanMetadata, error: errorMessage(error) };
         });
-        const planSelection = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], params);
+        const planSelection = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], params, this.isMacVariant() ? "darwin" : process.platform);
+        assertCurrent();
         const topology = this.projectTopologyAssessment();
         const infrastructureMissing = ApiWorkflow_1.structuredMissingInventory({
             workspace: root,
@@ -2755,6 +2761,7 @@ export class RealtimeTunnelPanelProvider {
             requirePlan: false,
         });
         if (params.autoPrepare === true && infrastructureMissing.length) {
+            assertCurrent();
             if (params.confirm !== true) {
                 return {
                     ok: false,
@@ -2777,15 +2784,18 @@ export class RealtimeTunnelPanelProvider {
                 };
             }
             await this.apiProjectPrepare({ ...params, confirm: true });
+            assertCurrent();
         }
         const validation = await this.apiPlanValidate(planSelection.plan ? {
             planFile: String(planSelection.plan.planFile || planSelection.plan.file || ""),
             planId: String(planSelection.plan.planId || planSelection.plan.planFile || planSelection.plan.file || ""),
         } : params);
+        assertCurrent();
         const selectedPlanFile = planSelection.plan ? String(planSelection.plan.planFile || planSelection.plan.file || "") : "";
         const selectedPlanId = planSelection.plan ? String(planSelection.plan.planId || selectedPlanFile) : "";
         const prepareParams = { ...params, confirm: true };
         const runParams = {
+            ...(binding ? { workspace: root } : {}),
             ...(selectedPlanFile ? { planFile: selectedPlanFile } : {}),
             ...(selectedPlanId ? { planId: selectedPlanId } : {}),
             debugMode: params.debugMode === true,
@@ -2833,7 +2843,10 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     async apiWorkflowRun(params = {}) {
+        const binding = this.isMacVariant() ? WorkflowBinding_1.bindWorkflowWorkspace(params.workspace, workspaceRoot()) : undefined;
+        if (binding) WorkflowBinding_1.assertPlanSeedContract(params);
         const route = await this.apiWorkflowPlan(params);
+        if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot());
         if (!route.ready) {
             return {
                 ok: false,
@@ -2842,20 +2855,6 @@ export class RealtimeTunnelPanelProvider {
                 ...route,
             };
         }
-        const operationId = makeOpId("workflow-run");
-        const startedAt = new Date().toISOString();
-        this.localOperations[operationId] = {
-            operationId,
-            type: "workflow-run",
-            status: "waiting_confirmation",
-            message: "请在 VS Code 弹窗中人工确认实验提交。",
-            startedAt,
-            planFile: String(route.calls[0]?.params?.planFile || route.plan?.planFile || ""),
-            planId: String(route.calls[0]?.params?.planId || route.plan?.planId || ""),
-            debugMode: params.debugMode === true,
-        };
-        this.markLocalOperationsDirty();
-        this.postState();
         const submittedPlanFile = String(route.calls[0]?.params?.planFile || route.plan?.planFile || "");
         const submittedPlanId = String(route.calls[0]?.params?.planId || route.plan?.planId || "");
         try {
@@ -2879,7 +2878,22 @@ export class RealtimeTunnelPanelProvider {
             }
             throw error;
         }
-        void this.runApiWorkflowOperation(operationId, route).catch(() => undefined);
+        if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot());
+        const operationId = makeOpId("workflow-run");
+        const startedAt = new Date().toISOString();
+        this.localOperations[operationId] = {
+            operationId,
+            type: "workflow-run",
+            status: "waiting_confirmation",
+            message: "请在 VS Code 弹窗中人工确认实验提交。",
+            startedAt,
+            planFile: String(route.calls[0]?.params?.planFile || route.plan?.planFile || ""),
+            planId: String(route.calls[0]?.params?.planId || route.plan?.planId || ""),
+            debugMode: params.debugMode === true,
+        };
+        this.markLocalOperationsDirty();
+        this.postState();
+        void this.runApiWorkflowOperation(operationId, route, binding).catch(() => undefined);
         return {
             ok: true,
             started: true,
@@ -2891,20 +2905,25 @@ export class RealtimeTunnelPanelProvider {
             calls: [{ method: "operations.list", params: {} }],
         };
     }
-    async runApiWorkflowOperation(operationId, route) {
+    async runApiWorkflowOperation(operationId, route, binding) {
+        const operations = this.localOperations;
+        const assertCurrent = () => { if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot()); };
         const knownOperationIds = new Set(Object.keys(this.localOperations || {}));
         const finish = (patch = {}) => {
-            this.localOperations[operationId] = {
-                ...(this.localOperations[operationId] || {}),
+            operations[operationId] = {
+                ...(operations[operationId] || {}),
                 operationId,
                 type: "workflow-run",
                 finishedAt: new Date().toISOString(),
                 ...patch,
             };
+            if (this.localOperations !== operations) return;
+            if (binding) { try { assertCurrent(); } catch { return; } }
             this.markLocalOperationsDirty();
             this.postState();
         };
         try {
+            assertCurrent();
             this.localOperations[operationId] = {
                 ...(this.localOperations[operationId] || {}),
                 status: "running",
@@ -2913,6 +2932,7 @@ export class RealtimeTunnelPanelProvider {
             this.markLocalOperationsDirty();
             this.postState();
             const submitted = await this.runActionCommand("runPlan", route.calls[0].params);
+            assertCurrent();
             let evidence = this.runSubmissionEvidence(submitted, knownOperationIds);
             if (!evidence)
                 evidence = await this.waitForRunSubmissionEvidence({ knownOperationIds, timeoutMs: 20_000 });
@@ -6101,6 +6121,10 @@ export class RealtimeTunnelPanelProvider {
             && (this.distributedPostprocessPromise || this.manualResultSyncCounts?.get(workspaceRoot())))
             this.assertPlanSubmissionNotDuringResultSync(message);
         assertSingleProjectWorkspace("远端实验操作");
+        const workflowBinding = this.isMacVariant() && (PLAN_SUBMISSION_COMMANDS.has(command) || PLAN_PREFLIGHT_COMMANDS.has(command))
+            ? WorkflowBinding_1.bindWorkflowWorkspace(this.actionBody(message).workspace, workspaceRoot()) : undefined;
+        const assertWorkflowCurrent = () => { if (workflowBinding) WorkflowBinding_1.assertWorkflowWorkspace(workflowBinding, workspaceRoot()); };
+        if (workflowBinding) WorkflowBinding_1.assertPlanSeedContract(this.actionBody(message));
         if (["runPlan", "reproducePlan", "parseResults"].includes(command)) {
             const root = workspaceRoot();
             const rules = root ? pluginProjectAdapterRules(root) : {};
@@ -6110,13 +6134,16 @@ export class RealtimeTunnelPanelProvider {
                     throw new Error(`插件接入规则尚未同步到 Agent：${errors.join("；")}。请检查隧道和 Agent 版本。`);
             }
         }
+        assertWorkflowCurrent();
         this.assertRetryPlanContext(command, message);
         const body = this.actionBody(message);
+        assertWorkflowCurrent();
         const actionPlanFile = operationResultPlanFile(body) || body?.options?.planFile || body?.planFile || body?.selectedPlanId || "";
         if (actionPlanFile && command !== "runAllPlans") {
             await this.refreshLocalPlanMetadataForAction(body);
             this.stampPlanRevision(body);
         }
+        assertWorkflowCurrent();
         await this.ensureManualStopReason(command, body, message);
         if (command === "stopExperiment") {
             const routed = await this.stopExperimentRouted({ ...body, operationId: stringField(message, "operationId"), remoteOperationId: stringField(message, "remoteOperationId") });
@@ -6201,6 +6228,7 @@ export class RealtimeTunnelPanelProvider {
             const selectWorkerStarted = Date.now();
             if (distributedPlan) await this.selectDistributedPlanPrimary(body);
             else await this.selectPlanSubmissionWorker(body, operationResultPlanFile(body) || plan?.planFile || command);
+            assertWorkflowCurrent();
             this.recordPlanSubmissionTiming?.(message, "selectWorkerMs", Date.now() - selectWorkerStarted);
             if (LENIENT_RUN) {
                 try { this.assertExecutionWorkersReady(body.options?.workers); } catch (error) { recordLenientSoftPass(this, "assertExecutionWorkersReady", errorMessage(error)); }
@@ -6209,10 +6237,12 @@ export class RealtimeTunnelPanelProvider {
                 this.assertExecutionWorkersReady(body.options?.workers);
                 this.assertExecutionAgentProjectsReady(body);
             }
+            assertWorkflowCurrent();
             const retryPlanFile = operationResultPlanFile(body) || plan?.planFile || plan?.file || plan?.planId || "";
             const restarted = await preparePlanSafeRetry(this, retryPlanFile, async (detail) =>
                 await vscode.window.showWarningMessage("停止当前 Plan 并重新运行？", { modal: true, detail }, "停止并重新运行") === "停止并重新运行",
                 () => new UiCommandCancelled("已取消重新运行，旧运行保持原状态。"));
+            assertWorkflowCurrent();
             if (restarted) { delete message.deferredPlanId; delete body.deferredPlanId; }
             await this.assertPlanNotAlreadyActive(retryPlanFile, plan);
             if (body.debugMode === true)
@@ -6222,19 +6252,24 @@ export class RealtimeTunnelPanelProvider {
                 return;
             if (command !== "runPlan")
                 await this.confirmPlanRunSubmission(command, plan, false, body);
+            assertWorkflowCurrent();
             const planFileForProvenance = operationResultPlanFile(body) || plan?.planFile || plan?.file || "";
             body.gitProvenance = await this.recordRunGitProvenance(
                 planFileForProvenance,
                 String(body.planRevision || plan?.revision || ""),
                 makeOpId(command),
             );
+            assertWorkflowCurrent();
             body.options = { ...(body.options || {}), gitProvenance: body.gitProvenance };
             if (distributedPlan) {
+                assertWorkflowCurrent();
                 await this.finishDistributedPlanSubmission(command, message, plan, body);
                 return;
             }
             await this.ensureCodeReadyForRun(undefined, [body], (text) => this.reportPlanStage(message, text));
+            assertWorkflowCurrent();
             const preflightOk = await this.runPlanPreflight(body, "当前计划", { reportStage: (text) => this.reportPlanStage(message, text) });
+            assertWorkflowCurrent();
             if (!preflightOk) {
                 if (LENIENT_RUN) {
                     recordLenientSoftPass(this, "runPlanPreflight", "preflight not ok, continue to submit");
@@ -6246,11 +6281,16 @@ export class RealtimeTunnelPanelProvider {
             if (preflightOk) {
                 this.reportPlanStage(message, "正在确认历史产物处理方式…");
                 await this.confirmPlanExistingOutputs(plan, body, preflightOk);
+                assertWorkflowCurrent();
                 if (body.existingOutputChoice === "keep_existing") {
                     this.finishPlanSubmissionProgress(message, "succeeded", "用户选择保留现有完整结果，本次未创建新调度任务。");
                     return;
                 }
             }
+            if (this.isMacVariant()) {
+                await this.assertPlanNotAlreadyActive(operationResultPlanFile(body) || plan?.planFile || plan?.file || "", plan);
+                assertWorkflowCurrent();
+            } else {
             try {
                 const pf = operationResultPlanFile(body) || (typeof plan !== 'undefined' ? (plan?.planFile || plan?.file || "") : "") || "";
                 if (pf) {
@@ -6266,9 +6306,12 @@ export class RealtimeTunnelPanelProvider {
                     }
                 }
             } catch {}
+            }
+            assertWorkflowCurrent();
             this.assertExecutionCondaEnvReady(this.workerActionTargets());
             if (PLAN_SUBMISSION_COMMANDS.has(command)) this.reportPlanStage(message, "预演通过，正在开启调度…");
         }
+        assertWorkflowCurrent();
         const danger = command === "deleteArtifacts";
         const noHubResult = await this.postNoHubResultAction(command, action, body, {
             confirm: NO_HUB_RESULT_CONFIRM_COMMANDS.has(command),
