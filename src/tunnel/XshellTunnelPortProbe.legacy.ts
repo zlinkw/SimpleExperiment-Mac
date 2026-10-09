@@ -1,4 +1,5 @@
 import * as net from "net";
+import { localBaseUrl } from "./TunnelGateway";
 import {
   AgentCapabilitiesResponse,
   checkAgentApiCompatibility,
@@ -72,7 +73,7 @@ function resolveProbeHost(config: { localForwardHost?: unknown }, fallback = "12
   return text || fallback;
 }
 function resolveProbeBase(config: { localForwardHost?: unknown; localForwardPort: number }): string {
-  return `http://${resolveProbeHost(config)}:${config.localForwardPort}`;
+  return localBaseUrl({ localHost: resolveProbeHost(config), localPort: config.localForwardPort });
 }
 async function fetchHealthWithFallback(base: string, headers: Record<string, string> | undefined, timeoutMs: number): Promise<Response> {
   const primary = await timedFetch(`${base}/api/health`, { headers }, timeoutMs);

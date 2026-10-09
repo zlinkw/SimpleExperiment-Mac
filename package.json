@@ -60,7 +60,9 @@
     "onCommand:simpleExperimentMac.removeGitBackup",
     "onCommand:simpleExperimentMac.showGitBackupStatus",
     "onCommand:simpleExperimentMac.syncToGitHub",
-    "onCommand:simpleExperimentMac.publishToGitHub"
+    "onCommand:simpleExperimentMac.publishToGitHub",
+    "onCommand:simpleExperimentMac.configureManualEndpoints",
+    "onCommand:simpleExperimentMac.showManualAgentGuide"
   ],
   "main": "./dist/mac/Bootstrap.js",
   "bin": {
@@ -270,6 +272,14 @@
       {
         "command": "simpleExperimentMac.installPreviewUpdates",
         "title": "SimpleExperiment Mac：安装 preview 配套更新"
+      },
+      {
+        "command": "simpleExperimentMac.configureManualEndpoints",
+        "title": "SimpleExperiment Mac：配置 Termius 手动端点"
+      },
+      {
+        "command": "simpleExperimentMac.showManualAgentGuide",
+        "title": "SimpleExperiment Mac：打开 Agent/tmux 操作指引"
       }
     ],
     "menus": {
@@ -808,6 +818,89 @@
           },
           "scope": "application",
           "description": "SimpleExperiment 面板分区的手动顺序。"
+        },
+        "simpleExperimentMac.tunnel.manualEndpoints": {
+          "type": "array",
+          "default": [],
+          "scope": "application",
+          "description": "Mac 手动转发端点。由用户在 Termius 登录并启动；插件只检测填写的地址/端口。SSH 身份用于独立 SimpleSFTP，不填写密码、私钥或 Termius 会话路径。",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "role",
+              "host",
+              "user",
+              "sshPort",
+              "localForwardHost",
+              "localForwardPort",
+              "remoteAgentHost",
+              "remoteAgentPort",
+              "projectParentDir"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string",
+                "enum": [
+                  "hub",
+                  "worker"
+                ]
+              },
+              "displayName": {
+                "type": "string"
+              },
+              "host": {
+                "type": "string"
+              },
+              "user": {
+                "type": "string"
+              },
+              "sshPort": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535
+              },
+              "localForwardHost": {
+                "type": "string"
+              },
+              "localForwardPort": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 65535
+              },
+              "remoteAgentHost": {
+                "type": "string"
+              },
+              "remoteAgentPort": {
+                "type": "integer",
+                "minimum": 1024,
+                "maximum": 65535
+              },
+              "projectParentDir": {
+                "type": "string"
+              },
+              "agentInstallDir": {
+                "type": "string"
+              },
+              "condaEnv": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true
+              },
+              "maxConcurrentGpus": {
+                "type": [
+                  "integer",
+                  "string"
+                ],
+                "default": "auto"
+              }
+            }
+          }
         }
       }
     }

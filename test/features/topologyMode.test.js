@@ -8,7 +8,7 @@ const { assessProjectTopology, normalizeTopologyMode } = require("../../dist/fea
 
 test("topology mode is a project-scoped explicit setting", () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-  const setting = pkg.contributes.configuration.properties["simpleExperiment.topologyMode"];
+  const setting = pkg.contributes.configuration.properties["simpleExperimentMac.topologyMode"];
   assert.equal(setting.scope, "resource");
   assert.equal(setting.default, "");
   assert.deepEqual(setting.enum, ["", "single_worker", "worker_pool", "hub_worker"]);

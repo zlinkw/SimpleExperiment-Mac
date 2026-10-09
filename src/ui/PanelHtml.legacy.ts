@@ -1332,7 +1332,7 @@ export function renderPanelHtml(): string {
       <div class="statusLegend" aria-label="状态颜色图例"><span class="legendItem"><span class="legendDot good"></span>正常</span><span class="legendItem"><span class="legendDot info"></span>运行 / 信息</span><span class="legendItem"><span class="legendDot warn"></span>等待 / 注意</span><span class="legendItem"><span class="legendDot error"></span>异常 / 失败</span><span class="legendItem"><span class="legendDot mine"></span>我的任务 / 重点</span></div>
       <div class="topbar-actions">
         <button data-command="bootstrapProject" type="button" title="扫描工作区，识别 experiments/plans 下的实验计划与项目配置&#10;同时检查服务器与 Agent 等前置条件&#10;已有的计划与接入配置不会重复写入">识别工作区</button>
-        <span class="status-chip">Xshell</span>
+        <span class="status-chip">Termius 手动转发</span>
         <span class="status-chip">全局配置</span>
         <span class="status-chip status-completed">仅本机端口</span>
         <button data-command="verifyAgentVersion" class="secondary" type="button" title="校验 Agent 版本&#10;对比本机与各服务器上的 Agent 版本&#10;不一致时提示升级">校验 Agent 版本</button>
@@ -9029,8 +9029,17 @@ export function renderPanelHtml(): string {
       setHtmlIfChanged("syncServerOverview", renderCheckStaticReports(state));
     }
 
+    function renderManualServerCards(state) {
+      const setup = state.setup || {}, topology = state.topology || {};
+      const endpoints = [];
+      if (setup.hubHost) endpoints.push({ id: "hub", label: setup.hubDisplayName || "Hub", host: setup.hubHost, user: setup.hubUser, localHost: setup.localForwardHost, localPort: setup.localForwardPort, remoteHost: setup.remoteAgentHost, remotePort: setup.remoteAgentPort, root: setup.agentProjectDir, enabled: topology.hubAllowed === true });
+      asArray(setup.workerTunnels).forEach(worker => endpoints.push({ id: worker.id, label: worker.displayName || worker.id, host: worker.workerHost, user: worker.workerUser, localHost: worker.localForwardHost, localPort: worker.localForwardPort, remoteHost: worker.remoteAgentHost, remotePort: worker.remoteTelemetryPort || worker.remoteAgentPort, root: worker.agentProjectDir, enabled: worker.enabled !== false }));
+      const cards = '<div class="server-card" data-anchor="settings-topology"><h3>Mac 服务器拓扑</h3><div class="configGrid">' + configSelect("topology", "mode", "拓扑模式", topology.mode || "", [["", "请选择"], ["single_worker", "单 Worker"], ["worker_pool", "多 Worker"], ["hub_worker", "Hub/Worker"]]) + '</div><div class="toolbar"><button data-command="saveTopologyMode" data-config-scope="topology">保存拓扑</button><button class="secondary" data-command="configureSessions">配置手动端点</button><button class="secondary" data-command="writeAgentCommands">Agent/tmux 指引</button><button class="secondary" data-command="testAll">检测全部</button></div><div class="muted">在 Termius 手动登录并启动转发。插件仅保存你填写的端点，不读取私有会话或密码，不自动重启远端实验。端点编辑入口为 VS Code 设置 tunnel.manualEndpoints。</div>' + (setup.manualEndpointError ? '<div class="status-failed">配置错误：' + esc(setup.manualEndpointError) + '</div>' : '') + (asArray(topology.issues).length ? '<div class="status-warning">' + esc(asArray(topology.issues).join("；")) + '</div>' : '') + '</div>';
+      setHtmlIfChanged("serverSettingsCards", cards + endpoints.map(endpoint => '<div class="server-card"><h3>' + esc(endpoint.label) + ' · ' + esc(endpoint.id) + '</h3><div>' + esc(endpoint.user + "@" + endpoint.host) + '</div><div>手动转发：' + esc(endpoint.localHost + ":" + endpoint.localPort + " → " + endpoint.remoteHost + ":" + endpoint.remotePort) + '</div><div>项目父目录：' + esc(endpoint.root) + '</div><div class="muted">' + (endpoint.enabled ? "启用" : "当前拓扑不使用或已禁用") + '</div></div>').join(""));
+    }
     function renderServerCardsV2(state) {
       const setup = state.setup || {};
+      if (setup.manualProvider === "termius") { renderManualServerCards(state); return; }
       const topology = state.topology || {};
       const hubParticipates = topology.hubAllowed === true;
       const scheduler = state.schedulerConfig || {};

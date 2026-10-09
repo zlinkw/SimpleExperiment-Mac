@@ -20,14 +20,19 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-005（passed，主题修复已发布）
+## 当前批次：mac-005c（passed，Termius 手动端点）
 
 ### 边界
 
-- 本批递增 Experiment 0.5.268/runtime，SFTP 保持 0.2.65；发布门禁加入真实三主题渲染测试，配套更新跳过同版 SFTP。最多 8 文件；不改变业务入口、Plan/API 或远端实验。
-- 完整 prepare/publish 与匿名客户端下载验证后，恢复 Termius/认证主流程。Mac 使用说明已优先交付，主题本地验证通过。
+- 本批保存并严格校验用户手动配置的 Hub/Worker 转发端点，接入既有三拓扑和 HTTP 检测；Mac 跳过旧会话扫描/推断及自动启动，提供配置与非破坏性 Agent/tmux 指引。最多 8 文件。
+- 保留旧入口、业务 API 和 Plan 格式；不读取 Termius 私有会话/密码、不执行远端实验、不停止现有 tmux/Agent。独立 SFTP 认证与 project.prepare 完整 Mac 接入随后分批，不标记科研验收通过。
 
 ### 验证清单
+
+- passed mac-005c：build/面板脚本、213 模块闭包/vm.Script、手动端点 7、既有探测 9、拓扑 5、真实三主题 1 测试逐文件串行通过。严格动态端点、三拓扑、禁用 Hub、IPv6、中文/空格与无私有会话路径覆盖。
+- failed 首次 typecheck：Worker 兼容类型缺少必需字段；补齐后 build 通过。首次新测试暴露同一主机多端点被旧去重器折叠，改为按显式 ID 保留后通过；旧拓扑测试仍引用 Windows namespace，迁至 Mac 后通过。均非超时。
+- 下一批 mac-doc-003：优先完善 README 与包内配置说明的 Mac 操作、手动端点 JSON、Agent/tmux 指引及更新按钮，递增并发布 0.5.269；独立认证和 project.prepare 后续分批。
+
 
 - passed preview-v0.5.268 完整 prepare/publish、实际匿名客户端下载两包/hash/platform/CRC/包内 Mac 文档及主题源码核验。0.5.267/0.2.65 客户端只计划更新 Experiment；0.5.266/0.2.64 计划两组件更新；M5 未执行，不视为在线安装验收。
 - passed mac-release-005：Experiment build/面板脚本、闭包、版本/lock/runtime 一致、辅助脚本语法与发布 3 测试、真实三主题测试逐文件通过。完整 prepare/publish 在同步源码后执行。

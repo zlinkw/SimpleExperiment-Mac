@@ -11,6 +11,7 @@ import { ProgressInactivity } from "../core/ProgressInactivity";
 import * as OperationOutcome_1 from "../core/OperationOutcome";
 import { atomicWriteText } from "../state/StateStore";
 import { LatestSnapshotWriter } from "../core/LatestSnapshotWriter";
+import * as ManualTunnel_1 from "../mac/ManualTunnel";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -733,6 +734,8 @@ async function activateExtension(context) {
         vscode.commands.registerCommand("simpleExperimentMac.openPanel", () => vscode.commands.executeCommand(`${viewId}.focus`)),
         vscode.commands.registerCommand("simpleExperimentMac.copyPanelDiagnostics", () => provider?.copyPanelDiagnosticsFromUi()),
         vscode.commands.registerCommand("simpleExperimentMac.restorePanel", () => provider?.restorePanelFromUi()),
+        hostCommand("simpleExperimentMac.configureManualEndpoints", "configure-manual-endpoints", "配置 Termius 手动端点", () => provider?.configureManualEndpoints()),
+        hostCommand("simpleExperimentMac.showManualAgentGuide", "manual-agent-guide", "显示 Agent/tmux 指引", () => provider?.showManualAgentGuide()),
         hostCommand("simpleExperimentMac.quickSetup", "quick-setup", "检查服务器配置", () => provider?.quickSetup()),
         hostCommand("simpleExperimentMac.configureXshellSavedSessions", "configure-xshell-sessions", "配置 Xshell 会话", () => provider?.configureXshellSavedSessions()),
         hostCommand("simpleExperimentMac.configureXshellAgentSessions", "configure-agent-sessions", "配置 Agent 会话", () => provider?.configureXshellAgentSessions()),
@@ -4231,6 +4234,7 @@ export class RealtimeTunnelPanelProvider {
         return false;
     }
     async quickSetup(showAgentCompletion = true) {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return false; }
         if (!await this.ensureSimpleSftpReadyForSetup("一键配置"))
             return false;
         const hubRequired = this.projectTopologyAssessment().hubAllowed;
@@ -4306,6 +4310,7 @@ export class RealtimeTunnelPanelProvider {
         return agentsReady;
     }
     async configureXshellSavedSessions() {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return; }
         let exePath = isXshellExecutablePath((0, XshellTunnelSetup_1.xshellExecutablePath)(this.setupConfig)) ? (0, XshellTunnelSetup_1.xshellExecutablePath)(this.setupConfig) : "";
         if (!exePath) {
             const found = await this.integration().findExecutable();
@@ -4427,9 +4432,11 @@ export class RealtimeTunnelPanelProvider {
         void vscode.window.showInformationMessage(`已切换为 Xshell 会话文件模式。Hub + ${workers.filter((worker) => worker.enabled !== false).length} 个 Worker 会话会由插件启动。配置已全局保存。`);
     }
     async configureXshellAgentSessions() {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return; }
         await this.writeXshellAgentStartupCommands(true);
     }
     async writeXshellAgentStartupCommands(showMessage = true, requireConfirm = true) {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         assertSingleProjectWorkspace("写入 Agent 自启动路径");
         this.assertTopologyActualWorkRoots("写入 Agent 自启动路径");
         const targets = this.agentStartupTargets();
@@ -4460,11 +4467,13 @@ export class RealtimeTunnelPanelProvider {
         return results;
     }
     async startAllXshellAgentSessions(showMessage = false, requireConfirm = true) {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         void showMessage;
         await this.startAllXshellRealtimeTunnels(requireConfirm);
         return true;
     }
     async startAllXshellConnections(requireConfirm = true, scheduleAutoTest = true) {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         await this.syncXshellConfigBeforeNetwork("start all xshell connections");
         const launchBlockers = this.currentTunnelLaunchBlockers();
         if (launchBlockers.length) {
@@ -4501,6 +4510,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     async prepareAgentsForFirstRun(showMessage = true) {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         if(!await this.ensureSimpleSftpReadyForSetup("准备 Agent")){
           console.warn("[diag] prepareAgents blocked: SimpleSFTP not ready");
           throw new UiCommandCancelled("SimpleSFTP 未就绪，已取消准备 Agent。请先安装并重载窗口。");
@@ -4580,6 +4590,7 @@ export class RealtimeTunnelPanelProvider {
         return true;
     }
     async configureXshellRealtimeTunnel() {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return; }
         const integration = this.integration();
         const found = await integration.findExecutable();
         let exePath = found.path || (0, XshellTunnelSetup_1.xshellExecutablePath)(this.setupConfig);
@@ -4652,6 +4663,7 @@ export class RealtimeTunnelPanelProvider {
         void vscode.window.showInformationMessage("Xshell 隧道配置已保存。");
     }
     async configureWorkerTunnels() {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return; }
         let workers = [...this.setupConfig.workerTunnels];
         for (;;) {
             const picked = await vscode.window.showQuickPick([
@@ -4702,6 +4714,7 @@ export class RealtimeTunnelPanelProvider {
         void vscode.window.showInformationMessage(`Worker 隧道配置已保存：${workers.filter((worker) => worker.enabled !== false).length} 个启用。`);
     }
     async startXshellRealtimeTunnel() {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         if (!this.projectTopologyAssessment().hubAllowed) {
             void vscode.window.showWarningMessage("当前拓扑不使用 Hub。请启动 Worker 或使用“启动全部 Xshell 会话”。");
             return;
@@ -4737,6 +4750,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     async configureTunnelPorts() {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return; }
         const rangeStart = await inputPort("Worker 本地端口范围起点", this.setupConfig.ports.workerLocalPortRange.start, { min: 1024, description: "Worker 本地端口范围起点" });
         if (rangeStart === undefined)
             return;
@@ -4769,6 +4783,7 @@ export class RealtimeTunnelPanelProvider {
             await this.configureTunnelPorts();
     }
     async startHubTunnel() {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         if (!this.projectTopologyAssessment().hubAllowed) {
             void vscode.window.showWarningMessage("当前拓扑不使用 Hub，已阻止启动 Hub 隧道。");
             return;
@@ -4776,6 +4791,7 @@ export class RealtimeTunnelPanelProvider {
         await this.startXshellRealtimeTunnel();
     }
     async startWorkerTunnel() {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         const workers = this.tunnelLaunchItems().filter((item) => item.role === "worker");
         if (!workers.length) {
             void vscode.window.showWarningMessage("没有已启用的 Worker 实时观测隧道。");
@@ -4794,6 +4810,7 @@ export class RealtimeTunnelPanelProvider {
         await vscode.window.showTextDocument(doc, { preview: true });
     }
     async startAllXshellRealtimeTunnels(requireConfirm = true) {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         await this.syncXshellConfigBeforeNetwork("start all tunnels");
         const portConflicts = this.currentPortConflicts();
         const blockingConflicts = portConflicts.filter((conflict) => conflict.severity === "error");
@@ -4915,7 +4932,7 @@ export class RealtimeTunnelPanelProvider {
             if (generation !== this.projectContextGeneration || authorityClient !== this.client)
                 return;
             this.lastHealth = (0, TunnelHealth_1.classifyTunnelHealth)({
-                configured: Boolean((0, XshellTunnelSetup_1.xshellExecutablePath)(this.setupConfig)),
+                configured: this.isMacVariant() ? this.realtimeEndpoints().length > 0 : Boolean((0, XshellTunnelSetup_1.xshellExecutablePath)(this.setupConfig)),
                 paused: error instanceof RequestBudget_1.RequestBudgetDeniedError && error.decision.reason === "paused",
                 rateLimited: error instanceof RequestBudget_1.RequestBudgetDeniedError && error.decision.reason === "rate_limited",
                 error,
@@ -4972,6 +4989,7 @@ export class RealtimeTunnelPanelProvider {
         this.postLaunchAutoTestTimer = undefined;
     }
     async runXshellRealIntegrationCheck() {
+        if (this.isMacVariant()) return this.testTunnel(true);
         const generation = this.projectContextGeneration;
         if (this.effectiveConnectionMode() === "offline_import")
             return;
@@ -6894,6 +6912,16 @@ export class RealtimeTunnelPanelProvider {
     expectedWorkerAgentProjectRoot(workerId) {
         const worker = this.setupConfig.workerTunnels.find((item) => item.id === workerId);
         return this.agentRuntimeDirs(worker?.agentProjectDir || this.setupConfig.agentProjectDir).workDir;
+    }
+    isMacVariant() { return this.context.extension?.packageJSON?.name === "simple-experiment-mac"; }
+    async configureManualEndpoints() {
+        await vscode.commands.executeCommand("workbench.action.openSettings", "simpleExperimentMac.tunnel.manualEndpoints");
+    }
+    async showManualAgentGuide() {
+        const topology = this.assertTopologyReady("生成 Agent/tmux 指引");
+        const content = ManualTunnel_1.manualAgentGuide(this.setupConfig, topology.mode, remoteProjectName(), Boolean(this.tunnelConfig.token));
+        const document = await vscode.workspace.openTextDocument({ language: "markdown", content });
+        await vscode.window.showTextDocument(document, { preview: true });
     }
     async openSetupGuide() {
         const guide = path.join(this.context.extensionPath, "docs", "simple-experiment-setup.md");
@@ -9479,6 +9507,7 @@ export class RealtimeTunnelPanelProvider {
         return `${label} 配置已全局保存。请补充项目父目录后再准备 Agent。`;
     }
     async showServerConfigSavedNextStep(label, actualWorkRoot) {
+        if (this.isMacVariant()) { await this.openSetupGuide(); return; }
         const message = this.serverConfigSavedMessage(label, actualWorkRoot);
         if (!workspaceRoot()) {
             const next = await vscode.window.showInformationMessage(`${message} 下一步选择本地项目后继续生成当前项目目标。`, "选择项目并继续", "打开配置说明");
@@ -9522,7 +9551,7 @@ export class RealtimeTunnelPanelProvider {
             ? String(config.get("topologyMode", "") || "").trim()
             : String(configuredModeOverride || "").trim();
         const normalizedMode = (0, TopologyMode_1.normalizeTopologyMode)(configuredMode);
-        const storedHubConfigured = Boolean(String(this.setupConfig.savedSessionPath || "").trim() && String(this.setupConfig.agentProjectDir || "").trim());
+        const storedHubConfigured = Boolean((this.isMacVariant() ? this.setupConfig.hubHost && this.setupConfig.localForwardPort : String(this.setupConfig.savedSessionPath || "").trim()) && String(this.setupConfig.agentProjectDir || "").trim());
         const hubConfigured = normalizedMode ? normalizedMode === "hub_worker" && storedHubConfigured : storedHubConfigured;
         const assessment = (0, TopologyMode_1.assessProjectTopology)(configuredMode, {
             hubConfigured,
@@ -12369,6 +12398,7 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     async addWorkerConfigFromUi(showMessage = true) {
+        if (this.isMacVariant()) { await this.configureManualEndpoints(); return false; }
         await this.refreshXshellSessionLibrary({ force: true, postState: false });
         const library = this.xshellLibrary;
         const primaryDir = library.existingDirs[0] || library.searchedDirs[0];
@@ -12406,6 +12436,7 @@ export class RealtimeTunnelPanelProvider {
         await this.applySetupDraft(manual, { syncAssignmentsFromFields: true });
     }
     async startTunnelEndpointFromUi(message) {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         await this.syncXshellConfigBeforeNetwork("start endpoint");
         const endpointId = stringField(message, "endpointId") || "hub";
         const item = this.tunnelLaunchItems().find((entry) => entry.id === endpointId);
@@ -19855,6 +19886,18 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     loadSetupConfig() {
+        if (this.isMacVariant()) {
+            const config = vscode.workspace.getConfiguration("simpleExperimentMac");
+            const saved = this.context.globalState.get(keys.setupConfig) || {};
+            try {
+                return ManualTunnel_1.setupFromManualEndpoints(config.get(ManualTunnel_1.MANUAL_ENDPOINT_SETTING, []), {
+                    ...saved, remoteTmuxSessionPrefix: config.get("tunnel.remoteTmuxSessionPrefix", saved.remoteTmuxSessionPrefix || "simple"),
+                    condaEnv: config.get("tunnel.condaEnv", saved.condaEnv || ""),
+                });
+            } catch (error) {
+                return { ...ManualTunnel_1.setupFromManualEndpoints([]), manualEndpointError: errorMessage(error) };
+            }
+        }
         const saved = this.context.globalState.get(keys.setupConfig) || {};
         const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const sessionDefaults = this.sessionDefaultInspections(config);
@@ -19942,12 +19985,14 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     async applySetupDraft(patch, options = {}) {
-        let next = (0, XshellTunnelSetup_1.normalizeXshellSetupConfig)({
-            ...this.setupConfig,
-            ...patch,
-        });
+        const input = { ...this.setupConfig, ...patch };
+        let next = this.isMacVariant() ? ManualTunnel_1.enforceManualSetup(input) : (0, XshellTunnelSetup_1.normalizeXshellSetupConfig)(input);
         if (options.syncAssignmentsFromFields)
             next = this.withAssignmentsFromConfigFields(next);
+        if (this.isMacVariant()) {
+            next = ManualTunnel_1.enforceManualSetup(next);
+            await vscode.workspace.getConfiguration("simpleExperimentMac").update(ManualTunnel_1.MANUAL_ENDPOINT_SETTING, ManualTunnel_1.endpointsFromSetup(next), vscode.ConfigurationTarget.Global);
+        }
         this.setupConfig = next;
         this.lastFullEndpointProbeAt = 0;
         if (this.lastProbe) {
@@ -20006,6 +20051,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     async refreshXshellSessionLibrary(options = {}) {
+        if (this.isMacVariant()) { this.xshellLibrary = { sessions: [], searchedDirs: [], existingDirs: [] }; return; }
         const dirs = xshellScanDirs(this.setupConfig);
         const configuredPaths = this.configuredXshellSessionPaths();
         const requestKey = this.xshellLibraryRequestKey(dirs, configuredPaths);
@@ -20085,6 +20131,7 @@ export class RealtimeTunnelPanelProvider {
         return this.xshellLibrary.sessions.find((session) => localPathKey(session.filePath) === key);
     }
     async ensureXshellSessionLoaded(filePath) {
+        if (this.isMacVariant()) return;
         if (!filePath || this.sessionInfoForPath(filePath))
             return;
         const info = await (0, XshellSessionScanner_1.readXshellSessionFile)(filePath, path.dirname(filePath)).catch(() => undefined);
@@ -20096,6 +20143,7 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     async syncConfiguredXshellSessions(_reason, postStateOnUnchanged = true) {
+        if (this.isMacVariant()) return;
         const synced = this.withXshellDerivedFields(this.setupConfig);
         if (JSON.stringify((0, XshellTunnelSetup_1.publicXshellSetupSummary)(synced)) === JSON.stringify((0, XshellTunnelSetup_1.publicXshellSetupSummary)(this.setupConfig))) {
             if (postStateOnUnchanged) this.postState();
@@ -20104,6 +20152,11 @@ export class RealtimeTunnelPanelProvider {
         await this.applySetupDraft(synced, { syncAssignmentsFromFields: true });
     }
     async syncXshellConfigBeforeNetwork(reason, options = {}) {
+        if (this.isMacVariant()) {
+            if (this.setupConfig.manualEndpointError) throw new Error(this.setupConfig.manualEndpointError);
+            ManualTunnel_1.endpointsFromSetup(this.setupConfig);
+            return;
+        }
         await Promise.all([
             this.refreshXshellSessionLibrary({ postState: options.postState !== false }),
             this.refreshLocalSshConfig(),
@@ -20112,6 +20165,7 @@ export class RealtimeTunnelPanelProvider {
         await this.syncConfiguredXshellSessions(reason, options.postState !== false);
     }
     withXshellDerivedFields(config) {
+        if (this.isMacVariant()) return ManualTunnel_1.enforceManualSetup(config);
         const hubInfo = this.sessionInfoForPath(config.savedSessionPath);
         const hubForward = chooseXshellForward(hubInfo, config.savedSessionForwardIndex, config.localForwardPort, config.remoteAgentPort);
         const workers = config.workerTunnels.map((worker) => {
@@ -20191,6 +20245,7 @@ export class RealtimeTunnelPanelProvider {
                 source: existing.get(worker.id)?.source || "imported",
             })),
         ];
+        if (this.isMacVariant()) return ManualTunnel_1.enforceManualSetup({ ...config, ports: { ...config.ports, assignments } });
         return (0, XshellTunnelSetup_1.normalizeXshellSetupConfig)({
             ...config,
             ports: {
@@ -20583,7 +20638,7 @@ export class RealtimeTunnelPanelProvider {
     }
     realtimeEndpoints() {
         const registry = (0, TunnelEndpointRegistry_1.buildTunnelEndpointRegistry)(this.setupConfig, { hub: this.lastProbe, ...this.lastWorkerProbes });
-        const hubAllowed = this.projectTopologyAssessment().hubAllowed;
+        const hubAllowed = this.projectTopologyAssessment().hubAllowed && (!this.isMacVariant() || Boolean(this.setupConfig.hubHost && this.setupConfig.agentProjectDir));
         return registry.endpoints.filter((endpoint) => endpoint.enabled && (hubAllowed || endpoint.role !== "hub_control")).map((endpoint) => ({
             id: endpoint.id,
             role: endpoint.role === "hub_control" ? "hub" : "worker",
@@ -20766,7 +20821,7 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     currentAssignments() {
-        const hubAllowed = this.projectTopologyAssessment().hubAllowed;
+        const hubAllowed = this.projectTopologyAssessment().hubAllowed && (!this.isMacVariant() || Boolean(this.setupConfig.hubHost && this.setupConfig.agentProjectDir));
         if (this.currentAssignmentsCacheConfig === this.setupConfig && this.currentAssignmentsCacheHubAllowed === hubAllowed)
             return this.currentAssignmentsCacheValue;
         const enabledWorkers = new Set(this.enabledWorkerConfigs().map((worker) => worker.id));
@@ -20828,7 +20883,7 @@ export class RealtimeTunnelPanelProvider {
             && this.endpointRegistryStateCachePolicy === policy) {
             return this.endpointRegistryStateCacheValue;
         }
-        const hubAllowed = this.projectTopologyAssessment().hubAllowed;
+        const hubAllowed = this.projectTopologyAssessment().hubAllowed && (!this.isMacVariant() || Boolean(this.setupConfig.hubHost && this.setupConfig.agentProjectDir));
         const registry = (0, TunnelEndpointRegistry_1.buildTunnelEndpointRegistry)(this.setupConfig, { hub: this.lastProbe, ...this.lastWorkerProbes });
         const scopedRegistry = hubAllowed ? registry : {
             ...registry,
@@ -20903,6 +20958,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     async launchTunnelItem(item) {
+        if (this.isMacVariant()) return { attempted: false, launched: false, message: "请在 Termius 手动启动转发；现有远端实验保持运行。" };
         const errors = (0, XshellTunnelSetup_1.validateXshellSetupConfig)(item.config);
         if (errors.length) {
             void vscode.window.showErrorMessage(`${item.id}: ${errors.join(" ")}`);
@@ -22543,6 +22599,7 @@ export class RealtimeTunnelPanelProvider {
         this.statePostRetryTimer.unref?.();
     }
     private integration() {
+        if (this.isMacVariant()) return { probeLocalTunnel: (config) => XshellTunnelPortProbe_1.probeLocalTunnel({ ...config, token: this.tunnelConfig.token }) };
         return new XshellTunnelIntegration_1.XshellIntegration({
             configuredPath: (0, XshellTunnelSetup_1.xshellExecutablePath)(this.setupConfig),
             workspaceRoot: workspaceRoot(),
@@ -25023,6 +25080,7 @@ function compactXshellSetupForWebview(config) {
     if (cached)
         return cached;
     const compacted = dropUndefined({
+        manualProvider: config.manualProvider, manualEndpointError: config.manualEndpointError,
         hubDisplayName: config.hubDisplayName,
         hubHost: config.hubHost,
         hubUser: config.hubUser,
@@ -27295,15 +27353,15 @@ function finalPlotSourcesFromSummary(summary) {
 function serverSetupMissingItems(setup, hubRequired = true) {
     const config = setup && typeof setup === "object" ? setup : {};
     const missing = [];
-    if (hubRequired && !String(config.savedSessionPath || "").trim())
-        missing.push("Hub Xshell 会话");
+    if (hubRequired && !(config.manualProvider === "termius" ? config.hubHost && config.localForwardPort : String(config.savedSessionPath || "").trim()))
+        missing.push(config.manualProvider === "termius" ? "Hub 手动转发端点" : "Hub Xshell 会话");
     if (hubRequired && !String(config.agentProjectDir || "").trim())
         missing.push("Hub 项目父目录");
     const workers = Array.isArray(config.workerTunnels) ? config.workerTunnels.filter((worker) => worker && worker.enabled !== false) : [];
     for (const worker of workers) {
         const label = String(worker.displayName || worker.id || "Worker");
-        if (!String(worker.savedSessionPath || "").trim())
-            missing.push(`${label} Xshell 会话`);
+        if (!(config.manualProvider === "termius" ? worker.workerHost && worker.localForwardPort : String(worker.savedSessionPath || "").trim()))
+            missing.push(`${label} ${config.manualProvider === "termius" ? "手动转发端点" : "Xshell 会话"}`);
         if (!String(worker.agentProjectDir || "").trim())
             missing.push(`${label} 项目父目录`);
     }
