@@ -5,7 +5,7 @@ export interface TunnelPortMemento {
   update(key: string, value: unknown): Thenable<void> | Promise<void> | void;
 }
 
-export const tunnelPortAssignmentsKey = "simpleExperiment.tunnel.portAssignments";
+export const tunnelPortAssignmentsKey = "simpleExperimentMac.tunnel.portAssignments";
 
 export class TunnelPortPersistence {
   constructor(

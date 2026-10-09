@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-002c（passed）
+## 当前批次：mac-002d（passed）
 
 ### 边界
 
-- SimpleExperiment 激活/命令/状态 namespace 与旧更新常量隔离，8 个文件以内。
+- UI、配置预填、工作区、业务/传输桥和路径确认 namespace 迁移，8 个文件以内。
 - 保护入口，阻断 Mac 自动导入 Windows 扩展数据库；下批处理 UI/其余业务 namespace。
 
 ### 验证清单
+
+- passed mac-002d build、面板生成脚本 2 测试/ vm.Script、195 模块闭包。
 
 - passed mac-002c build/面板脚本、195 模块闭包、namespace/更新源隔离和禁止跨身份读写断言。
 
@@ -45,6 +47,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。
 
 ## 本批记录
+
+- mac-002c Experiment `b70583431aad238d94001cdcf5e1bb20c56f3826` 已同步 origin/master。
 
 - mac-002b Experiment `18142b1211ddb549d43d9359158df52f21b92457` 已同步 origin/master。
 

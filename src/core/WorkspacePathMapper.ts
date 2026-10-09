@@ -37,13 +37,13 @@ export function resolveWorkspaceLocation(
     throw new Error(`不支持的工作区 URI scheme：${scheme || "<empty>"}`);
   }
   if (!String(config.hostRoot || "").trim()) {
-    throw new Error("远程工作区缺少配置 simpleExperiment.workspaceHostRoot。");
+    throw new Error("远程工作区缺少配置 simpleExperimentMac.workspaceHostRoot。");
   }
   if (!String(config.containerRoot || "").trim()) {
-    throw new Error("远程工作区缺少配置 simpleExperiment.workspaceContainerRoot。");
+    throw new Error("远程工作区缺少配置 simpleExperimentMac.workspaceContainerRoot。");
   }
 
-  const hostRoot = normalizeWindowsAbsolutePath(config.hostRoot, "simpleExperiment.workspaceHostRoot");
+  const hostRoot = normalizeWindowsAbsolutePath(config.hostRoot, "simpleExperimentMac.workspaceHostRoot");
   const containerRoot = normalizeContainerRoot(config.containerRoot);
   const containerPath = normalizeContainerPath(uri?.path, "远程工作区路径");
   if (containerPath !== containerRoot && !containerPath.startsWith(`${containerRoot}/`)) {
@@ -76,7 +76,7 @@ function normalizeWindowsAbsolutePath(value: unknown, label: string): string {
 }
 
 function normalizeContainerRoot(value: unknown): string {
-  const root = normalizeContainerPath(value, "simpleExperiment.workspaceContainerRoot");
+  const root = normalizeContainerPath(value, "simpleExperimentMac.workspaceContainerRoot");
   return root === "/" ? root : root.replace(/\/+$/, "");
 }
 

@@ -31,7 +31,7 @@ export interface MissingInventoryOptions {
   workspace?: string;
   setup?: Record<string, unknown>;
   topology?: Record<string, unknown>;
-  simpleSftp?: Record<string, unknown>;
+  simpleSftpMac?: Record<string, unknown>;
   project?: Record<string, unknown>;
   plan?: Record<string, unknown>;
   requirePlan?: boolean;
@@ -390,7 +390,7 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
   const workspace = String(options.workspace || "").trim();
   const setup = options.setup && typeof options.setup === "object" ? options.setup : {};
   const topology = options.topology && typeof options.topology === "object" ? options.topology : {};
-  const simpleSftp = options.simpleSftp && typeof options.simpleSftp === "object" ? options.simpleSftp : {};
+  const simpleSftpMac = options.simpleSftpMac && typeof options.simpleSftpMac === "object" ? options.simpleSftpMac : {};
   const project = options.project && typeof options.project === "object" ? options.project : {};
   const plan = options.plan && typeof options.plan === "object" ? options.plan : {};
   const workers = Array.isArray(setup.workerTunnels) ? setup.workerTunnels.filter((worker) => worker && typeof worker === "object" && worker.enabled !== false) : [];
@@ -432,10 +432,10 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
     });
   }
 
-  if (simpleSftp.ready !== true) {
+  if (simpleSftpMac.ready !== true) {
     missing.push({
       step: "prepare_agents",
-      reason: String(simpleSftp.message || "配套 SimpleSFTP 未就绪，无法完成正式上传或运行。"),
+      reason: String(simpleSftpMac.message || "配套 SimpleSFTP 未就绪，无法完成正式上传或运行。"),
       options: ["install_simple_sftp", "reload_vscode"],
       requiredConfirm: ["confirm"],
     });

@@ -3,7 +3,7 @@ import * as os from "os";
 import * as path from "path";
 
 export const REMOTE_ROOT_POLICY_PREFILL_VERSION = 1;
-export const REMOTE_ROOT_POLICY_PREFILL_KEY = "simpleExperiment.remoteRootPolicyPrefillVersion";
+export const REMOTE_ROOT_POLICY_PREFILL_KEY = "simpleExperimentMac.remoteRootPolicyPrefillVersion";
 
 interface RemoteRootPrefillSource {
   setupConfig?: unknown;
@@ -97,8 +97,8 @@ export function deriveRemoteRootPolicyPrefill(source: RemoteRootPrefillSource = 
 async function readServerProfiles(): Promise<unknown> {
   try {
     const file = path.join(
-      process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
-      "SimpleSFTP",
+      require("../mac/MacPaths").applicationDataRoot(),
+      "SimpleSFTPMac",
       "server-profiles",
       "servers.json",
     );
@@ -138,7 +138,7 @@ export async function prefillRemoteRootPolicy(
   if (!folder || Number(context.workspaceState.get(REMOTE_ROOT_POLICY_PREFILL_KEY, 0)) >= REMOTE_ROOT_POLICY_PREFILL_VERSION) return undefined;
   await context.workspaceState.update(REMOTE_ROOT_POLICY_PREFILL_KEY, REMOTE_ROOT_POLICY_PREFILL_VERSION);
 
-  const config = vscode.workspace.getConfiguration("simpleExperiment", folder.uri);
+  const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri);
   const allowedInspection = config.inspect("remote.allowedRoots");
   const deniedInspection = config.inspect("remote.deniedRoots");
   if (hasExplicitConfigurationValue(allowedInspection) && hasExplicitConfigurationValue(deniedInspection)) return undefined;
