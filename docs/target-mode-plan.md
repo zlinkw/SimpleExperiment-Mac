@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-020（passed，YAML 候选使用说明/发布门禁）
+## 当前批次 mac-release-025（running，0.5.288/0.2.82）
+- 本批 6 文件以内：两仓 package/lock、Experiment runtime/本文档；版本验证后普通推送，prepare/publish 绑定同步源码，实际 VSIX/匿名更新核验后交付，不 Actions/安装。
+- passed 版本门禁：两仓 build、221/26 闭包/面板 2/vm.Script、runtimeManifest 1、元数据/diff 一致；最初测试文件目录误写未启动，改为实际 test/runtimeManifest.test.js 后通过。准备/发布/实际包与匿名更新 pending。
+- mac-doc-020 Experiment `466f9651324ec905ac01a57d210e45e93048b807`、SFTP `a3c763e6f9eaec56c2c3cb213fd089c8dab781e9` 已普通推送/fetch 核对。
+
+### 前批 mac-doc-020（passed）
 - 7 文件以内：两仓 README、包内配置说明、prepare/门禁测试/配置说明测试、本文档；同步 Mac 结果路径的 YAML 引号用法与当前验证范围，保留更新入口及 M5 边界。
 - mac-005x-yaml `17ba8b376231633cdd062306b287f46b26d68078` 已普通推送并 fetch 核对 origin/master。
 - passed build/221 闭包/面板 2/vm.Script、macSetupGuide 1、macRelease 4 串行、三份文档 UTF8/更新入口/验收范围及 diff；新增 macPlanResultCandidates/jsonConfigOnboarding 门禁。下一批版本元数据和本机配套发布，不安装扩展。
