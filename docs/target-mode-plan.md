@@ -10,11 +10,16 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-031（running，0.5.294/0.2.88）
+## 当前批次 mac-release-031（passed，0.5.294/0.2.88）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。两仓干净且 master 同步；mac-doc-025 Exp `6307ebdd39d21ac1e22d545a7d3717b1a59c063e`/SFTP `38f582bddcc1a98f65772d8b3a640a896ea86693` 已普通推送/fetch 核对。
-- pending 元数据 build/闭包/面板/runtime/UTF8/diff，普通推送后绑定同步来源；再完整 prepare、实际 VSIX 回执候选和前版能力、匿名 updater 下载核验、完整草稿三附件核验后 publish。无 Actions/安装，保留历史附件。
+- passed 两仓 build/闭包/面板/runtime/UTF8/diff、完整 prepare、实际 VSIX 与匿名 updater；完整三附件草稿核验后公开发布。无 Actions/安装，保留历史附件。
 
-- passed 元数据子批：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；完整 prepare/实际包/匿名发布尚未计通过。
+- passed 元数据子批：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；后续完整 prepare/实际包/匿名发布证据分别记录。
+
+- passed 完整 release:prepare：build/225 与 26 闭包/面板 2/vm.Script、69 个目标测试文件单文件串行/20 秒（Exp feature 54/core 1、SFTP 14），回执候选 8/本机解析 8/读取 8/映射 11/wrapper 22/pending 39/实际编译链 6/浅深高对比真实 headless；日志 release-artifacts/prepare-0.5.294.log，70 个含 build 面板标记，无超时。
+- passed .294 实际 VSIX 十一份证据：新增回执候选 8（完整 typed Plan/别名/revision、祖先/兄弟范围、归属时间/最新空报告、Windows 兼容），本机解析 8/读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/编译结果链 6；所有 report 绑定包来源/hash。本机文件/模拟 API/POSIX/隔离 AST，无真实科研/SSH/远端启动/停止/删除/安装/M5。报告聚合检查初次把启动 scenarios 数组当数字，按原报告数组长度核对通过，未改报告或生产。
+- passed .293/.87→.294/.88 匿名 updater：34 次公开请求，预发布/清单/大小/hash/CRC/身份/平台验证，下载字节等于实际测试包；新回执模块、前版能力、两仓 README/包内说明匹配同步来源，同版本跳过/不降级。
+- 第三十一版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.294 已公开；来源 Exp `1dd2e0a80adc8a29b7ae5310c03d197d5214459e`/SFTP `8cceeee9ee706fc5cf25d3df66c02070f8386950` 已普通推送/fetch 相等。下一批限 Agent 检查输出契约回执产生端的原始 Plan/selectedPlanId 别名与关联只读候选，最多 8 文件；其他写操作/原子发布/归档/M5 保留后续。
 
 ### 前批 mac-doc-025（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/对应门禁测试与计划。同步轻量结果查看回执来源隔离和失败处理、继续保留 Mac 更新入口，明确其他回执及 Agent 输出仍待适配。
@@ -26,27 +31,10 @@
 - passed build/225 闭包/面板 2/vm.Script、实际编译回执候选 8、原结果查看 13/候选 6/摘要 7/结果身份 8，单文件串行/20 秒无测试超时；UTF8/LF/diff。初始新模块 copy 类型错误显式 Row 修复；第一次 vsce ls 的 8 秒子进程预算超时，后续源码验证完整 build 后闭包通过，未放松预算。
 - 下一批同步 README/配置/门禁与配套发布。其他运行/写操作回执、Webview 序列化、Agent 输出（action_payload_text/selectedPlanId 仍有 trim）与完整原子发布保留后续，不宣称真实 Agent/M5 通过。
 
-## 前批 mac-release-030（passed，0.5.293/0.2.87）
-- 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划。元数据验证后普通推送，同步来源绑定完整 prepare/publish、实际 VSIX Mac 解析与前版能力及匿名更新；历史附件保留，无 Actions/安装。
-- mac-doc-024 Exp `ee9d1850ee36e33a02587769af41fb9f48083735`、SFTP `c9d079c761e2b02fae150df843266df2ca2a0bd5` 已普通推送/fetch 核对。build/闭包/面板/runtimeManifest/UTF8/diff、完整 68 文件串行 prepare、实际包/匿名更新 passed；M5 延后。
-
-- passed 元数据子批：两仓 build/224 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、版本三方一致、UTF8/diff。后续完整 prepare/实际包/匿名发布单独记录，不提前记通过。
-
-- passed 完整 release:prepare：两仓 build/224 与 26 闭包/面板 2、68 个目标测试文件单文件串行/20 秒（Exp feature 53/core 1、SFTP 14），含实际 Mac 本机解析 8/读取 8/映射 11/wrapper 22/pending 39/实际编译链 6/浅深高对比真实 headless；日志 release-artifacts/prepare-0.5.293.log，无超时。
-- passed .293 实际 VSIX 十份证据：新增 Mac 本机解析 8（实际包解析/快照/mtime/原始 Plan 和输入来源/严格 UTF8/大小/hash/缓存 rows/二进制与空文件/尾空格），读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/实际编译结果链 6。各 report 绑定当前来源/hash；本机文件/模拟 API/POSIX/隔离 AST，无真实科研/SSH/远端启动/停止/删除/安装/M5。
-- passed .292/.86→.293/.87 匿名 updater：33 次公开请求，prerelease/清单/大小/hash/CRC/身份/平台核验，下载字节与实际测试包相等；新 MetricInput/ResultFiles/wrapper/后台及前版模块、两仓 README/包内说明匹配同步来源，同版本跳过/不降级。
-- 第三十版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.293 已公开，完整三附件草稿核验后发布；来源 Exp `8e2dc489b8dd60ef03eed1b8bcbd1766c85b9120`、SFTP `e9affcea0cc296588e537f26e51c0c8ecc28459f` 已普通推送/fetch 核对，旧版本保留、不覆盖。下一批限命令结果回执的完整 Plan 来源与相关结果候选授权的一组问题，最多 8 文件；保留原入口/业务 API/三拓扑及更新，完整原子发布/Agent/归档/其余 Mac 依赖/M5 后续。
-
-### 前批 mac-doc-024（passed）
-- 范围 6 文件：两仓 README、Mac 配置说明、prepare/门禁测试与计划。同步本机解析快照/严格 UTF8/输入来源及大小/hash/原始名称用法和失败处理，保留更新入口与真机边界；不扩大业务源码范围。
-- mac-005ac-parse `c4b50b61106f17933c053e2befaf25cdd84db51e` 已普通推送/fetch 核对；两仓 Git 干净。passed 两仓 build/224 与 26 闭包/面板 2/vm.Script、配置说明 1/发布脚本 4 单文件串行、三份文档 UTF8/更新入口/diff；prepare 新增真实编译本机解析门禁。下一批元数据与实际包/匿名配套发布。
-
-### 前批 mac-005ac-parse（passed）
-- 范围至多 7 文件：ResultFiles 快照、Mac 指标输入验证模块、后台本机结果解析、wrapper 格式识别、新编译回归/读取测试与计划。CSV/wrapper 本机读取绑定描述符/目录身份及 mtime，严格 UTF8/预算；原始 Plan/来源/大小/hash 核验后从真实文本解析，不借用缓存 rows 或覆盖错误 hash 证据。
-- 本批开始 Exp `364aae7125a32815afad6bf4e22b0d9f916baf1d`、SFTP `1f36111a37072df960a6ef8d404b883ebc409953` 干净且 origin/master 相等，前批实际结果链 fixture/README/配套发布 passed，属于进展。保护 API/Plan/三拓扑/原入口/租约/确认；无真实科研/SSH/删除/安装。
-- passed 7 文件：CSV/wrapper 本机解析绑定快照描述符/目录身份/mtime，4 MiB 预算与严格 UTF8；输入边界核验原始路径/大小/hash/编码，从实际文本重新解析，不信任 rows 或覆盖错误 hash。完整 Plan 范围隔离，wrapper 格式识别保留真实尾空格，二进制及空二进制可保留原名/bytes/同一 job 来源，不生成虚假指标。非 Mac 原入口保留。
-- passed build/224 闭包/面板 2/vm.Script/UTF8/diff；真实编译 Mac 解析 8/读取 8/摘要 7/映射 11、现有实际结果链 6/wrapper 22/pending 39，单文件串行/20 秒，无超时。本机真实文件/模拟 POSIX/API；新 fixture 最初错误大小写样本无差异及 UTF8 错误文本断言修正后通过，无生产放松。
-- 下一批两仓 README/Mac 配置/发布门禁最多 6 文件，再元数据/完整本机 prepare/publish/实际包与匿名更新。完整原子发布/Agent/回执/归档/M5 后续。
+### 前批 .293/.87（passed，完整证据见 Git）
+- mac-005ac-parse `c4b50b61106f17933c053e2befaf25cdd84db51e`：描述符快照/mtime、4 MiB/严格 UTF8、完整 Plan/原始路径/hash/大小、实际解析而非缓存 rows、wrapper 尾空格/二进制/空文件；build/224 闭包/面板、解析 8/读取 8/摘要 7/映射 11/结果链 6/wrapper 22/pending 39 passed。初始两项 fixture 无差异/断言修正，无生产放松。
+- mac-doc-024 Exp `ee9d1850ee36e33a02587769af41fb9f48083735`/SFTP `c9d079c761e2b02fae150df843266df2ca2a0bd5`；两仓 README/配置/门禁/UTF8 passed。
+- 来源 Exp `8e2dc489b8dd60ef03eed1b8bcbd1766c85b9120`/SFTP `e9affcea0cc296588e537f26e51c0c8ecc28459f`，交付 `5e5cab27c1f4a05e67f83e0c5881794d906aac23`；68 文件串行 prepare/十份实际包/33 匿名请求 passed，均已普通推送/fetch 相等；日志 release-artifacts/prepare-0.5.293.log，历史附件保留，M5 pending。
 
 ### 前批 .292/.86（passed，完整证据见 Git）
 - mac-005ab-compiled Exp `4fe3c9cb4c10f84203fed4037123a87700fca926`/SFTP `8d7a7ddec754ad0219fff4829a5a1758782124b3`，真实编译 Worker/结果链 6/迟到锁/错误响应保留旧结果 passed；不放松生产门禁。
@@ -71,7 +59,7 @@
 - .287 交付记录 fcff4d065efaa0450455c27aeb5b998cdd4e00f9 已推送/fetch 相等；旧版本/附件保留，不覆盖。
 
 ## 未完成与下一边界
-- pending mac-005：命令回执来源授权、映射原子下载发布、Webview 行字段序列化、Agent 结果读取、完整 Mac 本机解析与来源、归档、其余 Windows 专属业务依赖，逐批适配。新摘要范围门禁不代表这些链路已验收。
+- pending mac-005：Agent 结果命令回执产生端与其他运行/写操作回执来源授权、映射原子下载发布、Webview 行字段序列化、Agent 结果读取、完整 Mac 本机解析与来源、归档、其余 Windows 专属业务依赖，逐批适配。新摘要范围门禁不代表这些链路已验收。
 - 物理检查与启动/写入间尚非原子锁定，完整 YAML 特性及 suite/config 等其他 scalar 不在本批证据内。
 - pending mac-006：真实 M5 首装→更新/设置保留/重载/部分失败补装；Termius、独立密钥/密码传输/中文路径/断连；单 Worker、多 Worker、Hub/Worker科研主流程。
 - 本地更新链路、VM/AST 与 headless 通过不能宣称完整科研或 M5 验收。用户延后真机验收，不阻塞可继续的本地适配。
