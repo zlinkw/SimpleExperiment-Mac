@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-021（passed，摘要归属使用说明/门禁）
+## 当前批次 mac-release-026（running，0.5.289/0.2.83）
+- 本批 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新再验证，无 Actions/安装。
+- mac-doc-021 Experiment `134dec12ca34adb9e65c6324b4a64a75db21bce8`、SFTP `72b0ce05b0a11e92cf3f3e4d3c367c2cc3968c2e` 已普通推送/fetch 核对。
+- passed 版本门禁：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff。完整 prepare/publish、实际 VSIX 与匿名更新 pending。
+
+### 前批 mac-doc-021（passed）
 - 本批 6 文件：两仓 README、配置说明、prepare/发布门禁测试与计划；更新摘要归属/匿名来源说明、保留更新入口，新增摘要/缓存门禁。不扩展业务源范围。
 - mac-005y-summary `173bd71c476d36b7e6038a394ba4e2f96153da3f` 已普通推送/fetch 核对 origin/master。
 - passed build/222 闭包/面板 2/vm.Script、配置说明 1、发布门禁 4 单文件串行，三份 Mac 文档 UTF8/更新入口/归属边界与 diff；下一批版本元数据、prepare/publish、实际包/匿名更新。映射传输去重和物理发布仍待后续批次。
