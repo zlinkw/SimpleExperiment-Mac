@@ -10,10 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-026（running，0.5.289/0.2.83）
+## 当前批次 mac-release-026（passed，0.5.289/0.2.83）
 - 本批 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新再验证，无 Actions/安装。
 - mac-doc-021 Experiment `134dec12ca34adb9e65c6324b4a64a75db21bce8`、SFTP `72b0ce05b0a11e92cf3f3e4d3c367c2cc3968c2e` 已普通推送/fetch 核对。
-- passed 版本门禁：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff。完整 prepare/publish、实际 VSIX 与匿名更新 pending。
+- passed 版本门禁：两仓 build、222/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff。
+- passed 完整 npm run release:prepare：两仓 build/222 与 26 闭包/面板 2、62 个单文件串行/20 秒目标门禁（Experiment feature 47/core 1、SFTP 14），含新摘要/缓存和浅深高对比实际渲染。完整日志保留 release-artifacts/prepare-0.5.289.log；npm run release:publish 核验完整三附件草稿后公开，无 Actions/安装。
+- passed .289 实际 VSIX：摘要归属/后台/缓存 7、YAML 候选/实际面板后台联动 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8，六份包证据 JSON 有效。本机模拟/AST，无科研/SSH/启动/停止/删除。
+- passed .288/.82→.289/.83 实际匿名 updater：29 次公开请求完成 prerelease 筛选、清单/大小/hash/CRC/身份/平台、下载字节等于实际测试包，新 ResultSummaryScope 和业务模块、两仓 README/包内说明匹配来源；同版本跳过/不降级通过，不实际安装/M5。
+- 第二十六版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.289 已公开：Experiment 来源 `d31223805cc3a201ce0c37b4772238e236b40e20`、SFTP 来源 `28a85dd829e7e61799066621e3ac096570acd2f0` 已普通推送/fetch 核对。旧附件保留不覆盖；下一批限映射传输去重/原始来源路径的一组问题，最多 8 文件，使用说明/更新持续同步。
 
 ### 前批 mac-doc-021（passed）
 - 本批 6 文件：两仓 README、配置说明、prepare/发布门禁测试与计划；更新摘要归属/匿名来源说明、保留更新入口，新增摘要/缓存门禁。不扩展业务源范围。
@@ -62,7 +66,7 @@
 - .287 交付记录 fcff4d065efaa0450455c27aeb5b998cdd4e00f9 已推送/fetch 相等；旧版本/附件保留，不覆盖。
 
 ## 未完成与下一边界
-- pending mac-005：汇总授权/映射下载、Agent 结果读取、实际解析、物理发布/归档、其余 Windows 专属业务依赖，逐批适配。
+- pending mac-005：命令回执来源授权、映射传输去重/物理下载发布、Webview 行字段序列化、Agent 结果读取、实际解析、归档、其余 Windows 专属业务依赖，逐批适配。新摘要范围门禁不代表这些链路已验收。
 - 物理检查与启动/写入间尚非原子锁定，完整 YAML 特性及 suite/config 等其他 scalar 不在本批证据内。
 - pending mac-006：真实 M5 首装→更新/设置保留/重载/部分失败补装；Termius、独立密钥/密码传输/中文路径/断连；单 Worker、多 Worker、Hub/Worker科研主流程。
 - 本地更新链路、VM/AST 与 headless 通过不能宣称完整科研或 M5 验收。用户延后真机验收，不阻塞可继续的本地适配。
