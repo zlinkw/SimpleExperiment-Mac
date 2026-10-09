@@ -1,7 +1,7 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
-const { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, json, fingerprint, assertSource, verifyRemoteAssets } = require("./mac-release-common");
+const { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, json, fingerprint, assertSource, verifyRemoteAssets, assertNewerPreview } = require("./mac-release-common");
 
 function main() {
   const tag = process.argv[2] || `preview-v${json(path.join(EXPERIMENT_ROOT, "package.json")).version}`;
@@ -21,6 +21,7 @@ function main() {
   const info = JSON.parse(run("gh", ["repo", "view", REPOSITORY, "--json", "visibility"]));
   if (info.visibility !== "PUBLIC") throw new Error("Preview downloads require a public repository");
   const listing = JSON.parse(run("gh", ["api", `repos/${REPOSITORY}/releases?per_page=100`]));
+  assertNewerPreview(tag, listing);
   const existing = listing.find(item => item.tag_name === tag);
   const journalPath = path.join(directory, "publish-receipt.json");
   let journal = fs.existsSync(journalPath) ? json(journalPath) : undefined;

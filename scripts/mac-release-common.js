@@ -38,4 +38,14 @@ function verifyRemoteAssets(expected, actual) {
     if (assets.length !== 1 || assets[0].state !== "uploaded" || assets[0].size !== item.size || assets[0].digest !== `sha256:${item.sha256}`) throw new Error(`Remote asset verification failed: ${item.name}`);
   }
 }
-module.exports = { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, npm, json, fingerprint, assertSource, verifyRemoteAssets };
+function assertNewerPreview(tag, releases) {
+  const semver = require("semver");
+  const version = /^preview-v(\d+\.\d+\.\d+)$/.exec(tag)?.[1];
+  if (!semver.valid(version)) throw new Error("Invalid preview version");
+  for (const release of releases) {
+    if (release.draft) continue;
+    const previous = /^preview-v(\d+\.\d+\.\d+)$/.exec(release.tag_name || "")?.[1];
+    if (semver.valid(previous) && semver.compare(version, previous) <= 0) throw new Error("Preview fixes require a higher version than every published preview");
+  }
+}
+module.exports = { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, npm, json, fingerprint, assertSource, verifyRemoteAssets, assertNewerPreview };
