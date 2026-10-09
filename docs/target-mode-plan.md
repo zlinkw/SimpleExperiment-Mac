@@ -10,7 +10,11 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ac-parse（passed）
+## 当前批次 mac-doc-024（passed）
+- 范围 6 文件：两仓 README、Mac 配置说明、prepare/门禁测试与计划。同步本机解析快照/严格 UTF8/输入来源及大小/hash/原始名称用法和失败处理，保留更新入口与真机边界；不扩大业务源码范围。
+- mac-005ac-parse `c4b50b61106f17933c053e2befaf25cdd84db51e` 已普通推送/fetch 核对；两仓 Git 干净。passed 两仓 build/224 与 26 闭包/面板 2/vm.Script、配置说明 1/发布脚本 4 单文件串行、三份文档 UTF8/更新入口/diff；prepare 新增真实编译本机解析门禁。下一批元数据与实际包/匿名配套发布。
+
+### 前批 mac-005ac-parse（passed）
 - 范围至多 7 文件：ResultFiles 快照、Mac 指标输入验证模块、后台本机结果解析、wrapper 格式识别、新编译回归/读取测试与计划。CSV/wrapper 本机读取绑定描述符/目录身份及 mtime，严格 UTF8/预算；原始 Plan/来源/大小/hash 核验后从真实文本解析，不借用缓存 rows 或覆盖错误 hash 证据。
 - 本批开始 Exp `364aae7125a32815afad6bf4e22b0d9f916baf1d`、SFTP `1f36111a37072df960a6ef8d404b883ebc409953` 干净且 origin/master 相等，前批实际结果链 fixture/README/配套发布 passed，属于进展。保护 API/Plan/三拓扑/原入口/租约/确认；无真实科研/SSH/删除/安装。
 - passed 7 文件：CSV/wrapper 本机解析绑定快照描述符/目录身份/mtime，4 MiB 预算与严格 UTF8；输入边界核验原始路径/大小/hash/编码，从实际文本重新解析，不信任 rows 或覆盖错误 hash。完整 Plan 范围隔离，wrapper 格式识别保留真实尾空格，二进制及空二进制可保留原名/bytes/同一 job 来源，不生成虚假指标。非 Mac 原入口保留。
