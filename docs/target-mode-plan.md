@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-004a（passed）
+## 当前批次：mac-004b（passed）
 
 ### 边界
 
-- 本机 prepare/publish、source commit 门禁、双 VSIX 清单/不可覆盖 draft、附件 hash 核验及验收指引，8 文件。
+- 首版发布版本采用原提交源码版本递增：Experiment 0.5.264 / SFTP 0.2.62，并同步 runtime 与锁文件，7 文件以内。
 - 保护入口，阻断 Mac 自动导入 Windows 扩展数据库；下批处理 UI/其余业务 namespace。
 
 ### 验证清单
+
+- passed mac-004b 两仓 build/闭包、面板脚本、源版本方向与 runtime 同步断言；SFTP 品牌/设置 2 测试。
 
 - passed mac-004a 发布脚本语法、完整附件与 hash/禁止覆盖门禁 2 测试、build/面板脚本与 212 模块闭包。实际 prepare/publish 待源码同步后执行。
 
@@ -61,6 +63,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。
 
 ## 本批记录
+
+- mac-004a Experiment `e63faaa281861761484c43e382d8c1dab5df4431` 已同步 origin/master。
 
 - mac-003e SFTP `3ef462678671e96768dfe1cbd36101dc46eb5791`、记录 Experiment `59987dc8e3c96bbba7f93c0ae60b722466af8695` 已同步。
 - mac-003e2 SFTP `6f547b9e77cf4fef771556ac97055f198c94d58d` 已同步；补齐 idle 导出并测试控制器 dispose 加子进程 close 双证明，build/21 文件闭包/3 测试通过。

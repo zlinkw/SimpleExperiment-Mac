@@ -7,3 +7,5 @@
 - 首版仅 preview。两组件与 release.json 放在 SimpleExperiment-Mac 同一个 GitHub Release。无需 GitHub Actions，不接入 zlinkw.shop。
 - 三种拓扑及实验 Plan 和业务 API 契约保持兼容。PPT 自动绘图、Dev Containers、Intel Mac 不属于首版验收。
 - 完整复制的旧源码和文档仅是迁移基线，旧安装、发布、更新源和 Windows 说明不能作为 Mac 交付指令。正式发布只使用新的 release:prepare / release:publish。
+
+- 首版发布版本为 Experiment 0.5.264、SFTP 0.2.62，沿源版本递增，保持科研项目最低版本契约及已有 Agent 版本方向。初始化时的 0.1.1 从未发布。
