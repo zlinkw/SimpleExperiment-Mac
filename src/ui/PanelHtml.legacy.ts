@@ -2733,8 +2733,8 @@ export function renderPanelHtml(): string {
     const planFileEquivalenceCache = new Map();
     let enabledWorkerTunnelsCacheSource = null;
     let enabledWorkerTunnelsCacheValue = [];
-    let simpleSftpMacReadinessCacheSource = null;
-    let simpleSftpMacReadinessCacheValue = null;
+    let simpleSftpReadinessCacheSource = null;
+    let simpleSftpReadinessCacheValue = null;
     let serverSetupReadinessCacheSetup = null;
     let serverSetupReadinessCacheWorkers = null;
     let serverSetupReadinessCacheValue = null;
@@ -8534,12 +8534,12 @@ export function renderPanelHtml(): string {
       return enabledWorkerTunnelsCacheValue;
     }
 
-    function simpleSftpMacReadinessForState(state) {
-      const item = (((state || {}).integrations || {}).simpleSftpMac);
+    function simpleSftpReadinessForState(state) {
+      const item = (((state || {}).integrations || {}).simpleSftp);
       const source = item && typeof item === "object" ? item : EMPTY_SIMPLE_SFTP_INTEGRATION;
-      if (source === simpleSftpMacReadinessCacheSource && simpleSftpMacReadinessCacheValue) return simpleSftpMacReadinessCacheValue;
-      simpleSftpMacReadinessCacheSource = source;
-      simpleSftpMacReadinessCacheValue = source === EMPTY_SIMPLE_SFTP_INTEGRATION
+      if (source === simpleSftpReadinessCacheSource && simpleSftpReadinessCacheValue) return simpleSftpReadinessCacheValue;
+      simpleSftpReadinessCacheSource = source;
+      simpleSftpReadinessCacheValue = source === EMPTY_SIMPLE_SFTP_INTEGRATION
         ? DEFAULT_SIMPLE_SFTP_READINESS
         : {
           ready: source.ready === true,
@@ -8550,19 +8550,19 @@ export function renderPanelHtml(): string {
           legacyVersion: String(source.legacyVersion || ""),
           message: String(source.message || "配套 SimpleSFTP 未就绪。")
         };
-      return simpleSftpMacReadinessCacheValue;
+      return simpleSftpReadinessCacheValue;
     }
 
     function legacySftpNoticeForState(state) {
-      const simpleSftpMac = simpleSftpMacReadinessForState(state);
-      if (!simpleSftpMac.ready || !simpleSftpMac.legacyInstalled) return "";
-      return '<div class="notice warning legacySftpNotice" title="旧版扩展可能保留旧状态栏按钮；卸载旧版后请执行 Developer: Reload Window。"><b>检测到旧版 SFTP</b> 新版 SimpleSFTP 已可用，但旧版仍安装' + (simpleSftpMac.legacyVersion ? "（" + esc(simpleSftpMac.legacyVersion) + "）" : "") + '。卸载旧版并重载窗口后只保留新版界面。 <button class="mini secondary" type="button" data-command="openSetupGuide" title="打开该步骤的处理说明&#10;含配置步骤与常见问题排查">查看处理说明</button></div>';
+      const simpleSftp = simpleSftpReadinessForState(state);
+      if (!simpleSftp.ready || !simpleSftp.legacyInstalled) return "";
+      return '<div class="notice warning legacySftpNotice" title="旧版扩展可能保留旧状态栏按钮；卸载旧版后请执行 Developer: Reload Window。"><b>检测到旧版 SFTP</b> 新版 SimpleSFTP 已可用，但旧版仍安装' + (simpleSftp.legacyVersion ? "（" + esc(simpleSftp.legacyVersion) + "）" : "") + '。卸载旧版并重载窗口后只保留新版界面。 <button class="mini secondary" type="button" data-command="openSetupGuide" title="打开该步骤的处理说明&#10;含配置步骤与常见问题排查">查看处理说明</button></div>';
     }
 
-    function simpleSftpMacCommandDisableReason(state, command) {
+    function simpleSftpCommandDisableReason(state, command) {
       if (!SIMPLE_SFTP_GATED_COMMANDS?.has(String(command || ""))) return "";
-      const simpleSftpMac = simpleSftpMacReadinessForState(state);
-      return simpleSftpMac.ready ? "" : simpleSftpMac.message;
+      const simpleSftp = simpleSftpReadinessForState(state);
+      return simpleSftp.ready ? "" : simpleSftp.message;
     }
 
     function overviewProjectReadiness(state) {
@@ -8612,8 +8612,8 @@ export function renderPanelHtml(): string {
             : "任务需处理";
         return result(terminalStatus, terminalStage.status || "当前 Plan 已进入任务终态；查看对应入口。", { ready: true, blocking: terminalPhase === "review", tone: terminalTone });
       }
-      const simpleSftpMac = simpleSftpMacReadinessForState(state);
-      if (!simpleSftpMac.ready) return result("待安装 SimpleSFTP", simpleSftpMac.message, { tone: "error" });
+      const simpleSftp = simpleSftpReadinessForState(state);
+      if (!simpleSftp.ready) return result("待安装 SimpleSFTP", simpleSftp.message, { tone: "error" });
       if (!serverReadiness.ready) return result("待配置服务器", serverReadiness.summary || "配置 Hub/Worker 的 Xshell 会话和项目父目录。");
       if (!selectedPlan) {
         return planCount
@@ -12648,13 +12648,13 @@ export function renderPanelHtml(): string {
     function renderProjectOnboardingFlow(state, project, meta) {
       const selectedPlan = (meta || {}).selectedPlan || {};
       const selectedPlanFile = String(selectedPlan.planFile || selectedPlan.file || selectedPlan.planId || "").trim();
-      const simpleSftpMac = simpleSftpMacReadinessForState(state);
+      const simpleSftp = simpleSftpReadinessForState(state);
       const server = (meta || {}).serverReadiness || serverSetupReadiness(state);
       const worker = (meta || {}).executionWorkerReadiness || executionWorkerReadiness(state);
       const endpoint = (meta || {}).endpointReadiness || projectEndpointReadiness(state);
       const outputGate = (meta || {}).outputGate || projectOutputGateDiagnostics(project, meta, selectedPlan);
-      const infrastructureReady = simpleSftpMac.ready && server.ready && worker.ready;
-      const infrastructureDetail = !simpleSftpMac.ready ? simpleSftpMac.message : !server.ready ? server.summary : !worker.ready ? worker.summary : "SimpleSFTP、Hub 与执行 Worker 已就绪";
+      const infrastructureReady = simpleSftp.ready && server.ready && worker.ready;
+      const infrastructureDetail = !simpleSftp.ready ? simpleSftp.message : !server.ready ? server.summary : !worker.ready ? worker.summary : "SimpleSFTP、Hub 与执行 Worker 已就绪";
       const planReady = Boolean(selectedPlanFile) && outputGate.ok;
       const planDetail = !selectedPlanFile
         ? (asArray((meta || {}).plans || (project || {}).plans).length ? "先明确选择本次实验 Plan" : "识别工作区并创建首个 Plan")
@@ -16970,9 +16970,9 @@ export function renderPanelHtml(): string {
       const contextArchiveKey = usableTaskKey(context.archiveKey) ? context.archiveKey : "";
       if (state.connectionMode === "offline_import" && isRemoteAction(command)) return "离线导入不能执行远端操作";
       if (command === "clearLegacyTasks") return "";
-      const simpleSftpMacReason = simpleSftpMacCommandDisableReason(state, command);
-      if (simpleSftpMacReason) {
-        if (isLenient) { pushSoft("simpleSftpMac", simpleSftpMacReason); } else { return simpleSftpMacReason; }
+      const simpleSftpReason = simpleSftpCommandDisableReason(state, command);
+      if (simpleSftpReason) {
+        if (isLenient) { pushSoft("simpleSftp", simpleSftpReason); } else { return simpleSftpReason; }
       }
       const capabilityReadiness = uiCapabilityReadinessForStateCommand(state, command);
       const keys = capabilityReadiness.keys;
@@ -17776,13 +17776,13 @@ export function renderPanelHtml(): string {
       return value;
     }
 
-    function projectReadinessStatusText(simpleSftpMacReadiness, serverReadiness, workerReadiness, endpointReadiness, outputGate) {
-      const simpleSftpMacMissing = simpleSftpMacReadiness && simpleSftpMacReadiness.ready === false ? ["SimpleSFTP 文件传输依赖"] : [];
+    function projectReadinessStatusText(simpleSftpReadiness, serverReadiness, workerReadiness, endpointReadiness, outputGate) {
+      const simpleSftpMissing = simpleSftpReadiness && simpleSftpReadiness.ready === false ? ["SimpleSFTP 文件传输依赖"] : [];
       const serverMissing = asArray((serverReadiness || {}).missing);
       const workerMissing = asArray((workerReadiness || {}).missing);
       const endpointMissing = asArray((endpointReadiness || {}).missing);
       const outputMissing = asArray((outputGate || {}).missing);
-      const missing = [...simpleSftpMacMissing, ...serverMissing, ...workerMissing, ...endpointMissing, ...outputMissing];
+      const missing = [...simpleSftpMissing, ...serverMissing, ...workerMissing, ...endpointMissing, ...outputMissing];
       return missing.length ? "缺少：" + missing.join("、") : "已满足运行前置条件";
     }
 
@@ -17794,7 +17794,7 @@ function projectSectionNextAction(status, label, section, anchor) {
       const data = payload || {};
       const fileAttr = data.file ? ' data-file="' + escAttr(data.file) + '"' : "";
       const planAttr = data.planFile ? ' data-plan-file="' + escAttr(data.planFile) + '"' : "";
-      const actionReason = debugModeDisableReason(command) || simpleSftpMacCommandDisableReason(lastState || {}, command);
+      const actionReason = debugModeDisableReason(command) || simpleSftpCommandDisableReason(lastState || {}, command);
       const disabledAttr = actionReason ? ' disabled title="' + escAttr(actionReason) + '" aria-label="' + escAttr(label + "：" + actionReason) + '"' : "";
       return '<div class="projectQuickNext"><span>下一步</span><b>' + esc(status) + '</b><button class="mini" data-command="' + escAttr(command) + '"' + fileAttr + planAttr + disabledAttr + ' title="处理「' + escAttr(label) + '」" aria-label="处理「' + escAttr(label) + '」">' + esc(label) + '</button></div>';
     }

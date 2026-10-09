@@ -420,7 +420,7 @@ export class FileTransferClient {
           { server: "local", project: path.dirname(path.resolve(task.localPath!)), target: path.resolve(task.localPath!) },
           { server: this.config.resourceServer || "transport:" + localBaseUrl(this.config), project, target: path.posix.resolve(project, task.remotePath) },
         ];
-    return this.resourceLease.acquire({ pluginId: "simple-local.simple-experiment", workspaceUri: project, hostProjectPath: project,
+    return this.resourceLease.acquire({ pluginId: "simple-local.simple-experiment-mac", workspaceUri: project, hostProjectPath: project,
       actionType: task.direction, actionLabel: task.direction, signal: record.abort.signal, resources });
   }
 

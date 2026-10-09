@@ -72,7 +72,7 @@ async function writeCache(file: string, document: CacheDocument): Promise<void> 
   const key = process.platform === "win32" ? path.resolve(file).toLowerCase() : path.resolve(file);
   // Also serialize nested callers that share a parent resource lease.
   const pending = (cacheWrites.get(key) || Promise.resolve()).catch(() => undefined).then(() =>
-    new HostOperationLeaseManager().run({ pluginId: "simple-local.simple-experiment", workspaceUri: root, hostProjectPath: root,
+    new HostOperationLeaseManager().run({ pluginId: "simple-local.simple-experiment-mac", workspaceUri: root, hostProjectPath: root,
       actionType: "hash-cache-write", waitForConflict: true, resources: [{ server: "local", project: root, target: path.resolve(file) }] }, () => writeCacheOwned(file, document)));
   cacheWrites.set(key, pending);
   try { await pending; } finally { if (cacheWrites.get(key) === pending) cacheWrites.delete(key); }

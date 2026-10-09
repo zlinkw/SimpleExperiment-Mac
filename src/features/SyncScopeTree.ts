@@ -21,7 +21,7 @@ export type ScopeRoot = {
 };
 
 export function openSyncScopeTree(title: string, roots: ScopeRoot[]): vscode.WebviewPanel {
-  const panel = vscode.window.createWebviewPanel("simpleExperiment.syncScopeTree", title, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  const panel = vscode.window.createWebviewPanel("simpleExperimentMac.syncScopeTree", title, vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
   const nonce = crypto.randomBytes(16).toString("base64");
   panel.webview.html = scopeTreeHtml(nonce);
   panel.webview.onDidReceiveMessage(async (message: any) => {

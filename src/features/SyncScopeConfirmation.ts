@@ -10,7 +10,7 @@ function htmlText(value: string): string {
 }
 
 export function confirmSyncScopePaths(title: string, note: string, paths: ConfirmationPath[], finalLabel: string): Promise<boolean> {
-  const panel = vscode.window.createWebviewPanel("simpleExperiment.syncScopeConfirmation", title, vscode.ViewColumn.Active, { enableScripts: true });
+  const panel = vscode.window.createWebviewPanel("simpleExperimentMac.syncScopeConfirmation", title, vscode.ViewColumn.Active, { enableScripts: true });
   const nonce = crypto.randomBytes(16).toString("base64");
   const rows = paths.map(({ label, path }) => `<div class="path"><strong>${htmlText(label)}</strong><code>${htmlText(path)}</code></div>`).join("");
   panel.webview.html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -46,7 +46,7 @@ strong{display:block;margin-bottom:5px}code{display:block;white-space:pre-wrap;o
 /** Ephemeral review: no Webview state storage, output files, or disk caches. */
 export function reviewPlanVersionResults(runs: ComparisonRun[], candidates: OutputRetirementCandidate[],
   load: (run: ComparisonRun, signal: AbortSignal) => Promise<RunComparison>): Promise<OutputRetirementCandidate[] | undefined> {
-  const panel = vscode.window.createWebviewPanel("simpleExperiment.planVersionReview", "Plan 版本结果审核", vscode.ViewColumn.Active, { enableScripts: true });
+  const panel = vscode.window.createWebviewPanel("simpleExperimentMac.planVersionReview", "Plan 版本结果审核", vscode.ViewColumn.Active, { enableScripts: true });
   const nonce = crypto.randomBytes(16).toString("base64");
   const abort = new AbortController();
   const results = new Map<string, RunComparison>();

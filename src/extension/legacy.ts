@@ -4132,7 +4132,7 @@ export class RealtimeTunnelPanelProvider {
         const legacySftp = legacySftpInstallationState();
         const serverSetupComplete = initialServerSetupComplete(this.setupConfig, this.projectTopologyAssessment().hubAllowed);
         const enabledWorkerCount = this.enabledWorkerConfigs().length;
-        if (serverSetupComplete && simpleSftpMac.ready && enabledWorkerCount > 0) {
+        if (serverSetupComplete && simpleSftp.ready && enabledWorkerCount > 0) {
             const root = workspaceRoot();
             if (!root)
                 return;
@@ -4148,7 +4148,7 @@ export class RealtimeTunnelPanelProvider {
                 await this.context.workspaceState.update(keys.projectOnboardingPrompt, 1);
             return;
         }
-        if (simpleSftpMac.ready && legacySftp.installed && !this.context.globalState.get(keys.legacySftpNoticeShown)) {
+        if (simpleSftp.ready && legacySftp.installed && !this.context.globalState.get(keys.legacySftpNoticeShown)) {
             const choice = await vscode.window.showWarningMessage("检测到旧版 SFTP 插件仍已安装。新版 SimpleSFTP 已可用；若看到旧版状态栏按钮，请先卸载旧版，再执行 Developer: Reload Window。", "打开旧版扩展管理", "不再提示");
             if (choice === "打开旧版扩展管理")
                 await vscode.commands.executeCommand("workbench.extensions.search", `@id:${LEGACY_SFTP_EXTENSION_ID}`);
@@ -4158,10 +4158,10 @@ export class RealtimeTunnelPanelProvider {
         const shownVersion = Number(this.context.globalState.get(keys.firstRunSetupPrompt, 0));
         if (shownVersion >= FIRST_RUN_SETUP_PROMPT_VERSION)
             return;
-        const needsSftp = !simpleSftpMac.ready;
+        const needsSftp = !simpleSftp.ready;
         const needsWorker = !needsSftp && serverSetupComplete && enabledWorkerCount < 1;
         const message = needsSftp
-            ? `首次使用 SimpleExperiment：配套 SimpleSFTP 未就绪。${simpleSftpMac.message} 安装并重载窗口后再识别工作区。`
+            ? `首次使用 SimpleExperiment：配套 SimpleSFTP 未就绪。${simpleSftp.message} 安装并重载窗口后再识别工作区。`
             : needsWorker
                 ? "首次使用 SimpleExperiment：Hub 已配置，但正式运行、复现和批量运行还缺少至少一个启用的执行 Worker。请在“设置 > 服务器”手动添加。"
                 : "首次使用 SimpleExperiment：服务器相关配置不会通过弹窗从零填写。请前往“设置 > 服务器”配置 Xshell 会话和项目父目录；工作区识别时只确认会话前缀等项目参数。";
@@ -4200,7 +4200,7 @@ export class RealtimeTunnelPanelProvider {
     }
     async ensureSimpleSftpReadyForSetup(operation) {
         const simpleSftp = simpleSftpIntegrationReadiness();
-        if (simpleSftpMac.ready) {
+        if (simpleSftp.ready) {
             try {
                 const registered = new Set(await vscode.commands.getCommands(true));
                 const missing = SIMPLE_SFTP_REQUIRED_COMMANDS.filter((command) => !registered.has(command));
@@ -4222,7 +4222,7 @@ export class RealtimeTunnelPanelProvider {
                 return false;
             }
         }
-        const next = await vscode.window.showWarningMessage(`${operation}暂不能开始：${simpleSftpMac.message}`, "打开配置说明", "打开扩展管理", "稍后");
+        const next = await vscode.window.showWarningMessage(`${operation}暂不能开始：${simpleSftp.message}`, "打开配置说明", "打开扩展管理", "稍后");
         if (next === "打开配置说明")
             await this.openSetupGuide();
         else if (next === "打开扩展管理")
@@ -6908,8 +6908,8 @@ export class RealtimeTunnelPanelProvider {
             const enabledWorkers = this.enabledWorkerConfigs();
             const simpleSftp = simpleSftpIntegrationReadiness();
             const next = setupGuideNextStep({
-                simpleSftpReady: simpleSftpMac.ready,
-                simpleSftpMessage: simpleSftpMac.message,
+                simpleSftpReady: simpleSftp.ready,
+                simpleSftpMessage: simpleSftp.message,
                 setupComplete: initialServerSetupComplete(this.setupConfig, this.projectTopologyAssessment().hubAllowed),
                 workerCount: enabledWorkers.length,
                 workspaceOpen: Boolean(workspaceRoot()),
@@ -7563,7 +7563,7 @@ export class RealtimeTunnelPanelProvider {
         }
         const failures = [];
         for (const target of targets) {
-            console.log("[diag] simpleSftpMac.uploadFiles invoke", target.id, target.remotePath);
+            console.log("[diag] simpleSftp.uploadFiles invoke", target.id, target.remotePath);
             const result = await vscode.commands.executeCommand("simpleSftpMac.uploadFiles", {
                 apiMode: true,
                 confirm: true,
@@ -7579,7 +7579,7 @@ export class RealtimeTunnelPanelProvider {
                 ],
                 manifest: { ...manifest, targetId: target.id, targetRole: target.role, targetLabel: target.label },
             });
-            console.log("[diag] simpleSftpMac.uploadFiles result", JSON.stringify(result)?.slice(0,500));
+            console.log("[diag] simpleSftp.uploadFiles result", JSON.stringify(result)?.slice(0,500));
             const record = result && typeof result === "object" ? result : {};
             if (!sftpUploadFilesSucceeded(record))
                 failures.push(`${target.label}（id=${target.id}, host=${target.host}, networkHost=${target.networkHost || target.displayHost || "-"}）: ${stringFromRecord(record, ["error", "message", "status"]) || "上传失败"}`);
@@ -15139,7 +15139,7 @@ export class RealtimeTunnelPanelProvider {
             realtimeMode: this.isRealtimeMode(),
             setupComplete: initialServerSetupComplete(this.setupConfig, this.projectTopologyAssessment().hubAllowed),
             workerCount: enabledWorkers.length,
-            simpleSftpReady: simpleSftpMac.ready,
+            simpleSftpReady: simpleSftp.ready,
             activeRun: initialRunState.activeRun,
             finishedRun: initialRunState.finishedRun,
             endpointsReady: projectBootstrapEndpointProbeReusable(endpointReadiness, this.lastFullEndpointProbeAt),
@@ -27387,7 +27387,7 @@ function projectOnboardingStateForWebview(options) {
     const hasProject = Boolean(workspace.root) && workspace.singleProject === true;
     const missing = [
         ...serverSetupMissingItems(setup, hubRequired),
-        ...(simpleSftpMac.ready === true ? [] : [String(simpleSftpMac.message || "配套 SimpleSFTP 未就绪")]),
+        ...(simpleSftp.ready === true ? [] : [String(simpleSftp.message || "配套 SimpleSFTP 未就绪")]),
         ...(enabledWorkerCount > 0 ? [] : ["至少一个启用的执行 Worker"]),
     ];
     const missingItems = [...new Set(missing.filter(Boolean))];
@@ -27497,7 +27497,7 @@ function projectBootstrapNewProjectPrerequisite(options) {
     if (simpleSftp?.ready === false) {
         return {
             state: "simple_sftp_required",
-            message: `当前项目还没有 Plan。生成任何 Plan 或接入模板前，先完成配套插件安装：${String(simpleSftpMac.message || "SimpleSFTP 未就绪。")}`,
+            message: `当前项目还没有 Plan。生成任何 Plan 或接入模板前，先完成配套插件安装：${String(simpleSftp.message || "SimpleSFTP 未就绪。")}`,
             action: "打开配置说明",
         };
     }
@@ -27744,7 +27744,7 @@ function projectBootstrapCompletion(options) {
     if (simpleSftp?.ready === false) {
         return {
             state: "simple_sftp_required",
-            message: `Plan 与结果接入已完成，但文件传输依赖未就绪：${String(simpleSftpMac.message || "未安装或未启用配套 SimpleSFTP。")} 下一步：打开配置说明并使用配套离线包安装。`,
+            message: `Plan 与结果接入已完成，但文件传输依赖未就绪：${String(simpleSftp.message || "未安装或未启用配套 SimpleSFTP。")} 下一步：打开配置说明并使用配套离线包安装。`,
             action: "打开配置说明",
         };
     }

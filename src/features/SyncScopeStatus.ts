@@ -122,7 +122,7 @@ async function writeScopeHashCache(file: string, document: ScopeHashDocument): P
   const fullPath = path.resolve(file);
   const root = path.dirname(fullPath);
   await new HostOperationLeaseManager().run({
-    pluginId: "simple-local.simple-experiment",
+    pluginId: "simple-local.simple-experiment-mac",
     workspaceUri: root,
     hostProjectPath: root,
     actionType: "scope-hash-cache-write",
