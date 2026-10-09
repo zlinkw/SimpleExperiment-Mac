@@ -20,22 +20,24 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-016（running，Plan CLI 绑定/回执 preview）
+## 当前批次：mac-release-016（passed，Plan CLI 绑定/回执 preview）
 ### 边界
 
 - Experiment 0.5.279/SFTP 0.2.73 版本与计划，共 6 文件。完整本机 prepare/publish；实际 VSIX CLI health/RPC、Plan 等待确认本机 mock 与匿名 updater 包/源码/说明校验。无实际科研、服务器、安装或 Actions；服务端 workspace/seed/完整科研与 M5 后续核验。
 
 ### 验证清单
 
+- passed mac-release-016：完整本机 prepare/publish、两仓 build/217 与 26 文件闭包、面板脚本 2、逐文件串行更新/CLI/路径/认证/中转与浅/深/高对比真实渲染通过。三个完整草稿附件核验后发布，无 Actions/开发机安装。
+- passed preview-v0.5.279：实际两包固定 CLI 通过真实本地 shell/Node health/实时 RPC，Experiment 实际包以中文 Plan、本机 mock 完成工作区/路线预检与等待确认回执，submitted=false（2 项包测试）。真实匿名 updater 从 0.5.278/0.2.72 筛出两组件，19 次请求完成大小/hash/CRC/身份/平台校验；下载字节与已测试 VSIX 一致，新 CLI 模块、两仓 README/配置说明与来源一致。同版本跳过/禁止降级通过，无实际科研/服务器/M5。
+- pending 下一批 mac-005q：服务端 workflow workspace 绑定与 CLI seed 参数审计，实际标准 Plan 校验/预演/提交链路及 Windows 执行依赖继续分批；CLI 当前检查不是完整远端预演，等待确认不是远端提交证明。真实 SSH/三拓扑/M5 保持待验收。
+
 - passed mac-doc-011：两仓 README/配置说明补充正式 Plan CLI、预检/离线/等待确认回执与 operations.list，macCliWorkflow 纳入发布门禁并更新发布说明。UTF8 回读、build/217 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，共 6 文件。配套下一版 0.5.279/0.2.73，服务端 workspace/seed/完整科研仍待后续核验。
 
 - passed mac-005p：CLI Plan 限制当前项目内真实文件并拒绝链接逃逸，保留中文/真实首尾空格；在线运行核对 API workspace、workflow.plan 就绪/选择，再复核 workspace 申请 workflow.run。等待 VS Code 确认只报告 requested/operationId，不冒充远端已提交；HTTP/业务阻塞返回失败且不重试。离线预览标明 local_only/ready=false，保留旧手工 recorder，帮助改用 Mac 命令名。7 文件。
 - passed 本地：build/217 模块闭包/面板脚本 2、包闭包/vm.Script、真实 CLI 本机 mock 5（含三种返回拓扑、工作区变化、失败/离线/确认/路径）、旧 CLI 预览与发现 3/帮助 1、CLI 契约 8/固定入口 5 逐文件串行通过。无实际科研、传输或服务器调用。
-- pending mac-doc-011：说明与发布门禁同步后交付配套 preview；下一源码批 mac-005q 审核服务端 workspace 绑定与 CLI seed 参数、完整科研主流程/Windows 依赖，M5 pending。
 
 - passed mac-release-015：完整 `npm run release:prepare`/`release:publish` 本机门禁通过，Experiment build/216 模块闭包、SFTP build/26 文件闭包、面板脚本 2、更新/CLI/路径/认证/中转逐文件串行及浅/深/高对比渲染通过；三个完整草稿附件核验后发布。不使用 Actions 或安装扩展。
 - passed preview-v0.5.278：实际两包固定 CLI 经真实本地 POSIX shell/Node、中文发现文件完成 health 自检及实时 capabilities → RPC（2 项包测试），保留 confirm/pathConfirmed=false。真实匿名 updater 从 0.5.277/0.2.71 筛出两组件，18 次请求取得清单及包；大小/hash/CRC/平台/身份通过，字节与已测试 VSIX 相同，CLI 模块、两仓源码/README/配置说明匹配。同版本跳过/禁止降级通过；无真实科研/SSH/M5。
-- pending 下一批 mac-005p：核对 CLI 科研运行入口与 validatePlan/dryRunPlan/runPlan 职责、业务 API/三拓扑主流程及剩余 Windows 执行依赖；保留旧入口，按 2-3 问题/8 文件分批。M5/真实 SSH 仍待用户证据。
 
 - passed mac-doc-010：两仓 README/配置说明更新 CLI 自动契约预检、失败处理与确认参数边界，双仓 macCliApi 纳入 release:prepare；发布说明区分本地与 M5。UTF8 回读、build/216 闭包/面板脚本 2、vm.Script、配置说明 1、发布脚本 4 通过，共 6 文件。下一批 Experiment 0.5.278/SFTP 0.2.72 配套 preview。
 
@@ -77,6 +79,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- 第十六版 preview-v0.5.279 已发布：Experiment 来源 `0c58484ae8df959ddb9f4ecf162437baf6ef08be`、SFTP 0.2.73 来源 `1ae3c9da45ddb1364f6a3ae1c16955bbf1e5ee55` 均已普通推送并 fetch 核对，真实包 Plan CLI 等待确认与匿名下载通过。完整科研/服务端 workspace/seed/SSH/M5 pending。
+- mac-doc-011 Experiment 说明/门禁 `a727df446ce723540bb954df7b276c698e3dd132`、SFTP README `31ba6088e9229373e1b24f77a2c4c5ca2316ba18` 已同步。
 - mac-005p CLI 来源 `e95e099132427d2ffe4dedaa7f628d0d49854724` 已普通推送并 fetch 核对。
 - 第十五版 preview-v0.5.278 已发布：Experiment 来源 `56fb77d4fbed95eb3fa6874b2808f986b7e2840d`、SFTP 0.2.72 来源 `56cfd11be0f66bb33dfda5184e5662ad601538b6` 均已普通推送并 fetch 核对。实时 CLI 契约、实际包启动/RPC 和匿名下载通过，CLI 科研运行/完整主流程/真实 SSH/M5 pending。
 - mac-doc-010 Experiment 说明/门禁 `1c4f0d5423aa617e3147cf5d2c71bb9d51322ec5`、SFTP README `fead4c440e8b8dbc10bdad7ab4ad07042a42604b` 均已同步 origin/master。
