@@ -89,7 +89,16 @@
 
 保存后运行 **SimpleSFTP：选择服务器**，再运行 **SimpleSFTP：查看当前目标** 核对本机目录、远端账号、SSH 端口和完整路径。`sshPort` 是服务器 SSH 端口，不能填 Agent HTTP 转发端口。
 
-已有 `~/.ssh/config` 可运行 **SimpleSFTP：导入 VS Code SSH 配置** 导入连接描述；它读取本机 OpenSSH 配置，不读取 Termius 私有会话。当前传输仍依赖系统 SSH 配置，独立密钥、ssh-agent、密码和私钥口令的认证界面及 SecretStorage 记忆正在适配。**导入或选择配置不等于已验证认证成功。** Termius 登录也不会自动授权 SimpleSFTP。首次上传/下载及断连恢复请以后续版本说明和真机验证为准。
+已有 `~/.ssh/config` 可运行 **SimpleSFTP：导入 VS Code SSH 配置** 导入连接描述；它读取本机 OpenSSH 配置，不读取 Termius 私有会话。**导入或选择配置不等于已验证认证成功。**
+
+按 **⇧⌘P → SimpleSFTP Mac：配置服务器认证**，或在资源管理器 **SimpleSFTP → 配置服务器认证**，为每个目标选择方式：
+
+- **选择私钥**：从 Mac 文件选择框选择真实私钥；加密私钥首次连接时在 VS Code 密码输入框输入口令。
+- **ssh-agent**：使用当前 VS Code 进程可见的 `SSH_AUTH_SOCK` 和已加载身份；不向远端转发 agent。
+- **密码**：首次连接时在 VS Code 密码输入框填写该服务器的 SSH 密码。
+- **系统 SSH 配置 / 自动**：沿用自己的 OpenSSH 配置与默认密钥。需要 SSH 别名或已有跳板配置时使用此模式；独立密钥、agent 和密码模式应填写真实主机地址、用户与端口。
+
+记忆选项默认不勾选，仅本次扩展会话内记忆。只有勾选 **使用 VS Code SecretStorage 保存密码 / 私钥口令**，输入的凭据才保存以供重载后使用；不勾选时不读取以前保存的凭据。密码/口令不写服务器 JSON、项目设置、命令参数或临时文件；Termius 登录不会自动授权 SimpleSFTP。真实 SSH 上传下载、连接恢复和 M5 验收仍待执行。详细操作见 [SimpleSFTP Mac 独立认证](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md#独立认证入口)。
 
 ## 5. Termius 手动隧道与端点配置
 
@@ -148,7 +157,7 @@
 
 模式保存在当前项目；手动端点保存在用户设置。新增 Worker 时复制数组中的 Worker 对象，修改 ID、主机、账号、路径和本机端口。Hub 使用相同字段结构，ID/角色改为 `hub`，使用独立本机端口。停用端点可设 `enabled: false`。
 
-远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份，部署 runtime 与项目；Termius 的凭据不会被读取。**完整 Mac 项目准备与独立认证仍在适配，打开指引不会自动传输 runtime。**
+远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份，部署 runtime 与项目；Termius 的凭据不会被读取。**独立认证入口已接入，完整 Mac 项目准备仍在适配；打开指引不会自动传输 runtime。**
 
 ### Agent/tmux 操作指引
 
@@ -196,7 +205,7 @@ API 每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/
 | 仍看到 Xshell 字段或旧命令 | 使用“配置 Termius 手动端点”和“Agent/tmux 操作指引”；不在 Mac 上配置 `.xsh` 文件 |
 | 手动端点保存后报错 | 核对完整字段、整数端口、唯一 ID/启用端口及绝对 POSIX 路径；在用户设置 JSON 修改 |
 | 服务器列表为空 | 打开共享服务器配置填写真实目标，再选择服务器 |
-| Termius 已登录但传输失败 | SimpleSFTP 认证独立；核对自己的系统 SSH 配置，独立认证入口尚待交付 |
+| Termius 已登录但传输失败 | 运行“SimpleSFTP Mac：配置服务器认证”，核对该目标的地址、用户名、SSH 端口与方式；两插件不读取 Termius 凭据 |
 | 隧道已打开但 Agent 不可达 | 核对记录的端点、远端 Agent 是否运行和实际环境；勿重启运行中的实验 |
 | Windows 旧设置没有出现 | Mac 扩展身份和命名空间独立，按本文填写 Mac 设置 |
 
