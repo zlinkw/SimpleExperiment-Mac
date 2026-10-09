@@ -20,10 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-018（passed，Mac 结果使用说明与门禁）
+## 当前批次：mac-release-023（running，0.5.286/0.2.80 配套发布）
 ### 边界
 
-- 本批 6 文件，两仓 README 与包内配置说明同步 Mac 结果映射/完成运行/路径设置及 Agent 手动升级步骤，保留更新按钮入口。新增结果回归发布门禁，更新本版发布说明。本地/M5 边界分别注明，保护业务/API/原入口。
+- 本批 6 文件，仅递增两仓 package/lock 与 Experiment runtime 版本并记录验证；构建、runtime 版本验证后分别普通提交推送。prepare/publish 绑定这些已同步提交，验证实际包与匿名更新；不自动安装/Actions。完整结果 UI/Agent 读取/实际解析/物理发布和 M5 后续分批。
+- passed 版本元数据批：两仓 build/219 与 26 闭包、面板 2、vm.Script、runtimeManifest 1、package/lock 版本一致与 diff 检查通过。pending 完整 prepare/publish、实际包结果身份与匿名下载校验，清单绑定这些源码提交后不得修改。
 - passed 两仓说明 UTF8 回读、更新入口/结果设置/验收边界检查，build/219 闭包/面板 2 与 vm.Script、macSetupGuide 1、macRelease 4 逐文件串行通过。新增 7 个结果相关文件门禁；下一批仅版本递增与配套本机发布，M5 和完整结果 UI/读取/物理发布仍 pending。
 - passed build/219 闭包/面板 2、vm.Script、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7，逐文件串行 20 秒，UTF8/diff 检查通过。初次失败为旧夹具缺少依赖/已变更入口及原设置命名空间，按实际源码更新后通过，无超时；无业务生产修复混入此提交。
 - passed build/219 闭包/面板脚本 2、vm.Script；macResultIdentity 8、macProjectPrepare 16、macWorkflowBinding 10、projectResultTables 19、manualDistributedResultSync 25、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7、macPlanIdentity 6 逐文件串行 20 秒通过。UTF8/diff 检查通过；VM/AST/local mock 无真实科研/传输。
@@ -50,6 +51,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-doc-018 Experiment `6fbe63861f4782b9d81fb277ba5cb4a100b70c90`、SFTP `46e10d130213f82c08fbbcc95257a44e8d5a52b0` 已普通推送并 fetch 核对 origin/master，Mac 结果说明和门禁已同步。
 - mac-005v-results `ad537b2b37368479a6d0f08d4ef9c8c3b841ad91` 已普通推送并 fetch 核对 origin/master；下一批说明/发布，后续结果 UI/Agent/物理发布继续分批。
 - mac-005v-fixtures `5ac6eff31c5e673b75f0a64cd60af475540fbbba` 已普通推送并 fetch 核对 origin/master；三个旧结果夹具恢复有效覆盖，压力目录保留。
 - mac-release-022 交付记录 `2b9993d6b44e69c4a17580d1acf520a1a268fa62` 已普通推送并 fetch 核对 origin/master。
