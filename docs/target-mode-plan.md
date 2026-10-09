@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-026（passed，提交推送待记录）
+## 当前批次 mac-release-032（running，0.5.295/0.2.89）
+- 范围 6 文件：两仓 package/lock、Experiment runtime/计划。mac-doc-026 Exp `ffee575f5714fdbbfa6c79fbf92f375324d9a8e9`/SFTP `363a13a5a3ada307ff3f2cc49018197614d3ef9a` 已普通推送/fetch 相等，两仓干净；项目事实/计划/版本及发布门禁重读。
+- pending 两仓 build/闭包/面板/runtime 一致、完整 prepare、实际 VSIX/匿名更新，三附件完整草稿核验后发布。不得覆盖 .294 历史目录/tag，不触发 Actions/安装；下一边界仍为局部 Agent 结果读取适配，M5 延后。
+- passed 元数据子批：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 版本、UTF8/diff；来源提交同步后才执行完整 prepare，实际包/匿名下载证据后续记录。
+
+### 前批 mac-doc-026（passed）
 - 范围至多 7 文件：两仓 README、Mac 配置说明/发布说明、prepare/发布门禁回归与计划。同步检查输出契约 Agent 产生端的使用/升级/失败处理和本机快照发布步骤，保持更新按钮入口；实际隔离回归与快照测试纳入串行门禁。不得把局部身份检查写成完整解析/M5 通过。
 - 起始 Exp `0b27d0e3885bbf2beed0cb938764f8b3c70f98d2`/SFTP `8cceeee9ee706fc5cf25d3df66c02070f8386950` 已普通推送/fetch 相等且干净；项目事实/计划/README/配置说明/真实 prepare/回归重读。下一批仅配套 metadata 与完整发布验证。
 - passed 两仓 build/225 与 26 闭包/面板 2、配置说明 1/发布门禁 4 串行、三份文档严格 UTF8/更新入口/使用边界与 diff；保留目标/验证/风险/真实提交压缩旧历史到字符预算以下。新增两项测试列入完整 prepare；本机快照规则写入发布说明，未声明 M5/完整科研通过。
