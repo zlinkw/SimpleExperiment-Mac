@@ -20,14 +20,20 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-003（passed，Mac 使用说明与 0.5.269 已发布）
+## 当前批次：mac-005d（passed，SimpleSFTP 独立认证；待发布）
 
 ### 边界
 
-- 用户要求 README 与配置说明优先于配色。本批补全 Mac 实际入口、用户/工作区设置区别、Termius JSON 与 Agent/tmux 操作、更新按钮；递增 0.5.269 并加入端点/拓扑发布门禁。最多 8 文件。
-- 保护既有入口和远端实验；不宣称独立认证、完整项目准备或 M5 科研验收通过。下一批独立认证与 project.prepare 接入。
+- 本批建立每服务器独立的密钥/ssh-agent/密码/私钥口令、VS Code 密码输入与显式 SecretStorage 记忆，接入本机 SSH/tar 和中转进程。最多 8 文件。
+- 凭据不写配置、参数、日志或临时文件，不读取 Termius；已有 SSH 入口保留。保护路径确认、租约、流式背压和 close 退出证明；不执行真实服务器传输或实验。
+- 本批本地验证使用假服务器/假进程与真实本机 askpass IPC；M5 及真实 SSH 认证待用户后续验收。跨服务器禁止免密直连路由与 project.prepare 接入随后分批。
 
 ### 验证清单
+
+- passed mac-005d：SFTP build/24 文件闭包、独立认证 8、真实映射下载 26、API 19、跨服务器既有协议 13、上传进度 4、结算恢复 25、工作区 5 测试逐文件串行通过。真实本机 Node askpass IPC、服务器凭据隔离、未勾选不保存/读取、重载 SecretStorage、加密私钥、并发/取消/限次和 child.close 回执覆盖；未连接真实 SSH 服务器。
+- failed 旧上传进度 VM 回归：缺少已存在更新门禁的 require 注入，另需注入新的 SSH 包装器；修正测试依赖后 4 测试通过，非超时。为遵守 8 文件上限，README 修订已保存到系统暂存区，随后文档批恢复。
+- 下一批 mac-doc-004：同步认证说明及 LF askpass 脚本规则，随后发布 Experiment 0.5.270/SFTP 0.2.66；跨服务器默认本机中转及大文件分块、project.prepare 尚待适配。
+
 
 - passed mac-doc-003：build/面板脚本、213 模块闭包/vm.Script，配置说明入口 1、端点 7、发布 3 测试逐文件串行通过；UTF8、真实命令标题、文档链接、JSON 严格端点转换及版本/lock/runtime 一致核验通过。全文说明用户设置/工作区设置差异和不自动部署的指引边界。
 - passed preview-v0.5.269 完整 prepare/publish；匿名真实 updater 筛选新版、下载并核验两组件 SHA-256/平台/CRC/身份、包内 Mac 使用说明和手动端点模块。0.5.268/0.2.65 客户端只更新 Experiment，相同 SFTP 跳过，禁止降级；M5 在线安装与科研主流程仍未验收。
@@ -101,6 +107,9 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+
+- mac-005d SimpleSFTP `9173f139491dbf62a152a81c5e00dc21b5df5bbe` 已同步 origin/master；独立认证和 askpass/SSH 包装器通过本地验证，真实 SSH 与 M5 尚未执行。
+
 
 - 第六版 preview-v0.5.269 已发布：Experiment 0.5.269 来源 `1443732db0246f7d06ee2dc38ca82b6a2d4162bf`，SFTP 0.2.65 来源 `209615528e3a28bd420c89c681ee38e7874dfaf5`。README 和配置说明优先交付 Mac 实际操作、更新按钮、用户设置端点示例及 Agent/tmux 指引。两仓源码已同步，真实匿名客户端下载通过；下一批独立认证与 project.prepare 完整 Mac 接入，M5 用户后续验证。
 
