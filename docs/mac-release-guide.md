@@ -6,6 +6,7 @@
 
 1. 修改与验证分批完成后，两仓分别提交并普通推送至 origin/master。两个工作区必须干净，不能存在未审查文件或 Actions workflow。
 2. 在 SimpleExperiment-Mac 执行 `npm run release:prepare`。默认配套目录为 `../SimpleSFTP-Mac`，也可设置 `SIMPLE_SFTP_MAC_SOURCE`。脚本执行本地构建、目标测试串行、闭包与脚本校验，再打包 darwin-arm64 与生成 release.json。
+   主题门禁使用本机 Chromium 无界面渲染浅色、深色及高对比主题，检测文字/背景对比。默认检测本机 Chrome 路径；其他位置可设置 `SIMPLE_MAC_THEME_BROWSER` 为已有 Chromium 可执行文件。不会启动可见浏览器或安装浏览器，缺少测试环境时 prepare 失败。
 3. 在同一提交执行 `npm run release:publish`。需要发布者的 gh 登录。脚本创建 draft，上传两个 VSIX 与清单，核验附件完整集合、大小及 GitHub SHA-256 后发布 prerelease。测试用户公开下载不需要登录。
 4. 产物和发布回执保留在 `release-artifacts/preview-v<版本>/`，不提交。prepare 禁止复用已有版本目录。发布过的 tag/资产不覆盖，修复必须递增版本。失败的 draft 只允许凭本地回执恢复，并逐项核验已上传资产；未识别的 draft 保留供人工检查。
 

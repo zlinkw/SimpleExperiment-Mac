@@ -20,15 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-ui-002（passed，主题配色）
+## 当前批次：mac-release-005（passed，发布源码门禁；包发布待执行）
 
 ### 边界
 
-- Mac 使用说明已优先发布；本批修复面板亮色硬编码背景、文字与状态色，采用 VS Code 主题变量，覆盖浅色/深色/高对比。最多 8 个文件；不改变业务入口、Plan/API 或远端实验。
-- 新增无焦点 headless 真实渲染与颜色对比验证，截图留在系统暂存目录并按规范移动到 clean_dir；随后发布主题修复，再恢复 Termius/认证主流程。
+- 本批递增 Experiment 0.5.268/runtime，SFTP 保持 0.2.65；发布门禁加入真实三主题渲染测试，配套更新跳过同版 SFTP。最多 8 文件；不改变业务入口、Plan/API 或远端实验。
+- 完整 prepare/publish 与匿名客户端下载验证后，恢复 Termius/认证主流程。Mac 使用说明已优先交付，主题本地验证通过。
 
 ### 验证清单
 
+- passed mac-release-005：Experiment build/面板脚本、闭包、版本/lock/runtime 一致、辅助脚本语法与发布 3 测试、真实三主题测试逐文件通过。完整 prepare/publish 在同步源码后执行。
 - passed mac-ui-002：真实 headless Chromium 三主题渲染，页面/设置/输入/规则/详情/状态/GPU 标识/按钮/说明对比均 ≥4.5；首次旧样式浅色错误状态 4.41，修复后通过。两张 1440×1100 浅色/深色截图确认无亮底混用，移动并核验系统 CodexUiCaptures/clean_dir 保存。
 - passed build/面板脚本、212 模块闭包、vm.Script、更新卡片测试；源码与渲染辅助脚本 UTF8/语法/diff 检查。下一批发布 Experiment 0.5.268，与已发布 SFTP 0.2.65 配套，随后 Termius/认证。
 - passed preview-v0.5.267 完整 prepare/publish 与匿名实际客户端下载、两包平台/hash/CRC、包内 README 和 Mac 配置说明检查。Experiment 0.5.267/SFTP 0.2.65，真实 M5 更新仍 pending。
@@ -91,6 +92,7 @@
 
 ## 本批记录
 
+- mac-ui-002 Experiment `b4f39d112521e59028221bc0a73d8fb153bfb056` 已同步。
 - 第四版 preview-v0.5.267 已发布：Experiment 来源 `5fe898720083298c9439c01754c393f235310a08`，SFTP 来源 `209615528e3a28bd420c89c681ee38e7874dfaf5`；下一批深色模式修复，随后 Termius/认证。
 - mac-doc-002 Experiment `ef87f9dd8efd9a4ff2c61842322d0970ff05d041` 已同步。
 - mac-doc-002 SFTP `8d93015bdf4ee6870deb05eee388d37fd0cfc4cb` 已同步；Experiment 同批提交见 Git，发布批次记录真实提交。

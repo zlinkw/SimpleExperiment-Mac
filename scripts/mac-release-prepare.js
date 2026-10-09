@@ -12,7 +12,7 @@ function main() {
     if (!/^\d+\.\d+\.\d+$/.test(packages[index].version)) throw new Error("Invalid package version");
     npm(["run", "build"], roots[index]);
   }
-  const files = ["macVsix", "macPreviewRelease", "macUpdateTransaction", "macBootstrap", "macUpdateGate", "macUpdatePanel", "macHostLeasePaths", "macSetupGuide"];
+  const files = ["macVsix", "macPreviewRelease", "macUpdateTransaction", "macBootstrap", "macUpdateGate", "macUpdatePanel", "macHostLeasePaths", "macSetupGuide", "macPanelTheme"];
   for (const file of files) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/features/${file}.test.js`], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/core/workspacePathMapper.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   for (const file of ["macBootstrap", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
@@ -35,7 +35,7 @@ function main() {
   for (let index = 0; index < 2; index++) if (assertSource(roots[index], repos[index]) !== commits[index]) throw new Error("Build changed release source");
   const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: new Date().toISOString(), minimumMacOS: "26.0", components };
   fs.writeFileSync(path.join(directory, "release.json"), JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
-  const notes = `Apple Silicon macOS 26 及以上 preview。\n\n本地验证\n两仓 build、包依赖闭包、面板生成脚本及更新目标测试逐文件串行通过。真实 VSIX 的身份、版本、darwin-arm64、CRC 与 SHA-256 已校验。\n\nM5 真机验证\n尚未执行。需在 M5、24 GB、macOS 27.0 验证首版到第二版更新、设置保留、重载与部分失败补装。\n\n当前范围\n更新链路及本地 POSIX 工作区测试版。包内配置说明与两仓 README 已按 Mac 使用方式重写，包含快捷键、POSIX 路径、服务器 JSON 配置、Termius 手动转发约定与更新按钮入口。Mac 配置说明不再启动旧会话向导。Mac 宿主与共享租约保持 POSIX 大小写。深色配色随后独立交付。科研业务仍在适配，Termius/认证/三拓扑主流程尚未真机验收。PPT、Dev Containers、Intel Mac 不属于首版范围。\n\n首次安装\n先安装 SimpleSFTP Mac，再安装 SimpleExperiment Mac。以后点击 VS Code 底部右侧 Mac preview 状态栏，或执行命令面板“检查 preview 配套更新”。\n\n源码提交\nSimpleSFTP-Mac ${commits[0]}\nSimpleExperiment-Mac ${commits[1]}\n`;
+  const notes = `Apple Silicon macOS 26 及以上 preview。\n\n本地验证\n两仓 build、包依赖闭包、面板生成脚本及更新目标测试逐文件串行通过。真实 VSIX 的身份、版本、darwin-arm64、CRC 与 SHA-256 已校验。\n\nM5 真机验证\n尚未执行。需在 M5、24 GB、macOS 27.0 验证首版到第二版更新、设置保留、重载与部分失败补装。\n\n当前范围\n更新链路及本地 POSIX 工作区测试版。包内配置说明与两仓 README 已按 Mac 使用方式重写，包含快捷键、POSIX 路径、服务器 JSON 配置、Termius 手动转发约定与更新按钮入口。Mac 配置说明不再启动旧会话向导。Mac 宿主与共享租约保持 POSIX 大小写。本版主题修复已加入：页面、卡片、说明、输入及状态配色跟随 VS Code，浅色/深色/高对比真实 headless 渲染及代表文字对比通过。科研业务仍在适配，Termius/认证/三拓扑主流程尚未真机验收。PPT、Dev Containers、Intel Mac 不属于首版范围。\n\n首次安装\n先安装 SimpleSFTP Mac，再安装 SimpleExperiment Mac。以后点击 VS Code 底部右侧 Mac preview 状态栏，或执行命令面板“检查 preview 配套更新”。\n\n源码提交\nSimpleSFTP-Mac ${commits[0]}\nSimpleExperiment-Mac ${commits[1]}\n`;
   fs.writeFileSync(path.join(directory, "release-notes.md"), notes, { encoding: "utf8", flag: "wx" });
   process.stdout.write(`Prepared immutable paired preview: ${directory}\n`);
 }

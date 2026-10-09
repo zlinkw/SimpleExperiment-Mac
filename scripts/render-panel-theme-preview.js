@@ -33,7 +33,7 @@ function renderThemePreview(theme = "dark") {
   html = html.replace(bootstrap, "api = { postMessage() {}, getState() { return null; }, setState() {} }; window.__simplePanelVsCodeApi = api;");
   html = html.replace("</head>", `<style>:root {${Object.entries(variables).map(([key, value]) => `--vscode-${key}:${value};`).join("")}}</style></head>`);
   html = html.replace("<body>", `<body class="vscode-${theme === "hc" ? "high-contrast" : theme}">`);
-  const state = { projectName: "Mac 中文项目", connection: { status: "disconnected" }, pluginUpdate: { status: "up_to_date", message: "当前已是最新版本", experiment: { label: "SimpleExperiment Mac", currentVersion: "0.5.267", latestVersion: "0.5.267" }, sftp: { label: "SimpleSFTP Mac", currentVersion: "0.2.65", latestVersion: "0.2.65" } } };
+  const state = { projectName: "Mac 中文项目", connection: { status: "disconnected" }, pluginUpdate: { status: "up_to_date", message: "当前已是最新版本", experiment: { label: "SimpleExperiment Mac", currentVersion: require("../package.json").version, latestVersion: require("../package.json").version }, sftp: { label: "SimpleSFTP Mac", currentVersion: "0.2.65", latestVersion: "0.2.65" } } };
   html = html.replace("</body>", `<script nonce="${nonce}">
     window.addEventListener('load', () => {
       window.postMessage({type:'state', seq:1, state:${JSON.stringify(state)}}, '*');
