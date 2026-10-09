@@ -20,18 +20,21 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-023（running，0.5.286/0.2.80 配套发布）
+## 当前批次：mac-release-023（passed，0.5.286/0.2.80 配套发布）
 ### 边界
 
 - 本批 6 文件，仅递增两仓 package/lock 与 Experiment runtime 版本并记录验证；构建、runtime 版本验证后分别普通提交推送。prepare/publish 绑定这些已同步提交，验证实际包与匿名更新；不自动安装/Actions。完整结果 UI/Agent 读取/实际解析/物理发布和 M5 后续分批。
-- passed 版本元数据批：两仓 build/219 与 26 闭包、面板 2、vm.Script、runtimeManifest 1、package/lock 版本一致与 diff 检查通过。pending 完整 prepare/publish、实际包结果身份与匿名下载校验，清单绑定这些源码提交后不得修改。
+- passed 版本元数据批：两仓 build/219 与 26 闭包、面板 2、vm.Script、runtimeManifest 1、package/lock 版本一致与 diff 检查通过。完整 prepare/publish、实际包结果身份与匿名下载校验已通过，清单绑定原同步源码提交，不覆盖产物。
 - passed 两仓说明 UTF8 回读、更新入口/结果设置/验收边界检查，build/219 闭包/面板 2 与 vm.Script、macSetupGuide 1、macRelease 4 逐文件串行通过。新增 7 个结果相关文件门禁；下一批仅版本递增与配套本机发布，M5 和完整结果 UI/读取/物理发布仍 pending。
 - passed build/219 闭包/面板 2、vm.Script、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7，逐文件串行 20 秒，UTF8/diff 检查通过。初次失败为旧夹具缺少依赖/已变更入口及原设置命名空间，按实际源码更新后通过，无超时；无业务生产修复混入此提交。
 - passed build/219 闭包/面板脚本 2、vm.Script；macResultIdentity 8、macProjectPrepare 16、macWorkflowBinding 10、projectResultTables 19、manualDistributedResultSync 25、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7、macPlanIdentity 6 逐文件串行 20 秒通过。UTF8/diff 检查通过；VM/AST/local mock 无真实科研/传输。
-- Mac Plan 映射、完成运行筛选、attempt/hash 路径、API 选择、失败通知和轻量查看保留大小写/中文/首尾空格；TS/Agent 目录 key 对齐，错误类型/非法路径拒绝。配置非法结果目录须用户修正，不再回退默认值。UI 候选、Agent 结果读取、物理发布/归档及 M5 仍 pending；下一批仅同步 Mac 使用说明和发布门禁，最多 6 文件，再配套发布。
+- Mac Plan 映射、完成运行筛选、attempt/hash 路径、API 选择、失败通知和轻量查看保留大小写/中文/首尾空格；TS/Agent 目录 key 对齐，错误类型/非法路径拒绝。配置非法结果目录须用户修正，不再回退默认值。说明与配套发布完成；下一批限结果候选 UI/后台路径筛选的一组相关问题，最多 8 文件；Agent 结果读取、实际解析、物理发布/归档及 M5 后续分批。
 
 ### 验证清单
 
+- passed mac-release-023：npm run release:prepare 完整两仓 build、219/26 闭包、面板脚本 2、51 个目标文件串行 20 秒门禁（Experiment feature 36 + core 1，SFTP 14）；新增结果身份和相邻结果回归全部通过，浅深高对比实际渲染通过。npm run release:publish 上传完整三附件草稿，大小/hash 核验后公开；无 Actions/安装。
+- passed preview-v0.5.286 实际包：CLI 两包真实 shell/Node health/实时 RPC、中文 Plan 等待确认 submitted=false/seed 覆盖拒绝与 Agent 持久身份 5 场景通过；Agent/scheduler 启动隔离回归 8 场景通过；actual VSIX 结果模块/后台方法/Agent key 回归 8 项通过。均为本机模拟/AST，无真实科研/SSH/启动/停止/删除。
+- passed 匿名更新 0.5.285/0.2.79 → 0.5.286/0.2.80：真实 updater 共 26 次公开请求完成清单、大小/hash/CRC/身份/平台验证；下载字节等于已测试实际包，新结果模块/Agent/scheduler/其余业务模块和两仓 README/包内配置说明匹配来源。同版本跳过/禁止降级通过；不实际安装，M5 pending。
 - passed mac-release-022：npm run release:prepare 完整两仓 build、219/26 闭包、面板脚本 2 与 44 个目标测试文件逐文件串行门禁通过（Experiment feature 29 + core 1，SFTP 14），包括新增启动路径/模式及浅深高对比实际渲染。npm run release:publish 上传三个完整草稿附件，大小/hash 核验后公开；不触发 Actions 或安装扩展。
 - passed preview-v0.5.285：实际两包固定 CLI 经真实本机 shell/Node health/实时 RPC，中文 Plan 等待确认 submitted=false 与 seed 覆盖 RPC 前拒绝通过（2 包测试，含 Agent 持久身份 5 场景）；另一个实际 VSIX 的 Agent/scheduler AST 隔离回归 8 场景通过（真实条目、启动参数、依赖期间变化、全文 revision、输出/工作目录、attempt、key、入队）。本机 POSIX 模拟，无真实科研/SSH/启动/停止/删除。
 - passed 匿名更新：实际 updater 从 0.5.284/0.2.78 筛出两个新组件，25 次公开请求完成大小/hash/CRC/身份/平台核验；下载字节与已测试 VSIX 一致，编译 Agent/scheduler/业务模块与两仓 README/包内配置说明匹配来源。同版本跳过/禁止降级通过，不实际安装；M5 pending。
@@ -51,6 +54,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- 第二十三版 preview-v0.5.286 已公开：Experiment 来源 `c75f7675bfc13d473941315841d1c7530164ced1`、SFTP 0.2.80 来源 `b57db1a97c7db3cb630b449b95b5cf04667d235d` 已普通推送并 fetch 核对 origin/master；实际包结果身份与匿名更新通过。
 - mac-doc-018 Experiment `6fbe63861f4782b9d81fb277ba5cb4a100b70c90`、SFTP `46e10d130213f82c08fbbcc95257a44e8d5a52b0` 已普通推送并 fetch 核对 origin/master，Mac 结果说明和门禁已同步。
 - mac-005v-results `ad537b2b37368479a6d0f08d4ef9c8c3b841ad91` 已普通推送并 fetch 核对 origin/master；下一批说明/发布，后续结果 UI/Agent/物理发布继续分批。
 - mac-005v-fixtures `5ac6eff31c5e673b75f0a64cd60af475540fbbba` 已普通推送并 fetch 核对 origin/master；三个旧结果夹具恢复有效覆盖，压力目录保留。
