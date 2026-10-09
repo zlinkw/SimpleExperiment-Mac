@@ -111,9 +111,38 @@ export function endpointsFromSetup(setup: XshellRealtimeTunnelConfig): ManualEnd
   return validateManualEndpoints(endpoints);
 }
 
-export function manualAgentGuide(setup: XshellRealtimeTunnelConfig, topology: string, projectName: string, tokenRequired = false): string {
+export function setupFromPreparationApi(setup: XshellRealtimeTunnelConfig, params: any): ManualSetup {
+  if (params.manualEndpoints !== undefined) {
+    if (params.workerTunnels !== undefined || params.hub !== undefined || params.hubConfig !== undefined) throw new Error("manualEndpoints 与旧服务器参数不能同时传入。");
+    return setupFromManualEndpoints(params.manualEndpoints, setup);
+  }
+  if ((setup as ManualSetup).manualEndpointError) throw new Error((setup as ManualSetup).manualEndpointError);
+  const saved = endpointsFromSetup(setup);
+  const merge = (row: any, existing: ManualEndpoint | undefined, role: "hub" | "worker"): ManualEndpoint => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) throw new Error("项目准备服务器参数必须为对象。");
+    return { ...existing, id: role === "hub" ? "hub" : row.id ?? row.serverId ?? existing?.id, role,
+      displayName: row.displayName ?? row.label ?? existing?.displayName,
+      host: row.host ?? row.workerHost ?? row.hubHost ?? existing?.host,
+      user: row.user ?? row.username ?? row.workerUser ?? row.hubUser ?? existing?.user,
+      sshPort: row.sshPort ?? row.port ?? row.workerSshPort ?? row.hubSshPort ?? existing?.sshPort,
+      localForwardHost: row.localForwardHost ?? existing?.localForwardHost, localForwardPort: row.localForwardPort ?? existing?.localForwardPort,
+      remoteAgentHost: row.remoteAgentHost ?? existing?.remoteAgentHost,
+      remoteAgentPort: row.remoteAgentPort ?? row.remoteTelemetryPort ?? existing?.remoteAgentPort,
+      projectParentDir: row.projectParentDir ?? row.agentProjectDir ?? row.remoteRoot ?? row.remotePath ?? existing?.projectParentDir,
+      agentInstallDir: row.agentInstallDir ?? existing?.agentInstallDir, condaEnv: row.condaEnv ?? existing?.condaEnv,
+      enabled: row.enabled ?? existing?.enabled, maxConcurrentGpus: row.maxConcurrentGpus ?? existing?.maxConcurrentGpus };
+  };
+  const hub = params.hub ?? params.hubConfig;
+  const nextHub = hub === undefined ? saved.filter(endpoint => endpoint.role === "hub") : [merge(hub, saved.find(endpoint => endpoint.role === "hub"), "hub")];
+  if (params.workerTunnels !== undefined && !Array.isArray(params.workerTunnels)) throw new Error("workerTunnels 必须是数组。");
+  const workers = params.workerTunnels === undefined ? saved.filter(endpoint => endpoint.role === "worker")
+    : params.workerTunnels.map((row: any) => merge(row, saved.find(endpoint => endpoint.role === "worker" && endpoint.id === (row?.id ?? row?.serverId)), "worker"));
+  return setupFromManualEndpoints([...nextHub, ...workers], setup);
+}
+
+export function manualAgentGuide(setup: XshellRealtimeTunnelConfig, topology: string, projectName: string, tokenRequired = false, serverIds: string[] = []): string {
   if (!projectName || /[\x00-\x1f\x7f/\\]/.test(projectName) || [".", ".."].includes(projectName)) throw new Error("先打开一个本机项目文件夹，再生成 Agent 指引。");
-  const endpoints = endpointsFromSetup(setup).filter(endpoint => endpoint.enabled && (topology === "hub_worker" || endpoint.role !== "hub"));
+  const endpoints = endpointsFromSetup(setup).filter(endpoint => endpoint.enabled && (topology === "hub_worker" || endpoint.role !== "hub") && (!serverIds.length || serverIds.includes(endpoint.id)));
   if (!endpoints.length) throw new Error("先配置并启用 Termius 转发端点。");
   const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
   const sections = endpoints.map(endpoint => {

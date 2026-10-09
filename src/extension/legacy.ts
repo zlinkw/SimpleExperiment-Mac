@@ -1954,11 +1954,14 @@ export class RealtimeTunnelPanelProvider {
         return { ok: true, key, reset: true };
     }
     async apiProjectPrepare(params = {}) {
-        await this.ensureRemoteAgentVersionConsistent().catch(() => undefined);
+        const manual = this.isMacVariant();
+        if (!manual) await this.ensureRemoteAgentVersionConsistent().catch(() => undefined);
         const root = String(params.workspace || workspaceRoot() || "").trim();
         if (!root)
             throw new Error("project.prepare 需要已打开工作区，或传入 workspace 参数。");
         assertSingleProjectWorkspace("project.prepare");
+        if (manual && (!workspaceRoot() || path.posix.resolve(root) !== path.posix.resolve(workspaceRoot())))
+            throw new Error("Mac project.prepare 的 workspace 必须是当前打开的本机项目目录。");
         await Promise.all([
             this.refreshLocalPlanMetadata({ post: false, force: true }).catch((error) => {
                 this.localPlanMetadata = { ...this.localPlanMetadata, error: errorMessage(error) };
@@ -1970,6 +1973,7 @@ export class RealtimeTunnelPanelProvider {
         const setup = this.apiMergedSetupConfig(params);
         const topology = this.apiPrepareTopology(requestedMode, serverIds, setup);
         const targets = this.apiPrepareServerTargets(topology, serverIds, params.workerTunnels, setup);
+        const manualGuide = manual && topology.valid && targets.length ? ManualTunnel_1.manualAgentGuide(setup, topology.mode, remoteProjectName(), Boolean(this.tunnelConfig.token), targets.map(target => target.id)) : "";
         const simpleSftp = simpleSftpIntegrationReadiness();
         const planSelection = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], params);
         const infrastructureMissing = ApiWorkflow_1.structuredMissingInventory({
@@ -2006,16 +2010,21 @@ export class RealtimeTunnelPanelProvider {
                 networkHost: target.networkHost || "",
             })),
             modifications: {
-                xshellSessions: params.applyXshell === false ? [] : targets.map((target) => target.savedSessionPath).filter(Boolean),
+                xshellSessions: manual || params.applyXshell === false ? [] : targets.map((target) => target.savedSessionPath).filter(Boolean),
                 remoteRuntime: params.deployRuntime === false ? [] : targets.map((target) => ({ serverId: target.id, installDir: this.agentRuntimeDirs(target.remoteRoot, target.agentInstallDir).installDir, workDir: this.agentRuntimeDirs(target.remoteRoot).workDir })),
+                ...(manual ? { remoteProject: params.uploadProject === false ? [] : targets.map(target => ({ serverId: target.id, localPath: root, remotePath: this.agentRuntimeDirs(target.remoteRoot).workDir })), manualStart: true } : {}),
             },
         };
+        const preparationScope = manual ? crypto.createHash("sha256").update(JSON.stringify(preview)).digest("hex") : "";
+        if (manual && params.expectedPreparationScope !== undefined && params.expectedPreparationScope !== preparationScope)
+            throw new Error("Mac 准备目标或配置已变化，请重新预览并确认。");
         if (infrastructureMissing.length || params.confirm !== true)
             throw confirmationRequired({
                 operation: "project.prepare",
                 requires: ["confirm"],
                 missing,
                 preview,
+                ...(manual ? { preparationScope } : {}),
                 params: { ...params, confirm: undefined },
             });
         if (topology.configuredMode && params.applyTopology !== false)
@@ -2025,20 +2034,40 @@ export class RealtimeTunnelPanelProvider {
         const profileResult = await this.writeSftpManagerServerProfiles(targets.map((target) => target.id));
         if (profileResult.targetCount < targets.length)
             throw new Error(`project.prepare 写入 SimpleSFTP 目标不完整：需要 ${targets.length} 个，当前 ${profileResult.targetCount} 个。`);
-        const commandResults = params.applyXshell === false ? [] : await this.writeXshellAgentStartupCommands(false, false);
+        const commandResults = manual || params.applyXshell === false ? [] : await this.writeXshellAgentStartupCommands(false, false);
         const blocked = commandResults.filter((item) => item.error || AGENT_STARTUP_BLOCKED_SKIP_REASONS.has(item.skippedReason));
         if (blocked.length)
             throw new Error(`project.prepare 未修改 Xshell 自启动命令：${blocked.map((item) => item.summary).join("；")}`);
+        let runtimeDeployment;
         if (params.deployRuntime !== false)
-            await this.deployLatestAgentRuntime(false, true, serverIds);
-        if (params.startSessions === true)
+            runtimeDeployment = await this.deployLatestAgentRuntime(false, true, targets.map(target => target.id), manual);
+        const projectUploads = [];
+        if (manual && params.uploadProject !== false) {
+            await this.ensureSftpManagerCommand("simpleSftpMac.uploadWorkspace");
+            for (const target of targets) {
+                const remotePath = this.agentRuntimeDirs(target.remoteRoot).workDir;
+                const result = await vscode.commands.executeCommand("simpleSftpMac.uploadWorkspace", {
+                    apiMode: true, confirm: true, pathConfirmed: true, localPath: root, targetId: target.id, targetRole: target.role,
+                    remotePath, server: this.sftpServerOptions({ ...target, remotePath }),
+                    stateFileMode: "virtual", transientManifest: true, pruneManagedFiles: false,
+                });
+                if (!sftpUploadSucceeded(result, "")) throw new Error(`${target.id} 项目上传未确认成功：${resultError(result) || "SimpleSFTP 未返回成功回执"}`);
+                projectUploads.push({ serverId: target.id, remotePath, uploaded: true });
+            }
+        }
+        if (!manual && params.startSessions === true)
             await this.startAllXshellConnections(false, false);
         const test = params.autoTest === true
             ? await this.apiServerTestAll({ refresh: true })
             : await this.apiServerTestAll({ refresh: false });
         await this.apiAdvanceFlow("select_servers", { completed: true });
         if (topology.mode) await this.apiAdvanceFlow("select_mode", { completed: true });
-        await this.apiAdvanceFlow("prepare_agents", { completed: true });
+        let prepared = !manual;
+        if (manual && params.autoTest === true && runtimeDeployment && test.ok && test.rows.length === targets.length && test.rows.every(row => row.status === "ok")) {
+            const verification = await this.verifyDeployedAgentRuntime(runtimeDeployment.targets, runtimeDeployment.manifest);
+            prepared = !verification.fatal.length && !verification.warnings.length;
+        }
+        await this.apiAdvanceFlow("prepare_agents", { completed: prepared });
         return {
             ok: true,
             operation: "project.prepare",
@@ -2057,11 +2086,14 @@ export class RealtimeTunnelPanelProvider {
                 missing: planSelection.missing,
             },
             deferredValidation: true,
+            ...(manual ? { runtimeDeployed: Boolean(runtimeDeployment), projectUploads,
+                manualStart: { required: !prepared, provider: "termius", guide: manualGuide, automaticStart: false }, agentReady: prepared } : {}),
             test,
             flow: this.apiFlowState,
         };
     }
     apiMergedSetupConfig(params = {}) {
+        if (this.isMacVariant()) return ManualTunnel_1.setupFromPreparationApi(this.setupConfig, params);
         const hub = params.hub && typeof params.hub === "object" && !Array.isArray(params.hub)
             ? params.hub
             : params.hubConfig && typeof params.hubConfig === "object" && !Array.isArray(params.hubConfig)
@@ -2128,7 +2160,7 @@ export class RealtimeTunnelPanelProvider {
     }
     apiPrepareTopology(requestedMode, serverIds, setup = this.setupConfig) {
         const workerCount = setup.workerTunnels.filter((worker) => worker.enabled !== false).length;
-        const hubConfigured = Boolean(String(setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
+        const hubConfigured = Boolean(String(setup.manualProvider === "termius" ? setup.hubHost || "" : setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
         const hubSelected = !serverIds.length || serverIds.some((id) => ["hub", setup.hubHost, setup.hubDisplayName].filter(Boolean).includes(String(id || "").trim()));
         const current = this.projectTopologyAssessment();
         const mode = requestedMode
@@ -2165,7 +2197,7 @@ export class RealtimeTunnelPanelProvider {
         const configuredMode = String(mode || "").trim();
         const normalizedMode = TopologyMode_1.normalizeTopologyMode(configuredMode);
         const workers = (setup.workerTunnels || []).filter((worker) => worker.enabled !== false);
-        const hubConfigured = Boolean(String(setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
+        const hubConfigured = Boolean(String(setup.manualProvider === "termius" ? setup.hubHost || "" : setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
         const assessment = TopologyMode_1.assessProjectTopology(configuredMode, {
             hubConfigured,
             enabledWorkerIds: workers.map((worker) => String(worker.id || worker.displayName || "").trim()).filter(Boolean),
@@ -2293,6 +2325,7 @@ export class RealtimeTunnelPanelProvider {
     }
     apiMergedWorkerConfigs(workerTunnels, setup = this.setupConfig) {
         const configured = (setup.workerTunnels || []).filter((worker) => worker.enabled !== false);
+        if (setup.manualProvider === "termius") return configured;
         const incoming = Array.isArray(workerTunnels) ? workerTunnels.filter((item) => item && typeof item === "object") : [];
         if (!incoming.length)
             return configured;
@@ -2342,6 +2375,7 @@ export class RealtimeTunnelPanelProvider {
         this.postState();
     }
     async apiStartAllConnections(params = {}) {
+        if (this.isMacVariant()) return this.apiProjectPrepare({ ...params, deployRuntime: false, uploadProject: false, startSessions: false });
         const topology = this.projectTopologyAssessment();
         if (!topology.valid || !topology.mode)
             throw confirmationRequired({
@@ -4510,7 +4544,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     async prepareAgentsForFirstRun(showMessage = true) {
-        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
+        if (this.isMacVariant()) return this.prepareMacAgentsForFirstRun(showMessage);
         if(!await this.ensureSimpleSftpReadyForSetup("准备 Agent")){
           console.warn("[diag] prepareAgents blocked: SimpleSFTP not ready");
           throw new UiCommandCancelled("SimpleSFTP 未就绪，已取消准备 Agent。请先安装并重载窗口。");
@@ -6833,7 +6867,7 @@ export class RealtimeTunnelPanelProvider {
     }
     assertExecutionCondaEnvReady(workers = this.workerActionTargets()) {
         const list = Array.isArray(workers) ? workers : [];
-        const missing = list
+        const missing = this.isMacVariant() ? [] : list
             .filter((worker) => !normalizeCondaEnvSetting(worker?.condaEnv))
             .map((worker) => String(worker?.workerId || worker?.id || worker?.label || "未命名 Worker"));
         if (missing.length) {
@@ -6922,6 +6956,27 @@ export class RealtimeTunnelPanelProvider {
         const content = ManualTunnel_1.manualAgentGuide(this.setupConfig, topology.mode, remoteProjectName(), Boolean(this.tunnelConfig.token));
         const document = await vscode.workspace.openTextDocument({ language: "markdown", content });
         await vscode.window.showTextDocument(document, { preview: true });
+    }
+    async prepareMacAgentsForFirstRun(showMessage = true) {
+        if (!await this.ensureSimpleSftpReadyForSetup("准备 Agent")) throw new UiCommandCancelled("SimpleSFTP 未就绪，已取消准备 Agent。");
+        if (!workspaceRoot()) {
+            await this.openWorkspaceFolderForContinuation("准备 Agent", "prepareAgents");
+            throw new UiCommandCancelled("未选择项目，已取消准备 Agent。");
+        }
+        let preview;
+        try { await this.apiProjectPrepare({ confirm: false }); }
+        catch (error) { if (error?.apiCode !== 2001) throw error; preview = error.apiData; }
+        if (!preview || preview.missing.some(item => item.step === "prepare_agents" || item.step === "select_servers" || item.step === "select_mode"))
+            throw new Error(`Mac Agent 准备配置不完整：${(preview?.missing || []).map(item => item.reason).join("；")}`);
+        const detail = preview.preview.servers.map(target => `${target.serverId}：${target.user}@${target.host}:${target.port}\n项目 ${target.workDir}\nruntime ${preview.preview.modifications.remoteRuntime.find(item => item.serverId === target.serverId)?.installDir}`).join("\n\n");
+        const choice = await vscode.window.showWarningMessage(`确认通过 SimpleSFTP 上传当前项目和 runtime？\n\n${detail}\n\n上传后请在 Termius 手动启动转发和 Agent；不会重启已有实验。`, { modal: true }, "确认上传并查看指引");
+        if (choice !== "确认上传并查看指引") throw new UiCommandCancelled("Mac Agent 准备已取消。");
+        const result = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "Mac 项目与 Agent 准备", cancellable: false },
+            () => this.apiProjectPrepare({ confirm: true, autoTest: false, workspace: preview.preview.workspace, expectedPreparationScope: preview.preparationScope }));
+        const document = await vscode.workspace.openTextDocument({ language: "markdown", content: result.manualStart.guide });
+        await vscode.window.showTextDocument(document, { preview: true });
+        if (showMessage) void vscode.window.showInformationMessage("项目与 runtime 已上传。请按指引在 Termius 手动启动转发和 Agent，再点击检测全部。");
+        return false; // Upload receipt is not evidence that the manually started Agent is ready.
     }
     async openSetupGuide() {
         const guide = path.join(this.context.extensionPath, "docs", "simple-experiment-setup.md");

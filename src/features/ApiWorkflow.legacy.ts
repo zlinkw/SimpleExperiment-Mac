@@ -32,6 +32,7 @@ export interface MissingInventoryOptions {
   setup?: Record<string, unknown>;
   topology?: Record<string, unknown>;
   simpleSftpMac?: Record<string, unknown>;
+  simpleSftp?: Record<string, unknown>;
   project?: Record<string, unknown>;
   plan?: Record<string, unknown>;
   requirePlan?: boolean;
@@ -390,11 +391,12 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
   const workspace = String(options.workspace || "").trim();
   const setup = options.setup && typeof options.setup === "object" ? options.setup : {};
   const topology = options.topology && typeof options.topology === "object" ? options.topology : {};
-  const simpleSftpMac = options.simpleSftpMac && typeof options.simpleSftpMac === "object" ? options.simpleSftpMac : {};
+  const simpleSftpMac = options.simpleSftp && typeof options.simpleSftp === "object" ? options.simpleSftp : options.simpleSftpMac && typeof options.simpleSftpMac === "object" ? options.simpleSftpMac : {};
   const project = options.project && typeof options.project === "object" ? options.project : {};
   const plan = options.plan && typeof options.plan === "object" ? options.plan : {};
   const workers = Array.isArray(setup.workerTunnels) ? setup.workerTunnels.filter((worker) => worker && typeof worker === "object" && worker.enabled !== false) : [];
-  const hubConfigured = Boolean(String(setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
+  const manual = setup.manualProvider === "termius";
+  const hubConfigured = Boolean(String(manual ? setup.hubHost || "" : setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
   const requirePlan = options.requirePlan !== false;
 
   if (!workspace) {
@@ -441,9 +443,9 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
     });
   } else {
     const setupMissing = [];
-    if (mode === "hub_worker" && !hubConfigured) setupMissing.push("Hub Xshell 会话和项目父目录");
+    if (mode === "hub_worker" && !hubConfigured) setupMissing.push(manual ? "Hub 手动端点和项目父目录" : "Hub Xshell 会话和项目父目录");
     for (const worker of workers) {
-      if (!String(worker.savedSessionPath || "").trim()) setupMissing.push(`${String(worker.displayName || worker.id || "Worker")} Xshell 会话`);
+      if (manual ? !String(worker.workerHost || worker.hubHost || "").trim() : !String(worker.savedSessionPath || "").trim()) setupMissing.push(`${String(worker.displayName || worker.id || "Worker")} ${manual ? "手动端点" : "Xshell 会话"}`);
       if (!String(worker.agentProjectDir || "").trim()) setupMissing.push(`${String(worker.displayName || worker.id || "Worker")} 项目父目录`);
     }
     if (setupMissing.length) {
