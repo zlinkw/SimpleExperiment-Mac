@@ -431,6 +431,6 @@ function tokenInvalid(
     tcpOpen: true,
     status: "agent_token_invalid",
     message: "Hub Agent 拒绝了 token/session。",
-    suggestion: "请检查 simpleExperiment.tunnel.agentToken，或用匹配 token 重启 Hub Agent。",
+    suggestion: "请检查 simpleExperimentMac.tunnel.agentToken，或用匹配 token 重启 Hub Agent。",
   };
 }

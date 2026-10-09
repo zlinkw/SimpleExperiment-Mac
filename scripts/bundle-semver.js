@@ -8,7 +8,7 @@ const installed = require("semver/package.json");
 if (manifest.dependencies?.semver !== installed.version) throw new Error("SemVer dependency must match the explicitly pinned package version.");
 const dependencyRoot = path.dirname(require.resolve("semver/package.json"));
 const destination = path.join(root, "dist/vendor/semver");
-const closure = collectLocalRuntimeClosure(dependencyRoot, ["functions/compare.js", "functions/valid.js"]);
+const closure = collectLocalRuntimeClosure(dependencyRoot, ["functions/compare.js", "functions/valid.js", "functions/satisfies.js", "ranges/valid.js"]);
 let bytes = 0;
 for (const { file } of closure) {
   const source = fs.readFileSync(path.join(dependencyRoot, file), "utf8");

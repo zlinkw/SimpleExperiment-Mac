@@ -172,7 +172,7 @@ function completedCleanupCandidates(result: any): Candidate[] {
 }
 
 export function openCacheCleanupPanel(contextProvider: () => CleanupContext, onDidChangeContext?: vscode.Event<void>): void {
-  const panel = vscode.window.createWebviewPanel("simpleExperimentCacheCleanup", "缓存回收审核", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  const panel = vscode.window.createWebviewPanel("simpleExperimentMacCacheCleanup", "缓存回收审核", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
   let current = new Map<string, Candidate>();
   let busy = false;
   let disposed = false;

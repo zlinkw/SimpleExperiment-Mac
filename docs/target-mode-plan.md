@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-002e（passed）
+## 当前批次：mac-003a（passed）
 
 ### 边界
 
-- 修正 UI/后台业务字段 simpleSftp 保持兼容；仅字符串命令/设置改名，迁移剩余同步桥身份，8 个文件以内。
+- 真实 VSIX ZIP/CRC/XML 身份及平台、版本、hash 和 VS Code 要求验证；完成剩余 namespace，8 个文件以内。
 - 保护入口，阻断 Mac 自动导入 Windows 扩展数据库；下批处理 UI/其余业务 namespace。
 
 ### 验证清单
+
+- passed mac-003a build、包闭包、VSIX 3 测试：真实 XML 平台、Windows/universal/身份/engine/hash 拒绝、CRC 损坏及越界 ZIP。
 
 - passed mac-002e build、面板脚本、业务字段兼容断言、包闭包；namespace 替换保留 simpleSftp 业务变量。
 
@@ -49,6 +51,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。
 
 ## 本批记录
+
+- mac-002e Experiment `8d27d316eb2c798653b6fafed04757dbac6973a5` 已同步 origin/master。
 
 - mac-002d Experiment `b9ce16841d0385608660943a0a7c5f74f6b97824` 已同步 origin/master。
 
