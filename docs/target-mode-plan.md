@@ -20,7 +20,7 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-017（running，配套 preview-v0.5.280）
+## 当前批次：mac-release-017（passed，配套 preview-v0.5.280）
 ### 边界
 
 - 两仓版本与 RuntimeManifest 对齐，发布 Experiment 0.5.280 / SFTP 0.2.74 的同一 preview Release；绑定已同步来源。版本批次共 6 文件，生成产物不计。保护现有入口、Plan 格式、三拓扑、业务与历史附件。
@@ -33,48 +33,25 @@
 - passed mac-005q：服务端 Mac workflow 绑定当前物理工作区，异步准备/校验/标准 Plan 关键边界复核，晚到回执不写入另一工作区；精确保留 Plan 首尾空格。CLI/API seed override 显式拒绝，正式种子沿用保存的 Plan，离线预览不宣称应用 seed。Mac 提交不执行旧自动停止 fallback，活动运行在创建回执及提交前拦截。8 文件。
 - passed 本地：build/218 模块闭包/面板脚本 2、macWorkflowBinding 6、macCliWorkflow 6、macProjectPrepare 16、localApi 标准路线相关 5 逐文件串行通过；测试为编译方法 VM/本机 mock，无真实科研/SSH/停止/删除。初次 VM fixture 缺少编译导入别名，补齐后通过，非超时。
 - passed mac-doc-012：两仓 README/配置说明补全当前真实工作区、活动运行与保存 Plan seeds；在线覆盖明确报错、离线不应用、旧手工记录器边界，更新按钮入口保留。新工作区回归纳入发布门禁，发布说明区分本地/M5。UTF8 回读、build/218 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，6 文件。
-- pending 下一批：配套 0.5.280/0.2.74 本机发布。后续继续完整 Plan/结果/监控与 Windows 执行依赖审计；当前关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据。真实 SSH/三拓扑/M5 保持待验收。
+- passed mac-release-017：完整本机 prepare/publish、两仓 build/218 与 26 文件闭包、面板脚本 2、逐文件串行更新/工作区/CLI/路径/认证/中转及浅深高对比实际渲染通过；3 个完整草稿附件核验后发布，无 Actions/自动安装。
+- passed preview-v0.5.280：实际两包固定 CLI 通过真实本地 shell/Node health/实时 RPC，Experiment 包中文 Plan 工作区/路线预检与等待确认回执、seed 覆盖在 RPC 前拒绝通过（2 包测试）。真实匿名 updater 从 0.5.279/0.2.73 筛出两组件，20 次请求完成大小/hash/CRC/身份/平台核验；字节与已测试 VSIX 相同，工作区/Plan/CLI 模块与两仓 README/配置说明匹配来源。同版本跳过/禁止降级通过；首次 README 比对 fixture 未使用 vsce 的 HEAD 链接，修正匹配规则后通过，无生产修改。
+- pending 下一批 mac-005r：继续完整 Plan 标准路线异步边界、结果/监控及 Windows 执行依赖审计。当前关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据；真实 SSH/三拓扑/M5 保持待验收。
 
-- passed mac-doc-011：两仓 README/配置说明补充正式 Plan CLI、预检/离线/等待确认回执与 operations.list，macCliWorkflow 纳入发布门禁并更新发布说明。UTF8 回读、build/217 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，共 6 文件。配套下一版 0.5.279/0.2.73，服务端 workspace/seed/完整科研仍待后续核验。
 
-- passed mac-005p：CLI Plan 限制当前项目内真实文件并拒绝链接逃逸，保留中文/真实首尾空格；在线运行核对 API workspace、workflow.plan 就绪/选择，再复核 workspace 申请 workflow.run。等待 VS Code 确认只报告 requested/operationId，不冒充远端已提交；HTTP/业务阻塞返回失败且不重试。离线预览标明 local_only/ready=false，保留旧手工 recorder，帮助改用 Mac 命令名。7 文件。
-- passed 本地：build/217 模块闭包/面板脚本 2、包闭包/vm.Script、真实 CLI 本机 mock 5（含三种返回拓扑、工作区变化、失败/离线/确认/路径）、旧 CLI 预览与发现 3/帮助 1、CLI 契约 8/固定入口 5 逐文件串行通过。无实际科研、传输或服务器调用。
 
-- passed mac-release-015：完整 `npm run release:prepare`/`release:publish` 本机门禁通过，Experiment build/216 模块闭包、SFTP build/26 文件闭包、面板脚本 2、更新/CLI/路径/认证/中转逐文件串行及浅/深/高对比渲染通过；三个完整草稿附件核验后发布。不使用 Actions 或安装扩展。
-- passed preview-v0.5.278：实际两包固定 CLI 经真实本地 POSIX shell/Node、中文发现文件完成 health 自检及实时 capabilities → RPC（2 项包测试），保留 confirm/pathConfirmed=false。真实匿名 updater 从 0.5.277/0.2.71 筛出两组件，18 次请求取得清单及包；大小/hash/CRC/平台/身份通过，字节与已测试 VSIX 相同，CLI 模块、两仓源码/README/配置说明匹配。同版本跳过/禁止降级通过；无真实科研/SSH/M5。
 
-- passed mac-doc-010：两仓 README/配置说明更新 CLI 自动契约预检、失败处理与确认参数边界，双仓 macCliApi 纳入 release:prepare；发布说明区分本地与 M5。UTF8 回读、build/216 闭包/面板脚本 2、vm.Script、配置说明 1、发布脚本 4 通过，共 6 文件。下一批 Experiment 0.5.278/SFTP 0.2.72 配套 preview。
 
-- passed mac-005o：SFTP 接入同规则实时 capabilities/发现文件/监听变化与有界 HTTP/JSON-RPC，保留确认参数、CLI 入口和错误回执；只发送本地测试请求。SFTP build/26 文件闭包、CLI 契约 8、固定入口 5、API 19 逐文件串行通过。4 个 SFTP 文件加本计划共 5 文件。
 
-- passed mac-005n：每次 CLI RPC 重读 Mac 发现文件、GET 实时 capabilities 并核对方法/身份/版本，再复核监听实例发送 RPC；未知方法、监听变化、外部地址/异常 token、错误 HTTP/JSON/envelope 均拒绝。保留 confirm/pathConfirmed，错误不重试业务；请求/响应有界并使用总时限，self-check 同步有界 health。5 文件。
-- passed 本地：build/216 模块闭包/面板脚本 2、包运行时闭包、vm.Script、CLI 实时契约 8、旧 CLI 项目根发现 1、固定入口 5，逐文件串行通过。首次超大响应测试揭示 Node 已结束 socket 上传递 destroy(error) 会产生未处理 error，改为明确 reject 并无错误销毁请求/响应后通过。无超时/服务器操作/科研实验。
 
-- passed mac-release-014：`npm run release:prepare` 完整本机门禁通过，Experiment build/215 模块闭包、SFTP build/25 文件闭包、面板脚本 2、逐文件串行更新/CLI/路径/认证/中转与浅/深/高对比渲染通过。`npm run release:publish` 核验三个草稿附件后发布 preview-v0.5.277；未安装插件或使用 Actions。
-- passed preview-v0.5.277：实际 VSIX 解包后，两款固定入口通过真实本地 POSIX shell/Node、中文发现文件与本机 health mock 自检（2 项），LF/源码版本匹配。真实匿名 updater 从 0.5.276/0.2.70 筛出两组件，17 次请求完成清单和包校验；下载字节与已通过 CLI 自检的本地 VSIX 完全一致，两仓源码/README/配置说明匹配。同版本跳过、禁止降级通过；无真实 SSH 或 M5 验收。
 
-- passed mac-doc-009：两仓 README/配置说明补全 CLI 查看/复制命令、固定路径、Node 20+/PATH、更新重载、自检及未知文件处理边界；双仓 CLI 5/5 测试纳入发布门禁。UTF8 回读、Experiment build/215 模块闭包/面板脚本 2、配置说明 1、发布 4 与双仓 CLI 逐文件串行通过，共 6 文件。下一批 Experiment 0.5.277/SFTP 0.2.71，CLI 业务契约/真实 SSH/M5 后续。
 
-- passed mac-005m：SFTP 固定 Application Support/cli/simple-sftp-mac-api 与独立查看/复制自检命令；规则与 Experiment 一致，LF/Node 20+/完整参数/cwd、包身份/版本/链接/目录身份保护，受支持 Mac 激活刷新且不降级。未知文件拒绝覆盖，CLI 失败不阻塞业务或更新，保留旧 npm 入口。
-- passed mac-005m 本地：SFTP build/25 文件闭包，CLI 启动器 5、独立更新/退出证明 3 逐文件串行通过。真实本地 Git POSIX shell/Node、自检 health mock 与 Mac 命令入口覆盖，未安装扩展/修改 PATH/执行实验或服务器操作。5 文件。
 
-- passed mac-005l：Experiment 固定 Application Support/cli/simpleex-mac，LF/POSIX shell、Node 20+ 门禁、完整参数/cwd、命令面板入口及复制自检。支持 Mac 激活刷新，旧实例不降级；未知文件/链接/硬链接/异仓拒绝，CLI 失败不阻塞业务或独立更新。旧入口保留。
-- passed mac-005l 本地：build/215 模块闭包/面板脚本 2，CLI 启动器 5、独立更新 3 逐文件串行通过。真实本地 Git POSIX shell/Node、模拟本机 health API 与 Mac 命令入口覆盖；未安装扩展或执行实验/服务器操作。首次 Windows argv 引号被 shell 启动层改写，改用真实 shell stdin 引用；health fixture 补齐 ok 字段后通过，非超时。5 文件。
 
-- passed mac-release-013：完整本机 prepare/publish；两仓 build/24 与 214 模块闭包、面板脚本 2、更新/POSIX/相对文件名/范围协议门禁逐文件串行通过，浅/深/高对比真实渲染通过，package/lock/runtime 一致。3 附件完整草稿大小/SHA-256 核验后发布，不使用 Actions 或自动安装。
-- passed preview-v0.5.276 真实匿名 updater：从 0.5.275/0.2.69 选择两个更新，16 次匿名请求取得清单与两包，大小/hash/CRC/平台/身份核验通过；SFTP 范围/路径/tar/传输源码与 LF askpass、Experiment 面板/更新代码、两仓 README/配置说明匹配已同步来源，README 标准 vsce 链接改写已核对。同版本跳过/禁止降级，无真实 SSH/M5。
 
-- passed mac-doc-008：两仓 README/配置说明补全下载范围按钮、目标核对/浏览/保存/预览、过滤、选中链接拒绝与手动根/显式 API 边界；Mac 范围协议 4 进入发布门禁。UTF8 回读、Experiment build/214 模块闭包/面板脚本 2、配置说明 1、发布 4、SFTP 范围 4 逐文件串行通过，共 6 文件。CLI 和 M5/真实 SSH pending。
 
-- passed mac-005k：下载范围/目录选择保留 POSIX 中文/空格/大小写，空字符串与坏路径拒绝，显式下载禁止根目录别名；保留手动明确选择根入口。范围浏览限制项目内，文件列表用 NUL 文件名/大小对并校验完整性，Python 归档不重写路径并拒绝选中链接。无真实 SSH/删除。
-- passed mac-005k 本地：SFTP build/24 文件闭包；新 Mac 范围 4、范围协议 3、范围路径 2、显式下载 1、相对文件名 5、POSIX 5、API 19、跨端/删除 13、工作区 5 逐文件串行通过。初次链接测试 Python 不把 Windows junction 视为 POSIX symlink，新增已核验 fixture 链接适配后协议测试通过，生产判断未放宽。6 文件批次。
 
-- passed mac-release-012：完整本机 prepare/publish；两仓 build/24 与 214 模块闭包、面板脚本 2、更新/POSIX/相对文件名门禁逐文件串行通过，浅/深/高对比真实渲染通过，package/lock/runtime 一致。3 附件完整草稿大小/SHA-256 核验后发布，不使用 Actions 或自动安装。
-- passed preview-v0.5.275 真实匿名 updater：从 0.5.274/0.2.68 选择两个更新，15 次匿名请求取得清单与两包，大小/hash/CRC/平台/身份核验通过；包内 SFTP 路径/tar/传输源码和 LF askpass、Experiment 面板/更新代码、两仓 README 与 Mac 配置说明匹配本地来源，README 标准 vsce 链接改写已核对。同版本跳过/禁止降级，无真实 SSH/M5。
 
-- passed mac-doc-007：两仓 README/配置说明补全相对文件名保留、全清单预检和远端大小写/本机别名边界；新真实 tar/Python 测试纳入 release:prepare。两仓文档 UTF8 回读、Experiment build/214 模块闭包/面板脚本 2、配置说明 1、发布 4、SFTP 品牌 2 和相对文件名 5 逐文件串行通过，共 6 文件。下载范围界面与 CLI 后续分批。
 
-- passed mac-release-011：完整本机 prepare/publish；两仓 build/24 与 214 模块闭包、面板脚本 2、更新与两仓 POSIX 发布门禁逐文件串行通过，浅/深/高对比真实渲染通过，package/lock/runtime 一致。3 附件草稿大小/SHA-256 完整核验后公开发布。版本门禁首次写错 runtime 测试目录，改为真实 test/runtimeManifest 后通过，非超时。
 
 
 ### 相邻回归风险
@@ -83,25 +60,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- 第十七版 preview-v0.5.280 已发布：Experiment 来源 `07f147da7535218404ac69d6cd0abb68160a91fd`、SFTP 0.2.74 来源 `7464ac24324b12d1e6a3efdd9d3e0ff427074d0e` 已普通推送并 fetch 核对；实际包 CLI/工作区与 seed 边界及匿名下载通过。完整科研/SSH/M5 pending。
 - mac-doc-012 Experiment 说明/门禁 `bff6c01119713147e5ca7c7ce8da023b315c126a`、SFTP README `f772588be895e44d288fbdff986acd44a9b8e177` 均已普通推送并 fetch 核对。
 - mac-005q 已验证源码 `6a30a571502b697d70a40435a0c0e363246d0440` 已普通推送并 fetch 核对 origin/master。
 - 第十六版 preview-v0.5.279 已发布：Experiment 来源 `0c58484ae8df959ddb9f4ecf162437baf6ef08be`、SFTP 0.2.73 来源 `1ae3c9da45ddb1364f6a3ae1c16955bbf1e5ee55` 均已普通推送并 fetch 核对，真实包 Plan CLI 等待确认与匿名下载通过。完整科研/服务端 workspace/seed/SSH/M5 pending。
-- mac-doc-011 Experiment 说明/门禁 `a727df446ce723540bb954df7b276c698e3dd132`、SFTP README `31ba6088e9229373e1b24f77a2c4c5ca2316ba18` 已同步。
-- mac-005p CLI 来源 `e95e099132427d2ffe4dedaa7f628d0d49854724` 已普通推送并 fetch 核对。
-- 第十五版 preview-v0.5.278 已发布：Experiment 来源 `56fb77d4fbed95eb3fa6874b2808f986b7e2840d`、SFTP 0.2.72 来源 `56cfd11be0f66bb33dfda5184e5662ad601538b6` 均已普通推送并 fetch 核对。实时 CLI 契约、实际包启动/RPC 和匿名下载通过，CLI 科研运行/完整主流程/真实 SSH/M5 pending。
-- mac-doc-010 Experiment 说明/门禁 `1c4f0d5423aa617e3147cf5d2c71bb9d51322ec5`、SFTP README `fead4c440e8b8dbc10bdad7ab4ad07042a42604b` 均已同步 origin/master。
-- mac-005o SFTP CLI 契约来源 `7322bf06e0d63405e71023d58fb0bb860affedb3` 已普通推送并 fetch 核对。
-- mac-005n Experiment CLI 契约来源 `2a55f16e288d8c7fc4c173c9b836772222925c6e` 已普通推送并 fetch 核对。
-- 第十四版 preview-v0.5.277 已发布：Experiment 0.5.277 来源 `103dd1be66789e7dedc2efe33d43bc0cef8c5bc8`、SFTP 0.2.71 来源 `03520bb94c599a47d4a433254f497cd2d860026e` 均已普通推送并 fetch 核对。固定 CLI、两仓说明、真实包自检与匿名下载通过，实时 API 业务契约/完整科研/真实 SSH/M5 pending。
-- mac-doc-009 SFTP README 已普通推送并 fetch 核对；真实提交见 Git。
-- mac-005m SFTP 来源 `a6bf99c379c1c355032ce07488fde2205106fd66` 已普通推送并 fetch 核对，固定 CLI 本地验证通过。
-- mac-005m SimpleSFTP 稳定 CLI 源码已普通推送并 fetch 核对，真实提交见 Git；4 个 SFTP 文件与本计划共 5 文件。
-- mac-005l Experiment 来源 `6e656f2b1b962910147ea7796f4a1758ee05c415` 已普通推送并 fetch 核对，稳定 CLI 本地验证通过。
-- mac-005l Experiment 稳定 CLI 已完成本地验证，提交来源见 Git；SFTP 接入与配套发布后续批次。
-- 第十三版 preview-v0.5.276 已发布：Experiment 来源 `43ef53f3fe02b6f14f8d392486197a15c0470350`、SFTP 0.2.70 来源 `16e6ce87e98b2c61aef23cc93270734e000bc67b` 均已同步；Mac 下载范围/文件浏览、本地归档协议与真实匿名下载通过。CLI/完整科研主流程/真实 SSH/M5 pending。
-- mac-005k SimpleSFTP 源码 `ce60c041385374dabf9723b6aed0659049735832` 已普通推送并 fetch 核对；说明提交 `08595adc69ca73021e561663cce6644b085f3a81`。
-- mac-doc-008 SimpleSFTP README 已推送 origin/master；真实提交见 Git。配套下一版 Experiment 0.5.276/SFTP 0.2.70，不自动安装。
-- mac-005k SimpleSFTP 已验证源码推送 origin/master，实际提交见 Git；本地协议与模拟 UI/API 通过，含 5 个 SFTP 文件及本计划。
-- 第十二版 preview-v0.5.275 已发布：Experiment 来源 `70b9beda5bb21be5aeb601f7024e83c7a9deed07`、SFTP 0.2.69 来源 `a0877d725c9bec338d9711bcdcfba0adddcc2ade` 均已同步；上传/映射相对文件名、本地 tar/Python 与匿名下载通过，下载范围界面/CLI/真实 SSH/M5 pending。
-- mac-doc-007 SFTP README 已同步 origin/master；源码提交见 Git。下一批配套版本 Experiment 0.5.275/SFTP 0.2.69，发布不安装扩展。
-- mac-005j SimpleSFTP `32ff45c1ea99558467ae629bbe9a71fdfb3e0593` 已普通推送并 fetch 核对；6 个 SFTP 文件加本计划共 7 文件，实际本地 tar/Python 协议与 Mac 模拟入口验证通过。
