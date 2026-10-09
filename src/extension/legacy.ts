@@ -2584,8 +2584,15 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     apiResolveSelectedPlan(params) {
-        const planFile = String(params.planFile || params.file || "").trim();
-        const planId = String(params.planId || "").trim();
+        const mac = this.isMacVariant?.() === true || (typeof process !== "undefined" && process.platform === "darwin");
+        if (mac) {
+            for (const key of ["planFile", "file", "planId"])
+                if (params[key] != null && params[key] !== "" && typeof params[key] !== "string") throw new Error("Plan 选择必须是字符串。");
+            if (params.planFile && params.file && params.planFile !== params.file) throw new Error("Plan 路径别名不一致。");
+        }
+        const planFile = mac ? (params.planFile || params.file || "") : String(params.planFile || params.file || "").trim();
+        const planId = mac ? (params.planId || "") : String(params.planId || "").trim();
+        if (mac && planFile) normalizePosixRelativePath(planFile, "API Plan 路径");
         const plans = this.localPlanMetadata.plans || [];
         if (planFile)
             return plans.find((plan) => String(plan.planFile || plan.file || plan.planId || "") === planFile) || null;
@@ -2630,7 +2637,7 @@ export class RealtimeTunnelPanelProvider {
             startedAt: new Date().toISOString(),
             selectedServerIds: stringArrayField(params, "serverIds"),
             topologyMode: String(params.topologyMode || params.mode || "").trim(),
-            planFile: String(params.planFile || "").trim(),
+            planFile: this.isMacVariant() ? String(params.planFile || "") : String(params.planFile || "").trim(),
         };
         this.markLocalOperationsDirty();
         this.postState();
@@ -16901,7 +16908,7 @@ export class RealtimeTunnelPanelProvider {
         await this.refreshLocalPlanMetadataForAction(this.actionBody({ planFile }));
         if (generation !== this.projectContextGeneration || root !== workspaceRoot() || client !== this.client)
             return;
-        const remotePath = normalizeRemoteResultInspectionPath(stringField(message, "remotePath"));
+        const remotePath = normalizeRemoteResultInspectionPath(this.isMacVariant?.() ? message?.remotePath : stringField(message, "remotePath"));
         if (!remotePath)
             throw new Error("只允许查看当前项目内的 CSV、JSON、TXT、LOG 或 OUT 轻量结果文件。");
         const version = this.planVersionForFile(planFile);
@@ -16958,7 +16965,8 @@ export class RealtimeTunnelPanelProvider {
         await this.refreshLocalPlanMetadataForAction(this.actionBody({ planFile }));
         if (!isCurrent())
             return;
-        const artifactPath = normalizeRemoteResultInspectionPath(stringField(message, "remotePath") || stringField(message, "file"));
+        const artifactPath = normalizeRemoteResultInspectionPath(this.isMacVariant?.()
+            ? (message?.remotePath || message?.file) : stringField(message, "remotePath") || stringField(message, "file"));
         if (!artifactPath)
             throw new Error("只允许打开当前项目内的 CSV、JSON、TXT、LOG 或 OUT 轻量结果文件。");
         const summary = this.filterResultsSummaryForPlan(this.resultsSummary, planFile);
@@ -20710,7 +20718,7 @@ export class RealtimeTunnelPanelProvider {
                 ? row.failed_experiments.filter((item) => item && item.failedBySignal !== true)
                 : [];
             if (!failures.length) continue;
-            const plan = String(row.planFile || row.plan || "").trim();
+            const plan = normalizePlanSelectionKey(row.planFile || row.plan || "");
             const run = String(row.scheduler_session || row.operationId || row.startedAt || "").trim();
             const operationId = String(row.operationId || row.opId || "").trim() || (run.match(/run-plan-[A-Za-z0-9-]+/) || [])[0] || run;
             const key = [plan, operationId || String(failures[0]?.started_at || "")].join("|");
@@ -20723,7 +20731,7 @@ export class RealtimeTunnelPanelProvider {
             const latest = row.latestEvent?.payload && typeof row.latestEvent.payload === "object" ? row.latestEvent.payload : {};
             const failedCount = Number(row.failedCount ?? payload.failedCount ?? latest.failedCount ?? 0);
             if (!(failedCount > 0) || ![row, payload, latest].some((item) => item.dispatchStoppedOnFailure === true)) continue;
-            const plan = String(row.planFile || payload.planFile || latest.planFile || "").trim();
+            const plan = normalizePlanSelectionKey(row.planFile || payload.planFile || latest.planFile || "");
             const operationId = String(row.operationId || row.opId || "").trim();
             notices.push({ key: [plan, operationId].join("|"), plan, task: String(failedCount) + " 个", detail: String(row.schedulerError || payload.schedulerError || latest.schedulerError || row.message || "任务失败").slice(0, 200) });
         }
@@ -27470,6 +27478,7 @@ function planDirSafe() {
 }
 const DEFAULT_RESULT_CSV_DIR = "experiments/results";
 function normalizeResultCsvDir(value) {
+    if (typeof process !== "undefined" && process.platform === "darwin") return normalizePosixRelativePath(value, "Mac 结果 CSV 目录");
     const text = String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/+$/, "");
     if (!text)
         throw new Error("结果 CSV 目录不能为空，也不能直接使用工作区根目录。");
@@ -27485,7 +27494,8 @@ function resultCsvDirSafe() {
         const configured = vscode.workspace.getConfiguration("simpleExperimentMac").get("resultCsvDir", DEFAULT_RESULT_CSV_DIR);
         return normalizeResultCsvDir(configured);
     }
-    catch {
+    catch (error) {
+        if (typeof process !== "undefined" && process.platform === "darwin") throw error;
         return DEFAULT_RESULT_CSV_DIR;
     }
 }
@@ -31648,10 +31658,15 @@ function partitionMappedDownloadTransfers(transfers, maxEntries, maxBatchBytes, 
     return chunks;
 }
 function normalizeRemoteResultInspectionPath(value) {
-    const normalized = String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    let normalized;
+    if (mac) {
+        try { normalized = normalizePosixRelativePath(value, "Mac 结果路径"); }
+        catch { return ""; }
+    } else normalized = String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
     if (!(0, FileTransferTypes_1.isSafeRemotePath)(normalized))
         return "";
-    return WrapperResultBundle.isWrapperResultFile(normalized) ? normalized : "";
+    return WrapperResultBundle.isWrapperResultFile(mac ? normalized.trimEnd() : normalized) ? normalized : "";
 }
 function remoteResultInspectionLocalRelativePath(remotePath, planFile, timestamp = new Date().toISOString()) {
     const normalized = normalizeRemoteResultInspectionPath(remotePath);
@@ -31661,7 +31676,8 @@ function remoteResultInspectionLocalRelativePath(remotePath, planFile, timestamp
     const name = path.posix.basename(normalized, extension).replace(/[^\w.-]+/g, "_").slice(0, 64) || "result";
     const remoteKey = crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 10);
     const stamp = String(timestamp || "").replace(/[^0-9]/g, "").slice(0, 14) || String(Date.now());
-    return path.posix.join("simple_cluster", "downloads", "result_inspection", safePlanToken(planFile), `${name}__${remoteKey}__${stamp}${extension}`);
+    const planKey = typeof process !== "undefined" && process.platform === "darwin" ? ProjectResultTables.planDirectoryKey(planFile) : safePlanToken(planFile);
+    return path.posix.join("simple_cluster", "downloads", "result_inspection", planKey, `${name}__${remoteKey}__${stamp}${extension}`);
 }
 function methodResultArtifactLocalRelativePath(remotePath, planFile, summary, resultDir = DEFAULT_RESULT_CSV_DIR, workerId = "") {
     const normalized = normalizeRemoteResultInspectionPath(remotePath);
@@ -32035,6 +32051,13 @@ function isResultMetricFile(value) {
     return WrapperResultBundle.isWrapperResultFile(normalized);
 }
 function canonicalResultPlanFile(value) {
+    if (typeof process !== "undefined" && process.platform === "darwin") {
+        try {
+            const file = normalizePosixRelativePath(value, "结果 Plan 路径");
+            const directory = planDirSafe();
+            return file.startsWith(directory + "/") && MacPlanFiles_1.isYamlPlanPath(file) ? file : "";
+        } catch { return ""; }
+    }
     const planFile = String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
     if (!planFile || planFile.startsWith("/") || /^[A-Za-z]:/.test(planFile) || planFile.includes(":"))
         return "";

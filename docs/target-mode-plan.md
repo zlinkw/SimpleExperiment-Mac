@@ -20,12 +20,13 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005v-fixtures（passed，结果相邻回归夹具）
+## 当前批次：mac-005v-results（passed，Mac 结果与监控路径身份）
 ### 边界
 
-- 本批 4 文件，仅修正旧 VM 缺少 WrapperResultBundle、Mac 设置命名空间及已存在的指标入口/轻量图片支持断言，保留安全路径拒绝测试；压力夹具改为保留，不执行删除。生产改动另批暂存。
+- 本批 7 文件，统一结果 Plan 映射/TS 与 Python key、完成运行/attempt 来源、后台选择/通知/查看路径。保护统计公式、Plan/API、原入口和更新；只编译模块 VM、AST 函数与本机模拟，无真实科研/远端/传输/删除。
 - passed build/219 闭包/面板 2、vm.Script、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7，逐文件串行 20 秒，UTF8/diff 检查通过。初次失败为旧夹具缺少依赖/已变更入口及原设置命名空间，按实际源码更新后通过，无超时；无业务生产修复混入此提交。
-- 下一批 mac-005v-results 统一结果 Plan 映射/TS 与 Python key、完成运行/attempt 来源、后台选择/通知/查看路径，最多 7 文件。保护统计公式、Plan/API、原入口和更新；无真实科研/远端/传输/删除。UI 候选、Agent 结果读取、物理发布/归档及 M5 后续分批。
+- passed build/219 闭包/面板脚本 2、vm.Script；macResultIdentity 8、macProjectPrepare 16、macWorkflowBinding 10、projectResultTables 19、manualDistributedResultSync 25、projectResultSyncCompleteness 18、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7、macPlanIdentity 6 逐文件串行 20 秒通过。UTF8/diff 检查通过；VM/AST/local mock 无真实科研/传输。
+- Mac Plan 映射、完成运行筛选、attempt/hash 路径、API 选择、失败通知和轻量查看保留大小写/中文/首尾空格；TS/Agent 目录 key 对齐，错误类型/非法路径拒绝。配置非法结果目录须用户修正，不再回退默认值。UI 候选、Agent 结果读取、物理发布/归档及 M5 仍 pending；下一批仅同步 Mac 使用说明和发布门禁，最多 6 文件，再配套发布。
 
 ### 验证清单
 
@@ -48,6 +49,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005v-fixtures `5ac6eff31c5e673b75f0a64cd60af475540fbbba` 已普通推送并 fetch 核对 origin/master；三个旧结果夹具恢复有效覆盖，压力目录保留。
 - mac-release-022 交付记录 `2b9993d6b44e69c4a17580d1acf520a1a268fa62` 已普通推送并 fetch 核对 origin/master。
 - 第二十二版 preview-v0.5.285 已发布：Experiment 来源 `4585fb5c786b9e4ee952eeb8b9ce3e83090348d8`、SFTP 0.2.79 来源 `0d96e4388f7e5b4e51eb63bba0ced62cd2f3224c` 已普通推送并 fetch 核对，实际包启动路径与匿名更新验证通过。
 - mac-release-022 SFTP 0.2.79 来源 `0d96e4388f7e5b4e51eb63bba0ced62cd2f3224c` 已普通推送并 fetch 核对 origin/master。

@@ -1,3 +1,5 @@
+import { normalizePosixRelativePath } from "../mac/PosixPath";
+
 export type AuthoritativeJobIdentity = {
   index: number;
   case: string;
@@ -20,7 +22,19 @@ export type AuthoritativePlanRun = {
 };
 
 function normalizedPlanFile(value: unknown): string {
+  if (process.platform === "darwin") {
+    try { return normalizePosixRelativePath(value, "结果 Plan 路径"); }
+    catch { return ""; }
+  }
   return String(value || "").replace(/\\/g, "/").replace(/^\.\//, "").trim().toLowerCase();
+}
+
+function normalizedOutputPath(value: unknown): string {
+  if (process.platform === "darwin") {
+    try { return normalizePosixRelativePath(value, "结果输出路径"); }
+    catch { return ""; }
+  }
+  return String(value || "").replace(/\\/g, "/");
 }
 
 function timestamp(value: unknown): number {
@@ -33,14 +47,18 @@ function authoritativeJob(plan: Record<string, any>, job: Record<string, any>, r
   const seed = Number(job?.seed);
   const attempt = Number(job?.attempt);
   const workerId = String(job?.workerId || "").trim();
-  const outputDir = String(job?.outputDir || "").replace(/\\/g, "/").trim();
+  const outputDir = process.platform === "darwin" ? normalizedOutputPath(job?.outputDir)
+    : String(job?.outputDir || "").replace(/\\/g, "/").trim();
   if (!Number.isInteger(index) || index < 0 || !String(job?.case || "").trim() || !Number.isInteger(seed)
     || !Number.isInteger(attempt) || attempt < 1 || !workerId || !outputDir
     || outputDir.startsWith("/") || /^[A-Za-z]:/.test(outputDir)
     || outputDir.split("/").some((part) => !part || part === "." || part === "..")) return undefined;
   const artifactHashes: Record<string, string> = {};
   for (const [file, hash] of Object.entries(job?.artifacts || {})) {
-    if (/^[a-f0-9]{64}$/i.test(String(hash || ""))) artifactHashes[String(file)] = String(hash).toLowerCase();
+    if (/^[a-f0-9]{64}$/i.test(String(hash || ""))) {
+      if (process.platform === "darwin" && !normalizedOutputPath(file)) return undefined;
+      artifactHashes[String(file)] = String(hash).toLowerCase();
+    }
   }
   const commandId = String(job.commandId || "").trim();
   if (!commandId || requireArtifactHashes && !Object.keys(artifactHashes).length) return undefined;
@@ -68,9 +86,9 @@ export function selectLatestCompletePlanRunIdentity(queue: unknown, planFile: st
 
 /** A retry namespace belongs to a job attempt, while publication still belongs to its Plan run. */
 export function hasExclusiveAttemptOutput(queue: unknown, run: AuthoritativePlanRun, job: AuthoritativeJobIdentity): boolean {
-  const output = job.outputDir.replace(/\\/g, "/");
+  const output = normalizedOutputPath(job.outputDir);
   const parts = output.split("/");
-  if (!run.runId || output.startsWith("/") || parts.some(part => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part))) return false;
+  if (!run.runId || !output || !normalizedPlanFile(run.plan.planFile || run.plan.file) || output.startsWith("/") || parts.some(part => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part))) return false;
   const scoped = parts.some((part, index) => part === "attempts" && (parts[index + 1] === run.runId
     || job.attempt > 1 && /^(?:distributed-attempt|auto-retry)-[0-9]+-[a-z0-9]+$/.test(parts[index + 1] || "")));
   if (!scoped) return false;
@@ -83,22 +101,24 @@ export function hasExclusiveAttemptOutput(queue: unknown, run: AuthoritativePlan
   const plans = Array.isArray((queue as any)?.plans) ? (queue as any).plans : [];
   let found = false;
   for (const plan of plans) for (const row of Array.isArray(plan.jobs) ? plan.jobs : []) {
-    if (String(row.outputDir || "").replace(/\\/g, "/") === output) {
+    if (normalizedOutputPath(row.outputDir) === output) {
       if (identity(plan, row) !== expected || plan.recoveryConflict || row.recoveryConflict || row.outputRetiredAt
         || !["completed", "succeeded", "success"].includes(String(row.status || "").toLowerCase())
         || row.trustedTerminalStatus && row.trustedTerminalStatus !== "completed") return false;
       found = true;
     }
-    if ((Array.isArray(row.history) ? row.history : []).some((previous: Record<string, any>) => String(previous.outputDir || "").replace(/\\/g, "/") === output)) return false;
+    if ((Array.isArray(row.history) ? row.history : []).some((previous: Record<string, any>) => normalizedOutputPath(previous.outputDir) === output)) return false;
   }
   return found;
 }
 
 /** Incomplete newest runs have a separate preview; never lend their seeds to formal results. */
 export function selectLatestPlanRunPreview(queue: unknown, planFile: string, expectedRevision = ""): AuthoritativePlanRun | undefined {
+  const selectedPlan = normalizedPlanFile(planFile);
+  if (!selectedPlan) return undefined;
   const rows: Record<string, any>[] = Array.isArray((queue as any)?.plans) ? (queue as any).plans : [];
   const selected = rows.map((plan, order) => ({ plan, order })).filter(({ plan }) =>
-    normalizedPlanFile(plan.planFile || plan.file) === normalizedPlanFile(planFile) && plan.id && plan.revision
+    normalizedPlanFile(plan.planFile || plan.file) === selectedPlan && plan.id && plan.revision
     && (!expectedRevision || plan.revision === expectedRevision) && !plan.recoveryConflict)
     .sort((left, right) => timestamp(right.plan.enqueuedAt) - timestamp(left.plan.enqueuedAt) || right.order - left.order)[0]?.plan;
   if (!selected) return undefined;
@@ -116,6 +136,7 @@ export function selectLatestPlanRunPreview(queue: unknown, planFile: string, exp
 function selectLatestCompletePlanRunInternal(queue: unknown, planFile: string, expectedRevision: string, requireArtifactHashes: boolean): AuthoritativePlanRun | undefined {
   const rows: Record<string, any>[] = Array.isArray((queue as any)?.plans) ? (queue as any).plans : [];
   const selectedPlan = normalizedPlanFile(planFile);
+  if (!selectedPlan) return undefined;
   const revision = String(expectedRevision || "").trim();
   const candidates = rows.map((plan: Record<string, any>, order: number) => ({ plan, order }))
     .filter(({ plan }) => normalizedPlanFile(plan?.planFile || plan?.file) === selectedPlan

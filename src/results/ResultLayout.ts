@@ -1,5 +1,6 @@
 import * as crypto from "crypto";
 import * as path from "path";
+import { normalizePosixRelativePath } from "../mac/PosixPath";
 
 // Shared path policy and generated Python counterpart. UI consumes catalog keys only.
 const SAFE_RE = "[^A-Za-z0-9._-]+";
@@ -24,7 +25,8 @@ export function datasetPartitions(values: unknown[]): { dataset: string; dataset
   return [...keys.values()].map(dataset => ({ dataset, datasetKey: datasetPathKey(dataset) }));
 }
 export function planDirectoryKey(planFile: string): string {
-  const normalized = path.posix.normalize(String(planFile || "").trim().replace(/\\/g, "/")).replace(/^\.\//, "");
+  const normalized = process.platform === "darwin" ? normalizePosixRelativePath(planFile, "结果 Plan 路径")
+    : path.posix.normalize(String(planFile || "").trim().replace(/\\/g, "/")).replace(/^\.\//, "");
   if (!normalized || normalized === "." || normalized.startsWith("/") || normalized.split("/").includes("..") || /^[A-Za-z]:/.test(normalized)) throw new Error("Plan 路径无效。");
   const stem = path.posix.basename(normalized, path.posix.extname(normalized)).replace(new RegExp(SAFE_RE, "g"), "_").replace(/^[._]+|[._]+$/g, "").slice(0, 60) || "plan";
   return stem + "__" + crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 8);
@@ -66,8 +68,11 @@ def dataset_partitions(values):
 
 def result_plan_directory_key(plan_file):
     import posixpath
-    normalized = posixpath.normpath(str(plan_file or "").strip().replace(chr(92), "/"))
-    if not normalized or normalized == "." or normalized.startswith("/") or ".." in normalized.split("/") or re.match(r"^[A-Za-z]:", normalized):
+    normalized = plan_file
+    if (not isinstance(normalized, str) or not normalized or len(normalized.encode("utf-8")) > 4096
+            or normalized.startswith("/") or ":" in normalized or chr(92) in normalized
+            or any(ord(char) < 32 or ord(char) == 127 for char in normalized)
+            or any(part in ("", ".", "..") for part in normalized.split("/"))):
         raise ValueError("Invalid Plan path")
     stem = re.sub(${JSON.stringify(SAFE_RE)}, "_", posixpath.splitext(posixpath.basename(normalized))[0]).strip("._")[:60] or "plan"
     return stem + "__" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:8]

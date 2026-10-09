@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { normalizePosixRelativePath } from "../mac/PosixPath";
 import { datasetPartitions, datasetPathKey, planDirectoryKey, tablePaths, workerDirectoryKey } from "./ResultLayout";
 export { datasetPartitions, datasetPathKey, planDirectoryKey, planArtifactPath } from "./ResultLayout";
 
@@ -9,6 +10,7 @@ export type TableRegistry = { schemaVersion: 1; plans: Record<string, { revision
 export const emptyTableRegistry = (): TableRegistry => ({ schemaVersion: 1, plans: {} });
 
 export function normalizePlanDatasetKey(value: unknown): string {
+  if (process.platform === "darwin") return typeof value === "string" ? value : "";
   return path.posix.normalize(String(value || "").trim().replace(/\\/g, "/")).replace(/^\.\//, "").toLowerCase();
 }
 
@@ -177,7 +179,10 @@ function rawSources(table: any): string[] {
   return [table?.rawResultCsvPath, ...(table?.rawResultCsvPaths || []), ...(table?.datasetResultTables || []).map((row: any) => row.rawResultCsvPath)].filter(Boolean).map(String);
 }
 export function recordsForSummary(summary: any, planFile: string, manualMappings: Record<string, any> = {}): SeedRecord[] {
-  if (!summary || String(summary.planFile || "").replace(/\\/g, "/") !== planFile.replace(/\\/g, "/")) throw new Error("结果摘要与所选 Plan 不匹配。");
+  const mac = process.platform === "darwin";
+  if (mac) normalizePosixRelativePath(planFile, "结果 Plan 路径");
+  if (!summary || (mac ? summary.planFile !== planFile
+    : String(summary.planFile || "").replace(/\\/g, "/") !== planFile.replace(/\\/g, "/"))) throw new Error("结果摘要与所选 Plan 不匹配。");
   if ((summary.incompleteAggregate && summary.verifiedPartial !== true) || (Array.isArray(summary.unavailableWorkerIds) && summary.unavailableWorkerIds.length && summary.verifiedPartial !== true)) throw new Error("部分 Worker 离线，暂不覆盖总表。");
   const tables = Array.isArray(summary.workerResultTables) ? summary.workerResultTables : [];
   if (tables.some((row: any) => row.aggregateStatus && row.aggregateStatus !== "ready")) throw new Error("部分 Worker 的当前 Plan 汇总未就绪。");
@@ -578,7 +583,7 @@ export function resultCatalog(root: string, resultDir: string, manualMappings: R
               const parsed = readCsv(fs.readFileSync(path.join(root, artifact.path), "utf8"));
               const planIndex = parsed.header.indexOf("plan_file");
               const datasetIndex = parsed.header.indexOf("dataset");
-              if (planIndex >= 0) metadataPlanFiles.push(...parsed.rows.map(row => String(row[planIndex] || "").trim()).filter(Boolean));
+              if (planIndex >= 0) metadataPlanFiles.push(...parsed.rows.map(row => process.platform === "darwin" ? String(row[planIndex] || "") : String(row[planIndex] || "").trim()).filter(Boolean));
               if (datasetIndex >= 0) metadataDatasets.push(...parsed.rows.map(row => String(row[datasetIndex] || "").trim()).filter(Boolean));
             } catch {}
           }
