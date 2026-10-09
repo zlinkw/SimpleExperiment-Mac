@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-015（passed，Plan 文件使用说明与门禁）
+## 当前批次：mac-release-020（running，配套 preview-v0.5.283）
 ### 边界
 
-- 两仓 README/包内 Mac 配置说明补全 Plan 目录、扫描/读取变化与完整检查的真实用法，纳入文件模块/分布式合同发布门禁。6 文件，保留原更新按钮和旧入口。
-- 检查：UTF8 回读、build/219 闭包/面板脚本、macSetupGuide/macRelease 串行 20 秒，仅本地验证，M5/真实科研 pending。
+- 版本批次仅两仓 package/lock、Experiment runtime 真值与本计划，共 6 文件；升级 0.5.283/0.2.77，关联已同步源码。准备与上传完整配套发布，不安装扩展。
+- passed 版本批次两仓 build/219 与 26 模块闭包、面板脚本 2、runtimeManifest 1 串行 20 秒；完整 prepare/publish、实际包 CLI 与匿名下载 pending。M5/真实科研 pending。
 
 ### 验证清单
 
@@ -75,6 +75,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-doc-015 Experiment `9c0003371859033aaa8e674b0c5dbd83621f085d`、SFTP `3ae667adea74daa0b12e23ff795cc1275fb3820f` 已普通推送并 fetch 核对 origin/master。
 - mac-005t-full 已验证源码 `2326d48fcd56d7b863ace27d827e30d868c94776` 已普通推送并 fetch 核对 origin/master。
 - mac-005t 已验证源码 `7fd81e271bcd25e48f93b085133079540f3e3264` 已普通推送并 fetch 核对 origin/master。
 - 第十九版 preview-v0.5.282 已发布：Experiment 来源 `c4c2bb163d667af2a582e6ff6d32b25ff7cf94d5`、SFTP 0.2.76 来源 `886c072b3e14452e880bc17a1c673e24031bc777` 已普通推送并 fetch 核对。实际包 CLI/编译身份模块与匿名下载通过；完整科研/SSH/M5 pending。
