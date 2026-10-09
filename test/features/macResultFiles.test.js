@@ -43,6 +43,16 @@ test('actual compiled Mac byte/hash reads and wrapper reuse keep raw names with 
   assert.equal(await wrapper.readVerifiedLocalResult('/root', { ...entry, sha256: 'a'.repeat(64) }), undefined);
   assert.equal(await wrapper.readVerifiedLocalResult('/root', { ...entry, bytes: 5 }), undefined);
 });
+test('actual compiled snapshot returns descriptor mtime together with checked exact bytes', async () => {
+  const { state, api } = fixture();
+  state.nodes.get(state.file).mtimeMs = 1234;
+  const snapshot = await api.readMacResultSnapshot('/root', state.relative, 16);
+  assert.equal(snapshot.bytes.toString(), 'result'); assert.equal(snapshot.mtimeMs, 1234);
+  assert.equal(state.opens, 1); assert.equal(state.closes, 1);
+  state.onRead = opened => { opened.mtimeMs++; };
+  await assert.rejects(() => api.readMacResultSnapshot('/root', state.relative, 16), /读取期间变化/);
+  assert.equal(state.closes, 2);
+});
 test('case, Unicode and repaired aliases cannot be read or returned as a verified wrapper source', async () => {
   const { state, api, wrapper, entry } = fixture();
   for (const relative of [state.relative.toLowerCase(), state.relative.replace('é', 'e\u0301'), state.relative.replace('é', 'É')]) {

@@ -18,6 +18,7 @@ import { normalizePosixRelativePath } from "../mac/PosixPath";
 import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
 import * as MacResultSummaryScope from "../mac/ResultSummaryScope";
 import * as MacResultFiles from "../mac/ResultFiles";
+import * as MacMetricInput from "../mac/MetricInput";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -17856,6 +17857,11 @@ export class RealtimeTunnelPanelProvider {
         return { included, missing, skipped };
     }
     async summaryFromLocalMetricFiles(root, planFile, summary, options: { authoritativeLocal?: boolean, downloadedSources?: Set<string>, completedRunId?: string, memoryMetricFiles?: Map<string, any> } = {}) {
+        const mac = process.platform === "darwin";
+        if (mac) {
+            planFile = mappedResultPath(planFile);
+            summary = MacResultSummaryScope.scopeMacResultSummary(summary, planFile);
+        }
         const tables = Array.isArray(summary?.workerResultTables) ? summary.workerResultTables : [];
         const results = [];
         const nextTables = [];
@@ -17863,20 +17869,42 @@ export class RealtimeTunnelPanelProvider {
         if (summary?.completedMetricFilesMissing?.length && !summary.metricPreviewOnly)
             throw new Error("本次运行的 wrapper 必需文件缺失，保留旧完整结果：" + summary.completedMetricFilesMissing.slice(0, 3).join("；"));
         for (const table of tables.length ? tables : [{ ...summary, workerId: summary?.resultOwnerWorkerId || summary?.workerId || "" }]) {
-            const remotePath = String(table.rawResultCsvPath || "");
-            if (!isResultMetricFile(remotePath) || !remotePath.toLowerCase().endsWith(".csv") && !table.wrapperOnly)
+            if (mac && (table.rawResultCsvPath === undefined || table.rawResultCsvPath === "")) continue;
+            const remotePath = mac ? mappedResultPath(table.rawResultCsvPath) : String(table.rawResultCsvPath || "");
+            if (!isResultMetricFile(remotePath) || !(mac ? remotePath.trimEnd() : remotePath).toLowerCase().endsWith(".csv") && !table.wrapperOnly)
                 continue;
+            const metricPaths = mac && table.metricPaths !== undefined ? table.metricPaths : table.metricPaths || [remotePath];
+            const requiredMetricPaths = mac && table.requiredMetricPaths !== undefined ? table.requiredMetricPaths : table.requiredMetricPaths || [remotePath];
+            if (mac) for (const files of [metricPaths, requiredMetricPaths]) {
+                if (!Array.isArray(files) || files.length > 1024) throw new Error("Mac 指标文件清单无效。");
+                for (const file of files) mappedResultPath(file);
+            }
             const workerId = String(table.workerId || "");
             const localRelative = methodResultArtifactLocalRelativePath(remotePath, planFile, summary, this.resultCsvDirectory || DEFAULT_RESULT_CSV_DIR, tables.length > 1 ? workerId : "");
             const localPath = safeWorkspaceChildPath(root, localRelative);
-            const memory = options.memoryMetricFiles?.get((workerId || "hub") + "\0" + remotePath);
-            if (options.memoryMetricFiles && !memory) continue;
-            const localStat = options.memoryMetricFiles ? undefined : await fs.lstat(localPath).catch(() => undefined);
-            const text = localStat?.isFile() ? await fs.readFile(localPath, "utf8").catch(() => "") : "";
-            if (!memory && !text)
+            const memoryKey = (workerId || "hub") + "\0" + remotePath;
+            let memory = options.memoryMetricFiles?.get(memoryKey);
+            const hasMemory = options.memoryMetricFiles?.has(memoryKey);
+            if (options.memoryMetricFiles && !(mac ? hasMemory : memory)) continue;
+            const expectedHash = table.metricHashes?.[remotePath], expectedBytes = table.metricSizes?.[remotePath];
+            let localStat, text = "", localInput;
+            if (mac) {
+                if (hasMemory) memory = MacMetricInput.verifyMacMetricInput(memory, remotePath, !WrapperResultBundle.isWrapperTextFile(remotePath), expectedHash, expectedBytes);
+                else {
+                    const snapshot = await MacResultFiles.readMacResultSnapshot(root, localRelative, MacMetricInput.MAC_METRIC_MAX_BYTES);
+                    if (snapshot) {
+                        localStat = { mtimeMs: snapshot.mtimeMs };
+                        localInput = MacMetricInput.macMetricInputFromBytes(remotePath, snapshot.bytes, !WrapperResultBundle.isWrapperTextFile(remotePath), expectedHash, expectedBytes);
+                        text = localInput.text;
+                    }
+                }
+            } else {
+                localStat = options.memoryMetricFiles ? undefined : await fs.lstat(localPath).catch(() => undefined);
+                text = localStat?.isFile() ? await fs.readFile(localPath, "utf8").catch(() => "") : "";
+            }
+            if (!memory && !text && !(mac && localInput && table.wrapperOnly))
                 continue;
-            const expectedHash = table.metricHashes?.[remotePath];
-            if (expectedHash && (memory?.sha256 || crypto.createHash("sha256").update(text, "utf8").digest("hex")) !== expectedHash)
+            if (!mac && expectedHash && (memory?.sha256 || crypto.createHash("sha256").update(text, "utf8").digest("hex")) !== expectedHash)
                 throw new Error("已下载指标与服务器文件指纹不一致：" + remotePath);
             const onlineParsedAt = Date.parse(String(table.lastParsedAt || summary?.lastParsedAt || ""));
             const sourceKey = workerId || "hub";
@@ -17888,15 +17916,24 @@ export class RealtimeTunnelPanelProvider {
             if (!downloadedNow && workerOnlineRows.length && Number.isFinite(onlineParsedAt) && (localStat?.mtimeMs || 0) + 1000 < onlineParsedAt)
                 continue;
             const parsed = table.wrapperOnly ? [] : table.completedJob ? parseDownloadedMetricCsv(memory?.text ?? text, pluginProjectAdapterRules(root).csvColumnMapping || {}, table.completedJob)
-                : memory?.rows || parseDownloadedMetricCsv(memory?.text ?? text, pluginProjectAdapterRules(root).csvColumnMapping || {});
+                : (!mac && memory?.rows) || parseDownloadedMetricCsv(memory?.text ?? text, pluginProjectAdapterRules(root).csvColumnMapping || {});
             let wrapperJob;
             if (table.completedJob) {
                 const inputs = [];
-                for (const file of table.metricPaths || [remotePath]) {
+                for (const file of metricPaths) {
                     const mapped = methodResultArtifactLocalRelativePath(file, planFile, summary, this.resultCsvDirectory || DEFAULT_RESULT_CSV_DIR, tables.length > 1 ? workerId : "");
                     const cached = options.memoryMetricFiles?.get((workerId || "hub") + "\0" + file);
-                    if (cached) { inputs.push({ ...cached, sha256: table.metricHashes?.[file] || cached.sha256 }); continue; }
+                    if (mac ? options.memoryMetricFiles?.has((workerId || "hub") + "\0" + file) : cached) { inputs.push(mac ? MacMetricInput.verifyMacMetricInput(cached, file, !WrapperResultBundle.isWrapperTextFile(file), table.metricHashes?.[file], table.metricSizes?.[file])
+                        : { ...cached, sha256: table.metricHashes?.[file] || cached.sha256 }); continue; }
                     if (options.memoryMetricFiles) continue;
+                    if (mac) {
+                        if (file === remotePath && localInput) inputs.push(localInput);
+                        else {
+                            const original = await MacResultFiles.readMacResultBytes(root, mapped, MacMetricInput.MAC_METRIC_MAX_BYTES);
+                            if (original) inputs.push(MacMetricInput.macMetricInputFromBytes(file, original, !WrapperResultBundle.isWrapperTextFile(file), table.metricHashes?.[file], table.metricSizes?.[file]));
+                        }
+                        continue;
+                    }
                     const target = safeWorkspaceChildPath(root, mapped);
                     const info = await fs.lstat(target).catch(error => { if (error?.code === "ENOENT") return undefined; throw error; });
                     if (!info?.isFile() || info.isSymbolicLink()) continue;
@@ -17907,7 +17944,7 @@ export class RealtimeTunnelPanelProvider {
                             : { text: original.toString("base64"), encoding: "base64" }) });
                 }
                 wrapperJob = WrapperResultBundle.prepareWrapperJob({ ...table.completedJob, workerId }, inputs, remotePath,
-                    table.requiredMetricPaths || [remotePath], file => methodResultArtifactLocalRelativePath(file, planFile, summary, this.resultCsvDirectory || DEFAULT_RESULT_CSV_DIR, tables.length > 1 ? workerId : ""));
+                    requiredMetricPaths, file => methodResultArtifactLocalRelativePath(file, planFile, summary, this.resultCsvDirectory || DEFAULT_RESULT_CSV_DIR, tables.length > 1 ? workerId : ""));
                 wrapperJobs.push(wrapperJob);
             }
             if (table.completedJob && !table.wrapperOnly && (!parsed.length || parsed.some((row) => row.dimensions.case !== table.completedJob.case || String(row.dimensions.seed) !== String(table.completedJob.seed))))

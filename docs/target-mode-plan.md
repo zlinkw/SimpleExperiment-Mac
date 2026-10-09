@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-029（passed，0.5.292/0.2.86）
+## 当前批次 mac-005ac-parse（passed）
+- 范围至多 7 文件：ResultFiles 快照、Mac 指标输入验证模块、后台本机结果解析、wrapper 格式识别、新编译回归/读取测试与计划。CSV/wrapper 本机读取绑定描述符/目录身份及 mtime，严格 UTF8/预算；原始 Plan/来源/大小/hash 核验后从真实文本解析，不借用缓存 rows 或覆盖错误 hash 证据。
+- 本批开始 Exp `364aae7125a32815afad6bf4e22b0d9f916baf1d`、SFTP `1f36111a37072df960a6ef8d404b883ebc409953` 干净且 origin/master 相等，前批实际结果链 fixture/README/配套发布 passed，属于进展。保护 API/Plan/三拓扑/原入口/租约/确认；无真实科研/SSH/删除/安装。
+- passed 7 文件：CSV/wrapper 本机解析绑定快照描述符/目录身份/mtime，4 MiB 预算与严格 UTF8；输入边界核验原始路径/大小/hash/编码，从实际文本重新解析，不信任 rows 或覆盖错误 hash。完整 Plan 范围隔离，wrapper 格式识别保留真实尾空格，二进制及空二进制可保留原名/bytes/同一 job 来源，不生成虚假指标。非 Mac 原入口保留。
+- passed build/224 闭包/面板 2/vm.Script/UTF8/diff；真实编译 Mac 解析 8/读取 8/摘要 7/映射 11、现有实际结果链 6/wrapper 22/pending 39，单文件串行/20 秒，无超时。本机真实文件/模拟 POSIX/API；新 fixture 最初错误大小写样本无差异及 UTF8 错误文本断言修正后通过，无生产放松。
+- 下一批两仓 README/Mac 配置/发布门禁最多 6 文件，再元数据/完整本机 prepare/publish/实际包与匿名更新。完整原子发布/Agent/回执/归档/M5 后续。
+
+### 前批 mac-release-029（passed，0.5.292/0.2.86）
 - 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；两仓来源已普通推送/fetch 相等，先验证元数据，再完整 prepare/publish，绑定实际 VSIX 的结果链与前版能力、匿名更新。无 Actions/安装，历史附件保留，不覆盖。
 - mac-005ab-compiled Exp `4fe3c9cb4c10f84203fed4037123a87700fca926`、SFTP `8d7a7ddec754ad0219fff4829a5a1758782124b3` 已普通推送/fetch 核对。两仓 build/闭包/面板/runtimeManifest/UTF8/diff、67 个串行 prepare 门禁、实际包及匿名检查 passed。M5 延后，完整结果物理解析/来源与原子写入待后续。
 

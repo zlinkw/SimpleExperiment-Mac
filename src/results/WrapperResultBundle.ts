@@ -7,10 +7,11 @@ import type { ProjectResultFile } from "./ProjectResultPublication";
 import { readMacResultBytes } from "../mac/ResultFiles";
 import { normalizePosixRelativePath } from "../mac/PosixPath";
 
-export const isWrapperResultFile = (file: string): boolean => /\.[A-Za-z0-9]+$/.test(file)
-  && !/\.(pt|pth|ckpt|safetensors|onnx|bin|py|pyc|js|ts|sh|exe|dll|lock|pid)$/i.test(file)
+const formatPath = (file: string) => process.platform === "darwin" ? file.trimEnd() : file;
+export const isWrapperResultFile = (file: string): boolean => /\.[A-Za-z0-9]+$/.test(formatPath(file))
+  && !/\.(pt|pth|ckpt|safetensors|onnx|bin|py|pyc|js|ts|sh|exe|dll|lock|pid)$/i.test(formatPath(file))
   && !/(?:^|\/)(?:weights?|checkpoints?|code_backup|\.git|\.runtime|__pycache__|clean_dir)(?:\/|$)/i.test(file);
-export const isWrapperTextFile = (file: string) => /\.(csv|tsv|json|jsonl|ya?ml|md|txt|log|out)$/i.test(file);
+export const isWrapperTextFile = (file: string) => /\.(csv|tsv|json|jsonl|ya?ml|md|txt|log|out)$/i.test(formatPath(file));
 export const resultHash = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
 /** Reuse final originals only after comparing their bytes to this sync's remote inventory. */
 export async function readVerifiedLocalResult(root: string, entry: { remotePath: string; localRelativePath: string; sha256: string; bytes: number }): Promise<(MetricMemoryFile & { reused: true }) | undefined> {
@@ -128,7 +129,7 @@ export function prepareWrapperJob(job: MetricJob, inputs: MetricMemoryFile[], en
     if (file.encoding === "base64" && (typeof contents === "string" || contents.toString("base64") !== file.text)) throw new Error("wrapper 二进制内容编码无效");
     if (!/^[a-f0-9]{64}$/i.test(file.sha256) || createHash("sha256").update(contents).digest("hex") !== file.sha256.toLowerCase()
       || file.bytes != null && Buffer.byteLength(contents) !== file.bytes) throw new Error("wrapper SHA256 不符：" + file.remotePath);
-    const format = path.posix.extname(file.remotePath).slice(1).toLowerCase();
+    const format = path.posix.extname(formatPath(file.remotePath)).slice(1).toLowerCase();
     const source = { remotePath: file.remotePath, localRelativePath: localPath(file.remotePath), sha256: file.sha256.toLowerCase(),
       bytes: Buffer.byteLength(contents), kind: file.remotePath.slice(job.outputDir.length + 1), format };
     const rows = ["csv", "tsv"].includes(format) ? csvRecords(file.text, format === "tsv" ? "\t" : ",") : undefined;

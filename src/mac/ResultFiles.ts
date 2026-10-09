@@ -54,7 +54,7 @@ export async function withMacResultFile<T>(root: string, relative: string, maxBy
   } finally { await handle.close(); }
 }
 
-export async function readMacResultBytes(root: string, relative: string, maxBytes: number, expectedBytes?: number) {
+export async function readMacResultSnapshot(root: string, relative: string, maxBytes: number, expectedBytes?: number) {
   return withMacResultFile(root, relative, maxBytes, async handle => {
     const buffer = Buffer.alloc((expectedBytes ?? maxBytes) + 1);
     let length = 0;
@@ -65,8 +65,12 @@ export async function readMacResultBytes(root: string, relative: string, maxByte
     }
     if (length > maxBytes || expectedBytes !== undefined && length !== expectedBytes)
       throw new Error("Mac 结果内容在读取期间超出预算或改变大小：" + relative);
-    return buffer.subarray(0, length);
+    return { bytes: buffer.subarray(0, length), mtimeMs: (await handle.stat()).mtimeMs };
   }, expectedBytes);
+}
+
+export async function readMacResultBytes(root: string, relative: string, maxBytes: number, expectedBytes?: number) {
+  return (await readMacResultSnapshot(root, relative, maxBytes, expectedBytes))?.bytes;
 }
 
 export async function hashMacResultFile(root: string, relative: string, maxBytes: number) {
