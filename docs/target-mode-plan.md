@@ -10,11 +10,16 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-030（running，0.5.293/0.2.87）
+## 当前批次 mac-release-030（passed，0.5.293/0.2.87）
 - 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划。元数据验证后普通推送，同步来源绑定完整 prepare/publish、实际 VSIX Mac 解析与前版能力及匿名更新；历史附件保留，无 Actions/安装。
-- mac-doc-024 Exp `ee9d1850ee36e33a02587769af41fb9f48083735`、SFTP `c9d079c761e2b02fae150df843266df2ca2a0bd5` 已普通推送/fetch 核对。pending build/闭包/面板/runtimeManifest/UTF8/diff；完整 68 文件串行 prepare、实际包/匿名更新；M5 延后。
+- mac-doc-024 Exp `ee9d1850ee36e33a02587769af41fb9f48083735`、SFTP `c9d079c761e2b02fae150df843266df2ca2a0bd5` 已普通推送/fetch 核对。build/闭包/面板/runtimeManifest/UTF8/diff、完整 68 文件串行 prepare、实际包/匿名更新 passed；M5 延后。
 
 - passed 元数据子批：两仓 build/224 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、版本三方一致、UTF8/diff。后续完整 prepare/实际包/匿名发布单独记录，不提前记通过。
+
+- passed 完整 release:prepare：两仓 build/224 与 26 闭包/面板 2、68 个目标测试文件单文件串行/20 秒（Exp feature 53/core 1、SFTP 14），含实际 Mac 本机解析 8/读取 8/映射 11/wrapper 22/pending 39/实际编译链 6/浅深高对比真实 headless；日志 release-artifacts/prepare-0.5.293.log，无超时。
+- passed .293 实际 VSIX 十份证据：新增 Mac 本机解析 8（实际包解析/快照/mtime/原始 Plan 和输入来源/严格 UTF8/大小/hash/缓存 rows/二进制与空文件/尾空格），读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/实际编译结果链 6。各 report 绑定当前来源/hash；本机文件/模拟 API/POSIX/隔离 AST，无真实科研/SSH/远端启动/停止/删除/安装/M5。
+- passed .292/.86→.293/.87 匿名 updater：33 次公开请求，prerelease/清单/大小/hash/CRC/身份/平台核验，下载字节与实际测试包相等；新 MetricInput/ResultFiles/wrapper/后台及前版模块、两仓 README/包内说明匹配同步来源，同版本跳过/不降级。
+- 第三十版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.293 已公开，完整三附件草稿核验后发布；来源 Exp `8e2dc489b8dd60ef03eed1b8bcbd1766c85b9120`、SFTP `e9affcea0cc296588e537f26e51c0c8ecc28459f` 已普通推送/fetch 核对，旧版本保留、不覆盖。下一批限命令结果回执的完整 Plan 来源与相关结果候选授权的一组问题，最多 8 文件；保留原入口/业务 API/三拓扑及更新，完整原子发布/Agent/归档/其余 Mac 依赖/M5 后续。
 
 ### 前批 mac-doc-024（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/门禁测试与计划。同步本机解析快照/严格 UTF8/输入来源及大小/hash/原始名称用法和失败处理，保留更新入口与真机边界；不扩大业务源码范围。
