@@ -16,6 +16,7 @@ import * as WorkflowBinding_1 from "../mac/WorkflowBinding";
 import * as MacPlanFiles_1 from "../mac/PlanFiles";
 import { normalizePosixRelativePath } from "../mac/PosixPath";
 import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
+import * as MacResultSummaryScope from "../mac/ResultSummaryScope";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -24969,8 +24970,10 @@ function compactResultsSummaryForPlanForWebview(summary, selectedPlan, planRevis
     const cacheable = Boolean(summary) && typeof summary === "object" && !Array.isArray(summary);
     if (!cacheable)
         return compactResultsSummaryForWebview(filterResultsSummaryForSelectedPlan(summary, selectedPlan, planRevision, planUpdatedAt));
-    const plan = usableSelectionKey(String(selectedPlan || "").trim().replace(/\\/g, "/"));
-    const cacheKey = [plan, String(planRevision || "").trim(), String(planUpdatedAt || "")].join("|");
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    const plan = mac ? MacResultSummaryScope.macResultSummaryPlan(selectedPlan) : usableSelectionKey(String(selectedPlan || "").trim().replace(/\\/g, "/"));
+    const cacheParts = [plan, String(planRevision || "").trim(), String(planUpdatedAt || "")];
+    const cacheKey = mac ? JSON.stringify(cacheParts) : cacheParts.join("|");
     let variants = resultsSummaryForWebviewCache.get(summary);
     if (variants?.has(cacheKey)) {
         const cached = variants.get(cacheKey);
@@ -25040,7 +25043,9 @@ function resultSummaryMatchesPlanVersion(summary, planRevision, planUpdatedAt) {
     return !planRevision;
 }
 function filterResultsSummaryForSelectedPlan(summary, selectedPlan, planRevision = "", planUpdatedAt = "") {
-    const plan = usableSelectionKey(String(selectedPlan || "").trim().replace(/\\/g, "/"));
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    const plan = mac ? MacResultSummaryScope.macResultSummaryPlan(selectedPlan) : usableSelectionKey(String(selectedPlan || "").trim().replace(/\\/g, "/"));
+    if (mac) summary = MacResultSummaryScope.scopeMacResultSummary(summary, selectedPlan);
     if (!summary || typeof summary !== "object" || Array.isArray(summary) || !plan)
         return summary;
     const summaryPlan = normalizePlanSelectionKey(summary.planFile || summary.plan_file || "");
@@ -31776,6 +31781,7 @@ function remoteResultInspectionCandidates(operationGroups, planFile, planRevisio
     return checks[0]?.files || [];
 }
 function resultSummaryInspectionCandidates(summary, planFile) {
+    if (typeof process !== "undefined" && process.platform === "darwin") summary = MacResultSummaryScope.scopeMacResultSummary(summary, planFile);
     const selectedPlan = normalizePlanSelectionKey(planFile);
     if (!selectedPlan || !summary || typeof summary !== "object" || Array.isArray(summary))
         return [];
@@ -32159,6 +32165,7 @@ function acceptedCompletedRevision(item, summary, options = {}) {
     return { ok: true, revision, runId: trustedRun ? ledgerRun : reportedRuns.length === 1 ? reportedRuns[0] : "", note };
 }
 function filterCompletedResultSummaryForPlan(summary, planFile) {
+    if (typeof process !== "undefined" && process.platform === "darwin") return MacResultSummaryScope.scopeMacResultSummary(summary, planFile);
     if (!summary || typeof summary !== "object" || Array.isArray(summary))
         return summary;
     const summaryPlan = String(summary.planFile || summary.plan_file || "").replace(/\\/g, "/");
@@ -32357,6 +32364,7 @@ function isLegacyProjectAggregateMetric(value) {
     return LEGACY_PROJECT_AGGREGATE_METRICS.has(normalized);
 }
 function resultSummarySyncCandidates(summary, planFile) {
+    if (typeof process !== "undefined" && process.platform === "darwin") summary = MacResultSummaryScope.scopeMacResultSummary(summary, planFile);
     const inspected = new Set(resultSummaryInspectionCandidates(summary, planFile));
     const tables = Array.isArray(summary?.workerResultTables) ? summary.workerResultTables : [];
     const fields = ["rawResultCsvPath", "aggregateCsvPath", "projectAggregateCsvPath", "finalCsvPath", "finalMarkdownPath", "projectFinalCsvPath", "projectFinalMarkdownPath"];

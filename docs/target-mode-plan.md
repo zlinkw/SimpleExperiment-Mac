@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-025（passed，0.5.288/0.2.82）
+## 当前批次 mac-005y-summary（passed，结果摘要归属）
+- 本批仅 Mac 摘要/完成结果的原始 Plan 身份、嵌套记录归属及浅查看/同步候选授权，最多 5 源/测试/计划文件；改写修复别名与隐式继承，不运行科研/SSH/传输/删除。回归真实编译函数、结果缓存/查看/完成结果工作流、build/闭包/面板语法。映射传输的去重/本地物理发布、Agent/完整 YAML 后续批次。
+- mac-release-025 交付记录 `2ff50131c2204fce96fffc21c78fc6353f55dd40` 已推送/fetch 核对 origin/master。
+- passed 4 文件：新 ResultSummaryScope、后台筛选/缓存/候选入口、新 macResultSummaryScope 测试与计划。Mac 顶层/记录/provenance/Worker/数据集/完成 job/claim 的 Plan 别名一致；匿名和混合分析产物不授权，保留明确归属的记录与表，不修写路径/类型；缓存元组避免 | 碰撞。非 Mac 原入口保留。
+- passed build/222 闭包/面板 2/vm.Script/UTF8/diff；macResultSummaryScope 7、resultsSummaryWebviewCache 6、macResultIdentity 8、remoteResultInspectionWorkflow 13、projectResultSyncCompleteness 18、manualDistributedResultSync 25，单文件串行 20 秒，无超时。新 VM fixture 补齐实际 FileTransferTypes/WrapperResultBundle 导入后通过。
+- 下一批仅两仓说明/发布门禁，再版本递增/配套发布与实际 VSIX/匿名更新；后续映射去重与物理发布分批，不宣称传输/完整科研/M5 验收。
+
+### 前批 mac-release-025（passed，0.5.288/0.2.82）
 - 本批 6 文件以内：两仓 package/lock、Experiment runtime/本文档；版本验证后普通推送，prepare/publish 绑定同步源码，实际 VSIX/匿名更新核验后交付，不 Actions/安装。
 - passed 版本门禁：两仓 build、221/26 闭包/面板 2/vm.Script、runtimeManifest 1、元数据/diff 一致；最初测试文件目录误写未启动，改为实际 test/runtimeManifest.test.js 后通过。
 - passed 完整 npm run release:prepare：两仓 build、221/26 闭包/面板 2，60 个目标文件逐文件串行/20 秒门禁（Experiment feature 45/core 1，SFTP 14），包括新增 YAML 候选与浅深高对比真实渲染。npm run release:publish 核验完整三附件草稿后公开；无 Actions/安装。
