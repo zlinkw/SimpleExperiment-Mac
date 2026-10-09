@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, npm, json, fingerprint, assertSource } = require("./mac-release-common");
+const { createPackageProjection, assertPackageProjection } = require("./mac-package-projection");
 
 function main() {
   const roots = [SFTP_ROOT, EXPERIMENT_ROOT], repos = ["SimpleSFTP-Mac", "SimpleExperiment-Mac"];
@@ -25,7 +26,9 @@ function main() {
   const { inspectVsix, verifyVsix } = require("../dist/mac/Vsix");
   const components = roots.map((root, index) => {
     const pkg = packages[index], name = `${pkg.name}-${pkg.version}-darwin-arm64.vsix`, file = path.join(directory, name);
-    run(process.execPath, [require.resolve("@vscode/vsce/vsce", { paths: [root] }), "package", "--no-dependencies", "--target", "darwin-arm64", "--out", file], root, { inherit: true, timeout: 60000 });
+    const projection = createPackageProjection(root);
+    run(process.execPath, [require.resolve("@vscode/vsce/vsce", { paths: [root] }), "package", "--no-dependencies", "--target", "darwin-arm64", "--out", file], projection.directory, { inherit: true, timeout: 60000 });
+    assertPackageProjection(projection);
     const metadata = fingerprint(file), actual = inspectVsix(fs.readFileSync(file));
     const component = { extensionId: `${pkg.publisher}.${pkg.name}`, version: pkg.version, sourceCommit: commits[index], sourceRepository: `zlinkw/${repos[index]}`, targetPlatform: "darwin-arm64", vscodeEngine: pkg.engines.vscode, downloadUrl: `https://github.com/${REPOSITORY}/releases/download/${tag}/${name}`, size: metadata.size, sha256: metadata.sha256 };
     verifyVsix(fs.readFileSync(file), component);

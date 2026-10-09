@@ -10,7 +10,18 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-031（passed，0.5.294/0.2.88）
+## 当前批次 mac-tool-002（passed，提交推送待记录）
+- 范围至多 5 文件：发布源快照工具、VSIX 闭包校验器、prepare 与工具回归/计划。固定保留已提交源码和本机构建 dist，使用相同 pinned VSCE/.vscodeignore；快照全部字节/身份与实际来源前后核验，失败保留证据，不清理、不扩大超时。实际打包也用同一受检快照，历史附件不参与扫描。
+- mac-005ae-agent-contract 源码/测试暂存为待完成批次，未提交：build/面板、隔离 Agent→后台 7/既有回执 8/结果身份 8/Agent Plan 5 passed，闭包 required pending。首次 fixture 在 Windows 使用 POSIX runtime 的 relpath 语义不符，添加真实 NTFS 的 POSIX 调用桥接后通过，未放松生产校验。
+- pinned VSCE collectAllFiles 先 glob 全树（仅排除 node_modules），再应用 .vscodeignore；保留大量 release-artifacts 导致 8 秒 ls 多次 ETIMEDOUT。新工具批先验证相同打包规则/真实 CLI/字节与来源身份门禁并单独提交推送，再恢复 Agent 批校验/提交；不重试超时测试、不运行清理。
+- passed 真实 pinned VSCE/快照回归 7（原规则、源和快照变更、额外文件、路径/类型/链接/预算）、225 包闭包、闭包回归 2/发布门禁 4、UTF8/diff；8 秒 CLI 与 10 秒外层预算保持。快照核验完整文件集合和根身份，拒绝混入无来源附件；历史证据原样保留。Agent 三文件未纳入工具提交。
+
+### 待完成 mac-005ae-agent-contract（running）
+- 范围至多 4 文件：Agent 输出契约请求/报告回执及关联 Plan 候选、隔离 Python/真实编译后台回归与计划。三项关联问题：请求所有 Plan/revision 别名严格一致且原样；按真实 Plan 读取/筛选关联 jobs，不借匿名 suite 或相似路径；报告路径保留完整 Plan 的 hash key，事件/返回值保留同一身份。
+- 起始 Exp `02a425ccb84e7ad1fce5313c792d93596000a759`/SFTP `8cceeee9ee706fc5cf25d3df66c02070f8386950` 干净、master=origin/master。前批 .294 实际包/匿名发布为 progress，无活跃进程。本批保护其他动作、业务 API/三拓扑/远端任务，strict Plan 模式只用于输出契约，不扩入运行/删除/归档。
+- pending build/包闭包/面板、隔离实际 Agent→实际编译候选/现有 Mac 回执及结果身份回归，单文件串行/20 秒，Python 每次 10 秒且只提取函数；无真实科研/SSH/安装/删除。原始结果 YAML/其他 Agent 解析、revision 内容及物理原子锁定/M5 留后续。
+
+### 前批 mac-release-031（passed，0.5.294/0.2.88）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。两仓干净且 master 同步；mac-doc-025 Exp `6307ebdd39d21ac1e22d545a7d3717b1a59c063e`/SFTP `38f582bddcc1a98f65772d8b3a640a896ea86693` 已普通推送/fetch 核对。
 - passed 两仓 build/闭包/面板/runtime/UTF8/diff、完整 prepare、实际 VSIX 与匿名 updater；完整三附件草稿核验后公开发布。无 Actions/安装，保留历史附件。
 

@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const { collectLocalRuntimeClosure } = require("./runtime-closure");
+const { createPackageProjection, assertPackageProjection } = require("./mac-package-projection");
 
 const root = path.resolve(__dirname, "..");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
@@ -12,8 +13,9 @@ if (compiledRuntimeVersion !== packageJson.version) {
 }
 // Use the lockfile-pinned local tool. Validation must never fetch packages or wait for npm consent.
 const vsceCli = require.resolve("@vscode/vsce/vsce");
+const projection = createPackageProjection(root);
 const result = spawnSync(process.execPath, [vsceCli, "ls", "--no-dependencies"], {
-  cwd: root,
+  cwd: projection.directory,
   encoding: "utf8",
   timeout: 8000,
   windowsHide: true,
@@ -22,6 +24,7 @@ if (result.status !== 0) {
   process.stderr.write(result.stderr || result.stdout || `${result.error?.message || "vsce ls failed"}\n`);
   process.exit(result.status || 1);
 }
+assertPackageProjection(projection);
 
 const packaged = new Set(
   String(result.stdout || "")
