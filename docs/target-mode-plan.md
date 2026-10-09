@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005a（passed，mac 本地工作区路径）
+## 当前批次：mac-doc-001（passed，优先更新使用说明）
 
 ### 边界
 
-- 两插件本地 POSIX 工作区、中文/空格/大小写及 SFTP UI host 门禁；最多 8 个源/测试/文档文件。
-- 保留 Windows 旧入口与删除行为；Mac 不支持 Dev Containers；下一批共享租约路径规则及 Termius。
+- 用户计划修订：优先更新两仓 README，说明首次安装、状态栏/命令面板/设置检查按钮、更新失败与补装及真实验收边界；3 个文档文件。
+- README 不把待实现 Termius 与密码适配写成已通过；随后修正业务面板更新状态映射并发布更高 preview。
 
 ### 验证清单
+
+- passed 两仓 README UTF8 回读、真实贡献命令标题匹配及文档链接检查；已说明底部状态栏、命令面板、设置检查按钮、首次安装顺序、失败/补装与待验收范围。
 
 - failed 首次 release:prepare：SFTP API 导出测试使用 200 字符窗口，新增 idle 导出后误报。未生成发布附件或草稿。
 - passed SFTP 改用实际加载后的 API 导出断言，API/CLI 19 测试及 build/21 文件闭包通过；失败并非超时。
@@ -72,6 +74,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+
+- mac-005a 源码 Experiment `64daf727d93f957786948398b5a319700fc5f72f`、SFTP `75347fae83eb6b5c5fe68acc679f49bb56b69120`，两仓均已同步。
 
 - 第二版 preview-v0.5.265 源码 Experiment `3b65c44085d66e1b0ab30db4e503c5fbc25eaddf`、SFTP `155d6e3605313bd0955b884202eef9a693160454`，两仓均已同步。
 
