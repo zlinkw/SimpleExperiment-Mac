@@ -62,7 +62,7 @@
     "onCommand:simpleExperimentMac.syncToGitHub",
     "onCommand:simpleExperimentMac.publishToGitHub"
   ],
-  "main": "./dist/extension.js",
+  "main": "./dist/mac/Bootstrap.js",
   "bin": {
     "simpleex-mac": "./dist/cli.js"
   },
@@ -262,6 +262,14 @@
         "command": "simpleExperimentMac.runCheckStatic",
         "title": "SimpleExperiment：检查项目接入",
         "icon": "$(checklist)"
+      },
+      {
+        "command": "simpleExperimentMac.checkPreviewUpdates",
+        "title": "SimpleExperiment Mac：检查 preview 配套更新"
+      },
+      {
+        "command": "simpleExperimentMac.installPreviewUpdates",
+        "title": "SimpleExperiment Mac：安装 preview 配套更新"
       }
     ],
     "menus": {

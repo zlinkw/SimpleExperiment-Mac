@@ -4054,6 +4054,7 @@ export class RealtimeTunnelPanelProvider {
         await Promise.all(shutdownTasks);
     }
     async withHostOperationLease(actionType, actionLabel, operation, options = {}) {
+        if (actionType !== "installPluginUpdates") require("../mac/UpdateGate").assertBusinessAllowed();
         // Preflight, reads, transfer orchestration and cancellation use their target-level guards.
         if (/^(runPlan|reproducePlan|runAllPlans|validatePlan|dryRunPlan|parseResults|stop|abort|cancel|kill|clearTmux|sync|upload|download|distribute|prepareAgents|deploy|refresh|fetch|get|check|plot|startPpt)/i.test(actionType)) return operation();
         const leaseContext = currentHostOperationLeaseContext();
@@ -6021,6 +6022,7 @@ export class RealtimeTunnelPanelProvider {
         return this.runActionCommandCore(command, message);
     }
     async runActionCommandCore(command, message) {
+        require("../mac/UpdateGate").assertBusinessAllowed();
         const action = actionCommandMap[command];
         if (!action)
             return;
@@ -7177,6 +7179,12 @@ export class RealtimeTunnelPanelProvider {
         return value;
     }
     async checkPluginUpdates(manual = false) {
+        if (this.context.extension.packageJSON.name === "simple-experiment-mac") {
+            const plan = await vscode.commands.executeCommand("simpleExperimentMac.checkPreviewUpdates");
+            const status = require("../mac/Bootstrap").getUpdateStatus();
+            await this.setPluginUpdateStatus(status);
+            return plan;
+        }
         await this.setPluginUpdateStatus({ status: "checking", message: "正在检查 SimpleExperiment 与 SimpleSFTP 的配套 Release。", checkedAt: new Date().toISOString() });
         try {
             const token = await this.githubUpdateToken(manual);
@@ -7287,6 +7295,7 @@ export class RealtimeTunnelPanelProvider {
         }
     }
     async installPluginUpdates() {
+        if (this.context.extension.packageJSON.name === "simple-experiment-mac") return vscode.commands.executeCommand("simpleExperimentMac.installPreviewUpdates");
         return this.withHostOperationLease("installPluginUpdates", "安装配套插件更新", () => this.installPluginUpdatesOwned());
     }
     private async installPluginUpdatesOwned() {
