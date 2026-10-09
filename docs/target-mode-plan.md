@@ -20,13 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005n（passed，Experiment CLI 实时契约）
+## 当前批次：mac-005o（passed，SFTP CLI 实时契约）
 ### 边界
 
-- Experiment CLI 每次业务调用读取当前发现文件及 capabilities，限制本机监听地址、核对实时方法、阻止预检期间身份变化，保留 API/CLI 入口及参数。新增有界 HTTP/JSON-RPC 响应处理；只访问本地测试监听，不执行科研或服务器操作。最多 8 文件。
-- 最小回归：build/包闭包/面板脚本、新 CLI 契约测试、CLI 启动器；旧 CLI 测试发现文件变量与 mock 同步。SFTP 同规则、CLI 科研运行契约及配套发布后续分批，M5 pending。
+- SFTP CLI 接入与 Experiment 一致的实时 capabilities、发现文件/监听身份、HTTP/JSON-RPC 有界处理。只访问本地测试监听，不执行传输/服务器/科研操作；保留原 CLI/业务 API 方法与确认参数。最多 8 文件。
+- 最小回归：SFTP build/包闭包、实时 CLI 契约、CLI 启动器和 API；随后两仓使用说明、发布门禁与配套 preview 分批。CLI 科研运行和 M5 后续。
 
 ### 验证清单
+
+- passed mac-005o：SFTP 接入同规则实时 capabilities/发现文件/监听变化与有界 HTTP/JSON-RPC，保留确认参数、CLI 入口和错误回执；只发送本地测试请求。SFTP build/26 文件闭包、CLI 契约 8、固定入口 5、API 19 逐文件串行通过。4 个 SFTP 文件加本计划共 5 文件。
+- pending mac-doc-010：两仓 README/配置说明补充 CLI 自动实时预检与失败处理，加入双仓发布门禁；随后新配套 preview。CLI 科研运行与三拓扑/M5 后续。
 
 - passed mac-005n：每次 CLI RPC 重读 Mac 发现文件、GET 实时 capabilities 并核对方法/身份/版本，再复核监听实例发送 RPC；未知方法、监听变化、外部地址/异常 token、错误 HTTP/JSON/envelope 均拒绝。保留 confirm/pathConfirmed，错误不重试业务；请求/响应有界并使用总时限，self-check 同步有界 health。5 文件。
 - passed 本地：build/216 模块闭包/面板脚本 2、包运行时闭包、vm.Script、CLI 实时契约 8、旧 CLI 项目根发现 1、固定入口 5，逐文件串行通过。首次超大响应测试揭示 Node 已结束 socket 上传递 destroy(error) 会产生未处理 error，改为明确 reject 并无错误销毁请求/响应后通过。无超时/服务器操作/科研实验。
@@ -66,6 +69,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005o SFTP CLI 契约来源 `7322bf06e0d63405e71023d58fb0bb860affedb3` 已普通推送并 fetch 核对。
+- mac-005n Experiment CLI 契约来源 `2a55f16e288d8c7fc4c173c9b836772222925c6e` 已普通推送并 fetch 核对。
 - 第十四版 preview-v0.5.277 已发布：Experiment 0.5.277 来源 `103dd1be66789e7dedc2efe33d43bc0cef8c5bc8`、SFTP 0.2.71 来源 `03520bb94c599a47d4a433254f497cd2d860026e` 均已普通推送并 fetch 核对。固定 CLI、两仓说明、真实包自检与匿名下载通过，实时 API 业务契约/完整科研/真实 SSH/M5 pending。
 - mac-doc-009 SFTP README 已普通推送并 fetch 核对；真实提交见 Git。
 - mac-005m SFTP 来源 `a6bf99c379c1c355032ce07488fde2205106fd66` 已普通推送并 fetch 核对，固定 CLI 本地验证通过。
