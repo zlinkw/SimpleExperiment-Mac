@@ -7141,9 +7141,7 @@ export class RealtimeTunnelPanelProvider {
             return;
         let text;
         if (this.isMacVariant?.()) {
-            const preview = await MacPlanFiles_1.readMacPlanPreview(root, file, planDirSafe(), 1024 * 1024);
-            if (preview.stat.size > 1024 * 1024) throw new Error("Plan 超过本机配置检查读取预算，未把截断内容作为完整校验结果。");
-            text = preview.text;
+            text = (await MacPlanFiles_1.readMacPlanText(root, file, planDirSafe())).text;
         } else text = await fs.readFile(safeWorkspacePlanPath(root, file, planDirSafe()), "utf8");
         const summary = (0, PlanBuilder_1.parsePlanSummary)(text);
         const missing = [];

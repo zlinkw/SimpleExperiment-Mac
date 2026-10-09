@@ -55,15 +55,20 @@ export function macPlanFile(root: string, file: string, planDir: string, existin
   return checkComponents(root, relative, false, existing);
 }
 
-export async function readMacPlanPreview(root: string, file: string, planDir: string, maxBytes: number) {
-  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 1024 * 1024) throw new Error("Mac Plan 读取预算无效。");
+async function readMacPlan(root: string, file: string, planDir: string, maxBytes?: number) {
+  if (maxBytes !== undefined && (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 1024 * 1024)) throw new Error("Mac Plan 读取预算无效。");
   const binding = workspace(root), fullPath = macPlanFile(root, file, planDir, true);
   const expected = fs.lstatSync(fullPath);
   const handle = await fs.promises.open(fullPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || !sameFile(expected, stat)) throw new Error("Mac Plan 文件身份已变化，未读取。");
-    const buffer = Buffer.alloc(maxBytes), result = await handle.read(buffer, 0, buffer.length, 0);
+    let bytes: Buffer;
+    if (maxBytes === undefined) bytes = await handle.readFile();
+    else {
+      const buffer = Buffer.alloc(maxBytes), result = await handle.read(buffer, 0, buffer.length, 0);
+      bytes = buffer.subarray(0, result.bytesRead);
+    }
     const after = await handle.stat();
     if (!sameFile(stat, after) || stat.size !== after.size || stat.mtimeMs !== after.mtimeMs || stat.ctimeMs !== after.ctimeMs)
       throw new Error("Mac Plan 内容在读取期间变化，未使用读取结果。");
@@ -73,6 +78,15 @@ export async function readMacPlanPreview(root: string, file: string, planDir: st
       || macPlanFile(root, file, planDir, true) !== fullPath || !sameFile(after, currentFile)
       || after.size !== currentFile.size || after.mtimeMs !== currentFile.mtimeMs || after.ctimeMs !== currentFile.ctimeMs)
       throw new Error("Mac Plan 工作区或文件身份已变化，未使用读取结果。");
-    return { text: buffer.subarray(0, result.bytesRead).toString("utf8"), stat, fullPath };
+    return { text: bytes.toString("utf8"), stat, fullPath };
   } finally { await handle.close(); }
+}
+
+export function readMacPlanPreview(root: string, file: string, planDir: string, maxBytes: number) {
+  if (maxBytes === undefined) throw new Error("Mac Plan 摘要必须提供读取预算。");
+  return readMacPlan(root, file, planDir, maxBytes);
+}
+
+export function readMacPlanText(root: string, file: string, planDir: string) {
+  return readMacPlan(root, file, planDir);
 }

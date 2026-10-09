@@ -51,6 +51,7 @@ function filesystem() {
         assert.equal(flags, 3, 'actual reader must use NOFOLLOW and NONBLOCK'); opened++;
         const node = lookup(file);
         return { stat: async () => statOf(node),
+          readFile: async () => { const bytes = Buffer.from(node.text); if (mutate) mutate(file, node); return bytes; },
           read: async buffer => { const bytes = Buffer.from(node.text); bytes.copy(buffer); if (mutate) mutate(file, node); return { bytesRead: Math.min(bytes.length, buffer.length) }; },
           close: async () => { closed++; } };
       },
@@ -170,12 +171,15 @@ test('actual Mac Plan directory configuration preserves real spaces and never re
   await assert.rejects(sandbox.readLocalPlans(workspace, planDir), /permission denied/);
 });
 
-test('actual Mac local-config precheck cannot validate a truncated Plan as a complete file', async () => {
+test('actual Mac local-config precheck reads the complete Plan beyond the preview budget', async () => {
   const { sandbox, disk } = fixture(), subject = new sandbox.Subject();
   const file = planDir + '/large.yaml';
-  disk.write(file, '#'.repeat(1024 * 1024 + 1));
+  const text = '#'.repeat(1024 * 1024 + 1) + '\nbase_config: configs/last.yaml\n';
+  disk.write(file, text);
   subject.isMacVariant = () => true; subject.localPlanForActionBody = () => ({ planFile: file });
-  await assert.rejects(subject.assertPlanLocalConfigFiles({ planFile: file }), /截断内容/);
+  sandbox.planRuntimeConfigReferences = actual => { assert.equal(actual, text); throw Error('complete reference scan observed'); };
+  await assert.rejects(subject.assertPlanLocalConfigFiles({ planFile: file }), /complete reference scan observed/);
+  assert.equal((await sandbox.readLocalPlanSummary(workspace, planDir, file)).metadataTruncated, true);
   assert.equal(disk.opened, disk.closed);
 });
 
