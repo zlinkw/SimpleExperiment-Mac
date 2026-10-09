@@ -23,4 +23,6 @@ test("Mac configuration button opens the bundled Mac guide without saved-session
   const guide=fs.readFileSync(path.join(root,"docs/simple-experiment-setup.md"),"utf8");
   for(const text of ["Apple Silicon","⇧⌘P","Termius","Mac preview","Application Support","单 Worker","多 Worker","Hub/Worker"])assert.ok(guide.includes(text),text);
   assert.doesNotMatch(guide,/Windows \+ VS Code|安装最新版 `simple-local\.simple-sftp`|配置 Xshell 本地隧道并保存/);
+  for (const text of ["首尾空格", "不当作空格解码", "区分大小写", "非空非法行会拒绝保存", "只读目录浏览", "完整绝对路径"])
+    assert.ok(guide.includes(text), text);
 });

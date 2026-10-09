@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005i（passed，SFTP POSIX 根目录整合）
+## 当前批次：mac-doc-006（passed，路径说明与发布门禁）
 ### 边界
 
-- 本批将 SFTP 配置、确认预览、API 和传输入口的本机/远端绝对路径接入与 Experiment 一致的 POSIX 规则，保留大小写、中文、Unicode 拼写及首尾空格，拒绝坏路径。最多 8 文件，真实入口使用模拟传输验证。
-- 保护 API/Plan、更新、认证/租约、远端实验、直接父目录及删除双确认；没有删除/真实服务器操作，M5 pending。相对文件路径与 CLI 后续分批完成；本批完成后更新说明和发布门禁并发布配套版本。
+- 本批同步两仓 README 与配置说明的 POSIX 根目录、大小写策略、确认入口与故障处理，补入两仓路径发布门禁，并让 SFTP 单仓测试可独立执行。最多 8 文件；随后单独递增版本并发布。
+- 保护 API/Plan、更新、认证/租约、远端实验、直接父目录及删除双确认；没有删除/真实服务器操作，M5 pending。相对文件路径、CLI 和科研三拓扑后续分批完成。
 
 ### 验证清单
 
+- passed mac-doc-006：两仓 README/配置说明补入绝对路径、大小写策略、首尾空格、字面 %20、确认/错误处理和只读根浏览边界；两个 POSIX 测试进入本机 release:prepare 门禁，SFTP 单仓不强依赖 Experiment 构建产物。8 文件核对。
+- passed mac-doc-006 本地：两仓 build/24 与 214 模块闭包、面板脚本 2；配置说明 1、发布 4、Experiment POSIX 5、准备 16、SFTP POSIX 5 最终逐文件串行复验通过，三文档 UTF8 回读通过。下一批版本 Experiment 0.5.274/SFTP 0.2.68，完整本机 prepare/publish；相对文件名/CLI/真实 SSH/M5 pending。
 - passed mac-005h：Experiment 严格 POSIX 单根路径规则；allowed/deniedRoots 及迁移提示区分大小写/直接子路径；项目/runtime/环境目录、Agent 当前项目比对和确认预览保留中文、Unicode 拼写及首尾空格。非法策略不会静默变空；UI 非空坏行拒绝设置。保护既有删除父目录/两次确认，无删除或真实服务器操作。
 - passed mac-005h 本地：build/面板脚本 2、214 模块闭包/vm.Script；POSIX/三拓扑真实准备模拟 5、既有父目录 2、Agent 项目根 5、端点/UI 9、准备/bootstrap 16 测试逐文件串行通过。8 文件已核对；SFTP 传输参数/路径尚需同规则接入，完成相关批次后统一更新说明/发布门禁并发布。
 - passed mac-release-010：Experiment 0.5.273/SFTP 0.2.67 完整 prepare/publish 通过，两仓 build、213 与 24 文件闭包/vm.Script、面板脚本、更新门禁及准备/bootstrap 16 等目标测试逐文件串行通过，版本一致。完整草稿 3 附件大小/SHA-256 核验后发布。
@@ -38,7 +40,6 @@
 - passed mac-005g 本地：build/面板脚本 2、213 模块闭包/vm.Script；准备/bootstrap 16、端点/UI 9、配置说明 1、runtime 范围 4、manifest 1 测试逐文件串行通过。三拓扑均覆盖阻塞、免重复上传复检、坏哈希、Plan 失败、只读无自动部署/重启与配置变更。README/配置说明 UTF8 及真实 API 方法回读通过。真实 SSH/M5 仍 pending，下一批发布 Experiment 0.5.273/SFTP 0.2.67。
 - passed mac-release-009：Experiment 0.5.272/SFTP 0.2.67 完整 prepare/publish 通过，两仓 build/213 与 24 文件包闭包、面板脚本、更新目标测试逐文件串行通过；项目准备 10、手动端点/UI 9、配置说明 1、浅/深/高对比真实渲染通过。完整草稿 3 附件大小/SHA-256 核验后公开发布。
 - passed preview-v0.5.272 真实匿名 updater：从 0.5.271/0.2.67 筛选到 Experiment 单组件升级，下载两包核验平台/hash/CRC/身份；包内 README/配置说明、实际准备命令标题、准备实现、Mac 面板入口与 LF askpass 核验通过；同版本跳过且禁止降级。没有自动安装、Actions 或真实 SSH，M5 仍 pending。
-- pending 下一批 mac-005g：审查 project.bootstrap/科研运行前准备链的 Mac 手动端点与 Agent 检测边界、POSIX 路径一致性；保留既有科研契约，每批最多 8 文件。M5 证据回传前不得标记真实科研验收通过。
 - passed preview-v0.5.271 完整 prepare/publish：两包及清单草稿附件大小/SHA-256 完整核验后公开发布。真实匿名 updater 从 0.5.270/0.2.66 筛选两个升级包，下载核验平台/hash/CRC/身份、包内中转代码/close 保护、LF askpass 和 Mac 说明；同版本跳过、禁止降级。无本机安装、Actions 或真实服务器操作，M5 仍 pending。
 - passed mac-005f：Mac project.prepare 与“准备 Agent”使用严格端点、SimpleSFTP runtime/项目上传、绑定配置/工作区的确认预览和 Termius/tmux 指引。取消或配置变化不上传；明确检测及 runtime 哈希证据前不标记 Agent 就绪。修复 SFTP readiness 字段别名和显式空环境使用 python3。
 - passed mac-005f 本地：build、213 模块包闭包/vm.Script；项目准备 10、端点 7、拓扑 5、runtime 范围 4、SSH 身份 9、manifest 1 测试逐文件串行通过。此前 VM 缺少既有方法/依赖导致失败，补充真实方法与上传回执实现后通过，均非超时。没有真实服务器或 M5 操作。
@@ -60,6 +61,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-doc-006 SimpleSFTP `22b0244dc7bbbf00cd84d9c97ea27ffb93d4e77a` 已普通推送并 fetch 核对；Mac 路径说明及单仓独立测试完成。Experiment 同批源码提交见 Git。
 - mac-005i SimpleSFTP `259a1bf8d04721e889400a0aa9ce2f2cebd2588c` 已普通推送并 fetch 核对；7 文件批次含 Experiment 本计划，真实入口的模拟传输/目录浏览本地通过。
 - mac-005h Experiment `e288dd799c6cfc11273fb47d3348ab61a5806849` 已普通推送并 fetch 核对；POSIX 根目录、大小写策略及三拓扑准备路径本地模拟通过。
 - 第十版 preview-v0.5.273 已发布：Experiment 0.5.273 来源 `162ba7ace1bd2d9529589a044a1434b7b11a136c`，SFTP 0.2.67 来源 `9d40d42c95015faa6c60548ac4caba7f7bc5edac`；源码已同步。Mac 只读版本/哈希检查、手动 bootstrap 阻塞与免上传复检、匿名包下载通过本地验证。真实 SSH、M5 与科研主流程仍 pending。

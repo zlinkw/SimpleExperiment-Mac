@@ -24,3 +24,9 @@ test("local release scripts never install VS Code extensions, trigger Actions or
   assert.ok(source.indexOf("verifyRemoteAssets(expected, complete)") < source.indexOf('"draft=false"'));
   assert.match(source, /never overwrite/);
 });
+
+test("paired release gates include both repositories' POSIX path regressions", () => {
+  const prepare = fs.readFileSync(path.join(__dirname, "../../scripts/mac-release-prepare.js"), "utf8");
+  assert.equal((prepare.match(/"macPosixPaths"/g) || []).length, 2);
+  assert.match(prepare, /"--test-timeout", "20000"/);
+});

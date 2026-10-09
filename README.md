@@ -38,6 +38,8 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 
 配置说明包含单 Worker、多 Worker、Hub/Worker 的接入约定、数据目录及失败处理，并标明尚待交付的功能。打开 Mac 配置说明不会触发旧 Xshell 会话向导。
 
+项目父目录、runtime、Python 环境和 SFTP 目标使用单根绝对 POSIX 路径。两插件保留目录名的中文、大小写及首尾空格，不解码字面 `%20`；禁止 `.`、`..`、反斜杠和控制字符。远端 `/Data/项目` 与 `/data/项目` 是不同目标，允许/禁止目录策略同样区分大小写。确认对话框里的完整路径必须与实际目录一致；不要删去目录名末尾真实存在的空格。非法策略行会拒绝保存，详见 [路径配置](docs/simple-experiment-setup.md#3-本机工作区与路径配置)。
+
 在 Finder 按 **⇧⌘G** 可打开下文的 Application Support 目录。若需要终端中的 `code` 命令，在命令面板运行 **Shell Command: Install 'code' command in PATH** 后重新打开终端；见 [VS Code 官方 Mac 说明](https://code.visualstudio.com/docs/setup/mac)。安装 VSIX 不要求该命令。
 
 ## 更新按钮在哪里
