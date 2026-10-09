@@ -7047,32 +7047,40 @@ def discover_result_files(root, limit=240, max_dirs=4000, max_depth=8, deadline_
                     return sorted(dict.fromkeys(out))
     return sorted(dict.fromkeys(out))
 
-def plan_suite_value(root, plan):
-    plan_norm = normalize_result_candidate(plan) if plan else ""
+def plan_suite_value(root, plan, strict_plan=False):
+    plan_norm = durable_plan_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
     if not plan_norm:
         return ""
     try:
-        plan_path = safe_project_path(root, plan_norm)
+        plan_path = worker_plan_project_path(root, plan_norm, require_file=True) if strict_plan else safe_project_path(root, plan_norm)
         plan_text = open(plan_path, "r", encoding="utf-8", errors="replace").read()
         return str(yaml_scalar(uncommented_yaml_text(plan_text), "suite", "") or "").strip()
     except Exception:
         return ""
 
 
-def job_result_candidates(root, limit=240, plan=None):
+def job_result_candidates(root, limit=240, plan=None, strict_plan=False):
     path = os.path.join(root, "experiments", "results", "jobs.csv")
     if not safe_small_file(path):
         return []
     out = []
-    plan_norm = normalize_result_candidate(plan) if plan else ""
-    plan_suite = plan_suite_value(root, plan_norm)
+    plan_norm = durable_plan_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
+    plan_suite = "" if strict_plan else plan_suite_value(root, plan_norm)
     try:
         rows = read_csv_dicts(open(path, "r", encoding="utf-8", errors="replace").read())
     except Exception:
         return []
     for row in rows:
         if plan_norm:
-            row_plan = normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")
+            if strict_plan:
+                try:
+                    row_plan = output_contract_request_identity(row).get("planFile") or ""
+                except ValueError:
+                    continue
+                if row_plan != plan_norm:
+                    continue
+            else:
+                row_plan = normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")
             if row_plan:
                 if row_plan != plan_norm:
                     continue
@@ -7090,9 +7098,11 @@ def job_result_candidates(root, limit=240, plan=None):
             break
     return sorted(dict.fromkeys(out))
 
-def plan_scoped_discover_candidates(root, plan, limit=120):
-    declared = plan_declared_result_candidates(root, plan, limit=limit)
-    plan_suite = plan_suite_value(root, plan).lower()
+def plan_scoped_discover_candidates(root, plan, limit=120, strict_plan=False):
+    declared = plan_declared_result_candidates(root, plan, limit=limit, strict_plan=strict_plan)
+    plan_suite = plan_suite_value(root, plan, strict_plan=strict_plan)
+    if not strict_plan:
+        plan_suite = plan_suite.lower()
     dirs = []
     for item in declared:
         text = normalize_result_candidate(item)
@@ -7100,7 +7110,7 @@ def plan_scoped_discover_candidates(root, plan, limit=120):
             continue
         if re.search(r"\.(csv|json|txt|log|out)$", text, re.I):
             parent = "/".join(text.split("/")[:-1])
-            parent_parts = [part.lower() for part in parent.split("/") if part]
+            parent_parts = [part if strict_plan else part.lower() for part in parent.split("/") if part]
             if parent and plan_suite and plan_suite in parent_parts and not any(ch in parent for ch in "*?[]"):
                 dirs.append(parent)
         elif not any(ch in text for ch in "*?[]"):
@@ -8985,7 +8995,7 @@ def discover_plan_files(root, plan_dir=None, limit=500):
                 return out
     return out
 
-def plan_declared_result_candidates(root, plan=None, limit=240):
+def plan_declared_result_candidates(root, plan=None, limit=240, strict_plan=False):
     plans = []
     if plan:
         plans.append(plan)
@@ -8994,7 +9004,7 @@ def plan_declared_result_candidates(root, plan=None, limit=240):
     out = []
     for item in plans:
         try:
-            plan_path = safe_project_path(root, item)
+            plan_path = worker_plan_project_path(root, item, require_file=True) if strict_plan else safe_project_path(root, item)
             text = open(plan_path, "r", encoding="utf-8", errors="replace").read()
             cleaned = uncommented_yaml_text(text)
         except Exception:
@@ -10952,16 +10962,59 @@ def output_contract_unparseable_error(value):
         return "未解析到数值指标；请检查 JSON 指标结构、指标名称或数值格式。"
     return "未解析到数值指标；请检查 metricRegex、指标名称或文本数值格式。"
 
+def output_contract_request_identity(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("输出契约请求必须是对象")
+    owners = [payload]
+    if payload.get("options") is not None:
+        if not isinstance(payload["options"], dict):
+            raise ValueError("输出契约 options 类型无效")
+        owners.append(payload["options"])
+    fields = {}
+    for keys, target in ((["planFile", "plan_file", "plan", "selectedPlanId", "selected_plan_id"], "planFile"),
+                         (["planRevision", "plan_revision"], "planRevision")):
+        values = [owner[key] for owner in owners for key in keys if key in owner and owner[key] != ""]
+        if any(not isinstance(value, str) or value == "-" or len(value.encode("utf-8")) > 4096
+               or any(ord(char) < 32 or ord(char) == 127 for char in value) for value in values):
+            raise ValueError("输出契约 " + target + " 类型或内容无效")
+        if len(set(values)) > 1:
+            raise ValueError("输出契约 " + target + " 别名不一致")
+        if values:
+            fields[target] = durable_plan_path(values[0], "输出契约 Plan") if target == "planFile" else values[0]
+    if fields.get("planFile"):
+        fields["selectedPlanId"] = fields["planFile"]
+    return fields
+
+def output_contract_receipt(root, payload, operation_id, op_id):
+    identity = output_contract_request_identity(payload)
+    plan = identity.get("planFile") or ""
+    report = check_output_contract_action(root, plan or None)
+    report_identity = output_contract_request_identity(report)
+    if (report_identity.get("planFile", "") != plan
+            or report_identity.get("planRevision") and identity.get("planRevision")
+            and report_identity["planRevision"] != identity["planRevision"]):
+        raise ValueError("输出契约报告的 Plan 与请求不一致")
+    status = "failed" if report.get("status") == "failed" else "completed"
+    details = {"contractReport": report, "contractReportPath": report.get("path") or "simple_cluster/contracts/contract_check_reports/latest.json",
+               "contractIssueType": report.get("issueType") or "", "missingCount": len(report.get("missing") or []),
+               "missingFiles": report.get("missing") or [], "unparseableCount": len(report.get("unparseableFiles") or []),
+               "unparseableFiles": report.get("unparseableFiles") or [], "unparseable": report.get("unparseable") or [],
+               "parseableResultCount": int(report.get("parseableResultCount") or 0), **identity, "planFile": plan}
+    return terminal_action(root, "check-output-contract", operation_id, op_id, status,
+                           report.get("message") or report.get("status"), details, request=payload)
+
 def check_output_contract_action(root, plan=None):
-    plan_norm = normalize_result_candidate(plan) if plan else ""
+    plan_norm = "" if plan is None or plan == "" else durable_plan_path(plan, "输出契约 Plan")
+    if plan_norm:
+        worker_plan_project_path(root, plan_norm, require_file=True)
     required = list(OUTPUT_CONTRACT_SNAPSHOT_FILES)
     if plan_norm:
-        declared = plan_declared_result_candidates(root, plan_norm)
-        jobs = job_result_candidates(root, plan=plan_norm)
+        declared = plan_declared_result_candidates(root, plan_norm, strict_plan=True)
+        jobs = job_result_candidates(root, plan=plan_norm, strict_plan=True)
         files = sorted(dict.fromkeys([
             *expand_result_candidates(root, declared),
             *expand_result_candidates(root, jobs),
-            *expand_result_candidates(root, plan_scoped_discover_candidates(root, plan_norm)),
+            *expand_result_candidates(root, plan_scoped_discover_candidates(root, plan_norm, strict_plan=True)),
         ]))
         search_roots = output_contract_search_roots([*declared, *jobs, *files])
     else:
@@ -11034,7 +11087,7 @@ def check_output_contract_action(root, plan=None):
     else:
         message = f"输出契约完整：已确认 {len(required)} 个快照文件，并从 {len(parseable_files)} 个结果文件解析到 {parseable_result_count} 条结果"
     report = {"schemaVersion": 1, "status": "failed" if issue_type else "ok", "issueType": issue_type, "files": files, "missing": missing, "missingCount": len(missing), "requiredSnapshots": required, "resultFiles": result_files, "metricFiles": metric_files, "parseableResultFiles": parseable_files, "parseableResultCount": parseable_result_count, "unparseable": unparseable, "unparseableFiles": unparseable_files, "unparseableCount": len(unparseable_files), "checkedAt": now_iso(), "planFile": plan_norm or "", "message": message}
-    report_rel = f"simple_cluster/contracts/contract_check_reports/by_plan/{plan_summary_slug(plan_norm)}/latest.json" if plan_norm else "simple_cluster/contracts/contract_check_reports/latest.json"
+    report_rel = f"simple_cluster/contracts/contract_check_reports/by_plan/{result_plan_directory_key(plan_norm)}/latest.json" if plan_norm else "simple_cluster/contracts/contract_check_reports/latest.json"
     report["path"] = report_rel
     target = safe_project_path(root, report_rel)
     atomic_write(target, report)
@@ -11661,13 +11714,19 @@ def action_event_fields(extra=None, request=None):
         fields.update(extra)
     return fields
 
+def action_receipt_fields(action, request=None):
+    identity = output_contract_request_identity({} if request is None else request) if action == "check-output-contract" else {}
+    return {**action_operation_fields(request), **identity}
+
 def terminal_action(root, action, operation_id, op_id, status, message, extra=None, request=None):
     entry = getattr(INACTIVITY_ACTION_CONTEXT, "entry", None)
     if entry and entry["cancel"].is_set():
         status, message = "cancelled", "操作已取消；晚到完成回执已忽略"
     event_type = "operation_cancelled" if status == "cancelled" else "operation_completed" if status == "completed" else "operation_failed"
     body = {"action": action, "opId": op_id, "status": status, "message": message}
-    details = action_event_fields(extra, request)
+    details = action_receipt_fields(action, request)
+    if isinstance(extra, dict):
+        details.update(extra)
     body.update(details)
     append_event(root, {"type": event_type, "operationId": operation_id, "payload": body})
     return {"schemaVersion": SCHEMA_VERSION, "opId": op_id, "operationId": operation_id, "action": action, "status": status, "message": message, **details}
@@ -13374,9 +13433,7 @@ def handle_action(root, action, payload, operation_id, op_id):
         bundle = create_debug_bundle_action(root, True, plan)
         return terminal_action(root, action, operation_id, op_id, "completed", f"离线包已生成：{bundle.get('path')}", {"bundlePath": bundle.get("path"), "offlineBundlePath": bundle.get("path"), "path": bundle.get("path"), "latestPath": bundle.get("latestPath") or "", "bundleDir": bundle.get("bundleDir") or "", "size": bundle.get("size"), "planFile": bundle.get("planFile") or plan or "", "includeResults": True})
     if action == "check-output-contract":
-        report = check_output_contract_action(root, action_plan_file(payload))
-        status = "failed" if report.get("status") == "failed" else "completed"
-        return terminal_action(root, action, operation_id, op_id, status, report.get("message") or report.get("status"), {"contractReport": report, "contractReportPath": report.get("path") or "simple_cluster/contracts/contract_check_reports/latest.json", "contractIssueType": report.get("issueType") or "", "missingCount": len(report.get("missing") or []), "missingFiles": report.get("missing") or [], "unparseableCount": len(report.get("unparseableFiles") or []), "unparseableFiles": report.get("unparseableFiles") or [], "unparseable": report.get("unparseable") or [], "parseableResultCount": int(report.get("parseableResultCount") or 0), "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        return output_contract_receipt(root, payload, operation_id, op_id)
     if action == "parse-case-level":
         report = parse_case_level_action(root, action_plan_file(payload))
         return terminal_action(root, action, operation_id, op_id, "completed", f"Case-level 解析完成：{report.get('caseCount', 0)} 条", {"caseLevel": report, "caseLevelPath": report.get("path") or "simple_cluster/results/case_level_index.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
@@ -16089,7 +16146,11 @@ def serve_http(args):
                 worker = (selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker") if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan") else ""
                 return self.send_json(start_inactivity_action(root, action, payload, operation_id, op_id, worker), status=202)
             if action not in ("preview-cache-cleanup", "delete-cache-candidates"):
-                append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_operation_fields(payload)}})
+                try:
+                    started_fields = action_receipt_fields(action, payload)
+                except ValueError as exc:
+                    return self.send_json({"error": str(exc)}, status=400)
+                append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **started_fields}})
             release_worker_action = None
             try:
                 if mode == "worker_telemetry" and action in ("retry-worker-task", "stop-worker-task", "delete-worker-artifacts", "archive-worker-artifacts", "validate-plan", "dry-run-plan", "run-plan", "reproduce-plan"):
