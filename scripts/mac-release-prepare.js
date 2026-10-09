@@ -1,0 +1,42 @@
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, npm, json, fingerprint, assertSource } = require("./mac-release-common");
+
+function main() {
+  const roots = [SFTP_ROOT, EXPERIMENT_ROOT], repos = ["SimpleSFTP-Mac", "SimpleExperiment-Mac"];
+  const commits = roots.map((root, index) => assertSource(root, repos[index]));
+  const packages = roots.map(root => json(path.join(root, "package.json")));
+  for (let index = 0; index < 2; index++) {
+    if (`${packages[index].publisher}.${packages[index].name}` !== ["simple-local.simple-sftp-mac", "simple-local.simple-experiment-mac"][index]) throw new Error("Unexpected Mac extension identity");
+    if (!/^\d+\.\d+\.\d+$/.test(packages[index].version)) throw new Error("Invalid package version");
+    npm(["run", "build"], roots[index]);
+  }
+  const files = ["macVsix", "macPreviewRelease", "macUpdateTransaction", "macBootstrap", "macUpdateGate"];
+  for (const file of files) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/features/${file}.test.js`], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  for (const file of ["macBootstrap", "publicBranding", "api"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
+  npm(["run", "verify:package-runtime"], EXPERIMENT_ROOT);
+  run(process.execPath, ["-e", "new (require('vm').Script)(require('fs').readFileSync('dist/ui/PanelHtml.js','utf8'))"], EXPERIMENT_ROOT);
+  const tag = `preview-v${packages[1].version}`, directory = path.join(EXPERIMENT_ROOT, "release-artifacts", tag);
+  fs.mkdirSync(path.dirname(directory), { recursive: true });
+  if (fs.existsSync(directory)) throw new Error(`Prepared version already exists; inspect retained artifacts: ${directory}`);
+  fs.mkdirSync(directory);
+  const { inspectVsix, verifyVsix } = require("../dist/mac/Vsix");
+  const components = roots.map((root, index) => {
+    const pkg = packages[index], name = `${pkg.name}-${pkg.version}-darwin-arm64.vsix`, file = path.join(directory, name);
+    run(process.execPath, [require.resolve("@vscode/vsce/vsce", { paths: [root] }), "package", "--no-dependencies", "--target", "darwin-arm64", "--out", file], root, { inherit: true, timeout: 60000 });
+    const metadata = fingerprint(file), actual = inspectVsix(fs.readFileSync(file));
+    const component = { extensionId: `${pkg.publisher}.${pkg.name}`, version: pkg.version, sourceCommit: commits[index], sourceRepository: `zlinkw/${repos[index]}`, targetPlatform: "darwin-arm64", vscodeEngine: pkg.engines.vscode, downloadUrl: `https://github.com/${REPOSITORY}/releases/download/${tag}/${name}`, size: metadata.size, sha256: metadata.sha256 };
+    verifyVsix(fs.readFileSync(file), component);
+    if (actual.files.has("extension/baseline-source.zip") || [...actual.files.keys()].some(name => /\/release-artifacts\//.test(name))) throw new Error("Package contains local release artifacts");
+    return component;
+  });
+  for (let index = 0; index < 2; index++) if (assertSource(roots[index], repos[index]) !== commits[index]) throw new Error("Build changed release source");
+  const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: new Date().toISOString(), minimumMacOS: "26.0", components };
+  fs.writeFileSync(path.join(directory, "release.json"), JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+  const notes = `Apple Silicon macOS 26 及以上 preview。\n\n本地验证\n两仓 build、包依赖闭包、面板生成脚本及更新目标测试逐文件串行通过。真实 VSIX 的身份、版本、darwin-arm64、CRC 与 SHA-256 已校验。\n\nM5 真机验证\n尚未执行。需在 M5、24 GB、macOS 27.0 验证首版到第二版更新、设置保留、重载与部分失败补装。\n\n当前范围\n独立更新链路测试版。科研业务仍在适配，Termius/认证/三拓扑主流程尚未真机验收。PPT、Dev Containers、Intel Mac 不属于首版范围。\n\n首次安装\n先安装 SimpleSFTP Mac，再安装 SimpleExperiment Mac。以后执行插件内“检查 preview 配套更新”。\n\n源码提交\nSimpleSFTP-Mac ${commits[0]}\nSimpleExperiment-Mac ${commits[1]}\n`;
+  fs.writeFileSync(path.join(directory, "release-notes.md"), notes, { encoding: "utf8", flag: "wx" });
+  process.stdout.write(`Prepared immutable paired preview: ${directory}\n`);
+}
+if (require.main === module) { try { main(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; } }
+module.exports = { main };

@@ -20,6 +20,8 @@ test/**
 scenarios/**
 *.vsix
 *.tgz
+baseline-source.zip
+release-artifacts/**
 review_report.md
 **/*.vsix
 **/review_report.md

@@ -839,7 +839,9 @@
     "acceptance": "node scripts/acceptance.js",
     "compact:plan": "node scripts/compact-target-mode-plan.js",
     "check:tmux-guard": "node scripts/check-tmux-guard.js",
-    "check:static": "node scripts/check-static.js"
+    "check:static": "node scripts/check-static.js",
+    "release:prepare": "node scripts/mac-release-prepare.js",
+    "release:publish": "node scripts/mac-release-publish.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
