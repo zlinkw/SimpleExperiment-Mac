@@ -1,4 +1,4 @@
-export const SIMPLE_HELP = `Usage: simpleex <domain> <action> [options]
+export const SIMPLE_HELP = `Usage: simpleex-mac <domain> <action> [options]
 
 Agent-facing local CLI for SimpleExperiment. Aggregates existing scheduler, worker, result, tunnel, and artifact data.
 
@@ -16,9 +16,10 @@ Domains:
   artifact     list | download | inspect
 
 Other commands:
-  simpleex api <method> [--json <params.json>]
-  simpleex self-check
-  simpleex run --name <name> [--seed <seed>] -- <command> [args...]
+  simpleex-mac api <method> [--json <params.json>]
+  simpleex-mac self-check
+  simpleex-mac run --name <name> [--seed <seed>] -- <command> [args...]
+    Legacy manual local recorder. Official experiments use experiment run with a saved Plan.
 
 Global options:
   --json           strict JSON on stdout
@@ -27,70 +28,74 @@ Global options:
 
 Agent workflows:
   list running experiments:
-    simpleex experiment list --type worker_run --status running --json
+    simpleex-mac experiment list --type worker_run --status running --json
   diagnose a failure:
-    simpleex experiment diagnose <id> --json
+    simpleex-mac experiment diagnose <id> --json
   stop through the scheduler:
-    simpleex experiment stop <id> --json
+    simpleex-mac experiment stop <id> --json
   compare two results:
-    simpleex compare <id1> <id2> --json
+    simpleex-mac compare <id1> <id2> --json
   paper results:
-    simpleex experiment results <id> --json
+    simpleex-mac experiment results <id> --json
 
 Examples:
-  simpleex --help
-  simpleex project status
-  simpleex experiment tree --json
-  simpleex experiment monitor <id> --json
-  simpleex log tail <id> --lines 100 --json
-  simpleex metric show <id> --json
-  simpleex resource available --json
-  simpleex experiment run experiments/plans/baseline.yaml --check --dry-run --json
-  simpleex artifact inspect <id> --json
+  simpleex-mac --help
+  simpleex-mac project status
+  simpleex-mac experiment tree --json
+  simpleex-mac experiment monitor <id> --json
+  simpleex-mac log tail <id> --lines 100 --json
+  simpleex-mac metric show <id> --json
+  simpleex-mac resource available --json
+  simpleex-mac experiment run experiments/plans/baseline.yaml --check --dry-run --json
+
+Plan runs use the current VS Code workspace and live workflow preflight.
+The initial workflow.run receipt requests a VS Code confirmation; it is not remote submission evidence.
+Inspect the returned operationId through operations.list. Offline previews report local_only.
+  simpleex-mac artifact inspect <id> --json
 `;
 
 export function domainHelp(domain: string): string {
   const rows: Record<string, string> = {
-    project: `Usage: simpleex project status [--json]`,
+    project: `Usage: simpleex-mac project status [--json]`,
     experiment: `Usage:
-  simpleex experiment list [--status <status>] [--type workflow|worker_run] [--limit <n>] [--json]
-  simpleex experiment tree [--json]
-  simpleex experiment overview [--json] [--full]
-  simpleex experiment health [--json]
-  simpleex experiment status <id> [--json] [--full]
-  simpleex experiment monitor <id> [--json] [--watch]
-  simpleex experiment diagnose <id> [--json]
-  simpleex experiment inspect <id> [--json] [--full]
-  simpleex experiment config <id> [--json]
-  simpleex experiment results <id> [--json]
-  simpleex experiment batch <plan> [--json]
-  simpleex experiment run <plan> [--seed <seed>] [--check] [--dry-run] [--json]
-  simpleex experiment stop <id> [--json]
-  simpleex experiment pause <id> [--json]
-  simpleex experiment resume <id> [--from <stage>] [--json]
-  simpleex experiment retry <id> [--from <stage>] [--json]`,
+  simpleex-mac experiment list [--status <status>] [--type workflow|worker_run] [--limit <n>] [--json]
+  simpleex-mac experiment tree [--json]
+  simpleex-mac experiment overview [--json] [--full]
+  simpleex-mac experiment health [--json]
+  simpleex-mac experiment status <id> [--json] [--full]
+  simpleex-mac experiment monitor <id> [--json] [--watch]
+  simpleex-mac experiment diagnose <id> [--json]
+  simpleex-mac experiment inspect <id> [--json] [--full]
+  simpleex-mac experiment config <id> [--json]
+  simpleex-mac experiment results <id> [--json]
+  simpleex-mac experiment batch <plan> [--json]
+  simpleex-mac experiment run <plan> [--seed <seed>] [--check] [--dry-run] [--json]
+  simpleex-mac experiment stop <id> [--json]
+  simpleex-mac experiment pause <id> [--json]
+  simpleex-mac experiment resume <id> [--from <stage>] [--json]
+  simpleex-mac experiment retry <id> [--from <stage>] [--json]`,
     plan: `Usage:
-  simpleex plan list [--json]
-  simpleex plan validate <file> [--json]
-  simpleex plan matrix <file> [--json]`,
+  simpleex-mac plan list [--json]
+  simpleex-mac plan validate <file> [--json]
+  simpleex-mac plan matrix <file> [--json]`,
     result: `Usage:
-  simpleex result list [--experiment <id>] [--json]
-  simpleex result show <id> [--json]
-  simpleex result export <id> [--format csv|json] [--out <file>] [--json]`,
+  simpleex-mac result list [--experiment <id>] [--json]
+  simpleex-mac result show <id> [--json]
+  simpleex-mac result export <id> [--format csv|json] [--out <file>] [--json]`,
     log: `Usage:
-  simpleex log show <id> [--json]
-  simpleex log tail <id> [--lines <n>] [--json]`,
+  simpleex-mac log show <id> [--json]
+  simpleex-mac log tail <id> [--lines <n>] [--json]`,
     metric: `Usage:
-  simpleex metric list [--json]
-  simpleex metric show <experiment> [--json]`,
-    compare: `Usage: simpleex compare <id1> <id2> [--json]`,
-    gpu: `Usage: simpleex gpu status [--json]`,
-    resource: `Usage: simpleex resource available [--json]`,
-    server: `Usage: simpleex server list [--json]`,
+  simpleex-mac metric list [--json]
+  simpleex-mac metric show <experiment> [--json]`,
+    compare: `Usage: simpleex-mac compare <id1> <id2> [--json]`,
+    gpu: `Usage: simpleex-mac gpu status [--json]`,
+    resource: `Usage: simpleex-mac resource available [--json]`,
+    server: `Usage: simpleex-mac server list [--json]`,
     artifact: `Usage:
-  simpleex artifact list <experiment_id> [--json]
-  simpleex artifact download <id> [--out <path>] [--json]
-  simpleex artifact inspect <id> [--json]`,
+  simpleex-mac artifact list <experiment_id> [--json]
+  simpleex-mac artifact download <id> [--out <path>] [--json]
+  simpleex-mac artifact inspect <id> [--json]`,
   };
   return rows[domain] || SIMPLE_HELP;
 }

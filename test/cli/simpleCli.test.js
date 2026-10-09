@@ -200,7 +200,9 @@ test("simpleex experiment run --dry-run does not submit", async () => {
   assert.equal(payload.submitted, false);
   assert.equal(payload.seed, "42");
   assert.equal(payload.submitPath, "workflow.run");
-  assert.equal(payload.runner, "runRecordedExperiment");
+  assert.equal(payload.runner, "SimpleExperiment Local API");
+  assert.equal(payload.validation, "local_only");
+  assert.equal(payload.ready, false);
 });
 
 test("simpleex experiment run without API is env error", async () => {

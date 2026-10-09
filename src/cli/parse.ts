@@ -104,7 +104,7 @@ function applyFlag(flags: CliFlags, name: string, value: string): void {
 }
 
 export function requirePositional(positionals: string[], index: number, name: string): string {
-  const value = String(positionals[index] || "").trim();
-  if (!value) throw usageError(`missing ${name}`);
+  const value = String(positionals[index] || "");
+  if (!value.trim()) throw usageError(`missing ${name}`);
   return value;
 }

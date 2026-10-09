@@ -20,13 +20,17 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-015（passed，实时 CLI 契约 preview）
+## 当前批次：mac-005p（passed，CLI Plan 运行绑定与回执）
 ### 边界
 
-- Experiment 0.5.278/SFTP 0.2.72，只改版本与计划，共 6 文件。完整本机 prepare/publish，草稿三个附件核验后发布；实际包固定 CLI 自检与业务 RPC 本机 mock、公开匿名 updater 下载与源码/说明一致性校验。
-- 不安装插件、执行科研/服务器操作或使用 Actions。科研运行命令、三拓扑与 M5 仍在后续批次。
+- CLI Plan 运行核对当前 API 工作区、项目内 Plan 与实时 workflow.plan 路由，再申请 workflow.run；等待 VS Code 确认回执不冒充远端已提交。离线预览标明 local_only，保留旧 run/API/Plan 入口与格式、中文和真实空格参数。最多 8 文件。
+- 最小回归：build/包闭包/面板脚本、真实 CLI 本机 mock、旧 CLI 预览与发现、固定入口/契约。无实际科研/传输/服务器操作；文档、配套发布与其余 Windows 业务依赖后续批次。
 
 ### 验证清单
+
+- passed mac-005p：CLI Plan 限制当前项目内真实文件并拒绝链接逃逸，保留中文/真实首尾空格；在线运行核对 API workspace、workflow.plan 就绪/选择，再复核 workspace 申请 workflow.run。等待 VS Code 确认只报告 requested/operationId，不冒充远端已提交；HTTP/业务阻塞返回失败且不重试。离线预览标明 local_only/ready=false，保留旧手工 recorder，帮助改用 Mac 命令名。7 文件。
+- passed 本地：build/217 模块闭包/面板脚本 2、包闭包/vm.Script、真实 CLI 本机 mock 5（含三种返回拓扑、工作区变化、失败/离线/确认/路径）、旧 CLI 预览与发现 3/帮助 1、CLI 契约 8/固定入口 5 逐文件串行通过。无实际科研、传输或服务器调用。
+- pending mac-doc-011：说明与发布门禁同步后交付配套 preview；下一源码批 mac-005q 审核服务端 workspace 绑定与 CLI seed 参数、完整科研主流程/Windows 依赖，M5 pending。
 
 - passed mac-release-015：完整 `npm run release:prepare`/`release:publish` 本机门禁通过，Experiment build/216 模块闭包、SFTP build/26 文件闭包、面板脚本 2、更新/CLI/路径/认证/中转逐文件串行及浅/深/高对比渲染通过；三个完整草稿附件核验后发布。不使用 Actions 或安装扩展。
 - passed preview-v0.5.278：实际两包固定 CLI 经真实本地 POSIX shell/Node、中文发现文件完成 health 自检及实时 capabilities → RPC（2 项包测试），保留 confirm/pathConfirmed=false。真实匿名 updater 从 0.5.277/0.2.71 筛出两组件，18 次请求取得清单及包；大小/hash/CRC/平台/身份通过，字节与已测试 VSIX 相同，CLI 模块、两仓源码/README/配置说明匹配。同版本跳过/禁止降级通过；无真实科研/SSH/M5。
