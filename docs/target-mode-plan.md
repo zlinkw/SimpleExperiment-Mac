@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005s（passed，Mac Plan 身份）
+## 当前批次：mac-doc-014（passed，Mac Plan 路径说明与门禁）
 ### 边界
 
-- 关联问题：Mac Plan 选择/操作身份保留大小写与真实空格，分布式队列与自动重试不合并不同路径，面板选择/身份缓存采用同一规则。最多 8 文件；保护 API/Plan 格式、非 Mac 旧入口、远端实验及用户设置。
-- 检查：build/闭包/面板脚本，新编译模块与真实生成面板的 Mac 身份回归，队列/人工重试/重复提交/选择缓存相邻测试逐文件串行 20 秒。仅 VM/本机 mock，不执行真实科研、SSH、停止或删除；M5 待验收。
+- 两仓 README/包内配置说明补充 Mac Plan 完整路径选择规则与本地验证边界；发布门禁纳入真实身份、队列及自动重试回归。6 文件，保护更新按钮入口、旧入口和科研/API 契约。
+- 检查：UTF8 回读，build/闭包/面板脚本、配置说明及发布门禁测试串行 20 秒。仅本地验证；M5 与真实科研/SSH 待验收。
 
 ### 验证清单
 
@@ -42,6 +42,7 @@
 - passed preview-v0.5.281：实际两包固定 CLI 经真实本地 shell/Node health/实时 RPC，Experiment 实际包中文 Plan 的工作区/路线预检、等待确认回执和 seed 覆盖 RPC 前拒绝通过（2 包测试）。真实匿名 updater 从 0.5.280/0.2.74 筛出两组件，21 次请求完成大小/hash/CRC/身份/平台核验；下载字节与已测试 VSIX 相同，编译重试/工作区/Plan/CLI 模块及两仓 README/配置说明与来源一致。同版本跳过/禁止降级通过，无真实科研/SSH/M5。
 - passed mac-005s：Mac 的后台 Plan 选择、保存/回执与身份锁/缓存、分布式队列与自动重试、真实生成面板的下拉选择和身份缓存保留大小写/Unicode/真实空格/字面 %20，不把不同完整路径或绝对/相对后缀合并。非 Mac 路线和 API/Plan 格式保留。6 文件。
 - passed 本地：build/218 闭包/面板脚本 2；macPlanIdentity 6、distributedPlanQueue 29、distributedJobAutoRetry 30、planSafeRetry 12、duplicatePlanSubmissionGuard 10、planFileEquivalenceCache 4、planSelectionPreview 5、planSelectorStatus 13、selectedPlanCardOrder 2、visiblePreflight 19、distributedRouting 5、macWorkflowBinding 10，逐文件串行通过，无真实科研/SSH/停止/删除。初次 fixture 使用 JS 文件名解析 TS、误用导出名/默认重试状态，及旧下拉 fixture 缺依赖，补齐真实契约后通过，非超时。
+- passed mac-doc-014：两仓 README 与 Mac 配置说明同步补充完整 Plan 路径、大小写/真实空格和错误路径处理，保留更新按钮入口；身份、队列、自动重试回归纳入发布门禁，6 文件。UTF8 回读、build/218 闭包/面板脚本 2、macSetupGuide 1、macRelease 4 通过。
 - pending 下一批 mac-005t：继续核验 Plan 元数据扫描、分布式入队及结果/监控残余 trim/Windows 路径分支；本批身份修复不代表所有文件读取/科研路线已验收。先补两仓说明与发布门禁，再配套 preview。真实 SSH/三拓扑/M5 pending。
 
 
@@ -67,6 +68,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005s 已验证源码 `9aea7a1fc0b4260cc612b8248f43b0836f75e691` 已普通推送并 fetch 核对 origin/master。
 - 第十八版 preview-v0.5.281 已发布：Experiment 来源 `b5fdcd6e68b8601efc74246e4b84043448e41a20`、SFTP 0.2.75 来源 `9a1b956c4ece2eacef4669112829196eafa63b1c` 已普通推送并 fetch 核对，实际包 CLI、编译异步运行模块及匿名下载通过；完整科研/SSH/M5 pending。
 - mac-doc-013 Experiment 说明/门禁 `2c725d52db7e670b46c4885976c51ffb974f8210`、SFTP README `6c35407c32b7d2b91ba69b7e514508cc8da5d581` 已普通推送并 fetch 核对。
 - mac-005r 已验证源码 `6f490cf28532598540ba2a059e34e5619dc49d6b` 已普通推送并 fetch 核对 origin/master。
