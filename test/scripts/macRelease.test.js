@@ -29,5 +29,6 @@ test("paired release gates include both repositories' POSIX path regressions", (
   const prepare = fs.readFileSync(path.join(__dirname, "../../scripts/mac-release-prepare.js"), "utf8");
   assert.equal((prepare.match(/"macPosixPaths"/g) || []).length, 2);
   assert.match(prepare, /"macRelativePaths"/);
+  assert.match(prepare, /"macDownloadScope"/);
   assert.match(prepare, /"--test-timeout", "20000"/);
 });
