@@ -20,13 +20,17 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-013（running，下载范围 preview）
+## 当前批次：mac-release-013（passed，下载范围 preview）
 ### 边界
 
 - Experiment 0.5.276/SFTP 0.2.70，只修改版本及计划，最多 8 文件。完整本机 prepare/publish，草稿全附件大小/hash 核验后公开；实际匿名 updater 验证配套版本/包身份/平台/源码与 Mac 说明。
 - 发布不安装/Actions/覆盖历史附件/真实 SSH。CLI、完整科研主流程与 M5 后续分批，保护原入口与删除父目录/双确认。
 
 ### 验证清单
+
+- passed mac-release-013：完整本机 prepare/publish；两仓 build/24 与 214 模块闭包、面板脚本 2、更新/POSIX/相对文件名/范围协议门禁逐文件串行通过，浅/深/高对比真实渲染通过，package/lock/runtime 一致。3 附件完整草稿大小/SHA-256 核验后发布，不使用 Actions 或自动安装。
+- passed preview-v0.5.276 真实匿名 updater：从 0.5.275/0.2.69 选择两个更新，16 次匿名请求取得清单与两包，大小/hash/CRC/平台/身份核验通过；SFTP 范围/路径/tar/传输源码与 LF askpass、Experiment 面板/更新代码、两仓 README/配置说明匹配已同步来源，README 标准 vsce 链接改写已核对。同版本跳过/禁止降级，无真实 SSH/M5。
+- pending mac-005l：Mac CLI 可持续入口、LF/POSIX 启动器与实际 npm/VSIX 启动验证；两仓分批不超过 8 文件。现有 CLI 已打包且 discovery 为 Mac 目录，但 VSIX 没有稳定 POSIX 入口、仍含旧 cmd；保留旧入口，不自动装插件或修改用户 PATH。后续再核对 CLI 业务命令/本地 API 与三拓扑，M5 pending。
 
 - passed mac-doc-008：两仓 README/配置说明补全下载范围按钮、目标核对/浏览/保存/预览、过滤、选中链接拒绝与手动根/显式 API 边界；Mac 范围协议 4 进入发布门禁。UTF8 回读、Experiment build/214 模块闭包/面板脚本 2、配置说明 1、发布 4、SFTP 范围 4 逐文件串行通过，共 6 文件。CLI 和 M5/真实 SSH pending。
 
@@ -48,6 +52,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- 第十三版 preview-v0.5.276 已发布：Experiment 来源 `43ef53f3fe02b6f14f8d392486197a15c0470350`、SFTP 0.2.70 来源 `16e6ce87e98b2c61aef23cc93270734e000bc67b` 均已同步；Mac 下载范围/文件浏览、本地归档协议与真实匿名下载通过。CLI/完整科研主流程/真实 SSH/M5 pending。
+- mac-005k SimpleSFTP 源码 `ce60c041385374dabf9723b6aed0659049735832` 已普通推送并 fetch 核对；说明提交 `08595adc69ca73021e561663cce6644b085f3a81`。
 - mac-doc-008 SimpleSFTP README 已推送 origin/master；真实提交见 Git。配套下一版 Experiment 0.5.276/SFTP 0.2.70，不自动安装。
 - mac-005k SimpleSFTP 已验证源码推送 origin/master，实际提交见 Git；本地协议与模拟 UI/API 通过，含 5 个 SFTP 文件及本计划。
 - 第十二版 preview-v0.5.275 已发布：Experiment 来源 `70b9beda5bb21be5aeb601f7024e83c7a9deed07`、SFTP 0.2.69 来源 `a0877d725c9bec338d9711bcdcfba0adddcc2ade` 均已同步；上传/映射相对文件名、本地 tar/Python 与匿名下载通过，下载范围界面/CLI/真实 SSH/M5 pending。
