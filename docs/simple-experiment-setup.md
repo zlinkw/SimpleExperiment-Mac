@@ -182,6 +182,8 @@
 
 SSH 登录、转发打开和 Agent 可用分别核对；没有运行 Agent 时，SSH 成功并不代表检测通过。Mac 断线或插件更新后恢复 Termius 转发，先检查已有 tmux 会话；不因此停止或重复启动实验。
 
+Mac 的版本/哈希检查只读，不会自动部署或重启。检查不一致或不可达时，Plan 前置校验会报告缺项，即使以前的连接状态显示正常也不能视为已就绪。需要升级 runtime 时主动点击 **准备项目与 Agent** 确认上传，在 Termius 核对任务后处理 Agent；不要终止训练 tmux。
+
 ## 6. 科研主流程与三种拓扑
 
 | 模式 | 使用方式 |
@@ -195,6 +197,12 @@ SSH 登录、转发打开和 Agent 可用分别核对；没有运行 Agent 时�
 运行前核对最终远端项目路径、Plan revision、拓扑、启用 Worker、执行环境、GPU 限制与结果位置。文件传输由 SimpleSFTP 完成；正式实验不直接调用训练脚本代替 Plan。远端删除仍要求路径规范化、直接父目录核验及两次明确确认。
 
 这三种拓扑、认证上传下载、中文路径和断连恢复仍需 M5 真机验收。首阶段更新成功不代表完整科研功能验收通过。
+
+### 使用 project.bootstrap API
+
+先按第 7 节读取当前 API 发现文件及实时 capabilities，确认方法和参数。`project.bootstrap` 不带 `confirm: true` 时返回确认预览；确认后返回 `operationId`，通过 `project.bootstrap.operation` 查询后台结果。
+
+若上传完成但 Agent 尚未手动启动或检测未通过，操作记录为 `status: "blocked"`、`phase: "manual_start"`，提供 `manualStart.guide` 和后续 `calls`，不标记科研准备成功。按指引在 Termius 处理后，可从记录中的预览调用重新确认，使用 `deployRuntime: false`、`uploadProject: false`、`autoTest: true` 再次执行 `project.bootstrap`。这会产生新的操作记录，重新检测当前端点与 runtime 版本/哈希，避免重复上传；旧阻塞记录保留供查阅。只有检测与 Plan 校验均通过才记录成功，不会自动运行实验。
 
 ## 7. 数据目录、API 与常见问题
 

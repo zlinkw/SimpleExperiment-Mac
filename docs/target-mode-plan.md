@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-009（passed，Mac 准备与说明 preview 发布）
+## 当前批次：mac-005g（passed，Mac 识别与只读检测）
 ### 边界
 
-- 本批递增 Experiment 0.5.272，SFTP 保持 0.2.67；本地打包发布同一个 preview Release，核对匿名 updater 与随包 Mac README/说明/准备入口。最多 8 文件，不自动安装扩展。
-- 保留三拓扑、API/Plan、路径规范/删除双确认、认证及租约；无真实服务器操作，M5 仍 pending。下一批审查科研主流程及 POSIX 业务路径。
+- 本批适配 Mac project.bootstrap：未手动启动时记录真实阻塞及指引，手动启动后可只检测不重复上传；版本/哈希检查在 Mac 只读，禁止自动部署/重启。同步 API/readiness 回归及操作说明，最多 8 文件。
+- 保护三拓扑、API/Plan、更新事务、认证/租约、远端实验和删除规范。仅本地模拟验证，不连接服务器；M5 pending。POSIX 全业务路径下一批审查。
 
 ### 验证清单
 
+- passed mac-005g：Mac 版本/哈希检查不自动部署或重启；失败进入 Plan 缺项。bootstrap 未手动启动时记录 blocked/manual_start 与指引/后续预览；启动后可禁用两类上传，通过当前版本/哈希与 Plan 校验才成功。确认 scope 绑定工作区、端点/端口、Python、tmux 前缀与 token，后台确认变化拒绝执行。
+- passed mac-005g 本地：build/面板脚本 2、213 模块闭包/vm.Script；准备/bootstrap 16、端点/UI 9、配置说明 1、runtime 范围 4、manifest 1 测试逐文件串行通过。三拓扑均覆盖阻塞、免重复上传复检、坏哈希、Plan 失败、只读无自动部署/重启与配置变更。README/配置说明 UTF8 及真实 API 方法回读通过。真实 SSH/M5 仍 pending，下一批发布 Experiment 0.5.273/SFTP 0.2.67。
 - passed mac-release-009：Experiment 0.5.272/SFTP 0.2.67 完整 prepare/publish 通过，两仓 build/213 与 24 文件包闭包、面板脚本、更新目标测试逐文件串行通过；项目准备 10、手动端点/UI 9、配置说明 1、浅/深/高对比真实渲染通过。完整草稿 3 附件大小/SHA-256 核验后公开发布。
 - passed preview-v0.5.272 真实匿名 updater：从 0.5.271/0.2.67 筛选到 Experiment 单组件升级，下载两包核验平台/hash/CRC/身份；包内 README/配置说明、实际准备命令标题、准备实现、Mac 面板入口与 LF askpass 核验通过；同版本跳过且禁止降级。没有自动安装、Actions 或真实 SSH，M5 仍 pending。
 - pending 下一批 mac-005g：审查 project.bootstrap/科研运行前准备链的 Mac 手动端点与 Agent 检测边界、POSIX 路径一致性；保留既有科研契约，每批最多 8 文件。M5 证据回传前不得标记真实科研验收通过。

@@ -34,6 +34,8 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 6. 在当前项目选择并 **保存拓扑**：单 Worker、多 Worker 或 Hub/Worker。点击 **设置 → 服务器 → 准备项目与 Agent**，或运行 **SimpleExperiment Mac：准备项目与 Agent（手动启动）**。确认每台服务器的 SSH 地址、项目目录与 runtime 目录后，点击 **确认上传并查看指引**；SimpleSFTP 分别认证并上传，取消不会上传。此步不要求 Agent 隧道已在线。
 7. 在打开的指引中核对每台服务器，在对应 Termius 终端接入已有 tmux，或创建缺少的会话并手动启动 Agent；保持端口转发，再点击插件 **检测全部**。已有 Agent/实验不因上传而自动重启。只需查看命令时点击 **Agent/tmux 指引**，这个入口仅生成文本。
 
+版本/哈希检查在 Mac 只读：不一致或不可达会明确阻止就绪判定，不自动上传 runtime、重启会话或停止实验。需要更新 Agent 时先核对运行中的任务，主动使用 **准备项目与 Agent** 确认上传，再在 Termius 手动处理 Agent。
+
 配置说明包含单 Worker、多 Worker、Hub/Worker 的接入约定、数据目录及失败处理，并标明尚待交付的功能。打开 Mac 配置说明不会触发旧 Xshell 会话向导。
 
 在 Finder 按 **⇧⌘G** 可打开下文的 Application Support 目录。若需要终端中的 `code` 命令，在命令面板运行 **Shell Command: Install 'code' command in PATH** 后重新打开终端；见 [VS Code 官方 Mac 说明](https://code.visualstudio.com/docs/setup/mac)。安装 VSIX 不要求该命令。

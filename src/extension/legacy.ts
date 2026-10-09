@@ -2015,7 +2015,8 @@ export class RealtimeTunnelPanelProvider {
                 ...(manual ? { remoteProject: params.uploadProject === false ? [] : targets.map(target => ({ serverId: target.id, localPath: root, remotePath: this.agentRuntimeDirs(target.remoteRoot).workDir })), manualStart: true } : {}),
             },
         };
-        const preparationScope = manual ? crypto.createHash("sha256").update(JSON.stringify(preview)).digest("hex") : "";
+        const preparationScope = manual ? crypto.createHash("sha256").update(JSON.stringify({ preview,
+            endpoints: ManualTunnel_1.endpointsFromSetup(setup), sessionPrefix: setup.remoteTmuxSessionPrefix, token: this.tunnelConfig.token || "" })).digest("hex") : "";
         if (manual && params.expectedPreparationScope !== undefined && params.expectedPreparationScope !== preparationScope)
             throw new Error("Mac 准备目标或配置已变化，请重新预览并确认。");
         if (infrastructureMissing.length || params.confirm !== true)
@@ -2063,8 +2064,9 @@ export class RealtimeTunnelPanelProvider {
         await this.apiAdvanceFlow("select_servers", { completed: true });
         if (topology.mode) await this.apiAdvanceFlow("select_mode", { completed: true });
         let prepared = !manual;
-        if (manual && params.autoTest === true && runtimeDeployment && test.ok && test.rows.length === targets.length && test.rows.every(row => row.status === "ok")) {
-            const verification = await this.verifyDeployedAgentRuntime(runtimeDeployment.targets, runtimeDeployment.manifest);
+        if (manual && params.autoTest === true && test.ok && test.rows.length === targets.length && test.rows.every(row => row.status === "ok")) {
+            const evidence = runtimeDeployment || await this.expectedAgentRuntimeForTargets(targets.map(target => target.id));
+            const verification = await this.verifyDeployedAgentRuntime(evidence.targets, evidence.manifest);
             prepared = !verification.fatal.length && !verification.warnings.length;
         }
         await this.apiAdvanceFlow("prepare_agents", { completed: prepared });
@@ -2490,7 +2492,9 @@ export class RealtimeTunnelPanelProvider {
         return rows;
     }
     async apiPlanValidate(params = {}) {
-        await this.ensureRemoteAgentVersionConsistent().catch(() => undefined);
+        let macRuntimeIssue = "";
+        try { await this.ensureRemoteAgentVersionConsistent(); }
+        catch (error) { if (this.isMacVariant()) macRuntimeIssue = errorMessage(error); }
         const __root = workspaceRoot() || "";
         await Promise.all([
             this.refreshLocalPlanMetadata({ post: false, force: true }).catch((error) => {
@@ -2524,6 +2528,8 @@ export class RealtimeTunnelPanelProvider {
             project: this.localPlanMetadata.detectedProject,
             plan,
         });
+        if (macRuntimeIssue) missing.push({ step: "prepare_agents", reason: macRuntimeIssue,
+            options: ["project.prepare", "server.testAll"], requiredConfirm: ["confirm"] });
         if (plan) {
             const diagnostics = projectOutputGateDiagnostics(this.localPlanMetadata.detectedProject || {}, plan);
             for (const row of diagnostics.rows || []) {
@@ -2624,7 +2630,9 @@ export class RealtimeTunnelPanelProvider {
         };
         this.markLocalOperationsDirty();
         this.postState();
-        void this.runApiBootstrapOperation(operationId, params).catch((error) => {
+        const confirmedParams = this.isMacVariant() ? { ...params, workspace: preparePreview.preview.workspace,
+            expectedPreparationScope: preparePreview.preparationScope } : params;
+        void this.runApiBootstrapOperation(operationId, confirmedParams).catch((error) => {
             const apiData = (error as { apiData?: unknown })?.apiData;
             const message = apiData === undefined
                 ? errorMessage(error)
@@ -2655,13 +2663,23 @@ export class RealtimeTunnelPanelProvider {
         };
         this.markLocalOperationsDirty();
         this.postState();
-        await this.apiProjectPrepare({
+        const preparation = await this.apiProjectPrepare({
             ...params,
             applyTopology: true,
             startSessions: params.startSessions !== false,
             autoTest: params.autoTest !== false,
             confirm: true,
         });
+        if (this.isMacVariant() && !preparation.agentReady) {
+            this.localOperations[operationId] = {
+                ...this.localOperations[operationId], status: "blocked", phase: "manual_start",
+                message: "项目准备尚未通过 Agent 检测。请按指引在 Termius 手动启动转发与 Agent，再执行只读检测。",
+                manualStart: preparation.manualStart, runtimeDeployed: preparation.runtimeDeployed, projectUploads: preparation.projectUploads,
+                calls: [{ method: "project.bootstrap", params: { ...params, confirm: false, deployRuntime: false, uploadProject: false, autoTest: true, startSessions: false, expectedPreparationScope: undefined } }],
+                finishedAt: new Date().toISOString(),
+            };
+            this.markLocalOperationsDirty(); this.postState(); return;
+        }
         const missing = await this.apiPlanValidate(params);
         if (!missing.ok)
             throw new Error(`project.bootstrap 前置检查未通过：${JSON.stringify(missing.missing)}`);
@@ -7617,6 +7635,19 @@ export class RealtimeTunnelPanelProvider {
             : `Worker 代码已同步 ${syncedWorkerIds.length} 台。`;
         return { syncedWorkerIds, heldWorkers, message };
     }
+    async expectedAgentRuntimeForTargets(serverIds = []) {
+        const targets = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.agentRuntimeUploadTargets(), serverIds);
+        if (!targets.length) throw new Error("没有可校验的 Hub/Worker 目标。");
+        const runtimeDir = path.join(__dirname, "..", "runtime");
+        const [agentText, schedulerText] = await Promise.all([
+            fs.readFile(path.join(runtimeDir, "cluster_agent.py"), "utf8"),
+            fs.readFile(path.join(runtimeDir, "cluster_scheduler.py"), "utf8"),
+        ]);
+        const manifest = { pluginVersion: String(this.context?.extension?.packageJSON?.version || ""),
+            runtimeVersion: RuntimeManifest_1.CURRENT_RUNTIME_VERSION,
+            files: { "cluster_agent.py": RuntimeManifest_1.sha256Text(agentText), "cluster_scheduler.py": RuntimeManifest_1.sha256Text(schedulerText) } };
+        return { targets, manifest };
+    }
     async deployLatestAgentRuntime(showMessage = true, pathConfirmed = false, serverIds = [], deferVerification = false) {
         console.log("[diag] deployLatestAgentRuntime entry", { showMessage, pathConfirmed, serverIds });
         console.log("[diag] prepareSftpTargets before", { serverIds });
@@ -7905,6 +7936,14 @@ export class RealtimeTunnelPanelProvider {
                 return { fatal: [], warnings: ["未配置远端目标或隧道未建立"] };
             }
             const result = await this.verifyDeployedAgentRuntime(targets, manifest);
+            if (this.isMacVariant()) {
+                if (showUi) {
+                    const issues = [...result.fatal, ...result.warnings];
+                    if (issues.length) await vscode.window.showWarningMessage(`Agent 只读校验未通过：${issues.join("；")}。请使用“准备项目与 Agent”确认上传，并在 Termius 手动检查 Agent；不会自动部署或重启。`);
+                    else await vscode.window.showInformationMessage(`Agent 版本与 runtime 哈希一致：${pluginVersion}`);
+                }
+                return result;
+            }
             if (result.fatal.length) {
                 const detail = `远端 Agent 版本不一致（旧版覆盖风险）：${result.fatal.join("；")}，正在自动覆盖安装最新版。`;
                 console.warn(`[version-check] ${detail}`);
@@ -7947,6 +7986,11 @@ export class RealtimeTunnelPanelProvider {
     async ensureRemoteAgentVersionConsistent() {
         let result: any;
         try { result = await this.checkRemoteAgentVersionAndNotify(false); } catch (err) { console.warn(`[version-check] ensureRemoteAgentVersionConsistent check failed: ${String((err as any)?.message || err)}`); throw err; }
+        if (this.isMacVariant()) {
+            const issues = [...(result?.fatal || []), ...(result?.warnings || [])];
+            if (issues.length) throw new Error(`Mac Agent 只读版本/哈希校验未通过：${issues.join("；")}。请确认部署后在 Termius 手动检查 Agent，再检测；运行中的实验保持原状态。`);
+            return;
+        }
         if (result && Array.isArray(result.fatal) && result.fatal.length) {
             // 版本差异不能自动清理调度器或 GPU tmux；用户需通过 Agent 准备流程仅重启 Agent 会话。
             void this.deployLatestAgentRuntime(false, true).catch(() => undefined);
