@@ -18,7 +18,9 @@ test("preview commands exist without business panel, server config or Termius", 
 test("same preview prompts once across repeated checks and persists that receipt", async () => {
   const manifest = { releaseTag: "preview-v0.1.2", components: [{ extensionId: "simple-local.simple-sftp-mac", version: "0.1.2" }, { extensionId: "simple-local.simple-experiment-mac", version: "0.1.2" }] };
   const f = fixture({ check: async () => ({ manifest, pending: manifest.components }) });
-  try { await Promise.all([f.updater.check(), f.updater.check()]); await f.updater.check(); assert.equal(f.calls.length, 1); assert.equal(f.state.get("simpleExperimentMac.preview.notified.preview-v0.1.2"), true); }
+  try { await Promise.all([f.updater.check(), f.updater.check()]); await f.updater.check(); assert.equal(f.calls.length, 1); assert.equal(f.state.get("simpleExperimentMac.preview.notified.preview-v0.1.2"), true);
+    const status = getUpdateStatus(); assert.equal(status.sftp.updateAvailable, true); assert.equal(status.experiment.currentVersion, "0.1.1"); assert.equal(status.experiment.latestVersion, "0.1.2"); assert.ok(Number.isFinite(Date.parse(status.checkedAt)));
+  }
   finally { f.dispose(); }
 });
 test("bootstrap registers updates before loading business code and polls every thirty minutes", () => {

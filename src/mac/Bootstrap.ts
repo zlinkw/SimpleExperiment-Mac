@@ -64,7 +64,12 @@ export function registerPreviewUpdater(context: any, vscode: any, client: Pick<P
     try {
       lastPlan = await client.check(vscode.version, current, manual);
       const versions = lastPlan.manifest.components.map(item => `${item.extensionId} ${item.version}`).join("，");
-      status({ status: lastPlan.pending.length ? "update_available" : "up_to_date", message: lastPlan.pending.length ? "有可用更新" : "已是最新", plan: lastPlan });
+      const describe = (id: string, label: string) => {
+        const component = lastPlan!.manifest.components.find(item => item.extensionId === id)!;
+        return { extensionId: id, label, currentVersion: current(id), latestVersion: component.version, updateAvailable: lastPlan!.pending.some(item => item.extensionId === id) };
+      };
+      status({ status: lastPlan.pending.length ? "update_available" : "up_to_date", message: lastPlan.pending.length ? "有可用 preview 配套更新" : "已是最新", checkedAt: new Date().toISOString(), plan: lastPlan,
+        sftp: describe("simple-local.simple-sftp-mac", "SimpleSFTP Mac"), experiment: describe("simple-local.simple-experiment-mac", "SimpleExperiment Mac") });
       const key = "simpleExperimentMac.preview.notified." + lastPlan.manifest.releaseTag;
       if (lastPlan.pending.length && !notices.has(key) && !context.globalState.get(key, false)) {
         notices.add(key);

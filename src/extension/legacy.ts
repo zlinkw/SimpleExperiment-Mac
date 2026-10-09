@@ -7180,10 +7180,8 @@ export class RealtimeTunnelPanelProvider {
     }
     async checkPluginUpdates(manual = false) {
         if (this.context.extension.packageJSON.name === "simple-experiment-mac") {
-            const plan = await vscode.commands.executeCommand("simpleExperimentMac.checkPreviewUpdates");
-            const status = require("../mac/Bootstrap").getUpdateStatus();
-            await this.setPluginUpdateStatus(status);
-            return plan;
+            try { return await vscode.commands.executeCommand("simpleExperimentMac.checkPreviewUpdates"); }
+            finally { await this.setPluginUpdateStatus(require("../mac/Bootstrap").getUpdateStatus()); }
         }
         await this.setPluginUpdateStatus({ status: "checking", message: "正在检查 SimpleExperiment 与 SimpleSFTP 的配套 Release。", checkedAt: new Date().toISOString() });
         try {
@@ -21598,7 +21596,7 @@ export class RealtimeTunnelPanelProvider {
             setup: compactXshellSetupForWebview(this.setupConfig),
             schedulerConfig,
             remoteRootPolicy,
-            pluginUpdate: this.pluginUpdateStatus || { status: "unknown", message: "尚未检查配套更新。", checkedAt: "" },
+            pluginUpdate: this.context.extension.packageJSON.name === "simple-experiment-mac" ? require("../mac/Bootstrap").getUpdateStatus() : this.pluginUpdateStatus || { status: "unknown", message: "尚未检查配套更新。", checkedAt: "" },
             pptPlotConfig,
             pptAutomation: this.pptAutomationReadiness,
             integrations,

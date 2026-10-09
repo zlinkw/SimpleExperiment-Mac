@@ -9385,8 +9385,8 @@ export function renderPanelHtml(): string {
           '<div class="pluginUpdateMain">' +
             '<b>插件配套更新 · ' + esc(pluginUpdateStatusLabel(status)) + '</b>' +
             '<span>' + esc(status === "up_to_date"
-              ? "当前已是最新版本；更新来源为两个仓库的 GitHub Latest Release。"
-              : (plan.message || "同时检查 SimpleExperiment 和 SimpleSFTP 的 GitHub Latest Release。")) + '</span>' +
+              ? "当前已是最新版本；配套更新来源为 SimpleExperiment Mac 的 GitHub preview Release。"
+              : (plan.message || "检查 SimpleExperiment Mac Release 中的 preview 配套版本。")) + '</span>' +
             (rows ? rows : '') +
             (Number.isFinite(checkedAt) ? '<span class="muted">检查时间：' + esc(new Date(checkedAt).toLocaleString()) + '</span>' : '') +
           '</div>' +
