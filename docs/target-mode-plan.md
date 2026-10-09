@@ -10,7 +10,11 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ad-receipt（passed）
+## 当前批次 mac-doc-025（passed）
+- 范围 6 文件：两仓 README、Mac 配置说明、prepare/对应门禁测试与计划。同步轻量结果查看回执来源隔离和失败处理、继续保留 Mac 更新入口，明确其他回执及 Agent 输出仍待适配。
+- mac-005ad-receipt `289f1537970550cfef59eb258ac1b34b77f64e64` 已普通推送/fetch 相等；两仓干净。passed 两仓 build/225 与 26 闭包/面板 2/vm.Script、配置说明 1/发布门禁 4 单文件串行、三份文档 UTF8/更新入口/diff。下一批仅配套元数据/完整 prepare/实际包/匿名发布。
+
+### 前批 mac-005ad-receipt（passed）
 - 范围至多 4 文件：Mac 结果命令回执范围模块、后台轻量结果查看候选、真实编译回归与计划。核对完整 Plan/所有别名与 revision，仅显式归属祖先可授权结构子记录；子 Plan 不授权匿名祖先/兄弟的路径或新鲜度。冲突/错误类型拒绝，保留最新空报告抑制旧候选、原入口与 Windows 行为。
 - 起始 Exp `5e5cab27c1f4a05e67f83e0c5881794d906aac23`/SFTP `e9affcea0cc296588e537f26e51c0c8ecc28459f` 干净、master=origin/master；项目事实/计划/真实 Agent 回执形状与相关源码测试已读。保护 API/三拓扑/远端任务，无真实 SSH/科研/删除/安装。
 - passed build/225 闭包/面板 2/vm.Script、实际编译回执候选 8、原结果查看 13/候选 6/摘要 7/结果身份 8，单文件串行/20 秒无测试超时；UTF8/LF/diff。初始新模块 copy 类型错误显式 Row 修复；第一次 vsce ls 的 8 秒子进程预算超时，后续源码验证完整 build 后闭包通过，未放松预算。
