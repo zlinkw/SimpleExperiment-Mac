@@ -20,7 +20,7 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-011（running，0.5.274/0.2.68 配套发布）
+## 当前批次：mac-release-011（passed，0.5.274/0.2.68 配套发布）
 ### 边界
 
 - 本批仅递增两仓 package/lock 与 Experiment runtime 至 0.5.274/0.2.68（共 6 文件），本机构建/串行目标门禁后提交推送，再完整 prepare/publish。匿名 updater 下载两包并核对清单/平台/身份/hash 与说明；不安装扩展。
@@ -28,7 +28,9 @@
 
 ### 验证清单
 
-- passed mac-release-011 版本门禁：两仓 build/24 与 214 模块闭包、面板脚本 2；Experiment POSIX 5/准备 16、runtime manifest 1、发布 4 与 SFTP POSIX 5 逐文件串行通过；package/lock/runtime 版本一致。首次写错 runtime 测试目录，改为真实 test/runtimeManifest 后通过，非超时。完整 prepare/publish 与实际匿名下载仍 running。
+- passed mac-release-011：完整本机 prepare/publish；两仓 build/24 与 214 模块闭包、面板脚本 2、更新与两仓 POSIX 发布门禁逐文件串行通过，浅/深/高对比真实渲染通过，package/lock/runtime 一致。3 附件草稿大小/SHA-256 完整核验后公开发布。版本门禁首次写错 runtime 测试目录，改为真实 test/runtimeManifest 后通过，非超时。
+- passed preview-v0.5.274 真实匿名 updater：从 0.5.273/0.2.67 筛选双组件升级，14 次匿名请求取得清单与两包，大小/hash/CRC/平台/身份核验通过；包内 README 标准链接改写、Mac 配置说明、实际业务代码与路径模块字节匹配已验证来源；同版本跳过/禁止降级，askpass 保留 LF。没有安装/Actions/真实 SSH/M5。
+- pending 下一批 mac-005j：相对文件名在上传/下载/tar 清单中的中文、首尾空格、大小写和 Unicode 一致性，保留删除直接父目录和双确认；每批最多 8 文件。CLI 后续单独接入，真实科研验收仍需 M5 证据。
 - passed mac-doc-006：两仓 README/配置说明补入绝对路径、大小写策略、首尾空格、字面 %20、确认/错误处理和只读根浏览边界；两个 POSIX 测试进入本机 release:prepare 门禁，SFTP 单仓不强依赖 Experiment 构建产物。8 文件核对。
 - passed mac-doc-006 本地：两仓 build/24 与 214 模块闭包、面板脚本 2；配置说明 1、发布 4、Experiment POSIX 5、准备 16、SFTP POSIX 5 最终逐文件串行复验通过，三文档 UTF8 回读通过。下一批版本 Experiment 0.5.274/SFTP 0.2.68，完整本机 prepare/publish；相对文件名/CLI/真实 SSH/M5 pending。
 - passed mac-005h：Experiment 严格 POSIX 单根路径规则；allowed/deniedRoots 及迁移提示区分大小写/直接子路径；项目/runtime/环境目录、Agent 当前项目比对和确认预览保留中文、Unicode 拼写及首尾空格。非法策略不会静默变空；UI 非空坏行拒绝设置。保护既有删除父目录/两次确认，无删除或真实服务器操作。
@@ -62,6 +64,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- 第十一版 preview-v0.5.274 已发布：Experiment 0.5.274 来源 `9cb2322dda36d7e6e586f0bf75c83e654e55edca`，SFTP 0.2.68 来源 `e5ec5aeffcfd4a97786779f9a83f6112c7efc378`；两仓已同步。本机发布与真实匿名配套下载核验通过，三文档路径说明及深色主题随包交付；相对路径/CLI/真实 SSH/M5 pending。
 - mac-release-011 SimpleSFTP 0.2.68 来源 `e5ec5aeffcfd4a97786779f9a83f6112c7efc378` 已普通推送并 fetch 核对。
 - mac-doc-006 Experiment `d843a6749731adb303cdcbf641802965ffa1a7ce` 已普通推送并 fetch 核对；配置说明、README 与两仓路径发布门禁完成。
 - mac-doc-006 SimpleSFTP `22b0244dc7bbbf00cd84d9c97ea27ffb93d4e77a` 已普通推送并 fetch 核对；Mac 路径说明及单仓独立测试完成。Experiment 同批源码提交见 Git。
