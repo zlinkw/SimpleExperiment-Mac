@@ -33085,14 +33085,14 @@ function workspaceRoot() {
     }
 }
 function currentHostOperationLeaseContext() {
-    if (process.platform !== "win32")
-        throw new Error("SimpleExperiment 宿主副作用必须由 Windows UI Extension Host 执行。");
+    if (process.platform !== "win32" && !(process.platform === "darwin" && process.arch === "arm64"))
+        throw new Error("SimpleExperiment 宿主副作用必须由受支持的本地 UI Extension Host 执行。");
     const folders = Array.isArray(vscode.workspace.workspaceFolders) ? vscode.workspace.workspaceFolders : [];
     if (folders.length > 1)
         throw new Error("检测到多个工作区文件夹，已阻止宿主副作用操作。请在独立窗口中只打开一个目标项目。");
     const folder = folders[0];
     if (!folder?.uri) {
-        return { workspaceUri: "untitled://simple-experiment/no-workspace", hostProjectPath: path.join(process.env.APPDATA || os.homedir(), "Code", "User") };
+        return { workspaceUri: "untitled://simple-experiment/no-workspace", hostProjectPath: path.join(require("../mac/MacPaths").applicationDataRoot(), "Code", "User") };
     }
     const location = workspaceLocationForFolder(folder);
     if (!location?.hostPath)

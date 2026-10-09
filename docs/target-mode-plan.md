@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-003（passed，README 与路径适配发布）
+## 当前批次：mac-005b（passed，Mac 宿主与租约）
 
 ### 边界
 
-- 递增版本 Experiment 0.5.266/SFTP 0.2.64，新增路径/设置卡片发布门禁；最多 7 个源/文档文件。
-- 包含 README 使用说明、POSIX 本地工作区、更新按钮状态修正；完整科研适配仍未验收。
+- 放行 Apple Silicon 本地 UI host，修正两插件租约记录与进程内索引的 POSIX/大小写规则；最多 8 个源/测试/文档文件。
+- 保留 Windows 旧入口，拒绝 Linux/Intel Mac 宿主副作用；不改删除动作或实验契约。下一批 Termius 手动端点。
 
 ### 验证清单
+
+- passed mac-005b 两仓 build/包闭包/面板脚本；Mac 宿主/租约路径 2、SFTP Mac 路径 1、SFTP 跨窗口资源租约 9、更新门禁 1 测试逐文件通过；大小写不同的 POSIX 根不共享进程内索引。
 
 - passed mac-release-003 两仓 build/包闭包/面板脚本、发布脚本语法与 3 测试；新增路径与更新卡片测试逐文件串行纳入 prepare。
 - passed preview-v0.5.266 prepare/publish、完整附件核验、实际匿名客户端从 0.5.265/0.2.63 识别两个升级包、下载/平台/hash/CRC 与包内新 README 检查；M5 仍 pending。

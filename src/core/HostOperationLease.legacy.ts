@@ -249,7 +249,7 @@ export class LegacyHostOperationLeaseManager {
             windowId: this.windowId,
             processId: this.processId,
             workspaceUri: input.workspaceUri.trim(),
-            hostProjectPath: path.win32.normalize(input.hostProjectPath.trim()),
+            hostProjectPath: process.platform === "win32" ? path.win32.normalize(input.hostProjectPath.trim()) : path.posix.normalize(input.hostProjectPath),
             actionType: input.actionType.trim(),
             actionLabel: String(input.actionLabel || input.actionType).trim(),
             createdAt: timestamp,
@@ -412,7 +412,8 @@ function sharedSessions(): Map<string, SharedLeaseSession> {
 }
 
 function sessionKey(leasePath: string): string {
-    return path.resolve(leasePath).toLowerCase();
+    const resolved = path.resolve(leasePath);
+    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
 function validateLeaseInput(input: HostOperationLeaseInput): void {
