@@ -20,13 +20,14 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005o（passed，SFTP CLI 实时契约）
+## 当前批次：mac-doc-010（passed，CLI 实时预检说明与门禁）
 ### 边界
 
-- SFTP CLI 接入与 Experiment 一致的实时 capabilities、发现文件/监听身份、HTTP/JSON-RPC 有界处理。只访问本地测试监听，不执行传输/服务器/科研操作；保留原 CLI/业务 API 方法与确认参数。最多 8 文件。
-- 最小回归：SFTP build/包闭包、实时 CLI 契约、CLI 启动器和 API；随后两仓使用说明、发布门禁与配套 preview 分批。CLI 科研运行和 M5 后续。
+- 两仓 README/配置说明补充 CLI 自动实时预检与失败处理，新测试加入配套发布门禁，发布说明标记本地/M5 边界。共 6 文件；随后递增配套版本发布。CLI 科研运行和三拓扑/M5 后续。
 
 ### 验证清单
+
+- passed mac-doc-010：两仓 README/配置说明更新 CLI 自动契约预检、失败处理与确认参数边界，双仓 macCliApi 纳入 release:prepare；发布说明区分本地与 M5。UTF8 回读、build/216 闭包/面板脚本 2、vm.Script、配置说明 1、发布脚本 4 通过，共 6 文件。下一批 Experiment 0.5.278/SFTP 0.2.72 配套 preview。
 
 - passed mac-005o：SFTP 接入同规则实时 capabilities/发现文件/监听变化与有界 HTTP/JSON-RPC，保留确认参数、CLI 入口和错误回执；只发送本地测试请求。SFTP build/26 文件闭包、CLI 契约 8、固定入口 5、API 19 逐文件串行通过。4 个 SFTP 文件加本计划共 5 文件。
 - pending mac-doc-010：两仓 README/配置说明补充 CLI 自动实时预检与失败处理，加入双仓发布门禁；随后新配套 preview。CLI 科研运行与三拓扑/M5 后续。

@@ -98,6 +98,8 @@ CLI 为 `simpleex-mac`、`simple-sftp-mac-api`。VSIX 在受支持 Mac 激活时
 
 固定入口保留当前终端的工作目录、中文/空格参数和旧 npm 入口，不自动修改 PATH。用户可自行把上述两个 `cli` 目录加入终端 PATH，再直接使用命令名；更新后无需重设路径。找不到 Node 时先配置终端 Node；若发现文件或监听缺失，打开 VS Code 并确认对应扩展已激活。每次业务 API 调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/v1/openapi.json`，不要猜地址、token 和参数。固定入口与自检通过本地 shell/Node/API 模拟验证；CLI 业务命令和 M5 仍在后续验收。
 
+两款 CLI 的业务 RPC 已自动读取当前 Mac 发现文件并检查 `/api/v1/capabilities`。未知方法、监听实例或版本变化、非本机地址以及错误响应会停止本次调用；不会自动重试业务或替用户补上确认参数。出现预检失败时，先打开对应 VS Code 扩展并重新自检，核对实时 API 契约与参数后再主动调用。直接使用 HTTP API 时仍需自行读取发现文件和实时契约。此预检通过本机监听与真实 CLI 测试，科研运行命令及 M5 验收继续分批。
+
 ## 本机发布与验收
 
 两仓源码验证、提交并同步 origin/master 后，在 SimpleExperiment-Mac 执行：
