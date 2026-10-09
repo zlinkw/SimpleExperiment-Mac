@@ -20,14 +20,18 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-004c（passed，发布执行待验证）
+## 当前批次：mac-004d（running，首版发布执行）
 
 ### 边界
 
-- 发布必须高于已有 preview，校验完成后实际 prepare/publish 首版；4 源文件以内，产物不计入。
-- 保护入口，阻断 Mac 自动导入 Windows 扩展数据库；下批处理 UI/其余业务 namespace。
+- 验证并发布首版 preview，清单绑定已同步源码；本批仅更新计划记录，产物不计入。
+- 保护 Windows 项目与已发布附件；下一批审计 mac 业务入口与认证。
 
 ### 验证清单
+
+- failed 首次 release:prepare：SFTP API 导出测试使用 200 字符窗口，新增 idle 导出后误报。未生成发布附件或草稿。
+- passed SFTP 改用实际加载后的 API 导出断言，API/CLI 19 测试及 build/21 文件闭包通过；失败并非超时。
+- running 重执行 prepare、完整草稿附件核验、公开匿名下载验证；M5 真机验收仍 pending。
 
 - passed mac-004c 发布脚本语法及 3 测试：完整附件/hash、无安装/Actions/覆盖、已发布版本严格递增。实际 prepare/publish 随后执行。
 
@@ -61,10 +65,12 @@
 
 ### 相邻回归风险
 
-- 基线仍包含 Windows 专属路径和旧更新逻辑，尚不适合作为 Mac 安装包发布。
+- 基线仍包含 Windows 专属业务路径；首版仅用于更新链路验收，完整科研功能不得标记通过。
 - 真机测试依赖用户 M5 设备，尚无证据。
 
 ## 本批记录
+
+- mac-004c Experiment `5ca1a415edf6995e6d9f21649bd9aa108263f618` 已同步；SFTP API 测试修复 `e755d8d62aae4c6f82fa7a549f9b4627012f1d6b` 已同步。
 
 - mac-004b Experiment `bb69ac46d4be45526922a5d5c85c194d6fa9ce1f`、SFTP `a9f39db0f7fc2747803c2052bbfa54226f43fa27` 已同步。
 
