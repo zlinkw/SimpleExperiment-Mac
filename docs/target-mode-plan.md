@@ -10,10 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-028（running，0.5.291/0.2.85）
+## 当前批次 mac-release-028（passed，0.5.291/0.2.85）
 - 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；版本元数据验证后普通推送，完整 prepare/publish 绑定同步源码，实际包/匿名更新核验；无 Actions/安装。
 - mac-doc-023 Experiment `21b43698021ed95314cdbf7059ec87d47f9610c0`、SFTP `b75ce34e24e7fb4a7fb5a0d8b157a9a1300fa906` 已普通推送/fetch 核对。验证两仓 build/闭包/面板/runtimeManifest/UTF8，完整串行 prepare，实际读取/映射与前批包能力、匿名下载；M5 延后。
-- passed 元数据：两仓 build、223/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致与 UTF8/diff。完整 prepare/publish 与实际包/匿名验证 pending，未作为完成证据。
+- passed 元数据：两仓 build、223/26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致与 UTF8/diff；已普通推送/fetch 核对。
+- passed 完整 release:prepare：两仓 build/223 与 26 闭包/面板 2，66 个单文件串行/20 秒目标门禁（Experiment feature 51/core 1、SFTP 14），含读取 7/映射 11/wrapper 22/pending 指标 39/浅深高对比实际渲染，完整日志 release-artifacts/prepare-0.5.291.log。publish 核验完整三附件草稿后公开，无 Actions/安装。
+- passed .291 实际 VSIX：受检读取 7、映射/复制/磁盘补读 11、摘要 7、YAML 候选 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8，八份包证据 JSON 有效。本机文件/模拟 API/POSIX/AST，无真实科研/SSH/远端启动/停止/删除。
+- passed .290/.84→.291/.85 实际匿名 updater：31 次公开请求完成 prerelease/清单/大小/hash/CRC/身份/平台核验，下载字节等于测试包，新 ResultFiles/WrapperResultBundle/业务模块、两仓 README/包内说明匹配来源；同版本跳过/不降级通过。不实际安装/M5。
+- 第二十八版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.291 已公开：Experiment 来源 `5b43362749404eec5c68750d082278bbfbc646e6`、SFTP 来源 `be6fb9478d467f9dd1e721f9d856e46c70ab1e36` 已普通推送/fetch 核对。历史附件保留，不覆盖。下一批限真实编译结果回归 fixture 与相关结果调用的一组问题，最多 8 文件；完整原子发布、回执来源/解析/Agent/归档/M5 仍待后续，使用说明与更新持续同步。
 
 ### 前批 mac-doc-023（passed）
 - 范围 6 文件：两仓 README、配置说明、prepare/发布门禁与计划。同步描述符读取、身份变化处理、暂存/分发失败保留旧结果、更新入口及验收边界；不扩大源代码范围。
