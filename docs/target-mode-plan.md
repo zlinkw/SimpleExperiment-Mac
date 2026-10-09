@@ -20,14 +20,15 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005m（passed，SFTP 稳定 CLI 入口）
+## 当前批次：mac-doc-009（passed，CLI 说明与门禁）
 ### 边界
 
-- SFTP 使用与 Experiment 一致的私有稳定 POSIX CLI、版本/包身份/链接保护和独立查看命令。支持 Mac 激活刷新，旧实例不降级，LF/Node 20+/参数/cwd 保持，最多 8 文件。
-- 测试真实本地 shell/Node/health mock，不上传下载/实验/真实服务器，不自动安装插件/改 PATH/删除旧入口。CLI 失败不阻塞业务或更新。
-- 双仓文档和发布门禁后续批次，再核对 CLI 实时 API/业务命令与科研主流程；M5 pending。
+- 两仓 README/配置说明补全实际 CLI 命令、固定路径、Node 20+/PATH/自检边界和错误处理；两仓 CLI 测试进入本机发布门禁。最多 8 文件。
+- 不修改 PATH/自动装插件/执行实验或真实服务器/删除旧入口；保护更新、API/Plan 与删除父目录/两次确认。完成后发布配套 preview，CLI 业务契约与科研主流程/M5 后续。
 
 ### 验证清单
+
+- passed mac-doc-009：两仓 README/配置说明补全 CLI 查看/复制命令、固定路径、Node 20+/PATH、更新重载、自检及未知文件处理边界；双仓 CLI 5/5 测试纳入发布门禁。UTF8 回读、Experiment build/215 模块闭包/面板脚本 2、配置说明 1、发布 4 与双仓 CLI 逐文件串行通过，共 6 文件。下一批 Experiment 0.5.277/SFTP 0.2.71，CLI 业务契约/真实 SSH/M5 后续。
 
 - passed mac-005m：SFTP 固定 Application Support/cli/simple-sftp-mac-api 与独立查看/复制自检命令；规则与 Experiment 一致，LF/Node 20+/完整参数/cwd、包身份/版本/链接/目录身份保护，受支持 Mac 激活刷新且不降级。未知文件拒绝覆盖，CLI 失败不阻塞业务或更新，保留旧 npm 入口。
 - passed mac-005m 本地：SFTP build/25 文件闭包，CLI 启动器 5、独立更新/退出证明 3 逐文件串行通过。真实本地 Git POSIX shell/Node、自检 health mock 与 Mac 命令入口覆盖，未安装扩展/修改 PATH/执行实验或服务器操作。5 文件。
@@ -61,6 +62,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-doc-009 SFTP README 已普通推送并 fetch 核对；真实提交见 Git。
+- mac-005m SFTP 来源 `a6bf99c379c1c355032ce07488fde2205106fd66` 已普通推送并 fetch 核对，固定 CLI 本地验证通过。
 - mac-005m SimpleSFTP 稳定 CLI 源码已普通推送并 fetch 核对，真实提交见 Git；4 个 SFTP 文件与本计划共 5 文件。
 - mac-005l Experiment 来源 `6e656f2b1b962910147ea7796f4a1758ee05c415` 已普通推送并 fetch 核对，稳定 CLI 本地验证通过。
 - mac-005l Experiment 稳定 CLI 已完成本地验证，提交来源见 Git；SFTP 接入与配套发布后续批次。

@@ -225,7 +225,18 @@ Mac 的版本/哈希检查只读，不会自动部署或重启。检查不一致
 
 更新设置及扩展状态由 VS Code 管理，不迁移 Windows 原版数据库。不要手动修改租约或事务状态来绕过更新门禁。
 
-API 每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/v1/openapi.json`，从实时版本获取地址、token 和参数。CLI 名称为 `simpleex-mac`、`simple-sftp-mac-api`，源码 npm 包提供入口，VSIX 安装不会保证它们进入 shell PATH。
+API 每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/v1/openapi.json`，从实时版本获取地址、token 和参数。CLI 名称为 `simpleex-mac`、`simple-sftp-mac-api`，保留原 npm 入口。VSIX 在受支持 Mac 激活时生成固定 POSIX 入口，更新并重载后指向当前包；终端需要 **Node.js 20 或以上**，插件不自动修改 PATH。
+
+按 **⇧⌘P → SimpleExperiment Mac：查看 CLI 入口** 或 **SimpleSFTP Mac：查看 CLI 入口**，点击 **复制自检命令** 后粘贴到终端。也可直接运行：
+
+```sh
+"$HOME/Library/Application Support/SimpleExperimentMac/cli/simpleex-mac" self-check
+"$HOME/Library/Application Support/SimpleSFTPMac/cli/simple-sftp-mac-api" self-check
+```
+
+自检仅核对 CLI、当前发现文件和本机 API health，不能证明 Agent、隧道或科研任务已就绪。固定入口保留调用时的工作目录及中文/空格/引号参数，旧实例不会把入口降到更低版本。用户可自行把两个组件的 `cli` 目录加入终端 PATH，再直接使用命令名，更新后无需重设。不要编辑生成的启动器来改变服务器目标；业务地址和参数仍来自当前发现文件及实时契约。若入口路径存在未知文件、链接或身份变化，插件拒绝覆盖；在 Finder 核对完整路径，按原删除确认规则处理，不通过改写租约或未知文件绕过检查。
+
+固定入口、版本更新与参数保持通过真实本地 shell/Node 和本机 API 模拟测试；CLI 业务命令和 M5 验收继续分批。
 
 | 现象 | 操作 |
 | --- | --- |

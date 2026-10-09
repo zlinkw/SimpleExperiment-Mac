@@ -89,7 +89,14 @@ Mac 跨服务器产物传输默认分别认证来源/目标，经本机内存管
 | 共享服务器配置 | `~/Library/Application Support/SimpleSFTPMac/server-profiles/servers.json` |
 | 两插件共享租约 | `~/Library/Application Support/SimpleLocalMac/SimpleExperiment/` |
 
-CLI 为 `simpleex-mac`、`simple-sftp-mac-api`，从源码 npm 包入口使用，不保证 VSIX 安装后自动加入 shell PATH。每次调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/v1/openapi.json`，不要猜地址、token 和参数。
+CLI 为 `simpleex-mac`、`simple-sftp-mac-api`。VSIX 在受支持 Mac 激活时生成固定入口，更新并重载后指向当前包；终端需有 **Node.js 20 或以上**。按 **⇧⌘P → SimpleExperiment Mac：查看 CLI 入口**，或 **SimpleSFTP Mac：查看 CLI 入口**，点击 **复制自检命令** 后在终端执行。自检只检查 CLI、发现文件和本机 API 监听，不代表远端实验已就绪。
+
+```sh
+"$HOME/Library/Application Support/SimpleExperimentMac/cli/simpleex-mac" self-check
+"$HOME/Library/Application Support/SimpleSFTPMac/cli/simple-sftp-mac-api" self-check
+```
+
+固定入口保留当前终端的工作目录、中文/空格参数和旧 npm 入口，不自动修改 PATH。用户可自行把上述两个 `cli` 目录加入终端 PATH，再直接使用命令名；更新后无需重设路径。找不到 Node 时先配置终端 Node；若发现文件或监听缺失，打开 VS Code 并确认对应扩展已激活。每次业务 API 调用前读取当前发现文件和 `/api/v1/capabilities` 或 `/api/v1/openapi.json`，不要猜地址、token 和参数。固定入口与自检通过本地 shell/Node/API 模拟验证；CLI 业务命令和 M5 仍在后续验收。
 
 ## 本机发布与验收
 

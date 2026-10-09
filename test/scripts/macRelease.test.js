@@ -30,5 +30,6 @@ test("paired release gates include both repositories' POSIX path regressions", (
   assert.equal((prepare.match(/"macPosixPaths"/g) || []).length, 2);
   assert.match(prepare, /"macRelativePaths"/);
   assert.match(prepare, /"macDownloadScope"/);
+  assert.equal((prepare.match(/"macCliLauncher"/g) || []).length, 2);
   assert.match(prepare, /"--test-timeout", "20000"/);
 });
