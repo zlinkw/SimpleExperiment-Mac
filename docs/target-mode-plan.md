@@ -20,18 +20,18 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005e（passed，跨服务器本机流式中转）
+## 当前批次：mac-release-008（passed 本地版本门禁，配套发布待执行）
 ### 边界
 
-- 本批在 Mac 为普通分批 tar 与大文件断点分块默认使用本机流式中转，两端独立认证；修正启动/流错误及双进程 close 结算，同步使用说明和发布测试门禁。最多 8 文件。
-- 保护 API/Plan、哈希及接收检查点、删除父目录与双确认、更新业务门禁；保留旧入口。仅本地模拟/协议测试，无真实服务器操作，不宣称 SSH/M5 已验收。下一批递增双组件版本并发布，完整 project.prepare 随后适配。
+- 本批递增 Experiment 0.5.271/SFTP 0.2.67，同步 lock/runtime；两仓源码同步后完整 prepare/publish 与匿名客户端下载核验。最多 8 文件。
+- 不安装开发机扩展、不运行 Actions、不覆盖历史版本；真实 SSH/M5 仍 pending，完整 project.prepare 随后适配。
 
 ### 验证清单
 
+- passed mac-release-008：两仓 build/24 与 213 模块闭包、面板脚本 2、发布 3 测试逐文件通过；版本/lock/runtime 一致和 diff 核验通过。完整 prepare/publish 与匿名下载在同步后执行。
 - passed mac-005e：两仓 build/24 与 213 模块闭包、面板脚本 2、中转 9、跨服务器 13、认证 8、恢复 25、上传进度 4、压缩协商 9、真实本地 Python 接收/断点协议 5、配置说明 1、发布 3 测试逐文件串行通过。真实完整 Mac 分批流程在模拟 SSH 上覆盖双端清单/跳过相同/哈希复核、中文路径、无嵌套 SSH、背压、8MiB 断点、三压缩模式、双 close、启动/管道失败与未知接收结果门禁。
 - 下一批 mac-release-008：递增 Experiment 0.5.271/SFTP 0.2.67，本机完整 prepare/publish 与匿名客户端下载核验；随后完整 project.prepare 的 Mac 接入。真实 SSH/M5 仍 pending。
 - passed preview-v0.5.270 完整 prepare/publish：双包与清单草稿附件大小/SHA-256 完整核验后公开发布。真实匿名 updater 从 0.5.269/0.2.65 筛选到两个升级包，下载并核验平台/hash/CRC/身份及包内认证代码、LF askpass、README/配置说明；同版本跳过，禁止降级。未自动安装扩展，M5 和真实 SSH 仍未执行。
-- 下一批 mac-005e pending：跨服务器普通分批 tar 与大文件断点分块在 Mac 默认通过本机流式中转，两端分别认证；处理子进程异常结算，不改删除规范与 API/Plan 契约。完整 project.prepare 随后适配。
 - passed mac-release-007：两仓 build/24 与 213 模块闭包、面板脚本 2、发布脚本 3 测试逐文件通过；版本/lock/runtime 一致、askpass LF 和 diff 核验通过。完整 prepare/publish 与匿名下载已完成。
 - passed mac-doc-004：两仓 build/24 与 213 文件包闭包、面板脚本、配置说明 1、发布 3、认证 8 测试逐文件串行通过；三文档 UTF8 回读、命令标题、链接及 askpass LF 规则核验通过。配套版本已发布为 Experiment 0.5.270/SFTP 0.2.66。
 - passed mac-005d：SFTP build/24 文件闭包、独立认证 8、真实映射下载 26、API 19、跨服务器既有协议 13、上传进度 4、结算恢复 25、工作区 5 测试逐文件串行通过。真实本机 Node askpass IPC、服务器凭据隔离、未勾选不保存/读取、重载 SecretStorage、加密私钥、并发/取消/限次和 child.close 回执覆盖；未连接真实 SSH 服务器。
@@ -45,6 +45,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-release-008 SimpleSFTP 0.2.67 来源 `9d40d42c95015faa6c60548ac4caba7f7bc5edac` 已普通推送并 fetch 核对。
+- mac-005e Experiment `6730d1131937df8844430699f65e5e26461a2dd6` 已普通推送并 fetch 核对。
 - mac-005e SimpleSFTP `b756465b4300f8de320eb9a4b21fdbbfaa9c3caf` 已普通推送并 fetch 核对；Experiment 同批说明和发布门禁提交见 Git。
 - 第七版 preview-v0.5.270 已发布：Experiment 0.5.270 来源 `d1e8831e37dd938b3abf5d3ec09a54fec9931330`，SFTP 0.2.66 来源 `f3fb8b6bfdbcdc010153470fbfebcea857ce68e6`。两仓源码已同步；本地独立认证与匿名更新下载通过，真实 SSH、M5 在线安装和科研主流程仍 pending。
 - mac-release-007 SimpleSFTP 0.2.66 来源 `f3fb8b6bfdbcdc010153470fbfebcea857ce68e6` 已普通推送并 fetch 核对。
