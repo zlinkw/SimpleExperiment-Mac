@@ -2,7 +2,7 @@
 
 SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实验服务器，配套 SimpleSFTP Mac 传输文件。两个 Mac 扩展与 Windows 原版使用独立仓库、身份、设置、数据目录和更新源。
 
-**当前为 preview 测试版；M5 真机更新及完整科研业务尚未验收。** 已提供 Mac 安装、配套更新、手动 Termius 端点配置、Agent/tmux 操作指引、SimpleSFTP 独立认证及主题适配。完整项目准备、跨服务器默认本机中转和断连恢复仍在持续适配。
+**当前为 preview 测试版；M5 真机更新及完整科研业务尚未验收。** 已提供 Mac 安装、配套更新、手动 Termius 端点配置、Agent/tmux 操作指引、SimpleSFTP 独立认证、跨服务器本机流式中转及主题适配。完整项目准备和真机断连恢复仍在持续适配。
 
 ## 系统要求
 
@@ -66,6 +66,8 @@ SimpleExperiment Mac 在 Apple Silicon Mac 的 VS Code 中管理 Linux GPU 实�
 目标接入顺序为：Termius 手动登录并启动端口转发 → 插件保存端点与项目父目录 → SimpleSFTP Mac 部署 runtime 和项目 → 按指引启动 Agent/tmux → 检测 → 校验、预演并运行 Plan → 监控 → 收集结果。**当前已接入端点保存、配置校验、HTTP 检测、文本操作指引及独立认证；完整 Mac 项目准备和科研主流程尚未验收。** “Agent/tmux 指引”只生成文本，不会部署文件或执行远端命令。旧自动启动入口在 Mac 引导至手动配置或指引，不能代替 Termius 登录和转发。
 
 远端项目为 `<用户配置的项目父目录>/<工作区名称>`。Plan 位于 `experiments/plans/`；官方运行必须依次调用 `validatePlan`、`dryRunPlan`、`runPlan`，不直接运行 train.py。API 方法和 Plan 格式沿用原契约，文件传输交给 SimpleSFTP Mac。永久删除要求精确路径、直接父目录核验和两次确认。
+
+Mac 跨服务器产物传输默认分别认证来源/目标，经本机内存管道中转普通 tar 或大文件断点分块，无需两台服务器互相免密登录。传输前后核对 SHA-256；断连后的远端接收结果不明时，先完成恢复核验再补传。详细操作见 [SimpleSFTP Mac README](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。当前仅本地模拟/协议测试通过，真实传输仍待 M5 验收。
 
 设置使用 `simpleExperimentMac.*` 和 `simpleSftpMac.*`，不会自动导入 Windows 原版扩展数据库。
 

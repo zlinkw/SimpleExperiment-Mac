@@ -100,6 +100,8 @@
 
 记忆选项默认不勾选，仅本次扩展会话内记忆。只有勾选 **使用 VS Code SecretStorage 保存密码 / 私钥口令**，输入的凭据才保存以供重载后使用；不勾选时不读取以前保存的凭据。密码/口令不写服务器 JSON、项目设置、命令参数或临时文件；Termius 登录不会自动授权 SimpleSFTP。真实 SSH 上传下载、连接恢复和 M5 验收仍待执行。详细操作见 [SimpleSFTP Mac 独立认证](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md#独立认证入口)。
 
+跨服务器产物传输在 Mac 默认经过本机内存管道，来源和目标各建立自己的 SSH 连接。分别配置两端认证即可，不需要 Worker 之间互相免密登录。普通 tar 分组与大文件断点分块保留哈希核对、接收检查点和有限并发；本机不生成中转压缩包。传输失败等待两个本地进程退出，远端接收结果不明时先恢复核验再补传。真实跨服务器、断连后恢复仍待 M5 验收。
+
 ## 5. Termius 手动隧道与端点配置
 
 在 [Termius](https://termius.com/) 中自行配置 Linux 主机、SSH 端口和认证，手动登录。为每个端点建立 **本地端口转发（Local port forwarding）**，本机监听使用 loopback，目标为该 SSH 主机上的 Agent 监听地址与端口。手动启动转发并保持 Termius 连接。
