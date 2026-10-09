@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-019（passed，配套 preview-v0.5.282）
+## 当前批次：mac-005t（passed，Mac Plan 文件与入队）
 ### 边界
 
-- 两仓版本及 RuntimeManifest 对齐，发布 Experiment 0.5.282 / SFTP 0.2.76 同一 preview Release，绑定已同步来源；6 文件，生成产物不计。保护业务/旧入口/历史附件。
-- 检查：两仓 build/闭包/面板脚本、runtime manifest、完整 prepare 串行门禁、实际 VSIX CLI 与匿名 updater，核验完整草稿附件后公开。无 Actions/自动安装/真实科研/SSH/停止/删除；M5 待验收。
+- 关联问题：Mac Plan 扫描/读取真实拼写与目录身份，分布式合同/预演/入队路径不改写为另一文件；最多 8 文件。保护 API/Plan 格式、旧入口、三拓扑、已有实验和删除确认规则。
+- 检查：build/闭包/面板脚本，新编译 Mac 文件模块及实际后台方法本地文件系统模拟、Plan 身份/分布式/工作区/合同相邻回归逐文件串行 20 秒。无真实科研/SSH/停止/删除；M5 pending。
 
 ### 验证清单
 
@@ -46,7 +46,9 @@
 - passed mac-release-019 版本批次：0.5.282/0.2.76 两仓 build/218 与 26 模块闭包、面板脚本 2、runtimeManifest 1 通过，6 文件；完整配套打包/上传/实际包及匿名验证通过，见下条。
 - passed mac-release-019：完整本机 prepare/publish，两仓 build/218 与 26 模块闭包、面板脚本 2、逐文件串行更新/Plan 身份/队列/自动重试/工作区/CLI/路径/认证/中转及浅深高对比真实渲染通过，3 个完整草稿附件核验后公开。无 Actions/自动安装。
 - passed preview-v0.5.282：两包实际 CLI 经真实本地 shell/Node health/实时 RPC，Experiment 中文 Plan 等待确认回执与 seed 覆盖 RPC 前拒绝通过（2 包测试）；实际包编译队列在 Mac 模拟环境保留精确大小写/空格，包内 Mac 面板脚本语法通过。真实匿名 updater 从 0.5.281/0.2.75 筛出两组件，22 次请求完成大小/hash/CRC/身份/平台核验；下载字节与已测试 VSIX 一致，新编译队列、面板、业务模块及两仓 README/配置说明与来源匹配。同版本跳过/禁止降级通过，无真实科研/SSH/M5。
-- pending 下一批 mac-005t：继续核验 Plan 元数据扫描、分布式入队及结果/监控残余 trim/Windows 路径分支；本批身份修复不代表所有文件读取/科研路线已验收。两仓说明/门禁已同步并配套发布；真实 SSH/三拓扑/M5 pending。
+- passed mac-005t：Mac Plan 目录设置、正式/归档扫描与单文件摘要保留真实大小写、Unicode、字面 %20 和 YAML 名末尾空格。现有父目录/文件逐级校验实际目录条目，拒绝符号链接与错误类型；读取 NOFOLLOW/NONBLOCK，前后复核工作区/文件 inode 与内容时间/长度，变化后不使用结果；完整配置检查拒绝截断 Plan。显式错误 Plan 不退回另一唯一 Plan。分布式合同/本机预演/入队保留相对输出拼写，非法路径先拒绝再写队列，非 Mac 入口保留。7 文件。
+- passed 本地：build/219 闭包/面板脚本 2 与 vm.Script；macPlanFiles 9、macPlanIdentity 6、distributedProjectContract 6、macWorkflowBinding 10、visiblePreflight 19、distributedRouting 5、macProjectPrepare 16，逐文件串行通过。编译模块/实际方法配合 POSIX 文件系统模拟，无真实科研/SSH/停止/删除。初次 fixture 的错误提示预期不匹配、归档缺 stringField 和旧编译 fixture 缺新导入，修正后通过，非超时。
+- pending 下一批 mac-005u：远端 Agent 对 Plan/output_dir 的 strip 与 Windows 分隔符改写、结果/监控和归档 sidecar/写入边界继续适配；路径关键边界校验不是物理原子保证。先补说明与发布门禁，配套 preview。真实 SSH/三拓扑/M5 pending。
 
 
 

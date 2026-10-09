@@ -1,3 +1,5 @@
+import { normalizePosixRelativePath } from "../mac/PosixPath";
+
 export type DistributedProjectContract = {
   planPrefixes: string[];
   configPath: string;
@@ -12,12 +14,22 @@ export type DistributedProjectContract = {
 
 export function normalizeDistributedProjectContract(raw: Record<string, unknown> = {}): DistributedProjectContract {
   const relative = (value: unknown, fallback: string): string => {
+    if (process.platform === "darwin") {
+      const raw = value === undefined || value === "" ? fallback : value;
+      try { return normalizePosixRelativePath(raw, "分布式产物相对路径"); }
+      catch { throw new Error(`分布式产物相对路径无效：${String(raw)}`); }
+    }
     const text = String(value || fallback).replace(/\\/g, "/").trim();
     if (!text || text.startsWith("/") || text.includes(":") || text.split("/").some((part) => !part || part === "." || part === "..") || /[\x00-\x1f]/.test(text))
       throw new Error(`分布式产物相对路径无效：${text}`);
     return text;
   };
-  const list = (value: unknown): string[] => Array.isArray(value) ? value.map(String) : [];
+  const list = (value: unknown): string[] => {
+    if (process.platform === "darwin" && value !== undefined
+      && (!Array.isArray(value) || value.some(item => typeof item !== "string")))
+      throw new Error("分布式产物相对路径无效：路径列表必须包含字符串。");
+    return Array.isArray(value) ? value.map(String) : [];
+  };
   // An absent filter applies to every Plan; only the project's explicit prefixes restrict it.
   const planPrefixes = list(raw.planPrefixes)
     .map((value) => `${relative(value.replace(/\/+$/, ""), "")}/`);

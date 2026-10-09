@@ -1,5 +1,14 @@
 import * as path from "node:path";
 
+export function normalizePosixRelativePath(value: unknown, label = "相对路径"): string {
+  if (typeof value !== "string" || !value || Buffer.byteLength(value, "utf8") > 4096
+    || value.startsWith("/") || /[\x00-\x1f\x7f\\:]/.test(value)
+    || value.split("/").some(part => !part || part === "." || part === "..")) {
+    throw new Error(`${label} 必须是保留真实拼写的项目内相对路径，不含空路径段、.、..、反斜杠或控制字符。`);
+  }
+  return value;
+}
+
 export function normalizePosixAbsolutePath(value: unknown, label = "路径", allowRoot = false): string {
   if (typeof value !== "string" || !value.startsWith("/") || value.startsWith("//")
     || /[\x00-\x1f\x7f\\]/.test(value) || value.split("/").some(part => part === "." || part === "..")) {

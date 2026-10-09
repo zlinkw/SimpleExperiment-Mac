@@ -13,6 +13,8 @@ import { atomicWriteText } from "../state/StateStore";
 import { LatestSnapshotWriter } from "../core/LatestSnapshotWriter";
 import * as ManualTunnel_1 from "../mac/ManualTunnel";
 import * as WorkflowBinding_1 from "../mac/WorkflowBinding";
+import * as MacPlanFiles_1 from "../mac/PlanFiles";
+import { normalizePosixRelativePath } from "../mac/PosixPath";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -6624,7 +6626,7 @@ export class RealtimeTunnelPanelProvider {
         const validationCacheKey = this.distributedPlanEligible(String(body?.planFile || body?.plan || body?.selectedPlanId || body?.options?.planFile || body?.options?.plan || ""))
             ? this.planValidationCacheKey(body, workerId) : "";
         const serverLabel = worker ? (worker.displayName || worker.id) : (workerId || "默认调度");
-        const planKey = String(body?.planFile || body?.plan || body?.selectedPlanId || body?.options?.planFile || body?.options?.plan || body?.options?.selectedPlanId || "").trim() || "-";
+        const planKey = normalizePlanSelectionKey(body?.planFile || body?.plan || body?.selectedPlanId || body?.options?.planFile || body?.options?.plan || body?.options?.selectedPlanId || "") || "-";
         const clipOutput = (value) => {
             const text = String(value ?? "").trim();
             if (!text)
@@ -6716,7 +6718,7 @@ export class RealtimeTunnelPanelProvider {
                 const preview = DistributedPlanQueue.previewAvailable(queue, { planFile: planKey,
                     revision: String(body.planRevision || body.options?.planRevision || ""), codeFingerprint: fingerprint,
                     jobs: validation.jobs.map((job) => ({ index: Number(job.index), case: String(job.case),
-                        seed: Number(job.seed), outputDir: `${String(job.output_dir).replace(/\\/g, "/")}/attempts/preview` })) }, workers);
+                        seed: Number(job.seed), outputDir: `${this.isMacVariant?.() ? normalizePosixRelativePath(job.output_dir, "分布式输出目录") : String(job.output_dir).replace(/\\/g, "/")}/attempts/preview` })) }, workers);
                 return { ...validated, distributedPreview: preview };
             }
             check = "预演(dry-run-plan)";
@@ -7134,10 +7136,15 @@ export class RealtimeTunnelPanelProvider {
     async assertPlanLocalConfigFiles(body) {
         const root = workspaceRoot();
         const plan = this.localPlanForActionBody(body);
-        const file = String(plan?.planFile || plan?.file || body?.planFile || "").trim();
+        const file = normalizePlanSelectionKey(plan?.planFile || plan?.file || body?.planFile || "");
         if (!root || !file)
             return;
-        const text = await fs.readFile(safeWorkspacePlanPath(root, file, planDirSafe()), "utf8");
+        let text;
+        if (this.isMacVariant?.()) {
+            const preview = await MacPlanFiles_1.readMacPlanPreview(root, file, planDirSafe(), 1024 * 1024);
+            if (preview.stat.size > 1024 * 1024) throw new Error("Plan 超过本机配置检查读取预算，未把截断内容作为完整校验结果。");
+            text = preview.text;
+        } else text = await fs.readFile(safeWorkspacePlanPath(root, file, planDirSafe()), "utf8");
         const summary = (0, PlanBuilder_1.parsePlanSummary)(text);
         const missing = [];
         const configReferences = planRuntimeConfigReferences(text, summary.mode);
@@ -9812,8 +9819,12 @@ export class RealtimeTunnelPanelProvider {
     distributedPlanEligible(planFile) {
         if (this.projectTopologyAssessment().mode !== "worker_pool"
             || this.localPlanMetadata.detectedProject?.adapterRules?.distributedResults !== true
-            || !/\.ya?ml$/i.test(String(planFile || ""))) return false;
-        const file = String(planFile || "").replace(/\\/g, "/");
+            || !(this.isMacVariant?.() ? MacPlanFiles_1.isYamlPlanPath(String(planFile || "")) : /\.ya?ml$/i.test(String(planFile || "")))) return false;
+        const file = this.isMacVariant?.() ? String(planFile || "") : String(planFile || "").replace(/\\/g, "/");
+        if (this.isMacVariant?.()) {
+            try { normalizePosixRelativePath(file, "分布式 Plan"); }
+            catch { return false; }
+        }
         if (file.startsWith("/") || file.includes(":") || /[\x00-\x1f]/.test(file)
             || file.split("/").some((part) => !part || part === "." || part === "..")) return false;
         const prefixes = this.distributedProjectContract().planPrefixes;
@@ -10504,6 +10515,7 @@ export class RealtimeTunnelPanelProvider {
         if (body.existingOutputChoice === "rerun_missing" && validation.jobs.every((job) => skippedJobIndices.has(Number(job.index))))
             throw new Error("选择补跑缺失任务，但没有可补跑的任务；未提交运行。");
         const planFile = operationResultPlanFile(body);
+        if (this.isMacVariant?.()) normalizePosixRelativePath(planFile, "分布式 Plan");
         const revision = String(body.planRevision || body.options?.planRevision || "");
         const codeFingerprint = String(this.lastCodeSyncState?.fingerprint || "");
         const id = makeOpId("distributed-plan");
@@ -10528,7 +10540,7 @@ export class RealtimeTunnelPanelProvider {
             schedulingMode: DistributedSchedulingPolicy.schedulingMode(body.schedulingMode ?? this.schedulerSettings().dispatchMode),
             planJobCount: selectedJobs.length, fullPlanJobCount: validation.jobs.length, planFile, revision, codeFingerprint, overwriteExisting, jobs: selectedJobs.map((job) => ({
             index: Number(job.index), case: String(job.case), seed: Number(job.seed),
-            outputDir: String(job.output_dir || "").replace(/\\/g, "/").replace(/\/$/, "") + "/attempts/" + id,
+            outputDir: (this.isMacVariant?.() ? normalizePosixRelativePath(job.output_dir, "分布式输出目录") : String(job.output_dir || "").replace(/\\/g, "/").replace(/\/$/, "")) + "/attempts/" + id,
         })) }, id);
         const supersededId = String(supersededDeferredId || "");
         const next = supersededId ? { ...enqueued, deferred: (enqueued.deferred || []).map((row) => row.id === supersededId
@@ -27449,6 +27461,8 @@ function stringFromRecord(item, keys) {
     return "";
 }
 function planDirSafe() {
+    if (typeof process !== "undefined" && process.platform === "darwin")
+        return normalizePosixRelativePath(vscode.workspace.getConfiguration("simpleExperimentMac").get("planDir", "experiments/plans"), "Mac Plan 目录");
     try {
         return vscode.workspace.getConfiguration("simpleExperimentMac").get("planDir", "experiments/plans").replace(/\\/g, "/");
     }
@@ -27480,9 +27494,11 @@ function resultCsvDirSafe() {
 const localPlanSummaryReadBudgetBytes = 512 * 1024;
 const localPlanSummaryConcurrency = 8;
 async function readLocalPlans(root, planDir) {
-    const dir = path.join(root, planDir);
-    const files = await walkYaml(dir).catch(() => []);
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    const dir = mac ? MacPlanFiles_1.macPlanDirectory(root, planDir) : path.join(root, planDir);
+    const files = mac ? await walkYaml(dir, { strict: true }) : await walkYaml(dir).catch(() => []);
     return mapLimited(files.filter((fullPath) => !isArchivedPlanFile(root, planDir, fullPath)), localPlanSummaryConcurrency, async (fullPath) => {
+        if (mac) return readLocalPlanSummary(root, planDir, fullPath);
         const text = await readUtf8Preview(fullPath, localPlanSummaryReadBudgetBytes);
         const stat = await fs.stat(fullPath).catch(() => undefined);
         const relative = path.relative(root, fullPath).replace(/\\/g, "/");
@@ -27490,15 +27506,17 @@ async function readLocalPlans(root, planDir) {
     });
 }
 async function readArchivedLocalPlans(root, planDir) {
-    const dir = path.join(root, planDir, "_archived");
-    const files = await walkYaml(dir).catch(() => []);
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    const dir = mac ? MacPlanFiles_1.macPlanDirectory(root, planDir + "/_archived") : path.join(root, planDir, "_archived");
+    const files = mac ? await walkYaml(dir, { strict: true }) : await walkYaml(dir).catch(() => []);
     const rows = await mapLimited(files, localPlanSummaryConcurrency, async (fullPath) => {
         const bundle = await readPlanArchiveBundle(fullPath);
         if (bundle.schemaVersion && path.basename(fullPath).toLowerCase() !== "plan.yaml")
             return undefined;
-        const text = await readUtf8Preview(fullPath, localPlanSummaryReadBudgetBytes);
-        const stat = await fs.stat(fullPath).catch(() => undefined);
-        const relative = path.relative(root, fullPath).replace(/\\/g, "/");
+        const preview = mac ? await MacPlanFiles_1.readMacPlanPreview(root, fullPath, planDir, localPlanSummaryReadBudgetBytes) : undefined;
+        const text = preview ? preview.text : await readUtf8Preview(fullPath, localPlanSummaryReadBudgetBytes);
+        const stat = preview ? preview.stat : await fs.stat(fullPath).catch(() => undefined);
+        const relative = mac ? path.relative(root, fullPath) : path.relative(root, fullPath).replace(/\\/g, "/");
         const summary = parseLocalPlanText(relative, text);
         const resultSelectionPath = normalizePlanArchiveEvidencePath(stringField(bundle.resultSelection || {}, "path"));
         return { ...summary, metadataTruncated: Boolean(stat && stat.size > localPlanSummaryReadBudgetBytes), status: "archived", archivedFile: relative, archivedAt: bundle.archivedAt || stat?.mtime?.toISOString?.(), originalFile: bundle.originalPlanFile || summary.planFile.replace(/(^|\/)_archived\//, "$1"), archiveBundle: Boolean(bundle.schemaVersion), archiveConfigCount: Array.isArray(bundle.configs) ? bundle.configs.length : 0, archiveEnvironmentCount: Array.isArray(bundle.environment) ? bundle.environment.length : 0, archiveParameterCount: Number(bundle.parameters?.parameterCount || 0), archiveParameterReviewCount: Number(bundle.parameters?.reviewCount || 0), archiveEntryScriptCount: archiveManifestFileList(bundle.parameters?.entryScripts).length, archiveEvidenceCount: Array.isArray(bundle.evidence) ? bundle.evidence.length : 0, archiveEvidenceSourceMode: String(bundle.evidenceSource?.mode || bundle.resultArchive?.sourceMode || ""), archiveResultSelectionFile: resultSelectionPath ? path.posix.join(path.posix.dirname(relative), resultSelectionPath) : "", archiveResultSelectionTotalCount: Number(bundle.resultSelection?.totalCount || 0), archiveResultSelectionIncludedCount: Number(bundle.resultSelection?.includedCount || 0), archiveResultSelectionNotIncludedCount: Number(bundle.resultSelection?.notIncludedCount || 0), archiveConfigMigratedCount: archiveManifestFileList(bundle.configArchive?.migrated).length, archiveConfigRetainedCount: archiveManifestFileList(bundle.configArchive?.retainedShared).length, archiveResultMigratedCount: archiveManifestFileList(bundle.resultArchive?.migrated).length };
@@ -27691,6 +27709,12 @@ function agentSessionReuseBlockers(targets) {
 }
 function projectBootstrapPlanSelection(plans, planFileInput, selectedPlanId) {
     const list = Array.isArray(plans) ? plans.filter((plan) => plan && typeof plan === "object") : [];
+    if (typeof process !== "undefined" && process.platform === "darwin") {
+        const requested = planFileInput || selectedPlanId || "";
+        const matches = requested ? list.filter((item) => [item.planFile, item.file, item.planId].some((identity) => identity === requested)) : [];
+        const plan = matches.length === 1 ? matches[0] : !requested && list.length === 1 ? list[0] : undefined;
+        return { plans: list, plan, needsChoice: !plan && list.length > 0 };
+    }
     const requested = [planFileInput, selectedPlanId].map((value) => String(value || "").trim()).filter(Boolean);
     const plan = requested.map((value) => list.find((item) => [item.planFile, item.file, item.planId].some((identity) => String(identity || "").trim() === value))).find(Boolean)
         || (list.length === 1 ? list[0] : undefined);
@@ -28672,6 +28696,11 @@ async function copyPlanArchiveFiles(root, bundleDir, category, files) {
     return copied;
 }
 async function readLocalPlanSummary(root, planDir, file) {
+    if (typeof process !== "undefined" && process.platform === "darwin") {
+        const preview = await MacPlanFiles_1.readMacPlanPreview(root, file, planDir, localPlanSummaryReadBudgetBytes);
+        const relative = path.relative(root, preview.fullPath);
+        return { ...parseLocalPlanText(relative, preview.text), updatedAt: preview.stat.mtime?.toISOString?.(), metadataTruncated: preview.stat.size > localPlanSummaryReadBudgetBytes };
+    }
     const fullPath = safeWorkspacePlanPath(root, file, planDir);
     const stat = await fs.stat(fullPath).catch(() => undefined);
     if (!stat || !stat.isFile())
@@ -31176,7 +31205,10 @@ async function walkYaml(dir, options = {}) {
         if (!current)
             break;
         visitedDirs += 1;
-        const entries = await fs.readdir(current.dir, { withFileTypes: true }).catch(() => []);
+        const entries = await fs.readdir(current.dir, { withFileTypes: true }).catch((error) => {
+            if (options.strict && error?.code !== "ENOENT") throw error;
+            return [];
+        });
         for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
             const full = path.join(current.dir, entry.name);
             const relative = path.relative(budget.root, full).replace(/\\/g, "/");
@@ -31188,7 +31220,7 @@ async function walkYaml(dir, options = {}) {
                 stack.push({ dir: full, depth: current.depth + 1 });
                 continue;
             }
-            if (entry.isFile() && (/\.ya?ml$/i.test(entry.name) || (budget.includeJson && /\.json$/i.test(entry.name)) || (budget.includePython && /\.py$/i.test(entry.name)))) {
+            if (entry.isFile() && ((typeof process !== "undefined" && process.platform === "darwin" ? MacPlanFiles_1.isYamlPlanPath(entry.name) : /\.ya?ml$/i.test(entry.name)) || (budget.includeJson && /\.json$/i.test(entry.name)) || (budget.includePython && /\.py$/i.test(entry.name)))) {
                 out.push(full);
                 if (out.length >= budget.maxFiles)
                     break;
@@ -31365,6 +31397,7 @@ async function openWorkspaceFile(file) {
     await vscode.window.showTextDocument(doc, { preview: false, viewColumn: vscode.ViewColumn.Active });
 }
 function safeWorkspacePlanPath(root, file, planDir) {
+    if (typeof process !== "undefined" && process.platform === "darwin") return MacPlanFiles_1.macPlanFile(root, file, planDir);
     const fullPath = safeWorkspaceChildPath(root, file);
     const planRoot = path.resolve(root, planDir);
     const relative = path.relative(planRoot, fullPath);

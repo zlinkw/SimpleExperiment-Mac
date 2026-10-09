@@ -201,7 +201,7 @@ test("actual distributed enqueue refuses changed identity after queue load or wr
     const f = fixture(); f.state.changeAt = phase;
     Object.assign(f.provider, { schedulerSettings: () => ({}), lastCodeSyncState: { fingerprint: "code" }, loadDistributedQueue: async () => { f.step("load"); return { schemaVersion: 1, plans: [] }; },
       saveDistributedQueue: async () => f.step("save"), tickDistributedQueue: async () => f.step("dispatch"), notifyPlanOutputVersionReview: () => f.step("review") });
-    Object.assign(f.globals, { planValidationFromResult: value => value, PlanExecutionMode: require("../../dist/features/PlanExecutionMode"),
+    Object.assign(f.globals, { PosixPath_1: require("../../dist/mac/PosixPath"), planValidationFromResult: value => value, PlanExecutionMode: require("../../dist/features/PlanExecutionMode"),
       operationResultPlanFile: body => body.planFile, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy"), DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue") });
     const method = vm.runInNewContext("({" + source("enqueueDistributedPlan") + "})", f.globals).enqueueDistributedPlan;
     await assert.rejects(method.call(f.provider, { workspace: f.initial, planFile: "experiments/plans/A.yaml", planRevision: "r" }, { execution_mode: "train", jobs: [{ index: 0, case: "case-a", seed: 1, output_dir: "work_dirs/A" }] }), /身份已变化/);
