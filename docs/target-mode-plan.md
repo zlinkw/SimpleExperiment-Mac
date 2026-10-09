@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-025（passed）
+## 当前批次 mac-release-031（running，0.5.294/0.2.88）
+- 范围 6 文件：两仓 package/lock、Experiment runtime/计划。两仓干净且 master 同步；mac-doc-025 Exp `6307ebdd39d21ac1e22d545a7d3717b1a59c063e`/SFTP `38f582bddcc1a98f65772d8b3a640a896ea86693` 已普通推送/fetch 核对。
+- pending 元数据 build/闭包/面板/runtime/UTF8/diff，普通推送后绑定同步来源；再完整 prepare、实际 VSIX 回执候选和前版能力、匿名 updater 下载核验、完整草稿三附件核验后 publish。无 Actions/安装，保留历史附件。
+
+- passed 元数据子批：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；完整 prepare/实际包/匿名发布尚未计通过。
+
+### 前批 mac-doc-025（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/对应门禁测试与计划。同步轻量结果查看回执来源隔离和失败处理、继续保留 Mac 更新入口，明确其他回执及 Agent 输出仍待适配。
 - mac-005ad-receipt `289f1537970550cfef59eb258ac1b34b77f64e64` 已普通推送/fetch 相等；两仓干净。passed 两仓 build/225 与 26 闭包/面板 2/vm.Script、配置说明 1/发布门禁 4 单文件串行、三份文档 UTF8/更新入口/diff。下一批仅配套元数据/完整 prepare/实际包/匿名发布。
 
