@@ -19,6 +19,7 @@ import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
 import * as MacResultSummaryScope from "../mac/ResultSummaryScope";
 import * as MacResultFiles from "../mac/ResultFiles";
 import * as MacMetricInput from "../mac/MetricInput";
+import * as MacResultOperationScope from "../mac/ResultOperationScope";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -31780,6 +31781,10 @@ function methodResultArtifactLocalRelativePath(remotePath, planFile, summary, re
     return path.posix.join(base, ProjectResultTables.planArtifactPath(datasetKey, planFile, kind, filename, workerId));
 }
 function remoteResultInspectionCandidates(operationGroups, planFile, planRevision = "", planUpdatedAt = "") {
+    if (typeof process !== "undefined" && process.platform === "darwin") {
+        try { planFile = normalizePosixRelativePath(planFile, "结果回执 Plan"); }
+        catch { return []; }
+    }
     const selectedPlan = normalizePlanSelectionKey(planFile);
     if (!selectedPlan)
         return [];
@@ -31789,11 +31794,15 @@ function remoteResultInspectionCandidates(operationGroups, planFile, planRevisio
         for (const row of rows) {
             if (!row || typeof row !== "object")
                 continue;
-            const payloads = remoteResultOperationPayloads(row);
+            const macScope = typeof process !== "undefined" && process.platform === "darwin"
+                ? MacResultOperationScope.scopeMacResultOperation(row, selectedPlan) : undefined;
+            const payloads = macScope ? macScope.payloads : remoteResultOperationPayloads(row);
             const rowPlan = payloads.map((item) => operationResultPlanFile(item)).find(Boolean);
             if (!rowPlan || !samePlanSelection(rowPlan, selectedPlan))
                 continue;
-            const operationRevision = payloads.map((item) => stringFromRecord(item, ["planRevision", "plan_revision"])).find(Boolean) || "";
+            const operationRevision = macScope
+                ? payloads.map((item) => item.planRevision).find(Boolean) || ""
+                : payloads.map((item) => stringFromRecord(item, ["planRevision", "plan_revision"])).find(Boolean) || "";
             if (operationRevision && planRevision) {
                 if (operationRevision !== planRevision)
                     continue;
@@ -31805,7 +31814,7 @@ function remoteResultInspectionCandidates(operationGroups, planFile, planRevisio
                     continue;
             }
             const operationType = payloads.map((item) => String(item.type || item.action || "")).join(" ").toLowerCase();
-            const hasContractReport = payloads.some((item) => item.contractReport && typeof item.contractReport === "object");
+            const hasContractReport = macScope ? macScope.contractCheck : payloads.some((item) => item.contractReport && typeof item.contractReport === "object");
             if (!operationType.includes("check-output-contract") && !hasContractReport)
                 continue;
             const files = [];

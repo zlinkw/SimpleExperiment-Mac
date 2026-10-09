@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-030（passed，0.5.293/0.2.87）
+## 当前批次 mac-005ad-receipt（passed）
+- 范围至多 4 文件：Mac 结果命令回执范围模块、后台轻量结果查看候选、真实编译回归与计划。核对完整 Plan/所有别名与 revision，仅显式归属祖先可授权结构子记录；子 Plan 不授权匿名祖先/兄弟的路径或新鲜度。冲突/错误类型拒绝，保留最新空报告抑制旧候选、原入口与 Windows 行为。
+- 起始 Exp `5e5cab27c1f4a05e67f83e0c5881794d906aac23`/SFTP `e9affcea0cc296588e537f26e51c0c8ecc28459f` 干净、master=origin/master；项目事实/计划/真实 Agent 回执形状与相关源码测试已读。保护 API/三拓扑/远端任务，无真实 SSH/科研/删除/安装。
+- passed build/225 闭包/面板 2/vm.Script、实际编译回执候选 8、原结果查看 13/候选 6/摘要 7/结果身份 8，单文件串行/20 秒无测试超时；UTF8/LF/diff。初始新模块 copy 类型错误显式 Row 修复；第一次 vsce ls 的 8 秒子进程预算超时，后续源码验证完整 build 后闭包通过，未放松预算。
+- 下一批同步 README/配置/门禁与配套发布。其他运行/写操作回执、Webview 序列化、Agent 输出（action_payload_text/selectedPlanId 仍有 trim）与完整原子发布保留后续，不宣称真实 Agent/M5 通过。
+
+## 前批 mac-release-030（passed，0.5.293/0.2.87）
 - 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划。元数据验证后普通推送，同步来源绑定完整 prepare/publish、实际 VSIX Mac 解析与前版能力及匿名更新；历史附件保留，无 Actions/安装。
 - mac-doc-024 Exp `ee9d1850ee36e33a02587769af41fb9f48083735`、SFTP `c9d079c761e2b02fae150df843266df2ca2a0bd5` 已普通推送/fetch 核对。build/闭包/面板/runtimeManifest/UTF8/diff、完整 68 文件串行 prepare、实际包/匿名更新 passed；M5 延后。
 
@@ -32,22 +38,9 @@
 - passed build/224 闭包/面板 2/vm.Script/UTF8/diff；真实编译 Mac 解析 8/读取 8/摘要 7/映射 11、现有实际结果链 6/wrapper 22/pending 39，单文件串行/20 秒，无超时。本机真实文件/模拟 POSIX/API；新 fixture 最初错误大小写样本无差异及 UTF8 错误文本断言修正后通过，无生产放松。
 - 下一批两仓 README/Mac 配置/发布门禁最多 6 文件，再元数据/完整本机 prepare/publish/实际包与匿名更新。完整原子发布/Agent/回执/归档/M5 后续。
 
-### 前批 mac-release-029（passed，0.5.292/0.2.86）
-- 范围 6 文件以内：两仓 package/lock、Experiment runtime/计划；两仓来源已普通推送/fetch 相等，先验证元数据，再完整 prepare/publish，绑定实际 VSIX 的结果链与前版能力、匿名更新。无 Actions/安装，历史附件保留，不覆盖。
-- mac-005ab-compiled Exp `4fe3c9cb4c10f84203fed4037123a87700fca926`、SFTP `8d7a7ddec754ad0219fff4829a5a1758782124b3` 已普通推送/fetch 核对。两仓 build/闭包/面板/runtimeManifest/UTF8/diff、67 个串行 prepare 门禁、实际包及匿名检查 passed。M5 延后，完整结果物理解析/来源与原子写入待后续。
-
-- passed 元数据子批：两仓 build/223 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff。元数据先提交/普通推送，完整 prepare/实际包/匿名发布的通过证据分别记录如下。
-
-- passed 完整 release:prepare：两仓 build/223 与 26 闭包/面板 2、67 个目标测试文件单文件串行/20 秒（Exp feature 52/core 1、SFTP 14），实际编译结果链 6/读取 7/映射 11/wrapper 22/pending 39/主题浅深高对比 headless；日志 release-artifacts/prepare-0.5.292.log，无超时。
-- passed .292 实际 VSIX 九份证据：新增结果链 6（实际包目录读取 Worker/CSV 解析/注册表/CSV/Markdown），受检读取 7/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8；所有 report 绑定本次包 hash/源码。首次新增嵌套 Node fixture 继承测试上下文导致子测试输出为空而未计通过；清除 NODE_TEST_CONTEXT、显式 TAP 后实际 6 项通过，失败证据和修复后证据分别保留，无生产修改。
-- passed .291/.85→.292/.86 匿名 updater：32 公开请求，prerelease/清单/大小/hash/CRC/身份/平台/字节与实际测试包相等；编译 Worker/Publication 与前版模块、两仓 README/包内说明匹配同步来源，同版本跳过/不降级。实际包为本机文件/模拟 API/POSIX/AST，无真实科研/SSH/远端启动/停止/删除/安装/M5。
-- 第二十九版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.292 已公开，三附件完整草稿核验后发布；来源 Exp `b60b98a6decd583149bfbb5894824b15e1683836`、SFTP `1f36111a37072df960a6ef8d404b883ebc409953` 已普通推送/fetch 相等。不覆盖旧版。下一批限 summaryFromLocalMetricFiles 本机读取/实际解析与相关原始来源的一组问题，最多 8 文件；保留现有入口，使用说明/独立更新持续同步，完整原子写入/回执/Agent/归档/M5 后续。
-
-### 前批 mac-005ab-compiled（passed）
-- 范围至多 7 文件：真实编译 metricsDownloadEndToEnd fixture、发布门禁/对应测试、两仓 README/Mac 配置说明与计划。修复 TS 源码加载 Worker.js 和缺少执行模式的 fixture 前置条件，保留实际编译 Worker/解析/注册表/CSV/Markdown 与提交世代门禁；不放松生产判断。
-- 本批开始两仓干净且 master 同步：Experiment `e9e4a6c8e20505fbc10d3cce767e7db47971c4c0`，SFTP `be6fb9478d467f9dd1e721f9d856e46c70ab1e36`。保护原入口、API/Plan/三拓扑；不运行真实科研/SSH/远端操作/安装/删除。
-- passed 两仓 build/223 与 26 闭包/面板 2/vm.Script；实际 dist 结果 fixture 6（模拟 API、真实本机文件/编译 Worker）、pending 指标 39、执行模式 9、配置说明 1、发布门禁 4，单文件串行/20 秒无超时。拒绝四类错误响应并逐字节保留旧注册表和 CSV/Markdown；迟到锁测试确认实际进入锁回调后未发送。三份文档 UTF8/更新入口/diff passed；无生产门禁放松。缺失来源/本地解析路径、完整原子写入与 M5 后续处理。
-- 下一批仅两仓补丁元数据/完整 prepare/publish、实际 VSIX 结果链 fixture 与前版能力/匿名下载；最多 6 文件，无安装/Actions。
+### 前批 .292/.86（passed，完整证据见 Git）
+- mac-005ab-compiled Exp `4fe3c9cb4c10f84203fed4037123a87700fca926`/SFTP `8d7a7ddec754ad0219fff4829a5a1758782124b3`，真实编译 Worker/结果链 6/迟到锁/错误响应保留旧结果 passed；不放松生产门禁。
+- 来源 Exp `b60b98a6decd583149bfbb5894824b15e1683836`/SFTP `1f36111a37072df960a6ef8d404b883ebc409953`，交付 `364aae7125a32815afad6bf4e22b0d9f916baf1d`；两仓 build/闭包/67 文件串行 prepare/九份实际包/32 匿名请求 passed，均已普通推送/fetch 相等。实际包子测试上下文导致空输出，清除 NODE_TEST_CONTEXT/显式 TAP 后真实 6 项通过，失败证据保留，无生产修改。
 
 ### 压缩前批（完整状态、日志及提交见 Git）
 - mac-release-028 .291/.85：来源 Exp `5b43362749404eec5c68750d082278bbfbc646e6`/SFTP `be6fb9478d467f9dd1e721f9d856e46c70ab1e36`，交付 `e9e4a6c8e20505fbc10d3cce767e7db47971c4c0`；66 文件/build/八份实际包/31 匿名请求 passed，已推送。mac-doc-023 Exp `21b43698021ed95314cdbf7059ec87d47f9610c0`/SFTP `b75ce34e24e7fb4a7fb5a0d8b157a9a1300fa906`；mac-005aa-read `1fd09da53283b579a72552e06e48195cf845e674`：描述符/目录身份、hash/复制、暂存不提前截断/短写/失败保留旧结果；对应回归 passed。
