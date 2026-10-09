@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005y-summary（passed，结果摘要归属）
+## 当前批次 mac-doc-021（passed，摘要归属使用说明/门禁）
+- 本批 6 文件：两仓 README、配置说明、prepare/发布门禁测试与计划；更新摘要归属/匿名来源说明、保留更新入口，新增摘要/缓存门禁。不扩展业务源范围。
+- mac-005y-summary `173bd71c476d36b7e6038a394ba4e2f96153da3f` 已普通推送/fetch 核对 origin/master。
+- passed build/222 闭包/面板 2/vm.Script、配置说明 1、发布门禁 4 单文件串行，三份 Mac 文档 UTF8/更新入口/归属边界与 diff；下一批版本元数据、prepare/publish、实际包/匿名更新。映射传输去重和物理发布仍待后续批次。
+
+### 前批 mac-005y-summary（passed）
 - 本批仅 Mac 摘要/完成结果的原始 Plan 身份、嵌套记录归属及浅查看/同步候选授权，最多 5 源/测试/计划文件；改写修复别名与隐式继承，不运行科研/SSH/传输/删除。回归真实编译函数、结果缓存/查看/完成结果工作流、build/闭包/面板语法。映射传输的去重/本地物理发布、Agent/完整 YAML 后续批次。
 - mac-release-025 交付记录 `2ff50131c2204fce96fffc21c78fc6353f55dd40` 已推送/fetch 核对 origin/master。
 - passed 4 文件：新 ResultSummaryScope、后台筛选/缓存/候选入口、新 macResultSummaryScope 测试与计划。Mac 顶层/记录/provenance/Worker/数据集/完成 job/claim 的 Plan 别名一致；匿名和混合分析产物不授权，保留明确归属的记录与表，不修写路径/类型；缓存元组避免 | 碰撞。非 Mac 原入口保留。
