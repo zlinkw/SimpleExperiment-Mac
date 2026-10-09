@@ -20,10 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-005w-candidates（passed，Mac 结果候选匹配）
+## 当前批次：mac-doc-019（passed，Mac 结果候选说明与门禁）
 ### 边界
 
-- 本批 5 文件：共享 POSIX 候选规则、面板/后台按真实路径去重与匹配、候选列表保留原拼写。保护非 Mac 契约折叠、缓存与 API/Plan、统计公式及更新入口。只编译函数/实际生成面板模拟，无科研/传输/远端/删除。
+- 本批 6 文件：两仓 README/包内配置说明同步候选实际匹配范围、明确 glob/占位符与大小写行为，保留更新入口和本地/M5 边界；新增候选与相邻缓存门禁，发布说明匹配本版变化。
+- passed build/220 闭包/面板 2、vm.Script、macSetupGuide 1、macRelease 4 串行通过，三份 Mac 说明 UTF8 回读/更新入口/候选范围/M5 标记通过；新增 7 个候选/缓存门禁文件。下一批版本递增与配套本机发布，原科研/解析/真机验证边界保持。
 - passed build/220 闭包/面板脚本 2、vm.Script，macResultCandidates 6、projectResultLocationClarity 6、backendOutputDerivationCaches 4、outputCandidateDedupRegression 3、planScopedResultCandidateCache 10、planSelectionPreviewAndWorkerEmptyState 5、planOutputEvidenceSignals 1、macResultIdentity 8、remoteResultInspectionWorkflow 13、macPanelTheme 1，逐文件串行 20 秒通过；UTF8/diff 检查通过。新 fixture 改为实际 legacy 渲染入口传平台后通过，无超时。
 - 原始大小写/首尾空格/Unicode/%20 与目录身份参与匹配，glob/占位符保留且区分大小写，坏路径/类型不会修成另一候选。下一批限定使用说明/门禁与配套发布；上游 YAML 候选提取、汇总授权/映射下载、Agent 读取、实际解析/物理发布及 M5 后续分批。
 
@@ -51,6 +52,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-005w-candidates `f59da55da05270aa346eddd65c03b12b1de7558d` 已普通推送并 fetch 核对 origin/master；后续 YAML/汇总授权/映射/Agent/物理发布仍分批。
 - mac-release-023 交付记录 `b76f3f1ce163221e90860bd9dc47dc990c9de88d` 已普通推送并 fetch 核对 origin/master。
 - 第二十三版 preview-v0.5.286 已公开：Experiment 来源 `c75f7675bfc13d473941315841d1c7530164ced1`、SFTP 0.2.80 来源 `b57db1a97c7db3cb630b449b95b5cf04667d235d` 已普通推送并 fetch 核对 origin/master；实际包结果身份与匿名更新通过。
 - mac-doc-018 Experiment `6fbe63861f4782b9d81fb277ba5cb4a100b70c90`、SFTP `46e10d130213f82c08fbbcc95257a44e8d5a52b0` 已普通推送并 fetch 核对 origin/master，Mac 结果说明和门禁已同步。
