@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-010（passed，Mac 只读检测 preview 发布）
+## 当前批次：mac-005h（passed，POSIX 根目录与 Agent 路径）
 ### 边界
 
-- 本批递增 Experiment 0.5.273/SFTP 0.2.67，本地打包验证两包与清单、发布同一 preview，并以匿名 updater 核对说明和只读检测实现。最多 8 文件，不自动安装、Actions 或真实服务器操作。
-- 保护三拓扑、API/Plan、更新事务、认证/租约、远端实验和删除规范。M5 pending。POSIX 全业务路径与科研业务链下一批审查。
+- 本批统一 Experiment 的绝对 POSIX 路径规则、区分大小写的 allowed/deniedRoots、项目/runtime/环境目录与 Agent 项目核验，保留中文和首尾空格。8 文件以内，真实编译逻辑与三拓扑准备模拟回归。
+- 保护 API/Plan、更新、认证/租约、远端实验、直接父目录及删除双确认；没有删除/真实服务器操作，M5 pending。SFTP 路径整合、文档/发布门禁与 CLI 后续分批完成。
 
 ### 验证清单
 
+- passed mac-005h：Experiment 严格 POSIX 单根路径规则；allowed/deniedRoots 及迁移提示区分大小写/直接子路径；项目/runtime/环境目录、Agent 当前项目比对和确认预览保留中文、Unicode 拼写及首尾空格。非法策略不会静默变空；UI 非空坏行拒绝设置。保护既有删除父目录/两次确认，无删除或真实服务器操作。
+- passed mac-005h 本地：build/面板脚本 2、214 模块闭包/vm.Script；POSIX/三拓扑真实准备模拟 5、既有父目录 2、Agent 项目根 5、端点/UI 9、准备/bootstrap 16 测试逐文件串行通过。8 文件已核对；SFTP 传输参数/路径尚需同规则接入，完成相关批次后统一更新说明/发布门禁并发布。
 - passed mac-release-010：Experiment 0.5.273/SFTP 0.2.67 完整 prepare/publish 通过，两仓 build、213 与 24 文件闭包/vm.Script、面板脚本、更新门禁及准备/bootstrap 16 等目标测试逐文件串行通过，版本一致。完整草稿 3 附件大小/SHA-256 核验后发布。
 - passed preview-v0.5.273 真实匿名 updater：从 0.5.272/0.2.67 筛选 Experiment 单组件升级，匿名下载两包校验平台/hash/CRC/身份；包内业务构建与配置说明字节匹配本地已验证产物，README 的 vsce 相对链接改写核对后全文匹配；同版本跳过、禁止降级。首次 README 原字节比较因标准链接改写失败，核对真实差异后修正比较通过，不修改已发布包。无自动安装/Actions/真实 SSH，M5 pending。
 - pending 下一批 mac-005h：统一科研业务的 POSIX 父目录与 runtime 路径，重点核对 allowed/deniedRoots 大小写与中文/空格路径、Agent 目录一致性；CLI 和完整科研三拓扑继续分批验证，真实验收依赖 M5 证据。

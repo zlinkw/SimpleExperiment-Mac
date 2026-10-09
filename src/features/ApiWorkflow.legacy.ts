@@ -1,3 +1,5 @@
+import { normalizePosixAbsolutePath, posixProjectName } from "../mac/PosixPath";
+
 export const FLOW_STEPS = [
   "select_servers",
   "select_mode",
@@ -213,8 +215,7 @@ export function selectWorkflowPlan(
 
 export function remoteProjectWorkDir(remoteRoot: unknown, projectName: unknown): string | undefined {
   const root = normalizeApiRemotePath(remoteRoot);
-  const name = String(projectName || "").trim();
-  return root && name && name !== "." && name !== ".." ? `${root}/${name}` : undefined;
+  return root && projectName !== undefined && projectName !== "" ? `${root}/${posixProjectName(projectName)}` : undefined;
 }
 
 export interface WorkflowRouteOptions {
@@ -315,9 +316,8 @@ export function isWorkerServer(server: unknown): boolean {
 export const isNwpu3Server = isWorkerServer;
 
 export function normalizeApiRemotePath(value: unknown): string | undefined {
-  const text = String(value || "").trim().replace(/\\/g, "/").replace(/\/+/g, "/");
-  if (!text || text === "/" || text === "." || text === "..") return undefined;
-  return text.replace(/\/+$/, "");
+  if (value === undefined || value === null || value === "" || value === "/") return undefined;
+  return normalizePosixAbsolutePath(value, "远端路径");
 }
 
 export interface RemoteRootPolicy {
@@ -330,15 +330,18 @@ export function resolveApiRemoteRoot(value: unknown, server: unknown = {}): stri
 }
 
 function normalizedRemoteRootList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => normalizeApiRemotePath(item)).filter((item): item is string => Boolean(item));
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) throw new Error("远端根目录规则必须是路径数组。");
+  return value.map(item => {
+    const root = normalizeApiRemotePath(item);
+    if (!root) throw new Error("远端根目录规则不能包含空项或根目录。");
+    return root;
+  });
 }
 
 function containsRootOrDescendant(root: string, roots: string[]): boolean {
-  const lower = root.toLowerCase();
   return roots.some((item) => {
-    const candidate = item.toLowerCase();
-    return lower === candidate || lower.startsWith(`${candidate}/`);
+    return root === item || root.startsWith(`${item}/`);
   });
 }
 
@@ -370,13 +373,13 @@ export function resolveApiRemoteRootWithPolicy(
 }
 
 export function remoteRootMigrationHint(root: string, knownRoots: string[]): string | undefined {
-  const lowerSegments = String(root || "").toLowerCase().split("/").filter(Boolean);
-  if (!lowerSegments.includes("simple")) return undefined;
-  const canonicalSegments = lowerSegments.map((segment) => segment === "simple" ? "zlk" : segment);
+  const segments = String(root || "").split("/").filter(Boolean);
+  if (!segments.includes("simple")) return undefined;
+  const canonicalSegments = segments.map((segment) => segment === "simple" ? "zlk" : segment);
   const canonicalCandidate = `${root.startsWith("/") ? "/" : ""}${canonicalSegments.join("/")}`;
   const hasKnownRealCounterpart = knownRoots.some((knownRoot) => (
-    knownRoot.toLowerCase() === canonicalCandidate
-      || canonicalCandidate.startsWith(`${knownRoot.toLowerCase()}/`)
+    knownRoot === canonicalCandidate
+      || canonicalCandidate.startsWith(`${knownRoot}/`)
   ));
   if (!hasKnownRealCounterpart) return undefined;
   return [

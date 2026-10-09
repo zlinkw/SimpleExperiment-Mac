@@ -25,8 +25,7 @@ function extractFunction(name) {
 
 test("project parent roots reject reserved Agent directories and suggest the real parent", () => {
   const sandbox = {};
-  const { resolveApiRemoteRootWithPolicy } = require("../../dist/features/ApiWorkflow.js");
-  sandbox.ApiWorkflow_1 = { resolveApiRemoteRootWithPolicy };
+  sandbox.ApiWorkflow_1 = require("../../dist/features/ApiWorkflow.js");
   sandbox.errorMessage = (error) => String(error?.message || error);
   vm.createContext(sandbox);
   vm.runInContext(`${extractFunction("normalizeRemoteWorkRoot")}\n${extractFunction("remoteParentWorkRoot")}\n${extractFunction("actualWorkRootValidationMessage")}\n${extractFunction("actualWorkRootAmbiguityMessage")}\nthis.check = actualWorkRootValidationMessage; this.parent = remoteParentWorkRoot; this.warn = actualWorkRootAmbiguityMessage;`, sandbox);
@@ -35,7 +34,7 @@ test("project parent roots reject reserved Agent directories and suggest the rea
   assert.match(sandbox.warn("/srv/projects/demo", "demo", "Hub"), /最终代码目录会重复/);
   assert.match(sandbox.warn("/srv/projects/demo", "demo", "Hub"), /建议改为项目父目录：\/srv\/projects/);
   assert.equal(sandbox.parent("/srv/projects/demo"), "/srv/projects");
-  assert.equal(sandbox.parent("projects/demo"), "projects");
+  assert.throws(() => sandbox.parent("projects/demo"), /POSIX/);
   assert.equal(sandbox.parent("/demo"), undefined);
   assert.equal(sandbox.warn("/srv/projects", "demo", "Hub"), undefined);
   assert.match(sandbox.check("/srv/simple_agent", "demo", "Hub"), /不能包含 simple_agent/);

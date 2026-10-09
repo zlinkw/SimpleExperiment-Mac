@@ -1956,7 +1956,8 @@ export class RealtimeTunnelPanelProvider {
     async apiProjectPrepare(params = {}) {
         const manual = this.isMacVariant();
         if (!manual) await this.ensureRemoteAgentVersionConsistent().catch(() => undefined);
-        const root = String(params.workspace || workspaceRoot() || "").trim();
+        const requestedRoot = String(params.workspace || workspaceRoot() || "");
+        const root = manual ? requestedRoot : requestedRoot.trim();
         if (!root)
             throw new Error("project.prepare 需要已打开工作区，或传入 workspace 参数。");
         assertSingleProjectWorkspace("project.prepare");
@@ -15510,8 +15511,12 @@ export class RealtimeTunnelPanelProvider {
         const patch = recordField(message, "patch");
         const parseRootList = (value) => String(value || "")
             .split(/\r?\n/)
-            .map((item) => ApiWorkflow_1.normalizeApiRemotePath(item))
-            .filter((item) => Boolean(item));
+            .filter(item => item.trim().length > 0)
+            .map((item) => {
+                const root = ApiWorkflow_1.normalizeApiRemotePath(item);
+                if (!root) throw new Error("远端根目录规则不能包含根目录。");
+                return root;
+            });
         const allowedRoots = parseRootList(patch.allowedRoots);
         const deniedRoots = parseRootList(patch.deniedRoots);
         const config = vscode.workspace.getConfiguration("simpleExperimentMac", folder.uri);
@@ -20917,7 +20922,8 @@ export class RealtimeTunnelPanelProvider {
         const root = normalizeRemoteWorkRoot(actualWorkRoot);
         if (!root)
             return { projectName };
-        const override = String(agentInstallDir || "").trim();
+        const override = agentInstallDir === undefined || agentInstallDir === "" ? "" : ApiWorkflow_1.normalizeApiRemotePath(agentInstallDir);
+        if (agentInstallDir !== undefined && agentInstallDir !== "" && !override) throw new Error("runtime 安装目录必须是有效的绝对 POSIX 目录。");
         const installDir = override || `${root}/simple_agent`;
         return {
             workRoot: root,
@@ -27133,6 +27139,7 @@ function effectiveWorkerCondaEnv(worker, fallback = "") {
     return normalizeCondaEnvSetting(fallback);
 }
 function normalizeCondaEnvSetting(value) {
+    if (typeof value === "string" && value.startsWith("/")) return ApiWorkflow_1.normalizeApiRemotePath(value) || "";
     const normalized = String(value || "").trim();
     return normalized === "-" || normalized === "--" ? "" : normalized;
 }
@@ -33367,14 +33374,11 @@ function remoteProjectName() {
     const root = workspaceRoot();
     if (!root)
         return "";
-    const name = path.basename(root).trim();
+    const name = path.basename(root);
     return name && name !== "." && name !== ".." ? name : "";
 }
 function normalizeRemoteWorkRoot(value) {
-    const text = String(value || "").trim().replace(/\\/g, "/").replace(/\/+/g, "/");
-    if (!text || text === "/" || text === "." || text === "..")
-        return undefined;
-    return text.replace(/\/+$/, "");
+    return ApiWorkflow_1.normalizeApiRemotePath(value);
 }
 function remoteParentWorkRoot(value) {
     const root = normalizeRemoteWorkRoot(value);
@@ -33388,13 +33392,14 @@ function remoteParentWorkRoot(value) {
 function remoteRootPolicyConfig() {
     const config = vscode.workspace.getConfiguration("simpleExperimentMac");
     return {
-        allowedRoots: stringArrayConfig(config.get("remote.allowedRoots", [])),
-        deniedRoots: stringArrayConfig(config.get("remote.deniedRoots", [])),
+        allowedRoots: config.get("remote.allowedRoots", []),
+        deniedRoots: config.get("remote.deniedRoots", []),
     };
 }
 function actualWorkRootValidationMessage(value, projectName = remoteProjectName(), label = "服务器", server, policy) {
     const activePolicy = policy || {};
-    const root = normalizeRemoteWorkRoot(value);
+    let root;
+    try { root = normalizeRemoteWorkRoot(value); } catch (error) { return errorMessage(error); }
     const displayLabel = String(label || "服务器").trim() || "服务器";
     if (!root)
         return `请填写 ${displayLabel} 上用于存放项目的父目录。`;
@@ -33417,8 +33422,8 @@ function actualWorkRootAmbiguityMessage(value, projectName = remoteProjectName()
     if (!root || !String(projectName || "").trim())
         return undefined;
     const segments = root.split("/").filter(Boolean);
-    const expectedProjectName = String(projectName).trim();
-    if (!segments.length || segments[segments.length - 1].toLowerCase() !== expectedProjectName.toLowerCase())
+    const expectedProjectName = String(projectName);
+    if (!segments.length || segments[segments.length - 1] !== expectedProjectName)
         return undefined;
     const displayLabel = String(label || "服务器").trim() || "服务器";
     const suggestedRoot = remoteParentWorkRoot(root);
@@ -33452,12 +33457,7 @@ function assertConfiguredActualWorkRoots(config) {
     }
 }
 function normalizeAgentProjectRoot(value) {
-    const text = String(value || "").trim().replace(/\\/g, "/").replace(/\/+/g, "/");
-    if (!text)
-        return "";
-    if (/^[A-Za-z]:\//.test(text))
-        return `${text[0].toLowerCase()}${text.slice(1)}`.replace(/\/+$/, "");
-    return text.length > 1 ? text.replace(/\/+$/, "") : text;
+    try { return ApiWorkflow_1.normalizeApiRemotePath(value) || ""; } catch { return ""; }
 }
 function enforceExpectedAgentProjectRoot(probe, expectedRoot, label) {
     const rawStatus = String(probe?.status || "").toLowerCase();

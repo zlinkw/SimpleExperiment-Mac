@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { normalizePosixAbsolutePath } from "./PosixPath";
 import { assertLocalhost } from "../tunnel/TunnelGateway";
 import { normalizeXshellSetupConfig, normalizeXshellWorkerTunnelConfig, XshellRealtimeTunnelConfig } from "../tunnel/XshellTunnelSetup";
 import { defaultAgentTmuxSessionName, simpleAgentRuntimeRelativePath } from "../tunnel/AgentTmuxPolicy";
@@ -36,8 +37,7 @@ function host(value: unknown, label: string): string {
   return result.startsWith("[") ? result.slice(1, -1) : result;
 }
 function directory(value: unknown, label: string): string {
-  if (typeof value !== "string" || !value.startsWith("/") || /[\x00-\x1f\x7f\\]/.test(value) || value.split("/").some(part => part === "." || part === "..")) throw new Error(`${label} 必须是无 . 或 .. 的绝对 POSIX 路径。`);
-  const normalized = path.posix.normalize(value);
+  const normalized = normalizePosixAbsolutePath(value, label);
   if (["/", "/root", "/tmp"].includes(normalized)) throw new Error(`${label} 不能使用根目录、/root 或 /tmp。`);
   return normalized;
 }
@@ -91,7 +91,7 @@ export function setupFromManualEndpoints(value: unknown, saved: Partial<XshellRe
     hubDisplayName: hub?.displayName, workerTunnels: workers, ports: { ...normalizeXshellSetupConfig().ports, assignments: [] },
     workerRealtimeMode: workers.some(worker => worker.enabled) ? "hub_plus_workers" : "hub_only" }));
   // The legacy normalizer trims directory strings; Mac preserves POSIX leaves.
-  if (hub && hub.enabled !== false) { result.agentProjectDir = hub.projectParentDir; result.agentInstallDir = hub.agentInstallDir; }
+  if (hub && hub.enabled !== false) { result.agentProjectDir = hub.projectParentDir; result.agentInstallDir = hub.agentInstallDir; result.condaEnv = hub.condaEnv ?? saved.condaEnv ?? ""; }
   if (hub?.enabled === false) result.manualDisabledHub = hub;
   // Explicit endpoint IDs own the inventory, including multiple forwards to one host.
   result.workerTunnels = workers.map((worker, index) => ({ ...normalizeXshellWorkerTunnelConfig(worker, index), id: worker.id,

@@ -23,7 +23,7 @@ function extractFunction(source, name) {
 }
 
 function loadAgentRootHelpers() {
-  const sandbox = { ENDPOINT_READY_PROBE_STATUSES: new Set(["ok", "file_api_unavailable"]) };
+  const sandbox = { ApiWorkflow_1: require("../../dist/features/ApiWorkflow"), ENDPOINT_READY_PROBE_STATUSES: new Set(["ok", "file_api_unavailable"]) };
   vm.createContext(sandbox);
   vm.runInContext([
     extractFunction(extension, "normalizeAgentProjectRoot"),
@@ -54,9 +54,10 @@ function loadEndpointReadiness() {
 
 test("Agent project roots normalize separators and trailing slashes", () => {
   const { normalizeAgentProjectRoot } = loadAgentRootHelpers();
-  assert.equal(normalizeAgentProjectRoot(" /remote//experiments/project/ "), "/remote/experiments/project");
-  assert.equal(normalizeAgentProjectRoot("C:\\Experiments\\Project\\"), "c:/Experiments/Project");
-  assert.equal(normalizeAgentProjectRoot("/"), "/");
+  assert.equal(normalizeAgentProjectRoot("/remote//experiments/project/"), "/remote/experiments/project");
+  assert.equal(normalizeAgentProjectRoot("/remote/中文 Project "), "/remote/中文 Project ");
+  for (const invalid of [" /remote/project", "C:\\Experiments\\Project\\", "/", "/remote/../project"])
+    assert.equal(normalizeAgentProjectRoot(invalid), "");
 });
 
 test("matching roots pass while missing or stale roots become a dedicated mismatch", () => {
