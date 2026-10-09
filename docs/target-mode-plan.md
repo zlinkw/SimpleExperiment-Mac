@@ -10,9 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-025（running，0.5.288/0.2.82）
+## 当前批次 mac-release-025（passed，0.5.288/0.2.82）
 - 本批 6 文件以内：两仓 package/lock、Experiment runtime/本文档；版本验证后普通推送，prepare/publish 绑定同步源码，实际 VSIX/匿名更新核验后交付，不 Actions/安装。
-- passed 版本门禁：两仓 build、221/26 闭包/面板 2/vm.Script、runtimeManifest 1、元数据/diff 一致；最初测试文件目录误写未启动，改为实际 test/runtimeManifest.test.js 后通过。准备/发布/实际包与匿名更新 pending。
+- passed 版本门禁：两仓 build、221/26 闭包/面板 2/vm.Script、runtimeManifest 1、元数据/diff 一致；最初测试文件目录误写未启动，改为实际 test/runtimeManifest.test.js 后通过。
+- passed 完整 npm run release:prepare：两仓 build、221/26 闭包/面板 2，60 个目标文件逐文件串行/20 秒门禁（Experiment feature 45/core 1，SFTP 14），包括新增 YAML 候选与浅深高对比真实渲染。npm run release:publish 核验完整三附件草稿后公开；无 Actions/安装。
+- passed .288 实际 VSIX：Plan YAML 候选/实际面板后台联动 7、候选 6、结果/Agent key 8、CLI 2（Agent 持久身份 5）、Agent/scheduler 启动 8。本机模拟/AST，无科研/SSH/启动/停止/删除。YAML 包证据 JSON 回读有效，不需要修写。
+- passed .287/.81→.288/.82 实际匿名 updater：28 次公开请求，preview 筛选、清单/大小/hash/CRC/身份/平台、下载字节等于实际测试包，新 ResultCandidateYaml/PlanBuilder 与业务模块、两仓 README/包内说明匹配来源。同版本跳过/不降级通过，不实际安装/M5。
+- 第二十五版 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.288 已公开：Experiment 来源 `33fe795f88ac8e50c035dac7b452b2faf652be9f`、SFTP 来源 `1a87364fc251e9dbdcf8267ebdeadf614298e2ab`，已普通推送/fetch 相等；历史包保留不覆盖。下一批限结果汇总授权/映射下载的一组问题，最多 8 文件，README/配置与同一更新通道持续同步。
 - mac-doc-020 Experiment `466f9651324ec905ac01a57d210e45e93048b807`、SFTP `a3c763e6f9eaec56c2c3cb213fd089c8dab781e9` 已普通推送/fetch 核对。
 
 ### 前批 mac-doc-020（passed）
