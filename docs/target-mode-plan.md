@@ -20,14 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-003a（passed）
+## 当前批次：mac-003b（passed）
 
 ### 边界
 
-- 真实 VSIX ZIP/CRC/XML 身份及平台、版本、hash 和 VS Code 要求验证；完成剩余 namespace，8 个文件以内。
+- 匿名 preview 清单筛选、SemVer/资产/兼容校验、请求合并/缓存与 403/429 退避，3 文件。
 - 保护入口，阻断 Mac 自动导入 Windows 扩展数据库；下批处理 UI/其余业务 namespace。
 
 ### 验证清单
+
+- passed mac-003b build/面板脚本、preview 6 测试：列表筛选、禁止降级、伪造/不兼容拒绝、并发合并/ETag、403/429 与离线失败、响应上限。
 
 - passed mac-003a build、包闭包、VSIX 3 测试：真实 XML 平台、Windows/universal/身份/engine/hash 拒绝、CRC 损坏及越界 ZIP。
 
@@ -51,6 +53,8 @@
 - 真机测试依赖用户 M5 设备，尚无证据。
 
 ## 本批记录
+
+- mac-003a Experiment `38ad7c4b06495030e9b1cb227babf37fdd1a70a3` 已同步 origin/master。
 
 - mac-002e Experiment `8d27d316eb2c798653b6fafed04757dbac6973a5` 已同步 origin/master。
 
