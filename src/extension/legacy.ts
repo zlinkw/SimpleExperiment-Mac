@@ -15,6 +15,7 @@ import * as ManualTunnel_1 from "../mac/ManualTunnel";
 import * as WorkflowBinding_1 from "../mac/WorkflowBinding";
 import * as MacPlanFiles_1 from "../mac/PlanFiles";
 import { normalizePosixRelativePath } from "../mac/PosixPath";
+import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
 import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
@@ -26905,7 +26906,7 @@ function adapterRuleResultCandidates(rules) {
         ...arrayFromRecord(source, "candidateJson"),
         ...arrayFromRecord(source, "consoleLogs"),
         ...arrayFromRecord(source, "textLogs"),
-    ].map((item) => String(item || "").trim()).filter(isParseableResultCandidate));
+    ].map((item) => typeof process !== "undefined" && process.platform === "darwin" ? normalizeMacResultCandidatePath(item) : String(item || "").trim()).filter(isParseableResultCandidate));
     adapterRuleResultCandidatesCache.set(source, value);
     return value;
 }
@@ -26915,7 +26916,7 @@ function inferredPlanAdapterRuleCandidates(rules) {
         ...arrayFromRecord(rules, "inferredPlanCandidateJson"),
         ...arrayFromRecord(rules, "inferredPlanConsoleLogs"),
         ...arrayFromRecord(rules, "inferredPlanTextLogs"),
-    ].map((item) => String(item || "").trim()).filter(isParseableResultCandidate));
+    ].map((item) => typeof process !== "undefined" && process.platform === "darwin" ? normalizeMacResultCandidatePath(item) : String(item || "").trim()).filter(isParseableResultCandidate));
 }
 function projectOutputGateFixes(missing, plan, project) {
     const adapterReady = Boolean(stringPatch(project || {}, "adapterConfig"));
@@ -26943,12 +26944,17 @@ function resultPreviewHasRecords(item) {
     return row.parseable === true && Number(row.records || row.recordCount || row.rows || row.rowCount || 0) > 0;
 }
 function normalizeResultCandidatePath(value) {
+    if (typeof process !== "undefined" && process.platform === "darwin") return normalizeMacResultCandidatePath(value);
     return String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "");
 }
 // 输出候选归一键（去重×2根因修复）：优先复用 PlanBuilder.normalizeOutputCandidateKey，
 // trim→反斜杠转正斜杠→占位符展开→小写；4种契约文件按小写basename折叠，大表走全路径键。
 const OUTPUT_CANDIDATE_CONTRACT_BASENAMES = new Set(["metrics_summary.csv", "metrics_case.csv", "stdout.log", "stderr.log"]);
 function normalizeOutputCandidateKey(value) {
+    if (typeof process !== "undefined" && process.platform === "darwin") {
+        const valuePath = normalizeMacResultCandidatePath(value);
+        return valuePath ? `path:${valuePath}` : "";
+    }
     try {
         if (typeof PlanBuilder_1.normalizeOutputCandidateKey === "function")
             return PlanBuilder_1.normalizeOutputCandidateKey(value);
@@ -26969,7 +26975,7 @@ function dedupOutputCandidates(values) {
     const seen = new Set();
     const out = [];
     for (const raw of values || []) {
-        const text = String(raw || "").trim();
+        const text = typeof process !== "undefined" && process.platform === "darwin" ? normalizeMacResultCandidatePath(raw) : String(raw || "").trim();
         if (!text)
             continue;
         const key = normalizeOutputCandidateKey(text);
@@ -26982,10 +26988,12 @@ function dedupOutputCandidates(values) {
 }
 function compileResultCandidatePatterns(candidates, plan) {
     plan = plan || {};
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    const text = value => mac ? (typeof value === "string" ? value : "") : String(value || "").trim();
     const known = {
-        suite: String(plan?.suite || "").trim(),
-        plan: String(plan?.planFile || plan?.file || plan?.planId || "").trim(),
-        plan_file: String(plan?.planFile || plan?.file || "").trim(),
+        suite: text(plan?.suite || ""),
+        plan: text(plan?.planFile || plan?.file || plan?.planId || ""),
+        plan_file: text(plan?.planFile || plan?.file || ""),
     };
     const basenames = new Set();
     const exactPaths = new Set();
@@ -27000,9 +27008,9 @@ function compileResultCandidatePatterns(candidates, plan) {
             continue;
         if (!/[?*]/.test(pattern) && !pattern.includes(String.fromCharCode(123))) {
             if (pattern.includes("/"))
-                exactPaths.add(pattern.toLowerCase());
+                exactPaths.add(mac ? pattern : pattern.toLowerCase());
             else
-                basenames.add(pattern.toLowerCase());
+                basenames.add(mac ? pattern : pattern.toLowerCase());
             continue;
         }
         let source = "^";
@@ -27011,7 +27019,7 @@ function compileResultCandidatePatterns(candidates, plan) {
             if (placeholder) {
                 const key = placeholder[1];
                 const value = known[key];
-                source += value ? escapeRegExp(value.replace(/\\/g, "/")) : /output_?dir/i.test(key) ? ".+" : "[^/]+";
+                source += value ? escapeRegExp(mac ? value : value.replace(/\\/g, "/")) : /output_?dir/i.test(key) ? ".+" : "[^/]+";
                 index += placeholder[0].length;
                 continue;
             }
@@ -27036,7 +27044,7 @@ function compileResultCandidatePatterns(candidates, plan) {
             index += 1;
         }
         try {
-            patterns.push(new RegExp(`${source}$`, "i"));
+            patterns.push(new RegExp(`${source}$`, mac ? "" : "i"));
         }
         catch {
             // Ignore malformed candidates while retaining valid matchers.
@@ -27052,9 +27060,10 @@ function compiledResultCandidatesMatchFile(compiled, file) {
     const targetKey = normalizeOutputCandidateKey(target);
     if (targetKey && compiled.candidateKeys && compiled.candidateKeys.has(targetKey))
         return true;
-    const normalized = target.toLowerCase();
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    const normalized = mac ? target : target.toLowerCase();
     return compiled.exactPaths.has(normalized)
-        || compiled.basenames.has(path.posix.basename(target).toLowerCase())
+        || compiled.basenames.has(mac ? path.posix.basename(target) : path.posix.basename(target).toLowerCase())
         || compiled.patterns.some((pattern) => pattern.test(target));
 }
 function resultCandidatePatternMatchesFile(candidate, file, plan) {
@@ -27110,7 +27119,8 @@ function planOutputCandidates(plan) {
     const cached = planOutputCandidatesCache.get(source);
     if (cached)
         return cached;
-    const value = dedupOutputCandidates((source.outputCandidates || []).map((item) => String(item || "").trim()).filter(Boolean));
+    const value = dedupOutputCandidates((source.outputCandidates || []).map((item) =>
+        typeof process !== "undefined" && process.platform === "darwin" ? normalizeMacResultCandidatePath(item) : String(item || "").trim()).filter(Boolean));
     planOutputCandidatesCache.set(source, value);
     return value;
 }
@@ -27139,7 +27149,13 @@ function planOutputEvidenceSignals(plan) {
     return value;
 }
 function isParseableResultCandidate(value) {
-    const text = String(value || "").trim().replace(/\\/g, "/");
+    const mac = typeof process !== "undefined" && process.platform === "darwin";
+    if (mac) {
+        const candidate = normalizeMacResultCandidatePath(value);
+        if (!candidate) return false;
+        value = candidate.trimEnd(); // Classify the extension without rewriting the actual path.
+    }
+    const text = mac ? value : String(value || "").trim().replace(/\\/g, "/");
     const base = text.split("/").pop() || "";
     if (!text || /^simple_cluster\/results\//i.test(text)
         || /^(?:jobs\.csv|artifact_manifest\.json|checkpoint_manifest\.json|manifest\.json|metadata\.json|status\.json|state\.json|progress\.json|job\.json|jobs\.json|env_snapshot\.json|config_snapshot\.(?:json|ya?ml))$/i.test(base)

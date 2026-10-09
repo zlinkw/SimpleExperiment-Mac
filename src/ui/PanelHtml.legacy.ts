@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { patchPanelProgressDom } from "../features/PanelProgressDom";
+import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
 export function renderPanelHtml(platform: string = process.platform): string {
     const nonce = String(Date.now());
     const PLUGIN_VERSION: string = (() => { try { const pkg = require("../../package.json"); return String((pkg && pkg.version) || "").trim() || "unknown"; } catch { return "unknown"; } })();
@@ -3105,6 +3106,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     const CURRENT_PLAN_WORKFLOW_RESULT_CACHE_LIMIT = 32;
     const PLAN_FILE_EQUIVALENCE_CACHE_LIMIT = 128;
     const MAC_PLAN_IDENTITY = ${JSON.stringify(platform === "darwin")};
+    ${normalizeMacResultCandidatePath.toString()}
     const PLAN_ARCHIVE_READINESS_CACHE_LIMIT = 64;
     const PROJECT_OUTPUT_GATE_DIAGNOSTICS_VARIANT_LIMIT = 16;
     const EMPTY_PLAN_FILE_EQUIVALENCE_ENTRY = Object.freeze({ keys: Object.freeze([]), keySet: new Set() });
@@ -12954,15 +12956,18 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
 
     function normalizeResultCandidatePath(value) {
+      if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) return normalizeMacResultCandidatePath(value);
       return String(value || "").trim().replace(/\\\\/g, "/").replace(/^\\.\\//, "");
     }
 
     function compileResultCandidatePatterns(candidates, plan) {
       plan = plan || {};
+      const mac = typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY;
+      const text = value => mac ? (typeof value === "string" ? value : "") : String(value || "").trim();
       const known = {
-        suite: String(plan.suite || "").trim(),
-        plan: String(plan.planFile || plan.file || plan.planId || "").trim(),
-        plan_file: String(plan.planFile || plan.file || "").trim()
+        suite: text(plan.suite || ""),
+        plan: text(plan.planFile || plan.file || plan.planId || ""),
+        plan_file: text(plan.planFile || plan.file || "")
       };
       const basenames = new Set();
       const exactPaths = new Set();
@@ -12974,8 +12979,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const pattern = normalizeResultCandidatePath(candidate);
         if (!pattern) return;
         if (!/[?*]/.test(pattern) && !pattern.includes(String.fromCharCode(123))) {
-          if (pattern.includes("/")) exactPaths.add(pattern.toLowerCase());
-          else basenames.add(pattern.toLowerCase());
+          if (pattern.includes("/")) exactPaths.add(mac ? pattern : pattern.toLowerCase());
+          else basenames.add(mac ? pattern : pattern.toLowerCase());
           return;
         }
         let source = "^";
@@ -12984,7 +12989,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           if (placeholder) {
             const key = placeholder[1];
             const value = known[key];
-            source += value ? resultPreviewRegexEscape(value.replace(/\\\\/g, "/")) : /output_?dir/i.test(key) ? ".+" : "[^/]+";
+            source += value ? resultPreviewRegexEscape(mac ? value : value.replace(/\\\\/g, "/")) : /output_?dir/i.test(key) ? ".+" : "[^/]+";
             index += placeholder[0].length;
             continue;
           }
@@ -13008,7 +13013,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           index += 1;
         }
         try {
-          patterns.push(new RegExp(source + "$", "i"));
+          patterns.push(new RegExp(source + "$", mac ? "" : "i"));
         } catch (_) {
           // Ignore malformed candidates while retaining valid matchers.
         }
@@ -13021,8 +13026,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (!target) return false;
       const targetKey = normalizeOutputCandidateKey(target);
       if (targetKey && compiled.candidateKeys && compiled.candidateKeys.has(targetKey)) return true;
-      const normalized = target.toLowerCase();
-      const basename = (target.split("/").pop() || "").toLowerCase();
+      const mac = typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY;
+      const normalized = mac ? target : target.toLowerCase();
+      const basename = mac ? target.split("/").pop() || "" : (target.split("/").pop() || "").toLowerCase();
       return compiled.exactPaths?.has(normalized)
         || compiled.basenames?.has(basename)
         || compiled.patterns.some((pattern) => pattern.test(target));
@@ -13190,7 +13196,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         ...asArray(source.candidateJson),
         ...asArray(source.consoleLogs),
         ...asArray(source.textLogs)
-      ].map((item) => String(item || "").trim()).filter(isParseableResultCandidate));
+      ].map((item) => typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY ? normalizeMacResultCandidatePath(item) : String(item || "").trim()).filter(isParseableResultCandidate));
       adapterRuleResultCandidatesCache.set(source, value);
       return value;
     }
@@ -13215,6 +13221,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
 
     function normalizeOutputCandidateKey(value) {
+      if (typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY) {
+        const valuePath = normalizeMacResultCandidatePath(value);
+        return valuePath ? "path:" + valuePath : "";
+      }
       var text = String(value || "").trim();
       if (!text) return "";
       text = text.split(String.fromCharCode(92)).join("/");
@@ -13246,7 +13256,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       var seen = new Set();
       var out = [];
       (values || []).forEach((raw) => {
-        var text = String(raw || "").trim();
+        var text = typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY ? normalizeMacResultCandidatePath(raw) : String(raw || "").trim();
         if (!text) return;
         var key = normalizeOutputCandidateKey(text);
         if (!key || seen.has(key)) return;
@@ -17173,7 +17183,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (!source) return EMPTY_OUTPUT_DERIVATION_VALUES;
       const cached = planOutputCandidatesCache?.get(source);
       if (cached) return cached;
-      const value = dedupOutputCandidates(asArray(source.outputCandidates || []).map((item) => String(item || "").trim()).filter(Boolean));
+      const value = dedupOutputCandidates(asArray(source.outputCandidates || []).map((item) =>
+        typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY ? normalizeMacResultCandidatePath(item) : String(item || "").trim()).filter(Boolean));
       planOutputCandidatesCache.set(source, value);
       return value;
     }
@@ -17198,7 +17209,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
       return value;
     }
     function isParseableResultCandidate(value) {
-      const text = String(value || "").trim().replace(/\\\\/g, "/");
+      const mac = typeof MAC_PLAN_IDENTITY !== "undefined" && MAC_PLAN_IDENTITY;
+      const text = mac ? normalizeMacResultCandidatePath(value).trimEnd() : String(value || "").trim().replace(/\\\\/g, "/");
       const base = text.split("/").pop() || "";
       const lower = base.toLowerCase();
       if (!text || text.toLowerCase().startsWith("simple_cluster/results/") || RESULT_METADATA_FILENAMES?.has(lower) || RESULT_METADATA_SUFFIXES.some((suffix) => lower.endsWith(suffix))) return false;
