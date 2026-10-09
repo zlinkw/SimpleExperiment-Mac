@@ -20,7 +20,7 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-003（running，README 与路径适配发布）
+## 当前批次：mac-release-003（passed，README 与路径适配发布）
 
 ### 边界
 
@@ -30,6 +30,7 @@
 ### 验证清单
 
 - passed mac-release-003 两仓 build/包闭包/面板脚本、发布脚本语法与 3 测试；新增路径与更新卡片测试逐文件串行纳入 prepare。
+- passed preview-v0.5.266 prepare/publish、完整附件核验、实际匿名客户端从 0.5.265/0.2.63 识别两个升级包、下载/平台/hash/CRC 与包内新 README 检查；M5 仍 pending。
 
 - passed mac-ui-001 build/面板脚本/212 模块闭包、独立更新 3 测试和实际设置卡片渲染 1 测试；组件版本/安装并重载按钮与检查失败状态一致。
 
@@ -78,6 +79,9 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+
+- 第三版 preview-v0.5.266 已发布，Experiment 来源 `9e45701bfe615c357ec407442e8a0ef688f63b1e`，SFTP 0.2.64 来源 `6172ae89b6a0da411c2219d6f9a9c0ce6b72ee81`。
+- 下一批边界：mac-005b Mac 宿主副作用入口及共享租约路径/大小写，最多 8 文件；随后 Termius 手动端点与独立认证。保持科研业务未验收标记。
 
 - mac-ui-001 Experiment `0d7c786513fb1b45a9e758f9b1ef5079bb8b3785` 已同步。
 
