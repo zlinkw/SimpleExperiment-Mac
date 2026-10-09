@@ -14,7 +14,7 @@ const scheduler = readSource("src/clusterSchedulerRuntime.ts");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 test("result CSV directory is project-scoped and editable from Settings", () => {
-  const setting = pkg.contributes.configuration.properties["simpleExperiment.resultCsvDir"];
+  const setting = pkg.contributes.configuration.properties["simpleExperimentMac.resultCsvDir"];
   assert.equal(setting.default, "experiments/results");
   assert.equal(setting.scope, "resource");
   assert.match(panel, /id="resultCsvDirectorySettings" data-anchor="settings-result-csv"/);
@@ -85,7 +85,7 @@ test("guided Plan uses the configured directory only for injectable defaults", (
 test("Provider reuses one normalized result directory until config or workspace changes", () => {
   assert.match(extension, /resultCsvDirectory = resultCsvDirSafe\(\)/);
   assert.match(extension, /refreshResultCsvDirectory\(\) \{\s*this\.resultCsvDirectory = resultCsvDirSafe\(\)/);
-  assert.match(extension, /affectsConfiguration\("simpleExperiment\.resultCsvDir"\)[\s\S]{0,220}this\.refreshResultCsvDirectory\(\)/);
+  assert.match(extension, /affectsConfiguration\("simpleExperimentMac\.resultCsvDir"\)[\s\S]{0,220}this\.refreshResultCsvDirectory\(\)/);
   assert.match(extension, /resetProjectContextInMemory\(\)[\s\S]*this\.refreshResultCsvDirectory\(\)/);
   assert.match(extension, /defaultResultCsvDir: this\.resultCsvDirectory/);
   assert.match(extension, /csvDirectory: this\.resultCsvDirectory/);

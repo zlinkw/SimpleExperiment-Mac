@@ -25,6 +25,8 @@ function loadHelpers() {
     path,
     crypto,
     ProjectResultTables: require("../../dist/results/ProjectResultTables.js"),
+    WrapperResultBundle: require("../../dist/results/WrapperResultBundle.js"),
+    process: { platform: 'win32' },
     FileTransferTypes_1: { isSafeRemotePath },
     normalizePlanSelectionKey: (value) => String(value || "").trim().replace(/\\/g, "/"),
     operationResultPlanFile(item) {
@@ -78,11 +80,12 @@ test("remote result inspection accepts only lightweight project files", () => {
     "reports/run/summary.txt",
     "logs/run/stdout.log",
     "artifacts/eval/output.out",
+    "outputs/plot.png",
     "simple_cluster/results/by_plan/demo/final.md",
   ]) {
     assert.equal(helpers.normalizeRemoteResultInspectionPath(file), file);
   }
-  for (const file of ["/etc/passwd", "../metrics.csv", "work_dirs/model.pt", "outputs/plot.png", "reports/id_rsa.txt", "logs/key.pem"]) {
+  for (const file of ["/etc/passwd", "../metrics.csv", "work_dirs/model.pt", "reports/id_rsa.txt", "logs/key.pem"]) {
     assert.equal(helpers.normalizeRemoteResultInspectionPath(file), "");
   }
   const local = helpers.remoteResultInspectionLocalRelativePath("work_dirs/smoke/metrics_summary.csv", "experiments/plans/smoke.yaml", "2026-07-17T12:34:56.000Z");
@@ -163,7 +166,7 @@ test("remote result inspection is authorized by the matching Plan contract opera
   };
   assert.deepEqual(
     Array.from(helpers.remoteResultInspectionCandidates([operations], "experiments/plans/smoke.yaml")),
-    ["work_dirs/smoke/metrics_summary.csv", "outputs/smoke/metrics.json"]
+    ["work_dirs/smoke/metrics_summary.csv", "outputs/smoke/metrics.json", "outputs/smoke/plot.png"]
   );
   assert.deepEqual(Array.from(helpers.remoteResultInspectionCandidates([operations], "experiments/plans/missing.yaml")), []);
   operations.latestSuccess = {
@@ -266,7 +269,7 @@ test("Plan concise table is the primary result entry with scoped explanations", 
   assert.match(panel, /data-command="openLocalResultTable"/);
   assert.match(panel, /查看共享产物/);
   assert.doesNotMatch(panel, /resultFileButton\("查看简洁汇总 CSV"/);
-  assert.match(panel, /同步当前 Plan 原始与详细表/);
+  assert.match(panel, /更新当前 Plan 指标表/);
   assert.doesNotMatch(panel, /data-details-key="result-trace-files"/);
   assert.doesNotMatch(panel, /原始数据与详细追溯/);
   assert.match(panel, /data-details-key="result-split-tables"/);
@@ -274,14 +277,15 @@ test("Plan concise table is the primary result entry with scoped explanations", 
   assert.match(panel, /重建当前 Plan 汇总/);
 });
 
-test("bulk sync uses one action, one overwrite decision and one mapped transfer per source", () => {
-  const handler = extension.slice(extension.indexOf("async syncAllResultArtifactsFromUi"), extension.indexOf("async editResultColumnMappingFromUi"));
-  assert.match(extension, /case "syncAllResultArtifacts":\s*await this\.withManualResultSync\(\(\) => this\.syncAllResultArtifactsFromUi\(message\)\)/);
+test("current Plan metrics delegate to the scoped rebuild and mapped downloads keep one overwrite review", () => {
+  const handler = extension.slice(extension.indexOf("async syncAllResultArtifactsFromUi"), extension.indexOf("async syncPendingResultMetricsFromUi"));
+  const download = extension.slice(extension.indexOf("    collectMappedResultDownloadBatches("), extension.indexOf("async publishDownloadedResultMetrics"));
+  assert.match(extension, /case "syncAllResultArtifacts":\s*return this\.withManualResultSync\(\(\) => this\.syncAllResultArtifactsFromUi\(message\)\)/);
   assert.match(panel, /data-command="syncAllResultArtifacts" data-plan-file=/);
-  assert.match(handler, /resultSummarySyncCandidates\(summary, planFile\)/);
-  assert.match(handler, /methodResultArtifactLocalRelativePath\(remotePath, planFile, summary/);
-  assert.match(handler, /if \(existingCount && !options\.missingOnly\) \{/);
-  assert.match(handler, /sync\.downloadMappedPaths/);
+  assert.match(handler, /rebuildProjectResultTablesFromUi\(\{ planFiles: \[planFile\]/);
+  assert.match(download, /methodResultArtifactLocalRelativePath\(remotePath, planFile, summary/);
+  assert.match(download, /if \(existingCount && !options\.missingOnly\) \{/);
+  assert.match(download, /sync\.downloadMappedPaths/);
   assert.doesNotMatch(handler, /client\.downloadWorkerFile\(|client\.downloadFile\(/);
   assert.doesNotMatch(handler, /selectPlanFromUi|this\.selectedPlanId\s*=/);
 });

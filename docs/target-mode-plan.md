@@ -20,11 +20,12 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-022（passed，配套 preview-v0.5.285）
+## 当前批次：mac-005v-fixtures（passed，结果相邻回归夹具）
 ### 边界
 
-- 两仓 package/lock、Experiment runtime 真值与本计划共 6 文件，升级 0.5.285/0.2.79，绑定已同步启动路径与 Mac 说明源码；本机 prepare/publish 不安装扩展。
-- passed 版本批次两仓 build/219 与 26 闭包/面板 2、runtimeManifest 1，逐文件串行 20 秒；完整 prepare/publish、实际包与匿名更新 passed，M5 pending。
+- 本批 4 文件，仅修正旧 VM 缺少 WrapperResultBundle、Mac 设置命名空间及已存在的指标入口/轻量图片支持断言，保留安全路径拒绝测试；压力夹具改为保留，不执行删除。生产改动另批暂存。
+- passed build/219 闭包/面板 2、vm.Script、remoteResultInspectionWorkflow 13、resultCsvDirectoryConfig 6、datasetResultCatalog 7，逐文件串行 20 秒，UTF8/diff 检查通过。初次失败为旧夹具缺少依赖/已变更入口及原设置命名空间，按实际源码更新后通过，无超时；无业务生产修复混入此提交。
+- 下一批 mac-005v-results 统一结果 Plan 映射/TS 与 Python key、完成运行/attempt 来源、后台选择/通知/查看路径，最多 7 文件。保护统计公式、Plan/API、原入口和更新；无真实科研/远端/传输/删除。UI 候选、Agent 结果读取、物理发布/归档及 M5 后续分批。
 
 ### 验证清单
 
@@ -47,6 +48,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-release-022 交付记录 `2b9993d6b44e69c4a17580d1acf520a1a268fa62` 已普通推送并 fetch 核对 origin/master。
 - 第二十二版 preview-v0.5.285 已发布：Experiment 来源 `4585fb5c786b9e4ee952eeb8b9ce3e83090348d8`、SFTP 0.2.79 来源 `0d96e4388f7e5b4e51eb63bba0ced62cd2f3224c` 已普通推送并 fetch 核对，实际包启动路径与匿名更新验证通过。
 - mac-release-022 SFTP 0.2.79 来源 `0d96e4388f7e5b4e51eb63bba0ced62cd2f3224c` 已普通推送并 fetch 核对 origin/master。
 - mac-doc-017 Experiment `bcce84caf80ebe3fef0c763c52878c8afe73dc31`、SFTP `ce291edd7892cd8ae090f3a86c4aaceefdc052c3` 已普通推送并 fetch 核对 origin/master。

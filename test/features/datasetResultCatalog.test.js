@@ -133,9 +133,9 @@ test('published registry excludes retired method and dataset tables from current
   assert.equal(fs.existsSync(path.join(root, 'artifacts/results/old-dataset/final/final.md')), true);
 });
 
-test('result catalog stays within dataset, plan, table and artifact response limits at stress scale', (t) => {
+test('result catalog stays within dataset, plan, table and artifact response limits at stress scale', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dataset-catalog-stress-'));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  // Retain the unique local fixture; cleanup requires explicit path approval.
   const resultRoot = path.join(root, 'experiments/results/benchmark/plans');
   const registryPlans = {};
   for (let plan = 0; plan < 100; plan++) {
