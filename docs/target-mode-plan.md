@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-012（passed，工作区与 Plan seeds 使用说明）
+## 当前批次：mac-release-017（running，配套 preview-v0.5.280）
 ### 边界
 
-- 更新两仓 README/配置说明的服务端真实工作区保护、活动运行及 Plan seeds 参数边界，将 macWorkflowBinding 纳入发布门禁并更新发布说明。保留旧入口/Plan 格式/三拓扑和更新按钮入口。最多 6 文件。
-- 检查：文档 UTF8 回读、build/包闭包/面板脚本、配置说明与发布门禁测试。无真实科研、传输、停止实验、服务器或删除操作；配套发布下一批，M5 待验收。
+- 两仓版本与 RuntimeManifest 对齐，发布 Experiment 0.5.280 / SFTP 0.2.74 的同一 preview Release；绑定已同步来源。版本批次共 6 文件，生成产物不计。保护现有入口、Plan 格式、三拓扑、业务与历史附件。
+- 检查：两仓 build/包闭包/面板脚本、runtime manifest、完整 prepare 串行门禁、实际 VSIX CLI 与匿名 updater，核验草稿附件后公开。无 Actions/自动安装/真实科研/SSH/停止/删除；M5 待验收。
 
 ### 验证清单
 
@@ -83,6 +83,7 @@
 - 真机测试依赖用户 M5 设备，尚无证据。用户明确延后验收，授权继续其余适配及逐批发布；不再等待即时真机回传。
 
 ## 本批记录
+- mac-doc-012 Experiment 说明/门禁 `bff6c01119713147e5ca7c7ce8da023b315c126a`、SFTP README `f772588be895e44d288fbdff986acd44a9b8e177` 均已普通推送并 fetch 核对。
 - mac-005q 已验证源码 `6a30a571502b697d70a40435a0c0e363246d0440` 已普通推送并 fetch 核对 origin/master。
 - 第十六版 preview-v0.5.279 已发布：Experiment 来源 `0c58484ae8df959ddb9f4ecf162437baf6ef08be`、SFTP 0.2.73 来源 `1ae3c9da45ddb1364f6a3ae1c16955bbf1e5ee55` 均已普通推送并 fetch 核对，真实包 Plan CLI 等待确认与匿名下载通过。完整科研/服务端 workspace/seed/SSH/M5 pending。
 - mac-doc-011 Experiment 说明/门禁 `a727df446ce723540bb954df7b276c698e3dd132`、SFTP README `31ba6088e9229373e1b24f77a2c4c5ca2316ba18` 已同步。
