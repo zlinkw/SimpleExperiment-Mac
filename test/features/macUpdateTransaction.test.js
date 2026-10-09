@@ -39,6 +39,15 @@ test("double clicks share one transaction while existing local transfers finish"
   await new Promise(resolve => setImmediate(resolve)); assert.ok(f.events.includes("wait")); assert.ok(!f.events.some(item => item.startsWith("download:")));
   resume(); await first; assert.equal(f.events.filter(item => item.startsWith("install:")).length, 2);
 });
+test("a second download failure after partial installation retains the business gate and receipts", async () => {
+  const first = setup({ installFailure: COMPONENT_IDS[1] });
+  await assert.rejects(first.engine.install(first.plan), /install failed/);
+  const retry = setup({ journal: first.journal(), downloadFailure: COMPONENT_IDS[1], versions: { [COMPONENT_IDS[0]]: "0.1.2" } });
+  await assert.rejects(retry.engine.install(retry.plan), /hash mismatch/);
+  assert.deepEqual(retry.journal().completed, [COMPONENT_IDS[0]]);
+  assert.ok(!retry.events.includes("ungate"));
+  assert.ok(!retry.events.includes(`download:${COMPONENT_IDS[0]}`));
+});
 test("same/newer versions skip and a crash before receipt is reconciled from installed versions", async () => {
   const f = setup({ versions: { [COMPONENT_IDS[0]]: "0.2.0", [COMPONENT_IDS[1]]: "0.1.2" } }); await f.engine.install(f.plan); assert.equal(f.events.length, 0);
   const retry = setup({ journal: { manifest: f.plan.manifest, completed: [], status: "installing" }, versions: { [COMPONENT_IDS[0]]: "0.1.2" } }); await retry.engine.install(retry.plan);

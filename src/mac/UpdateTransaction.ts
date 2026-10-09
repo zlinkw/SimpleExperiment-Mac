@@ -39,6 +39,9 @@ export class UpdateTransaction {
     }
     const pending = components.filter(item => !journal.completed.includes(item.extensionId));
     if (!pending.length) return { ...journal, status: "reload_required" };
+    // A retry after partial installation still owns a mixed component set,
+    // even if this attempt fails before installing another package.
+    const partialRetry = previous?.manifest.releaseTag === plan.manifest.releaseTag && previous.completed.length > 0 && previous.status !== "preparing";
     let gate = false, installedThisAttempt = false;
     try {
       // beginGate must stop new local work before waiting for existing transfers.
@@ -70,7 +73,7 @@ export class UpdateTransaction {
     } finally {
       // Installed extensions require a reload even if their companion failed.
       // Keeping the gate prevents mixed code from starting new local work.
-      if (gate && !installedThisAttempt) await this.io.endGate();
+      if (gate && !installedThisAttempt && !partialRetry) await this.io.endGate();
     }
   }
 }
