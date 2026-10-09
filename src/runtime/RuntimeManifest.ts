@@ -48,7 +48,7 @@ export interface RuntimeVerifyResult {
 
 // 单源：CURRENT_RUNTIME_VERSION 为 runtime 真值（远端 py 的 AGENT/RUNTIME/SCHEDULER_VERSION 由 build 动态注入，禁止手改）；pluginVersion 真值来自 package.json#version，自动同步
 export const RUNTIME_MANIFEST_SCHEMA_VERSION = 1;
-export const CURRENT_RUNTIME_VERSION = "0.5.266";
+export const CURRENT_RUNTIME_VERSION = "0.5.267";
 
 export function sha256Text(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");

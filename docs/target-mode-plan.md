@@ -20,15 +20,16 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-doc-002（passed，苹果电脑配置说明）
+## 当前批次：mac-release-004（passed，发布源码门禁；包发布待执行）
 
 ### 边界
 
-- 用户追加优先级：面板“配置说明”和两仓 README 先按苹果电脑使用方式更新，随后深色配色，再恢复 Termius/认证主流程；本批最多 8 个文件。
-- Mac 配置说明不再触发旧 Xshell onboarding；明确现有操作入口与待适配能力。深色模式混合亮背景问题 pending，不在本批修改。
+- 本批递增 Experiment 0.5.267/SFTP 0.2.65，运行版本一致；发布门禁加入实际配置说明入口及 Mac 租约路径测试，配套清单关联已同步提交；最多 8 个文件。
+- Mac 使用说明优先交付，随后深色配色，再恢复 Termius/认证主流程；旧科研入口与 Plan/API 格式保留，业务验收仍 pending。
 
 ### 验证清单
 
+- passed mac-release-004：两仓 build/包闭包、面板脚本、版本/lock/runtime 一致、发布脚本语法与 3 测试逐文件通过。prepare 加入配置说明入口与 Mac 宿主/SFTP 租约路径目标测试；源码同步后执行完整 prepare/publish。
 - passed mac-doc-002：两仓 build/包闭包/面板脚本通过；配置说明真实编译方法测试 1、SFTP 品牌测试 2 逐文件串行通过；UTF8、文档链接、JSON 示例和实际命令标题核对通过。两仓 README、包内配置说明、设置字段解释共 8 文件；Mac 打开说明不进入旧会话向导。
 - 下一批边界：版本递增并发布本批 Mac 说明，随后深色模式；Termius/认证继续保留待适配标记。
 - pending 深色模式：用户截图显示亮色页面/卡片与深色输入混用，文字对比不足。后续独立批次复现并验证浅色/深色/高对比。
@@ -87,6 +88,7 @@
 
 ## 本批记录
 
+- mac-doc-002 Experiment `ef87f9dd8efd9a4ff2c61842322d0970ff05d041` 已同步。
 - mac-doc-002 SFTP `8d93015bdf4ee6870deb05eee388d37fd0cfc4cb` 已同步；Experiment 同批提交见 Git，发布批次记录真实提交。
 - 第三版 preview-v0.5.266 已发布，Experiment 来源 `9e45701bfe615c357ec407442e8a0ef688f63b1e`，SFTP 0.2.64 来源 `6172ae89b6a0da411c2219d6f9a9c0ce6b72ee81`。
 - mac-005b 已完成并同步：Experiment `c9649aecbe75364a03f3a21f88253398d32dc45d`、SFTP `e9056979e5eaef4070c0407add8076afc1dfefa0`。Termius 手动端点与独立认证待后续批次。
