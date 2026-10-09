@@ -81,6 +81,7 @@ const production = new Function("DistributedPlanQueue", "fs", "path", "crypto", 
 
 function provider() {
   const host = Object.create(production);
+  host.isMacVariant = () => false;
   host.localOperations = {};
   host.distributedSubmissionEpochs = new Map();
   host.distributedSubmissionAborts = new Map();
@@ -131,7 +132,7 @@ function provider() {
 }
 
 function validation() {
-  return { ok: true, status: "completed", validation: { ok: true, jobs: [
+  return { ok: true, status: "completed", validation: { ok: true, execution_mode: "train", jobs: [
     { index: 0, case: "bus", seed: 42, output_dir: "work/drf/bus" },
   ], existing: [{ index: 0, case: "bus", seed: 42, output_dir: "work/drf/bus" }] } };
 }
@@ -547,11 +548,11 @@ test("persisted deferred rows are superseded for audit instead of auto dispatche
 });
 
 test("missing explicit historical-output choice cannot skip every job or close a continued row", async () => {
-  const enqueue = new Function("workspaceRoot", "operationResultPlanFile", "makeOpId", "DistributedPlanQueue", "vscode", "errorMessage", `
+  const enqueue = new Function("workspaceRoot", "operationResultPlanFile", "makeOpId", "DistributedPlanQueue", "vscode", "errorMessage", "PlanExecutionMode", `
     ${functionSource("planValidationFromResult")}
     return ${method("enqueueDistributedPlan").replace("async enqueueDistributedPlan", "async function").replace(/ as const/g, "")};
   `)(() => root, (body) => body.planFile, () => "new-plan", DistributedPlanQueue,
-    { window: { showInformationMessage: () => Promise.resolve() } }, (error) => String(error));
+    { window: { showInformationMessage: () => Promise.resolve() } }, (error) => String(error), require("../../dist/features/PlanExecutionMode"));
   const previous = { id: "deferred-drf", planFile: drf, revision: "rev-drf", codeFingerprint: "new-code", status: "blocked", confirmedOutputChoice: false };
   const host = {
     distributedQueueTickPromise: undefined,

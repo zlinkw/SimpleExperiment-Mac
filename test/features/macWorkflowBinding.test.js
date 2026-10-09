@@ -41,7 +41,7 @@ function fixture(mode = "single_worker") {
   // Submission remains mocked unless the operation body itself is under test.
   const runOperation = provider.runApiWorkflowOperation;
   provider.runApiWorkflowOperation = async () => step("operation");
-  return { provider, calls, state, globals, guard, initial, other, runOperation, setRoot: value => { root = value; } };
+  return { provider, calls, state, globals, guard, initial, other, runOperation, step, setRoot: value => { root = value; } };
 }
 
 test("Mac workspace binding preserves POSIX spelling and rejects mismatches, invalid roots and replaced directories", () => {
@@ -124,4 +124,87 @@ test("actual Plan core rechecks async choices and never runs the legacy automati
   f.state.activeAt = 0; f.calls.length = 0; f.provider.ensureCodeReadyForRun = async () => f.setRoot(f.other);
   await assert.rejects(method.call(f.provider, "runPlan", { workspace: f.initial, planFile: "experiments/plans/A.yaml" }), /已变化/);
   assert.ok(!f.calls.includes("remote-submit"));
+});
+
+test("actual evidence polling refuses another project's or replacement directory's late receipt in normal and pending paths", async () => {
+  for (const pending of [false, true]) for (const change of ["project", "replace", "operations", "none"]) {
+    const f = fixture(), snapshot = f.guard.bindWorkflowWorkspace(undefined, f.initial), old = f.provider.localOperations;
+    old.op = { status: "waiting_confirmation" }; let sleeps = 0;
+    f.globals.isUiCommandRemotePending = error => error.pending === true;
+    f.globals.resultStatus = row => row?.status || "";
+    f.globals.sleep = async () => {
+      sleeps++;
+      if (change === "project") f.setRoot(f.other);
+      if (change === "replace") { f.state.changeAt = "evidence:replace"; f.step("evidence"); }
+      if (change === "operations") f.provider.localOperations = {};
+      f.provider.localOperations.remote = { operationId: "remote", type: "run-plan", status: "running" };
+    };
+    for (const name of ["runSubmissionEvidence", "waitForRunSubmissionEvidence"])
+      f.provider[name] = vm.runInNewContext("({" + source(name) + "})", f.globals)[name];
+    f.provider.runActionCommand = async () => { if (pending) throw Object.assign(Error("operationId=remote"), { pending: true }); return {}; };
+    await f.runOperation.call(f.provider, "op", { calls: [{ params: {} }] }, snapshot);
+    assert.equal(sleeps, 1); assert.equal(old.op.status, change === "none" ? "succeeded" : "failed");
+    if (change === "none") assert.equal(old.op.submissionOperationId, "remote");
+    else { assert.equal(old.op.submissionOperationId, undefined); assert.deepEqual(f.calls.filter(c => c === "persist" || c === "post"), ["persist", "post"]); }
+  }
+});
+
+test("compiled manual retry rechecks reviewed workspace before queue writes, modal approval and exact mocked stop", async () => {
+  const { preparePlanSafeRetry } = require("../../dist/features/PlanSafeRetry");
+  for (const phase of ["reconcile", "load", "tasks", "modal", "save", "tasks:replace", "none"]) {
+    const f = fixture(); f.state.changeAt = phase;
+    const snapshot = f.guard.bindWorkflowWorkspace(undefined, f.initial), planFile = "experiments/plans/A.yaml";
+    const job = { index: 0, case: "case-a", seed: 1, attempt: 1, status: "running", workerId: "worker-a", commandId: "command-old", outputDir: "work_dirs/A/attempts/run-old" };
+    let queue = { schemaVersion: 1, plans: [{ id: "run-old", planFile, revision: "r", jobs: [job] }] }, stopped = false;
+    const host = {
+      captureProjectContext: () => ({ root: f.initial }), projectContextIsCurrent: () => true,
+      reconcileStalePlanRunOperations: async () => f.step("reconcile"), longRunningPlanRunOperations: () => [],
+      loadDistributedQueue: async () => { f.step("load"); return queue; },
+      saveDistributedQueue: async (_root, _queue, options) => { f.step("save"); queue = options.mutateLatest(queue); },
+      client: { getWorkerTasks: async () => { f.step("tasks"); return { tasks: [{ ...job, workflowId: "run-old", planFile, planRevision: "r", experimentIndex: 0 }] }; } },
+      distributedLaunchInFlight: new Set(), distributedQueueGeneration: 1, detachStaleDistributedTick() {}, boundedPromise: work => work(), postState() {},
+      stopDistributedJobForClear: async () => { f.step("stop"); stopped = true; },
+    };
+    const run = preparePlanSafeRetry(host, planFile, async () => { f.step("modal"); return true; }, () => Error("cancelled"), () => f.guard.assertWorkflowWorkspace(snapshot, f.globals.workspaceRoot()));
+    if (phase === "none") { assert.equal(await run, true); assert.equal(stopped, true); assert.ok(f.calls.indexOf("modal") < f.calls.indexOf("stop")); }
+    else { await assert.rejects(run, /已变化/); assert.equal(stopped, false); }
+    assert.equal(host.distributedPlanStopEpoch || 0, 0);
+  }
+});
+
+test("actual distributed submission binds code sync, preflight, output choice and enqueue to the original physical workspace", async () => {
+  for (const phase of ["fingerprint", "before-sync", "deferred", "sync", "preflight", "outputs", "preflight:replace", "none"]) {
+    const f = fixture(); f.state.changeAt = phase;
+    let waits = 0;
+    Object.assign(f.provider, {
+      planSubmissionOperationId: () => "", submissionStillCurrent: () => true,
+      waitForPlanSubmission: async (_message, work) => { await Promise.resolve(); if (++waits === 2 && phase === "before-sync") f.step("before-sync"); return work(); },
+      distributedCodeVersionHold: async () => { f.step("fingerprint"); return undefined; }, localDistributedCodeFingerprint: async () => "fp",
+      activeDeferredForSubmission: async () => { f.step("deferred"); return {}; },
+      ensureCodeReadyForRun: async () => f.step("sync"), runPlanPreflight: async () => { f.step("preflight"); return { ok: true }; },
+      confirmDistributedPlanExistingOutputs: async () => f.step("outputs"), assertExecutionCondaEnvReady() {}, workerActionTargets: () => [],
+      recordPlanSubmissionTiming() {}, recordPlanSubmissionTimingByOperation() {}, reportPlanStage() {}, finishPlanSubmissionProgress: () => f.step("finish"),
+      enqueueDistributedPlan: async (...args) => { assert.ok(args[6]?.identity); f.step("enqueue"); return { enqueued: true }; },
+    });
+    f.globals.DistributedPlanQueue = { distributedSubmissionProgress: () => ({ status: "succeeded", waiting: false }) };
+    f.globals.stringField = (body, key) => body[key] || "";
+    f.globals.resultStatus = result => result?.status || "";
+    const method = vm.runInNewContext("({" + source("finishDistributedPlanSubmission") + "})", f.globals).finishDistributedPlanSubmission;
+    const run = method.call(f.provider, "runPlan", phase === "deferred" ? { deferredPlanId: "old" } : {}, {}, { workspace: f.initial });
+    if (phase === "none") { await run; assert.ok(f.calls.includes("enqueue")); assert.ok(f.calls.includes("finish")); }
+    else { await assert.rejects(run, /已变化/); assert.ok(!f.calls.includes("enqueue")); assert.ok(!f.calls.includes("finish")); }
+  }
+});
+
+test("actual distributed enqueue refuses changed identity after queue load or write without dispatching or posting into another project", async () => {
+  for (const phase of ["load:replace", "save:replace"]) {
+    const f = fixture(); f.state.changeAt = phase;
+    Object.assign(f.provider, { schedulerSettings: () => ({}), lastCodeSyncState: { fingerprint: "code" }, loadDistributedQueue: async () => { f.step("load"); return { schemaVersion: 1, plans: [] }; },
+      saveDistributedQueue: async () => f.step("save"), tickDistributedQueue: async () => f.step("dispatch"), notifyPlanOutputVersionReview: () => f.step("review") });
+    Object.assign(f.globals, { planValidationFromResult: value => value, PlanExecutionMode: require("../../dist/features/PlanExecutionMode"),
+      operationResultPlanFile: body => body.planFile, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy"), DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue") });
+    const method = vm.runInNewContext("({" + source("enqueueDistributedPlan") + "})", f.globals).enqueueDistributedPlan;
+    await assert.rejects(method.call(f.provider, { workspace: f.initial, planFile: "experiments/plans/A.yaml", planRevision: "r" }, { execution_mode: "train", jobs: [{ index: 0, case: "case-a", seed: 1, output_dir: "work_dirs/A" }] }), /身份已变化/);
+    assert.deepEqual(f.calls, phase.startsWith("load") ? ["load"] : ["load", "save"]);
+  }
 });

@@ -20,11 +20,11 @@
 - pending mac-005：Termius 手动隧道、mac 路径/租约/CLI、认证与本机流式中转。
 - pending mac-006：真机更新及科研三拓扑验收，用户回传证据后完成。
 
-## 当前批次：mac-release-017（passed，配套 preview-v0.5.280）
+## 当前批次：mac-005r（passed，Plan 异步运行边界）
 ### 边界
 
-- 两仓版本与 RuntimeManifest 对齐，发布 Experiment 0.5.280 / SFTP 0.2.74 的同一 preview Release；绑定已同步来源。版本批次共 6 文件，生成产物不计。保护现有入口、Plan 格式、三拓扑、业务与历史附件。
-- 检查：两仓 build/包闭包/面板脚本、runtime manifest、完整 prepare 串行门禁、实际 VSIX CLI 与匿名 updater，核验草稿附件后公开。无 Actions/自动安装/真实科研/SSH/停止/删除；M5 待验收。
+- Mac 工作区保护覆盖运行证据等待、用户明确确认的 Plan 重试以及分布式校验/排队关键异步边界。保持原 Plan 与 API 契约、三拓扑、活动实验和旧入口；旧非 Mac 路线兼容。修复相邻旧回归 fixture 的上下文依赖，最多 6 源/测试/计划文件。
+- 检查：build/包闭包/面板脚本、真实编译方法与编译重试模块本机 mock、既有重试/分布式路线回归，逐文件串行 20 秒。无真实科研/SSH/停止/删除；README 与配套发布随后分批，M5 待验收。
 
 ### 验证清单
 
@@ -35,7 +35,9 @@
 - passed mac-doc-012：两仓 README/配置说明补全当前真实工作区、活动运行与保存 Plan seeds；在线覆盖明确报错、离线不应用、旧手工记录器边界，更新按钮入口保留。新工作区回归纳入发布门禁，发布说明区分本地/M5。UTF8 回读、build/218 闭包/面板脚本 2、配置说明 1、发布门禁 4 通过，6 文件。
 - passed mac-release-017：完整本机 prepare/publish、两仓 build/218 与 26 文件闭包、面板脚本 2、逐文件串行更新/工作区/CLI/路径/认证/中转及浅深高对比实际渲染通过；3 个完整草稿附件核验后发布，无 Actions/自动安装。
 - passed preview-v0.5.280：实际两包固定 CLI 通过真实本地 shell/Node health/实时 RPC，Experiment 包中文 Plan 工作区/路线预检与等待确认回执、seed 覆盖在 RPC 前拒绝通过（2 包测试）。真实匿名 updater 从 0.5.279/0.2.73 筛出两组件，20 次请求完成大小/hash/CRC/身份/平台核验；字节与已测试 VSIX 相同，工作区/Plan/CLI 模块与两仓 README/配置说明匹配来源。同版本跳过/禁止降级通过；首次 README 比对 fixture 未使用 vsce 的 HEAD 链接，修正匹配规则后通过，无生产修改。
-- pending 下一批 mac-005r：继续完整 Plan 标准路线异步边界、结果/监控及 Windows 执行依赖审计。当前关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据；真实 SSH/三拓扑/M5 保持待验收。
+- passed mac-005r：运行证据轮询（含 remote-pending 路线）复核原工作区/目录/操作集合，另一项目活动记录不能冒充成功；人工确认的重试回调在队列加载、修改、确认及精确停止前复核；分布式路线的指纹、排队回调、代码同步、预演、历史产物选择及 enqueue 前后保持同一物理工作区，目录变化后不向另一项目发送状态或派发。原 API/Plan 格式/非 Mac 路线保留。6 文件。
+- passed 本地：build/218 闭包/面板脚本 2、macWorkflowBinding 10、planSafeRetry 12、distributedPlanSubmissionRouting 5、duplicatePlanSubmissionGuard 10、planSubmissionVisiblePreflight 19 逐文件串行通过。编译方法 VM/编译重试模块/本机 mock 无真实科研/停止/SSH。初次新 fixture 缺少 outputDir、当前 root 回调/字符串依赖与 revision，旧 fixture 缺少 Mac 分支/运行模式依赖；补齐真实契约后通过，非超时。
+- pending 下一批：README/配置说明与相邻回归发布门禁更新，再发布 0.5.281/0.2.75。后续结果/监控/Windows 执行依赖与实际队列/同步写入边界继续审计；关键边界检查不是完整远端预演或物理原子保证，等待确认不是远端提交证据，真实 SSH/三拓扑/M5 待验收。
 
 
 

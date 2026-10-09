@@ -2907,7 +2907,11 @@ export class RealtimeTunnelPanelProvider {
     }
     async runApiWorkflowOperation(operationId, route, binding) {
         const operations = this.localOperations;
-        const assertCurrent = () => { if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot()); };
+        const assertCurrent = () => {
+            if (!binding) return;
+            WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot());
+            if (this.localOperations !== operations) throw new Error("Mac workflow 操作归属已变化，未复用另一项目的提交证据。");
+        };
         const knownOperationIds = new Set(Object.keys(this.localOperations || {}));
         const finish = (patch = {}) => {
             operations[operationId] = {
@@ -2935,7 +2939,8 @@ export class RealtimeTunnelPanelProvider {
             assertCurrent();
             let evidence = this.runSubmissionEvidence(submitted, knownOperationIds);
             if (!evidence)
-                evidence = await this.waitForRunSubmissionEvidence({ knownOperationIds, timeoutMs: 20_000 });
+                evidence = await this.waitForRunSubmissionEvidence({ knownOperationIds, timeoutMs: 20_000, assertCurrent });
+            assertCurrent();
             if (!evidence) {
                 finish({
                     status: "failed",
@@ -2951,27 +2956,32 @@ export class RealtimeTunnelPanelProvider {
             });
         }
         catch (error) {
-            if (isUiCommandRemotePending(error)) {
-                const match = /operationId=([^\s；;]+)/.exec(errorMessage(error));
-                const evidence = match?.[1]
-                    ? this.runSubmissionEvidence(this.localOperations[match[1]], knownOperationIds)
-                        || await this.waitForRunSubmissionEvidence({
-                            operationId: match[1],
-                            knownOperationIds,
-                            timeoutMs: 20_000,
-                        })
-                    : null;
-                if (evidence) {
-                    finish({ status: "succeeded", message: errorMessage(error), ...evidence });
+            try {
+                assertCurrent();
+                if (isUiCommandRemotePending(error)) {
+                    const match = /operationId=([^\s；;]+)/.exec(errorMessage(error));
+                    const evidence = match?.[1]
+                        ? this.runSubmissionEvidence(this.localOperations[match[1]], knownOperationIds)
+                            || await this.waitForRunSubmissionEvidence({
+                                operationId: match[1],
+                                knownOperationIds,
+                                timeoutMs: 20_000,
+                                assertCurrent,
+                            })
+                        : null;
+                    assertCurrent();
+                    if (evidence) {
+                        finish({ status: "succeeded", message: errorMessage(error), ...evidence });
+                        return;
+                    }
+                    finish({
+                        status: "failed",
+                        error: "RUN_SUBMISSION_EVIDENCE_MISSING",
+                        message: "Agent 已返回提交中状态，但未找到对应的新 run-plan/reproduce-plan operation 或活动证据。",
+                    });
                     return;
                 }
-                finish({
-                    status: "failed",
-                    error: "RUN_SUBMISSION_EVIDENCE_MISSING",
-                    message: "Agent 已返回提交中状态，但未找到对应的新 run-plan/reproduce-plan operation 或活动证据。",
-                });
-                return;
-            }
+            } catch (contextError) { error = contextError; }
             finish({
                 status: isUiCommandCancelled(error) ? "cancelled" : "failed",
                 error: errorMessage(error),
@@ -3003,9 +3013,10 @@ export class RealtimeTunnelPanelProvider {
         };
     }
     async waitForRunSubmissionEvidence(options = {}) {
-        const { operationId = "", knownOperationIds, timeoutMs = 20_000 } = options;
+        const { operationId = "", knownOperationIds, timeoutMs = 20_000, assertCurrent = () => {} } = options;
         const deadline = Date.now() + timeoutMs;
         while (Date.now() < deadline) {
+            assertCurrent();
             const candidates = operationId
                 ? [this.localOperations?.[operationId]].filter(Boolean)
                 : Object.values(this.localOperations || {});
@@ -3015,6 +3026,7 @@ export class RealtimeTunnelPanelProvider {
                     return evidence;
             }
             await sleep(250);
+            assertCurrent();
         }
         return null;
     }
@@ -6241,7 +6253,7 @@ export class RealtimeTunnelPanelProvider {
             const retryPlanFile = operationResultPlanFile(body) || plan?.planFile || plan?.file || plan?.planId || "";
             const restarted = await preparePlanSafeRetry(this, retryPlanFile, async (detail) =>
                 await vscode.window.showWarningMessage("停止当前 Plan 并重新运行？", { modal: true, detail }, "停止并重新运行") === "停止并重新运行",
-                () => new UiCommandCancelled("已取消重新运行，旧运行保持原状态。"));
+                () => new UiCommandCancelled("已取消重新运行，旧运行保持原状态。"), assertWorkflowCurrent);
             assertWorkflowCurrent();
             if (restarted) { delete message.deferredPlanId; delete body.deferredPlanId; }
             await this.assertPlanNotAlreadyActive(retryPlanFile, plan);
@@ -6263,7 +6275,7 @@ export class RealtimeTunnelPanelProvider {
             body.options = { ...(body.options || {}), gitProvenance: body.gitProvenance };
             if (distributedPlan) {
                 assertWorkflowCurrent();
-                await this.finishDistributedPlanSubmission(command, message, plan, body);
+                await this.finishDistributedPlanSubmission(command, message, plan, body, workflowBinding);
                 return;
             }
             await this.ensureCodeReadyForRun(undefined, [body], (text) => this.reportPlanStage(message, text));
@@ -9875,25 +9887,35 @@ export class RealtimeTunnelPanelProvider {
         }); }
         catch (error) { if (error instanceof RequestReplacedError) throw new UiCommandCancelled(error.message); throw error; }
     }
-    async finishDistributedPlanSubmission(command, message, plan, body) {
+    async finishDistributedPlanSubmission(command, message, plan, body, binding) {
         const operationId = this.planSubmissionOperationId(message);
         const submissionEpoch = operationId ? (this.distributedSubmissionEpochs?.get(operationId) || 0) : 0;
         const submissionRoot = workspaceRoot();
-        if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+        if (this.isMacVariant?.() && !binding) binding = WorkflowBinding_1.bindWorkflowWorkspace(body.workspace, submissionRoot);
+        const submissionCurrent = () => {
+            if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot());
+            return this.submissionStillCurrent(message, submissionEpoch, submissionRoot);
+        };
+        const waitCurrent = (work) => this.waitForPlanSubmission(message, () => {
+            if (!submissionCurrent()) return;
+            return work();
+        });
+        if (!submissionCurrent()) return;
         if (this.distributedPostprocessPromise || this.manualResultSyncCounts?.get(workspaceRoot()))
             this.assertPlanSubmissionNotDuringResultSync(message);
         const fingerprintStarted = Date.now();
-        const versionHold: any = await this.waitForPlanSubmission(message, () => this.distributedCodeVersionHold(body, this.distributedSubmissionAborts?.get(operationId)?.signal));
-        if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+        const versionHold: any = await waitCurrent(() => this.distributedCodeVersionHold(body, this.distributedSubmissionAborts?.get(operationId)?.signal));
+        if (!submissionCurrent()) return;
         const root = versionHold?.root || submissionRoot;
         const continueDeferredId = stringField(message, "deferredPlanId") || stringField(body, "deferredPlanId");
         const submissionFingerprint = versionHold?.fingerprint || (continueDeferredId
-            ? await this.waitForPlanSubmission(message, () => this.localDistributedCodeFingerprint(root, this.distributedSubmissionAborts?.get(operationId)?.signal))
+            ? await waitCurrent(() => this.localDistributedCodeFingerprint(root, this.distributedSubmissionAborts?.get(operationId)?.signal))
             : "");
         this.recordPlanSubmissionTiming?.(message, "localFingerprintMs", Date.now() - fingerprintStarted);
-        if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+        if (!submissionCurrent()) return;
         if (continueDeferredId) {
             const existing = await this.activeDeferredForSubmission(root, body, submissionFingerprint, continueDeferredId);
+            if (!submissionCurrent()) return;
             if (existing === null) {
                 throw new Error("这条旧排队记录与当前 Plan、版本或代码指纹不一致，未修改队列，也未校验或提交。请到实验准备的 Plan 列表手动选中该 Plan，再点“校验并提交运行”。");
             }
@@ -9906,33 +9928,33 @@ export class RealtimeTunnelPanelProvider {
         }
         try {
             const codeSyncStarted = Date.now();
-            await this.waitForPlanSubmission(message, () => this.ensureCodeReadyForRun(undefined, [body], (text) => this.reportPlanStage(message, text)));
+            await waitCurrent(() => this.ensureCodeReadyForRun(undefined, [body], (text) => this.reportPlanStage(message, text)));
             this.recordPlanSubmissionTiming?.(message, "codeSyncMs", Date.now() - codeSyncStarted);
-            if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+            if (!submissionCurrent()) return;
             const validateStarted = Date.now();
-            const preflightOk = await this.waitForPlanSubmission(message, () => this.runPlanPreflight(body, "当前计划", {
+            const preflightOk = await waitCurrent(() => this.runPlanPreflight(body, "当前计划", {
                 reportStage: (text) => this.reportPlanStage(message, text),
                 recordTiming: (key, ms) => this.recordPlanSubmissionTimingByOperation(operationId, key, ms),
             }));
             this.recordPlanSubmissionTiming?.(message, "validateMs", Date.now() - validateStarted);
-            if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+            if (!submissionCurrent()) return;
             if (!preflightOk) {
                 this.finishPlanSubmissionProgress(message, "failed", "校验或预演未通过，未提交运行。");
                 return;
             }
             this.reportPlanStage(message, "正在确认历史产物处理方式…");
             const historyChoiceStarted = Date.now();
-            await this.waitForPlanSubmission(message, () => this.confirmDistributedPlanExistingOutputs(plan, body, preflightOk));
+            await waitCurrent(() => this.confirmDistributedPlanExistingOutputs(plan, body, preflightOk));
             this.recordPlanSubmissionTiming?.(message, "historyChoiceMs", Date.now() - historyChoiceStarted);
-            if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+            if (!submissionCurrent()) return;
             if (body.existingOutputChoice === "keep_existing") {
                 this.finishPlanSubmissionProgress(message, "succeeded", "用户选择保留现有完整结果，本次未创建新调度任务。");
                 return;
             }
             this.assertExecutionCondaEnvReady(this.workerActionTargets());
             this.reportPlanStage(message, "预演通过，正在开启调度…");
-            const submission = await this.enqueueDistributedPlan(body, preflightOk, false, "", submissionEpoch, operationId);
-            if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot) || submission?.cancelled) return;
+            const submission = await this.enqueueDistributedPlan(body, preflightOk, false, "", submissionEpoch, operationId, binding);
+            if (!submissionCurrent() || submission?.cancelled) return;
             const submissionProgress = DistributedPlanQueue.distributedSubmissionProgress(submission);
             if (submissionProgress.status === "failed") {
                 this.finishPlanSubmissionProgress(message, submissionProgress.status, submissionProgress.message);
@@ -9951,11 +9973,11 @@ export class RealtimeTunnelPanelProvider {
                 return;
             }
         } catch (error) {
-            if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+            if (!submissionCurrent()) return;
             this.finishPlanSubmissionProgress(message, isUiCommandCancelled(error) ? "cancelled" : "failed", errorMessage(error));
             throw error;
         }
-        if (!this.submissionStillCurrent(message, submissionEpoch, submissionRoot)) return;
+        if (!submissionCurrent()) return;
         this.finishPlanSubmissionProgress(message, "succeeded", "调度队列已接收；面板继续显示 Worker 回传的任务状态。");
     }
     async activeDeferredForSubmission(root, body, fingerprint, deferredPlanId) {
@@ -10455,10 +10477,12 @@ export class RealtimeTunnelPanelProvider {
             }
         }
     }
-    async enqueueDistributedPlan(body, validated, skipTick = false, supersededDeferredId = "", submissionEpoch = 0, submissionOperationId = "") {
+    async enqueueDistributedPlan(body, validated, skipTick = false, supersededDeferredId = "", submissionEpoch = 0, submissionOperationId = "", binding) {
         const root = workspaceRoot();
         if (!root) throw new Error("没有当前项目目录。");
+        if (this.isMacVariant?.() && !binding) binding = WorkflowBinding_1.bindWorkflowWorkspace(body.workspace, root);
         const submissionCurrent = () => {
+            if (binding) WorkflowBinding_1.assertWorkflowWorkspace(binding, workspaceRoot());
             if (!submissionOperationId) return workspaceRoot() === root;
             const record = this.localOperations?.[submissionOperationId];
             if (record && String(record.status || "") === "cancelled") return false;
@@ -10514,6 +10538,7 @@ export class RealtimeTunnelPanelProvider {
         const enqueueStartedAt = Date.now();
         await this.saveDistributedQueue(root, next, { queueGeneration, submissionOperationId, submissionEpoch,
             appendPlanId: id, supersededDeferredId: supersededId });
+        if (!submissionCurrent()) return { enqueued: true, cancelled: true };
         this.notifyPlanOutputVersionReview?.(root, next);
         this.recordPlanSubmissionTimingByOperation?.(submissionOperationId, "enqueueMs", Date.now() - enqueueStartedAt);
         if (!submissionCurrent()) return { enqueued: true, cancelled: true };
@@ -10535,6 +10560,7 @@ export class RealtimeTunnelPanelProvider {
         }
         if (!submissionCurrent()) return { enqueued: true, cancelled: true };
         const latest = await this.loadDistributedQueue(root);
+        if (!submissionCurrent()) return { enqueued: true, cancelled: true };
         const submittedPlan = latest.plans.find((item) => item.id === id);
         const result = DistributedPlanQueue.distributedSubmissionResult(submittedPlan, dispatchError);
         return { enqueued: true, ...result };

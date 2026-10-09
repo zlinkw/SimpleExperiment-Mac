@@ -4,11 +4,13 @@ const terminal = (status: unknown) => ["completed", "failed", "cancelled", "canc
 
 /** Stop only the identities the user confirmed. Never clear output/history or bypass the final active guard. */
 export async function preparePlanSafeRetry(host: any, planFile: string,
-  confirm: (detail: string) => Promise<boolean>, cancelled: () => Error): Promise<boolean> {
+  confirm: (detail: string) => Promise<boolean>, cancelled: () => Error, assertWorkspace: () => void = () => {}): Promise<boolean> {
+  assertWorkspace();
   const context = host.captureProjectContext();
   const client = host.client;
   let stopEpoch = 0;
   const current = () => {
+    assertWorkspace();
     if (!host.projectContextIsCurrent(context) || host.client !== client) throw new Error("项目已切换，已停止重新运行。");
     if (stopEpoch && host.distributedPlanStopEpoch !== stopEpoch) throw new Error("停止批次已变化，未重新运行。");
   };
@@ -16,6 +18,7 @@ export async function preparePlanSafeRetry(host: any, planFile: string,
   const verifiedOperations = new Set(reconciliation?.checked || []);
   current();
   const queue: Queue.DistributedQueue = await host.loadDistributedQueue(context.root);
+  current();
   const plans = queue.plans.filter(row => Queue.sameDistributedPlanFile(row.planFile, planFile));
   if (plans.some(row => Queue.hasUnresolvedPlanRecovery(row)))
     throw new Error("该 Plan 仍有未核实的远端任务，未启动新运行；请恢复连接并刷新状态后重试。");
@@ -49,6 +52,7 @@ export async function preparePlanSafeRetry(host: any, planFile: string,
         const status = observedTerminal.get(identity({ plan, job }));
         return status ? { ...job, status, trustedTerminalStatus: status } : job;
       }) })) }) });
+    current();
     jobs = jobs.filter(row => !observedTerminal.has(identity(row)));
     if (!jobs.length && !operations.length && !deferred.length) return false;
   }
@@ -99,6 +103,7 @@ export async function preparePlanSafeRetry(host: any, planFile: string,
     await host.reconcileStalePlanRunOperations({ reason: "safe_retry_stopped" });
     current();
     const latest: Queue.DistributedQueue = await host.loadDistributedQueue(context.root);
+    current();
     if (latest.plans.some(plan => Queue.sameDistributedPlanFile(plan.planFile, planFile)
       && (Queue.hasUnresolvedPlanRecovery(plan) || plan.jobs.some(job => !terminal(job.status)))))
       throw new Error("该 Plan 又出现未结束任务，未创建重复运行，请刷新后重试。");

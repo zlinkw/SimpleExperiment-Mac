@@ -38,9 +38,9 @@ const routingStatements = submission.thenStatement.statements.filter(node => {
     ts.isIfStatement(node) && node.expression.getText(ast) === "distributedPlan";
 });
 assert.equal(routingStatements.length, 3);
-const route = new Function("operationResultPlanFile", `return async function(command, body, plan, message) {
+const route = new Function("operationResultPlanFile", "assertWorkflowCurrent", "workflowBinding", `return async function(command, body, plan, message) {
   ${routingStatements.map(node => node.getText(ast)).join("\n")}
-};`)(body => body.planFile || body.options?.planFile || "");
+};`)(body => body.planFile || body.options?.planFile || "", () => {}, undefined);
 
 function provider(rules = { distributedResults: true }, mode = "worker_pool") {
   return {
