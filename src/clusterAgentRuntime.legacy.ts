@@ -2,6 +2,7 @@ import { RESULT_LAYOUT_PYTHON } from "./results/ResultLayout";
 import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
 import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
 import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
+import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -13,6 +14,7 @@ ${RESULT_LAYOUT_PYTHON}
 ${PLAN_EXISTING_ARTIFACTS_PYTHON}
 ${OUTPUT_CONTRACT_FILES_PYTHON}
 ${RESULT_PARSE_INPUTS_PYTHON}
+${ARCHIVE_EVIDENCE_READ_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -8348,18 +8350,19 @@ def result_final_evidence_decision(record, entries):
         return {"state": "manual_verified", "eligibleForFinalAnalysis": False, "reason": "人工审核不替代归档；保留为待归档候选，不进入最终统计或绘图。", "matchedKeys": []}
     return {"state": "pending_review", "eligibleForFinalAnalysis": False, "reason": "未归档或未人工审核，仅作为待审核线索。", "matchedKeys": []}
 
-def annotate_final_evidence(root, records, plan=None, plan_revision=""):
-    entries = read_archive_entries(root, plan, plan_revision)
+def annotate_final_evidence(root, records, plan=None, plan_revision="", strict_plan=False, snapshots=None):
+    entries = read_plan_archive_evidence(root, plan, plan_revision, snapshots) if strict_plan else read_archive_entries(root, plan, plan_revision)
+    states = plan_archive_evidence_index(entries) if strict_plan else None
     out = []
     for record in records or []:
         if not isinstance(record, dict):
             continue
         item = dict(record)
-        decision = result_final_evidence_decision(item, entries)
+        decision = plan_archive_evidence_decision(item, entries, plan, plan_revision, states) if strict_plan else result_final_evidence_decision(item, entries)
         item["finalEvidenceState"] = decision["state"]
         item["eligibleForFinalAnalysis"] = bool(decision["eligibleForFinalAnalysis"])
         item["finalEvidenceReason"] = decision["reason"]
-        item["finalEvidenceKeys"] = result_evidence_keys(item)[:12]
+        item["finalEvidenceKeys"] = decision.get("evidenceKeys", []) if strict_plan else result_evidence_keys(item)[:12]
         item["matchedArchiveKeys"] = decision.get("matchedKeys") or []
         out.append(item)
     return out
@@ -8368,12 +8371,14 @@ def final_analysis_results(root, summary):
     records = (summary or {}).get("results") or []
     if not records:
         return []
-    if not all(isinstance(record, dict) and "eligibleForFinalAnalysis" in record for record in records):
-        records = annotate_final_evidence(root, records, (summary or {}).get('planFile') or None, (summary or {}).get('planRevision') or "")
+    strict_plan = (summary or {}).get("resultPathIdentity") == "posix-v1"
+    if strict_plan or not all(isinstance(record, dict) and "eligibleForFinalAnalysis" in record for record in records):
+        records = annotate_final_evidence(root, records, result_summary_plan(summary) or None, (summary or {}).get('planRevision') or "", strict_plan=strict_plan)
     return [record for record in records if isinstance(record, dict) and str(record.get("finalEvidenceState") or "").lower() == "archived"]
 
-def apply_final_evidence_summary(root, summary):
-    records = annotate_final_evidence(root, (summary or {}).get("results") or [], (summary or {}).get("planFile") or None, (summary or {}).get("planRevision") or "")
+def apply_final_evidence_summary(root, summary, snapshots=None):
+    strict_plan = (summary or {}).get("resultPathIdentity") == "posix-v1"
+    records = annotate_final_evidence(root, (summary or {}).get("results") or [], result_summary_plan(summary) or None, (summary or {}).get("planRevision") or "", strict_plan=strict_plan, snapshots=snapshots)
     final_records = [record for record in records if str(record.get("finalEvidenceState") or "").lower() == "archived"]
     excluded_records = [record for record in records if str(record.get("finalEvidenceState") or "").lower() == "excluded"]
     summary["results"] = records
@@ -9422,6 +9427,9 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     apply_result_ownership(summary, ownership)
     apply_final_evidence_summary(root, summary)
+    if strict_plan:
+        for relative, snapshot in snapshots:
+            output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     write_plan_seed_aggregate(root, summary, policy)
     claim_report = evaluate_claim_evidence(root, summary)
     apply_claim_evidence_summary(summary, claim_report)
@@ -14021,7 +14029,8 @@ def read_current_results_summary(root, plan=None, plan_revision=""):
     summary_revision = output_contract_request_identity(summary).get("planRevision", "") if strict_plan else str(summary.get("planRevision") or summary.get("plan_revision") or "").strip() if isinstance(summary, dict) else ""
     plan_matches = not strict_plan or result_parse_row_identity(summary) == identity["planFile"]
     revision_matches = not revision or summary_revision == revision
-    if not summary.get("results") or not plan_matches or not revision_matches:
+    identity_current = not strict_plan or summary.get("resultPathIdentity") == "posix-v1"
+    if not summary.get("results") or not plan_matches or not revision_matches or not identity_current:
         return parse_results_action(root, None, plan, revision)
     return summary
 

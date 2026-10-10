@@ -52,7 +52,7 @@ def result_parse_row_identity(row):
         if not isinstance(row["provenance"], dict):
             raise ValueError("结果行 provenance 类型无效")
         owners.append(row["provenance"])
-    values = [owner[key] for owner in owners for key in ("planFile", "plan_file", "selectedPlanId", "selected_plan_id") if key in owner and owner[key] != ""]
+    values = [owner[key] for owner in owners for key in ("planFile", "plan_file", "plan", "selectedPlanId", "selected_plan_id") if key in owner and owner[key] != ""]
     if any(not isinstance(value, str) for value in values) or len(set(values)) > 1:
         raise ValueError("结果行 Plan 别名类型或身份冲突")
     return durable_plan_path(values[0], "结果行 Plan") if values else ""
