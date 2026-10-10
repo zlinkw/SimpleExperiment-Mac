@@ -27819,7 +27819,7 @@ function simpleSftpIntegrationReadiness(extensionRegistry = vscode.extensions) {
             extensionId: SIMPLE_SFTP_EXTENSION_ID,
             version: "",
             missingCommands: [...SIMPLE_SFTP_REQUIRED_COMMANDS],
-            message: "未安装或未启用配套 SimpleSFTP。请运行公开离线包中的 install-public-release.ps1，安装后执行 Developer: Reload Window。",
+            message: "未安装或未启用配套 SimpleSFTP Mac。请从 SimpleExperiment Mac 的同一 preview Release 先安装 SimpleSFTP Mac VSIX，再安装 SimpleExperiment Mac VSIX，随后执行 Developer: Reload Window。",
         };
     }
     else {
@@ -27839,7 +27839,7 @@ function simpleSftpIntegrationReadiness(extensionRegistry = vscode.extensions) {
             legacyInstalled: legacySftp.installed,
             legacyVersion: legacySftp.version,
             message: missingCommands.length
-                ? `SimpleSFTP ${version || "当前版本"} 缺少编排命令：${missingCommands.join("、")}。请使用配套公开离线包升级两个插件并重载窗口。`
+                ? `SimpleSFTP Mac ${version || "当前版本"} 缺少编排命令：${missingCommands.join("、")}。请检查 preview 配套更新，升级两个插件并重载窗口。`
                 : `SimpleSFTP ${version || "已安装"} 的上传 ABI 已就绪。`,
         };
     }

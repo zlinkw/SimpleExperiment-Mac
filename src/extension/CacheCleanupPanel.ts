@@ -133,6 +133,24 @@ async function deleteLocalCandidate(root: string, row: Candidate): Promise<void>
   const immediatelyBeforeDelete = await fs.lstat(full, { bigint: true });
   if (!immediatelyBeforeDelete.isFile() || immediatelyBeforeDelete.isSymbolicLink() || immediatelyBeforeDelete.nlink !== 1n
     || candidateIdentity(row.path, immediatelyBeforeDelete) !== row.token) throw new Error(`本机候选在删除前再次发生变化：${row.path}`);
+  if (process.platform === "darwin") {
+    const { fingerprintCacheFile } = require("../mac/CacheDelete");
+    const fingerprint = fingerprintCacheFile(full, row.path);
+    if (fingerprint.token !== row.token) throw new Error(`本机候选在删除前再次发生变化：${row.path}`);
+    const approval = { root: realRoot, relative: row.path, fullPath: full, ...fingerprint,
+      confirm: true, secondConfirmation: true, confirmedAbsolutePath: full };
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(process.execPath, [require.resolve("../mac/CacheDelete"), JSON.stringify(approval)], {
+        cwd: parent, windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "ignore", "pipe"],
+      });
+      let message = "";
+      child.stderr.on("data", data => { message = (message + String(data)).slice(-500); });
+      child.on("error", error => reject(new Error(`PARENT_CD_FAILED：无法在已核验父目录启动删除程序：${String(error)}`)));
+      child.on("close", code => code === 0 ? resolve() : reject(new Error(message || "PARENT_CD_FAILED")));
+    });
+    try { await fs.lstat(full); } catch (error: any) { if (error?.code === "ENOENT") return; throw error; }
+    throw new Error(`本机删除后仍存在：${row.path}`);
+  }
   const encoded = Buffer.from(script, "utf16le").toString("base64");
   await new Promise<void>((resolve, reject) => {
     const child = spawn("pwsh.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { cwd: parent, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });

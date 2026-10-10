@@ -22,12 +22,12 @@
 | 16 | 本机 prepare/publish、完整草稿核验后发布、不安装/Actions | 已验证 | .308完整公开附件后索引普通提交推送/fetch通过；.307实际Git TLS故障凭同一回执补推同一索引提交成功，无重复发布/覆盖/安装；发布模块6回归与门禁4通过 |
 | 17 | 版本不可覆盖、更高版本修复、保留历史附件不清理 | 已验证 | assertNewerPreview/发布附件集合核验，历史 preview 保留，macRelease |
 | 18 | 验证批次分别提交普通推送 master，包绑定同步提交 | 已验证 | 历史批次计划、两仓 Git 提交/fetch 记录、清单 sourceCommit 与源码快照 |
-| 19 | Mac 数据目录/POSIX/大小写/中文空格/锁/退出/CLI/执行依赖 | 剩余 | MacPaths/PosixPath、共享租约、CLI、Darwin 退出证明已有局部回归；完整业务依赖和真实进程/路径行为仍待核验 |
+| 19 | Mac 数据目录/POSIX/大小写/中文空格/锁/退出/CLI/执行依赖 | 剩余 | MacPaths/PosixPath、共享租约、CLI、Darwin退出证明；本机缓存回收已替换固定pwsh.exe，实际消费者6通过（虚拟文件系统/进程叶子）；完整业务依赖及真实进程/路径仍待核验 |
 | 20 | Termius 手动登录隧道、保存检测端点与 Agent/tmux 指引 | 剩余 | ManualTunnel/macManualTunnel/macProjectPrepare；补齐遗留高级脚本命令的Mac分支，显示动态三拓扑Agent/tmux指引，不执行Windows校验/保存框；真实Termius尚待验收 |
 | 21 | SFTP 密钥/agent/密码/口令，会话记忆与可选 SecretStorage | 剩余 | mac-auth、macAuthentication、本机认证替身；真实密钥/密码服务器和用户系统 agent 未验收 |
 | 22 | SSH/tar 流、本机跨服务器中转、两端独立认证 | 剩余 | macRelay、tar-writer/relay 实际消费者回归；真实双服务器认证/断连尚未验收 |
 | 23 | 一致 Mac 路径/租约、独立 AppSupport 发现、兼容 API/Plan | 剩余 | macHostLeasePaths/macLeasePaths/API/Plan 回归通过；完整真实插件协作仍待验证 |
-| 24 | 删除规范化/直接父目录/两确认，保留 Agent 职责边界 | 剩余 | 现有防护和只读回归保留；真实完整业务边界与 macOS 文件行为未整体验收，无真实删除验证 |
+| 24 | 删除规范化/直接父目录/两确认，保留 Agent 职责边界 | 剩余 | Mac本机删除助手6防护回归：双确认、规范直接父目录、最短子项、身份/SHA、链接/跨文件系统/变化拒绝及结果核验；缓存面板上下文7通过。仅虚拟文件系统，不执行真实删除，macOS完整边界待验 |
 | 25 | M5 首装→下一版 GitHub 更新、版本/设置/重载功能 | 剩余 | 用户延后；匿名下载及模拟事务不能替代安装证据 |
 | 26 | 不可达/限流/筛选/错平台/哈希/重复点击/部分失败补装 | 已验证 | macPreviewRelease/macVsix/macUpdateTransaction/macBootstrap/macUpdateGate 单文件串行回归 |
 | 27 | 本地 build/依赖闭包/面板脚本与串行超时门禁 | 已验证 | .308 prepare82目标文件/83含面板标记，两仓build/闭包/主题/vm、实际两包客户端15/按钮3/三拓扑指引1/退出7及完整快照绑定通过；旧命令门禁失败已迁移Mac并以新提交补正、纳入prepare，单文件串行20秒 |

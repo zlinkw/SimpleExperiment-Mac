@@ -42,18 +42,20 @@ test("SimpleSFTP integration readiness validates the paired command ABI", () => 
   const missing = readiness({ getExtension() { return undefined; } });
   assert.equal(missing.ready, false);
   assert.equal(missing.installed, false);
-  assert.match(missing.message, /install-public-release\.ps1/);
+  assert.match(missing.message, /同一 preview Release/);
+  assert.match(missing.message, /先安装 SimpleSFTP Mac VSIX/);
+  assert.doesNotMatch(missing.message, /\.ps1|Windows/);
 
   const ready = readiness({
     getExtension(id) {
-      if (id !== "simple-local.simple-sftp") return undefined;
+      if (id !== "simple-local.simple-sftp-mac") return undefined;
       return {
         packageJSON: {
           version: "0.1.2",
           contributes: { commands: [
-            { command: "simpleSftp.uploadWorkspace" },
-            { command: "simpleSftp.uploadFiles" },
-            { command: "simpleSftp.configureDownloadScope" },
+            { command: "simpleSftpMac.uploadWorkspace" },
+            { command: "simpleSftpMac.uploadFiles" },
+            { command: "simpleSftpMac.configureDownloadScope" },
           ] },
         },
       };
@@ -65,13 +67,13 @@ test("SimpleSFTP integration readiness validates the paired command ABI", () => 
 
   const outdated = readiness({
     getExtension(id) {
-      if (id !== "simple-local.simple-sftp") return undefined;
-      return { packageJSON: { version: "0.1.0", contributes: { commands: [{ command: "simpleSftp.uploadWorkspace" }] } } };
+      if (id !== "simple-local.simple-sftp-mac") return undefined;
+      return { packageJSON: { version: "0.1.0", contributes: { commands: [{ command: "simpleSftpMac.uploadWorkspace" }] } } };
     },
   });
   assert.equal(outdated.ready, false);
-  assert.deepEqual(Array.from(outdated.missingCommands), ["simpleSftp.uploadFiles", "simpleSftp.configureDownloadScope"]);
-  assert.match(outdated.message, /配套公开离线包升级两个插件/);
+  assert.deepEqual(Array.from(outdated.missingCommands), ["simpleSftpMac.uploadFiles", "simpleSftpMac.configureDownloadScope"]);
+  assert.match(outdated.message, /检查 preview 配套更新/);
 });
 
 test("SimpleSFTP integration readiness reuses ABI derivation and invalidates on extension replacement", () => {
@@ -80,9 +82,9 @@ test("SimpleSFTP integration readiness reuses ABI derivation and invalidates on 
   const packageJSON = {
     version: "0.1.3",
     contributes: { commands: [
-      { command: "simpleSftp.uploadWorkspace" },
-      { command: "simpleSftp.uploadFiles" },
-      { command: "simpleSftp.configureDownloadScope" },
+      { command: "simpleSftpMac.uploadWorkspace" },
+      { command: "simpleSftpMac.uploadFiles" },
+      { command: "simpleSftpMac.configureDownloadScope" },
     ] },
   };
   const extension = {};
@@ -92,8 +94,8 @@ test("SimpleSFTP integration readiness reuses ABI derivation and invalidates on 
   let legacyExtension;
   const registry = {
     getExtension(id) {
-      if (id === "simple-local.simple-sftp") return extension;
-      if (id === "simple-local.simple-sftp-manager") return legacyExtension;
+      if (id === "simple-local.simple-sftp-mac") return extension;
+      if (id === "simple-local.simple-sftp-mac-manager") return legacyExtension;
       return undefined;
     },
   };
@@ -113,8 +115,8 @@ test("SimpleSFTP integration readiness reuses ABI derivation and invalidates on 
   const upgraded = { packageJSON: { ...packageJSON, version: "0.1.4" } };
   const upgradedRegistry = {
     getExtension(id) {
-      if (id === "simple-local.simple-sftp") return upgraded;
-      if (id === "simple-local.simple-sftp-manager") return legacyExtension;
+      if (id === "simple-local.simple-sftp-mac") return upgraded;
+      if (id === "simple-local.simple-sftp-mac-manager") return legacyExtension;
       return undefined;
     },
   };
