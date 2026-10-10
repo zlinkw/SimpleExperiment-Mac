@@ -2,7 +2,7 @@
   "name": "simple-experiment-mac",
   "displayName": "SimpleExperiment Mac",
   "description": "面向 Apple Silicon macOS 的科研实验编排面板，用户手动配置 Termius 本地隧道。",
-  "version": "0.5.295",
+  "version": "0.5.296",
   "publisher": "simple-local",
   "extensionKind": [
     "ui"

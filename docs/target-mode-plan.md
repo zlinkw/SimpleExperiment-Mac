@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-tool-003（passed，提交推送待记录）
+## 当前批次 mac-release-033（running，0.5.296/0.2.90）
+- 范围 6 文件：两仓 package/lock、Experiment runtime/计划。mac-tool-003 `4f0f295707f0f142e852184e162e92c81b7a3547` 与 SFTP `0abf9794021d3bd86e8af61478fe8b7e4d0db06c` 已普通推送/fetch 相等，工作区干净；重读事实/计划/来源/版本。失败 .295/.89 未发布、证据保留，改用更高版本和新目录。
+- pending metadata build/闭包/面板/runtime，再完整 prepare/实际包十二份（新增 Agent 产生端 7）/匿名 .294/.88→.296/.90；核验完整三附件草稿后发布。无 Actions/安装/真实科研，M5 延后；原 Plan 结果读取与其他回执/写动作下一批。
+- passed 新 metadata：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；提交来源后完整 prepare 待执行。
+
+### 前批 mac-tool-003（passed）
 - 范围至多 5 文件：源快照工具/回归、发布说明/prepare 文案与计划。prepare 所有 71 目标文件/72 含面板标记通过，225 闭包通过；打包前因 SFTP 无 .vscodeignore 而使用 package.json files，快照工具错误要求 ignore 存在，失败。保留 prepare-0.5.295.log 与空 .295 目录/来源，不覆盖。仅修正快照保留真实 VSCE 规则的缺省机制，新增真实 CLI files 策略证明/策略变化拒绝，不扩大超时或放松来源字节检查。
 - Exp `f9d988dd44642d8a9100478c3ab8760e60f6bee9`/SFTP `0abf9794021d3bd86e8af61478fe8b7e4d0db06c` master 同步且干净；重读事实/计划/源快照/实际 SFTP files 与 pinned VSCE 缺省源码。工具批验证提交后改用更高 .296/.90，不重试任何超时测试。
 - passed 快照 8（含无 ignore 的真实 files 机制/策略突现拒绝）、225 闭包、闭包 2/发布门禁 4 串行，实际 SFTP 真实 pinned VSCE 27 文件符合原 files、无脚本/测试/历史证据；源/快照字节检查未改变，UTF8/diff。完整打包仍须新版本 prepare/实际 VSIX，不把 ls 当作包验收。
