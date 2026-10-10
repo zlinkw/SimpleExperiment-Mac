@@ -217,7 +217,7 @@
       },
       {
         "command": "simpleExperimentMac.generateXshellTunnelScript",
-        "title": "SimpleExperiment：生成 Xshell 会话启动脚本",
+        "title": "SimpleExperiment：显示 Termius 隧道与 Agent 指引",
         "icon": "$(file-code)"
       },
       {

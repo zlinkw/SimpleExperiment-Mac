@@ -54,6 +54,30 @@ function compiledMethod(name, globals = {}) {
   return vm.runInNewContext("({" + tail.slice(0, end) + "})", { ManualTunnel_1: manual, keys: { setupConfig: "setup" }, errorMessage: e => e.message, ...globals });
 }
 
+test("legacy script command opens the actual Termius guide on Mac for all three topologies", async () => {
+  for (const mode of ["single_worker", "worker_pool", "hub_worker"]) {
+    const documents = [], shown = [];
+    const points = mode === "single_worker" ? [endpoint()] : mode === "worker_pool" ? [endpoint(), endpoint("worker-b", 29102)] : [endpoint("hub", 29100), endpoint()];
+    const vscode = { workspace: { openTextDocument: async value => { documents.push(value); return value; } },
+      window: { showTextDocument: async (doc, options) => { shown.push({ doc, options }); }, showSaveDialog: () => { throw Error("Windows script dialog must not open"); } } };
+    const globals = { vscode, remoteProjectName: () => "实验 A", fs: { writeFile: () => { throw Error("Must not write a launch script"); } },
+      XshellTunnelSetup_1: { validateXshellSetupConfig: () => { throw Error("Windows Xshell validation must not run"); } } };
+    const instance = compiledMethod("generateTunnelScript", globals);
+    instance.showManualAgentGuide = compiledMethod("showManualAgentGuide", globals).showManualAgentGuide;
+    instance.isMacVariant = () => true;
+    instance.setupConfig = manual.setupFromManualEndpoints(points);
+    instance.tunnelConfig = { token: "PRIVATE_TOKEN_MUST_NOT_APPEAR" };
+    instance.assertTopologyReady = () => ({ mode });
+    instance.tunnelLaunchItems = () => { throw Error("Windows session launch items must not be queried"); };
+    await instance.generateTunnelScript();
+    assert.equal(documents.length, 1); assert.equal(shown.length, 1); assert.equal(shown[0].options.preview, true);
+    assert.equal(documents[0].language, "markdown"); assert.match(documents[0].content, /Termius/);
+    assert.match(documents[0].content, /tmux has-session/); assert.ok(documents[0].content.includes("实验 A"));
+    assert.doesNotMatch(documents[0].content, /PRIVATE_TOKEN_MUST_NOT_APPEAR|\.bat|\.ps1|Xshell/);
+    for (const point of points) { assert.ok(documents[0].content.includes(String(point.localForwardPort))); assert.ok(documents[0].content.includes(String(point.remoteAgentPort))); }
+  }
+});
+
 test("actual Mac provider reads settings, fails closed and bypasses private-session operations", async () => {
   let value = [endpoint()];
   const provider = compiledMethod("loadSetupConfig", { vscode: { workspace: { getConfiguration: () => ({ get: (key, fallback) => key === manual.MANUAL_ENDPOINT_SETTING ? value : fallback }) } } });

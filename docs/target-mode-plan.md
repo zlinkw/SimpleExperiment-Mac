@@ -13,7 +13,14 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-044（published，0.5.307/0.2.97）
+## 当前批次 mac-005ar-manual-guide-entry（passed，本地修复）
+- 用户继续按计划推进；保留先完成后完善及延后真机的约束。本轮重读事实/计划/两仓Git与入口源码，Exp e1450e49176ffca1454b1ae325e358d7b704bcc5、SF2f464eb75e362150de5cbe61e1946504c3497a0a同步干净。
+- 已证实未适配入口：高级命令generateXshellTunnelScript仍直接执行Windows Xshell校验并提供bat/ps1保存框；其他手动隧道入口已转Termius。本批修复此遗留入口，保留命令ID，在Mac显示现有动态端点/Agent/tmux指引，不自动启动隧道或读取Termius私有状态。
+- 范围至多7文件：legacy、Mac隧道实际消费者测试、package/CommandFactory命令标题、发布说明模板、本计划/状态清单。保护三拓扑、业务API/Plan/更新、Windows原项目及已有命令。pending真实编译入口复现/回归、build/闭包/vm/UTF8/diff。
+- 下一批仅补丁版本与发布，真机相关行为deferred；剩余15/29。不重复修改README/配置说明。
+- 回归先在实际编译入口失败：Windows session launch items must not be queried；补齐Mac早返回后macManualTunnel10/macProjectPrepare16、命令标题门禁、build面板2/225闭包/vm/UTF8/diff通过，单文件串行20秒，无超时/远端操作。真实提交在普通同步后由发布批记录SHA。
+
+## 前批 mac-release-044（published，0.5.307/0.2.97）
 - 起始Expf633c5bb6dfb0771238e89498096b898dba02159=origin/master，SF2f464eb75e362150de5cbe61e1946504c3497a0a 干净且来源不变；重读事实/计划/版本/发布门禁。本批4文件：Exp package/lock/runtime/计划，索引作为独立发布元数据提交。
 - 静态客户端及发布恢复已本地通过；本批仅交付，不扩科研适配。pending metadata build/runtime/闭包/vm；同步后prepare81目标文件、实际包客户端/按钮/源码快照、publish三附件及索引普通提交/推送、真实匿名静态检查和下载。保护M5待验/Windows/已有入口/远端实验，无安装/Actions/删除。
 - 静态索引替代旧匿名列表等待，不再以API reset作为本次用户更新验证入口；M5 deferred，剩余15/29。
@@ -66,5 +73,5 @@
 - .264首版以来两仓独立namespace/更新通道、Mac路径/CLI、Termius手动端点、独立认证与本机中转、主题、Plan/结果路径适配分批实现，源码及交付均普通推送/fetch相等。完整历史、失败与局限保留在Git和产物，无自动安装/Actions/未经授权清理。
 
 ## 下一边界
-- 先完成后完善：静态索引.307已交付，用户端无REST请求；只等待真机反馈，不把潜在科研增强追加为首版阻塞。缺少真机证据的完善延期，收到明确结果后再处理具体问题。
+- 先完成后完善：用户授权继续计划，核查已有mac业务入口并修复可由源码/实际消费者证实的未适配问题；缺少真机证据的完善延期，不追加潜在科研增强。静态索引.307已交付，用户端无REST请求。
 - M5待验：更新/两插件启动/设置与重载/部分失败补装、Termius、独立认证/中文路径/断连、三拓扑完整科研主流程；不得用本机VM/AST/headless替代。目标清单固定29条，当前15项待验/整体核验。旧版API受限时可从.307公开Release按SF→Exp手动安装一次并重载；新版本沿静态preview通道更新，按钮不变。

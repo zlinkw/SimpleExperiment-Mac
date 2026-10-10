@@ -5362,6 +5362,7 @@ export class RealtimeTunnelPanelProvider {
             this.postState();
     }
     async generateTunnelScript() {
+        if (this.isMacVariant()) { await this.showManualAgentGuide(); return; }
         const hubConfig = this.tunnelLaunchItems()[0].config;
         const errors = (0, XshellTunnelSetup_1.validateXshellSetupConfig)(hubConfig);
         if (errors.length) {

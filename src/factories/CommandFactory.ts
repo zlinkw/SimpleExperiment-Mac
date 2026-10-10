@@ -68,7 +68,7 @@ export const COMMAND_MANIFEST: ReadonlyArray<Omit<CommandDescriptor, "handler">>
   { id: "simpleExperimentMac.pauseRealtimeStream", title: "SimpleExperiment：暂停实时流", withLease: false },
   { id: "simpleExperimentMac.resumeRealtimeStream", title: "SimpleExperiment：恢复实时流", withLease: false },
   { id: "simpleExperimentMac.pauseAllNetworkActivity", title: "SimpleExperiment：暂停全部网络活动" },
-  { id: "simpleExperimentMac.generateXshellTunnelScript", title: "SimpleExperiment：生成 Xshell 会话启动脚本" },
+  { id: "simpleExperimentMac.generateXshellTunnelScript", title: "SimpleExperiment：显示 Termius 隧道与 Agent 指引" },
   { id: "simpleExperimentMac.openTunnelStatus", title: "SimpleExperiment：打开隧道状态", withLease: false },
   { id: "simpleExperimentMac.runXshellRealIntegrationCheck", title: "SimpleExperiment：运行 Xshell 真实对接检测", withLease: false },
   { id: "simpleExperimentMac.manualRefresh", title: "SimpleExperiment：手动快照", withLease: false },
