@@ -55,37 +55,9 @@ def claim_evidence_record_key(record):
     return tuple(sorted(dict.fromkeys(paths))), identifier
 
 def claim_evidence_catalog(root, summary, snapshots):
-    plan, revision = archive_evidence_identity(summary)
-    durable_plan_path(plan, "claim Plan")
-    records = summary.get("results", [])
-    if not isinstance(records, list) or len(records) > 50000:
-        raise ValueError("claim 结果列表类型或数量无效")
-    wanted = set(claim_evidence_record_key(record) for record in final_analysis_results(root, summary, snapshots))
-    sources = sorted({source for paths, _ in wanted for source in paths})
-    if len(sources) > 240:
-        raise ValueError("claim 来源数量超出预算")
-    if not sources:
-        return {"sources": [], "keys": []}
-    contract = output_contract_plan(root, plan)
-    snapshots.append((plan, contract["snapshot"]))
-    policy = read_project_metric_policy(root, strict_paths=True, snapshots=snapshots)
-    jobs = result_parse_jobs(root, plan, [], snapshots)
-    policy.update(_strictResultIdentity=True, _strictResultPlan=plan, _strictResultSuite=contract["suite"],
-                  _strictPlanContract=contract, _strictResultSnapshots=snapshots)
-    checked = []
-    for source in sources:
-        policy["_strictResultRequireOwner"] = not (source in jobs or any(output_contract_pattern_matches(pattern, source) for pattern in contract["candidates"]))
-        for record in parse_result_file(root, source, policy, strict_paths=True, snapshots=snapshots):
-            if not result_parse_row_matches(record, plan, contract["suite"]):
-                continue
-            record = {**record, "planFile": plan, "provenance": {**(record.get("provenance") or {}), "planFile": plan}}
-            if claim_evidence_record_key(record) in wanted:
-                checked.append(record)
-            if len(checked) > 50000:
-                raise ValueError("claim 重解析结果超出数量预算")
+    checked = analysis_current_records(root, summary, snapshots)
     catalog_sources, keys = set(), set()
-    child = {"planFile": plan, "planRevision": revision, "resultPathIdentity": "posix-v1", "results": checked}
-    for record in final_analysis_results(root, child, snapshots):
+    for record in checked:
         paths, _ = claim_evidence_record_key(record)
         evidence = [source for source in paths if claim_evidence_reference(source)]
         if not evidence:
@@ -146,7 +118,7 @@ def claim_evidence_verify(root, snapshots, directories, missing=False):
             return
         raise ValueError("claim 文件在核验期间出现")
 
-def checked_claim_evidence(root, summary):
+def checked_claim_evidence(root, summary, _publish=True):
     plan, revision = archive_evidence_identity(summary)
     durable_plan_path(plan, "claim Plan")
     snapshots, directories, missing = ProjectAggregateSnapshots(), [], False
@@ -184,6 +156,8 @@ def checked_claim_evidence(root, summary):
               "unsupportedCount": counts["unsupported"], "needsExperimentCount": counts["needs experiment"], "claims": rows,
               "evidenceSources": catalog["sources"], "planFile": plan, "planRevision": revision, "resultPathIdentity": "posix-v1", "path": relative}
     claim_evidence_verify(root, snapshots, directories, missing)
+    if not _publish:
+        return report
     for target in (relative, "simple_cluster/results/claim_evidence.json"):
         full = worker_plan_project_path(root, target)
         os.makedirs(os.path.dirname(full), exist_ok=True)

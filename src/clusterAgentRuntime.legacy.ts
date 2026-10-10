@@ -5,6 +5,7 @@ import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
 import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
 import { PROJECT_AGGREGATE_READ_PYTHON } from "./runtime/ProjectAggregateRead";
 import { CLAIM_EVIDENCE_READ_PYTHON } from "./runtime/ClaimEvidenceRead";
+import { PLAN_ANALYSIS_READ_PYTHON } from "./runtime/PlanAnalysisRead";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -19,6 +20,7 @@ ${RESULT_PARSE_INPUTS_PYTHON}
 ${ARCHIVE_EVIDENCE_READ_PYTHON}
 ${PROJECT_AGGREGATE_READ_PYTHON}
 ${CLAIM_EVIDENCE_READ_PYTHON}
+${PLAN_ANALYSIS_READ_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -9478,12 +9480,14 @@ def project_primary_metric(root):
     return read_project_metric_policy(root).get("primaryMetric") or "AUC"
 
 def run_quality_gate_action(root, plan=None, plan_revision=""):
-    summary = read_current_results_summary(root, plan, plan_revision)
-    apply_final_evidence_summary(root, summary)
-    policy = read_project_metric_policy(root)
+    context = plan_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
+    summary = context["summary"] if context else read_current_results_summary(root, plan, plan_revision)
+    if not context:
+        apply_final_evidence_summary(root, summary)
+    policy = context["policy"] if context else read_project_metric_policy(root)
     primary = policy.get("primaryMetric") or "AUC"
     issues = []
-    records = final_analysis_results(root, summary)
+    records = context["records"] if context else final_analysis_results(root, summary)
     if not records:
         issues.append({"severity": "critical", "message": "没有已归档结果；请先从完整预览中选择有效记录并归档。"})
     for record in records:
@@ -9504,13 +9508,18 @@ def run_quality_gate_action(root, plan=None, plan_revision=""):
             if metric in ("loss", "HD95", "ASD", "ECE", "brier", "MAE", "MSE", "RMSE") and value < 0:
                 issues.append({"severity": "warning", "resultId": record.get("resultId"), "metric": metric, "message": f"{metric} 应为非负"})
     severity_counts = {level: len([item for item in issues if item.get("severity") == level]) for level in ("critical", "warning")}
-    plan_norm = normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
+    plan_norm = plan if context else normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
     report = {"schemaVersion": 1, "status": "failed" if severity_counts["critical"] else "warning" if issues else "passed", "taskType": policy.get("taskType"), "primaryMetric": primary, "classificationMetrics": policy.get("classificationMetrics"), "segmentationMetrics": policy.get("segmentationMetrics"), "source": "archived_only", "resultCount": len(records), "parsedResultCount": len(summary.get("results") or []), "pendingReviewCount": summary.get("pendingReviewCount", 0), "issues": issues, "checkedAt": now_iso(), "planFile": plan_norm or ""}
-    rel_target = plan_results_artifact_relpath(plan_norm, "quality_gate.json")
-    target = safe_project_path(root, rel_target)
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    atomic_write(target, report)
-    atomic_write(safe_project_path(root, "simple_cluster/results/quality_gate.json"), report)
+    rel_target = plan_results_artifact_relpath(plan_norm, "quality_gate.json", strict_plan=bool(context))
+    target = worker_plan_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
+    if context:
+        report.update(planRevision=summary.get("planRevision", ""), resultPathIdentity="posix-v1", path=rel_target)
+        plan_analysis_verify(root, context)
+        plan_analysis_publish_report(root, report, "quality_gate.json")
+    else:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        atomic_write(target, report)
+        atomic_write(safe_project_path(root, "simple_cluster/results/quality_gate.json"), report)
     summary["qualityWarnings"] = len(issues)
     summary["qualityGateStatus"] = report["status"]
     summary["qualityGatePath"] = relpath(root, target)
@@ -9639,11 +9648,13 @@ def paired_metric_comparisons(records, primary):
         out.append(stats)
     return out
 
-def compute_statistics_action(root, plan=None, plan_revision=""):
-    summary = read_current_results_summary(root, plan, plan_revision)
-    apply_final_evidence_summary(root, summary)
-    policy = read_project_metric_policy(root)
-    final_records = final_analysis_results(root, summary)
+def compute_statistics_action(root, plan=None, plan_revision="", _analysis=None, _publish=True):
+    context = _analysis or (plan_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None)
+    summary = context["summary"] if context else read_current_results_summary(root, plan, plan_revision)
+    if not context:
+        apply_final_evidence_summary(root, summary)
+    policy = context["policy"] if context else read_project_metric_policy(root)
+    final_records = context["records"] if context else final_analysis_results(root, summary)
     if not final_records:
         raise ValueError("没有已归档结果；请先从完整预览中选择有效记录并归档。")
     rows = []
@@ -9654,14 +9665,11 @@ def compute_statistics_action(root, plan=None, plan_revision=""):
         rows.append({"suite": item["suite"], "group": item["group"], "groupKey": item.get("groupKey"), "method": item.get("method") or item["group"], "dataset": item.get("dataset") or "", "split": item.get("split") or "", "dimensions": item.get("dimensions") or {}, "groupBy": item.get("groupBy") or STATISTICS_GROUP_BY, "aggregateOver": item.get("aggregateOver") or STATISTICS_AGGREGATE_OVER, "metrics": metrics})
     comparisons = paired_metric_comparisons(final_records, policy.get("primaryMetric") or "AUC")
     report = {"schemaVersion": 1, "generatedAt": now_iso(), "taskType": policy.get("taskType"), "primaryMetric": policy.get("primaryMetric"), "metricPriority": policy.get("metricPriority"), "aggregationPolicy": {"source": "archived_only", "groupBy": STATISTICS_GROUP_BY, "aggregateOver": STATISTICS_AGGREGATE_OVER, "valueField": "mean", "message": "SCI 绘图只使用已归档结果的 mean/std/ci，不使用临时预览或单个 seed 原始值。"}, "rows": rows, "pairedComparisons": comparisons, "resultCount": len(final_records), "parsedResultCount": len(summary.get("results") or []), "pendingReviewCount": summary.get("pendingReviewCount", 0), "inclusionPolicy": summary.get("inclusionPolicy"), "message": "统计仅包含已归档结果，绘图默认使用 mean/std/ci。" if final_records else "没有已归档结果，统计不会使用临时预览记录。"}
-    plan_norm = normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
+    plan_norm = plan if context else normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
     if plan_norm:
         report = {**report, "planFile": plan_norm}
-    rel_target = plan_results_artifact_relpath(plan_norm, "statistics.json")
-    target = safe_project_path(root, rel_target)
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    atomic_write(target, report)
-    atomic_write(safe_project_path(root, "simple_cluster/results/statistics.json"), report)
+    rel_target = plan_results_artifact_relpath(plan_norm, "statistics.json", strict_plan=bool(context))
+    target = worker_plan_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
     summary["statisticsUpdatedAt"] = report["generatedAt"]
     summary["statisticsPath"] = relpath(root, target)
     summary["statisticsResultCount"] = report["resultCount"]
@@ -9670,6 +9678,16 @@ def compute_statistics_action(root, plan=None, plan_revision=""):
         summary["planFile"] = plan_norm
     summary["significanceStatus"] = "available" if comparisons else "需要至少两个方法和共享 seed/case"
     summary["pairedComparisons"] = comparisons[:10]
+    if context:
+        report.update(planRevision=summary.get("planRevision", ""), resultPathIdentity="posix-v1")
+        plan_analysis_verify(root, context)
+        if not _publish:
+            return report
+        plan_analysis_publish_report(root, report, "statistics.json")
+    else:
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        atomic_write(target, report)
+        atomic_write(safe_project_path(root, "simple_cluster/results/statistics.json"), report)
     write_results_summary_v2(root, summary)
     append_event(root, {"type": "statistics_updated", "payload": {"rows": len(rows), "path": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or ""}})
     return report
@@ -10060,10 +10078,14 @@ def paper_dataset_output(root, stats, policy, dataset, plan):
                 "",
                 "",
             ])
-    plan_norm = normalize_result_candidate(plan) if plan else ""
+    strict_plan = stats.get("resultPathIdentity") == "posix-v1"
+    plan_norm = durable_plan_path(plan, "论文表 Plan") if strict_plan else normalize_result_candidate(plan) if plan else ""
+    if strict_plan and archive_evidence_identity(stats)[0] != plan_norm:
+        raise ValueError("论文表统计与原始 Plan 不一致")
     slug = result_plan_directory_key(plan_norm) if plan_norm else "project"
     md = "# SimpleExperiment results\n\n" + "\n".join(lines) + "\n"
-    out_dir = safe_project_path(root, "paper/tables/" + dataset_path_key(dataset))
+    relative_dir = "paper/tables/" + dataset_path_key(dataset)
+    out_dir = worker_plan_project_path(root, relative_dir) if strict_plan else safe_project_path(root, relative_dir)
     md_name = f"simple_results_table__{slug}.md" if slug else "simple_results_table.md"
     csv_name = f"simple_results_table__{slug}.csv" if slug else "simple_results_table.csv"
     md_path = os.path.join(out_dir, md_name)
@@ -10073,8 +10095,9 @@ def paper_dataset_output(root, stats, policy, dataset, plan):
     return {"dataset": dataset, "datasetKey": dataset_path_key(dataset), "paperTablePath": relpath(root, md_path), "paperTableCsvPath": relpath(root, csv_path), "rowCount": len(csv_rows) - 1}, [("text", relpath(root, md_path), md), ("text", relpath(root, csv_path), csv_buffer.getvalue())]
 
 def export_paper_table_action(root, plan=None, plan_revision=""):
-    stats = compute_statistics_action(root, plan, plan_revision)
-    policy = read_project_metric_policy(root)
+    context = plan_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
+    stats = compute_statistics_action(root, plan, plan_revision, _analysis=context, _publish=not bool(context))
+    policy = context["policy"] if context else read_project_metric_policy(root)
     partitions = dataset_partitions([(row.get("dimensions") or {}).get("dataset") for row in stats.get("rows") or []])
     tables, outputs = [], []
     for partition in partitions:
@@ -10083,8 +10106,9 @@ def export_paper_table_action(root, plan=None, plan_revision=""):
         table, files = paper_dataset_output(root, child, policy, dataset, plan)
         tables.append(table)
         outputs.extend(files)
-    publish_dataset_outputs(root, outputs)
-    summary = read_current_results_summary(root, plan, plan_revision)
+    if not context:
+        publish_dataset_outputs(root, outputs)
+    summary = context["summary"] if context else read_current_results_summary(root, plan, plan_revision)
     summary["paperDatasetTables"] = tables
     for field in ("paperTablePath", "paperTableCsvPath", "exportPath"):
         summary.pop(field, None)
@@ -10093,8 +10117,16 @@ def export_paper_table_action(root, plan=None, plan_revision=""):
         summary["paperTableCsvPath"] = tables[0]["paperTableCsvPath"]
         summary["exportPath"] = tables[0]["paperTablePath"]
     summary["paperTableResultCount"] = stats.get("resultCount", 0)
-    claim_report = evaluate_claim_evidence(root, summary)
+    claim_report = checked_claim_evidence(root, summary, _publish=False) if context else evaluate_claim_evidence(root, summary)
     apply_claim_evidence_summary(summary, claim_report)
+    if context:
+        for _, relative, _ in outputs:
+            worker_plan_project_path(root, relative)
+        plan_analysis_verify(root, context)
+        plan_analysis_publish_report(root, stats, "statistics.json")
+        publish_dataset_outputs(root, outputs)
+        plan_analysis_publish_report(root, claim_report, "claim_evidence.json")
+        append_event(root, {"type": "statistics_updated", "payload": {"rows": len(stats["rows"]), "path": stats["path"], "planFile": plan}})
     write_results_summary_v2(root, summary)
     append_event(root, {"type": "paper_table_updated", "payload": {"datasetTables": tables, "planFile": plan or ""}})
     return {"schemaVersion": 1, "path": summary.get("paperTablePath", ""), "csvPath": summary.get("paperTableCsvPath", ""), "paperDatasetTables": tables, "rows": sum(table["rowCount"] for table in tables), "resultCount": stats.get("resultCount", 0), "claimEvidence": summary.get("claimEvidence")}
