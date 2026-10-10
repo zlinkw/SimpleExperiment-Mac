@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-032（passed）
+## 当前批次 mac-release-039（running，0.5.302/0.2.96）
+- 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp d3840a06518607d942848f9a14bef5ddfcdceb17/SFTP6a7537468b64d363ed04d2cf5cff4bc274262d1b普通推送/fetch相等，起始干净；事实/计划/版本/门禁和实际包runner重读。
+- 递增版本保留原格式，metadata验证后普通提交推送；完整77串行目标、十八实际VSIX含新分析8、快照/完整草稿附件与匿名.301/.95→.302/.96。无Actions/自动安装/科研/SSH/归档删除，M5延后。
+- 下一边界：其他Agent结果动作仍旧路径/读取，完整报告发布/归档执行/revision内容和物理原子锁定继续分批。
+
+- passed metadata两仓build/runtimeManifest1/225与26闭包/面板2/vm.Script、版本一致/UTF8/diff，mac-release-039-metadata.log。下一步完整prepare77目标串行、十八实际VSIX、快照与匿名更新核验；M5继续pending。
+
+## 前批 mac-doc-032（passed）
 - 范围6文件：两仓README、Mac配置、prepare/发布门禁回归和计划。代码来源eb7197917417dfae2d9fa06e48196437a7ce5047已普通推送/fetch相等；SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96同步干净，事实/计划/实际入口与门禁重读。
 - 补结果区质量门禁→统计→论文表步骤、当前来源/配置/归档与失败重解析、近似统计复核和写入限制；安装/更新/Termius/认证/CLI/三拓扑入口保留。新分析8加入77串行目标，不宣称M5/科研/原子发布已验收。
 
