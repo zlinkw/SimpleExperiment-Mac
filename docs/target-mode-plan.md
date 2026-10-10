@@ -11,7 +11,13 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005an-update-settlement（passed，本机功能批次）
+## 当前批次 mac-release-042（metadata passed，0.5.305/0.2.97）
+- 起始Exp62a6874d855406074409721f8fdd438360a0e598/SF202ea28b4c13222a8c0ef8ef604b9f1f71d0dd83同步；事实/计划/版本/发布runner重读，范围6文件：两仓package/lock、Exp runtime和计划。仅版本与交付；README/配置按阶段集中。剩余原目标14/29。
+- 本机两仓build/闭包/vm、79目标文件串行/20秒、十九既有实际VSIX与新增实际更新/退出消费者、来源快照/完整草稿/匿名两包验证；不安装扩展/Actions/SSH/科研/删除。真实Mac ps和M5仍pending。
+
+- metadata passed 两仓build/26与225闭包/runtimeManifest1/面板2/vm.Script/UTF8/diff，mac-release-042-metadata.log。SF来源2f464eb75e362150de5cbe61e1946504c3497a0a已普通推送/fetch相等；Exp提交以本批Git记录为准。打包与发布验证待执行，原目标剩余14/29。
+
+## 前批 mac-005an-update-settlement（passed，本机功能批次）
 - 前轮progress：.304/.96来源21900a074984d1173ab42ff917447efa1ce97413/ca2ddc26a5fe634c0498f01feebfb046503dbe2c和交付30380d7b492ff5ed406334eb69bd4b1992a9935d已同步；78目标/十九实际包/匿名首轮超时原样重试43请求passed。两仓起始干净且fetch后master相等，无活动进程；事实/计划/AGENTS/实际PreviewRelease与SF恢复、相关回归已重读。
 - 范围8文件跨两仓：PreviewRelease及回归、SF退出证明与实际恢复回归、prepare/门禁回归、目标状态清单和计划。两相关问题为有效preview查询效率/失败语义、Darwin只读退出证明/恢复；用户新增目标计数记入本批。保护Win分支/旧入口/API/三拓扑/未知退出保护，不读取Termius私有会话，不停止SSH或远端实验，不执行科研/删除/安装。
 - README/配置阶段集中，功能本机构建与单文件目标先验证，再.305/.97配套发布。完整目标按原始29条建表，M5缺失证据和已知Mac缺口不假定完成。
@@ -60,14 +66,8 @@
 
 - passed 两仓build/225与26闭包/面板2/vm.Script、Mac配置1/发布门禁4、脚本语法/UTF8/diff，mac-doc-032.log。文档编辑器首次变量重复语法错误未执行任何修改，另存修正脚本后完成；未改变门禁或超时。下一批 .302/.96 配套发布，科研/M5/原子发布仍pending。
 
-## 前批 mac-005ak-analysis-read（passed）
-- 起始Exp a0d00c9bec05a620aa7ec9d0e2e665cedcca320f/SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96干净，master=origin/master已fetch确认；重读事实/计划/实际质量、统计、论文表、claim/归档输入与隔离回归。
-- 范围6文件：共享真实记录只读模块、claim共享调用、Agent三个分析入口、实际隔离Node/Python回归与计划。三问题为原始Plan/revision/报告路径、当前CSV/配置/归档重计算、报告输入发布前受检；沿用统计计算，不把fixture视为科研证据。
-- 保护旧入口/API/三拓扑/Plan格式；不执行整Agent/科研/SSH/归档删除/安装。摘要缺失/旧协议仍由既有解析迁移；多文件原子发布、完整revision与M5 pending。代码验证后同步Mac README/配置与配套发布。
-
-- 首轮新实际回归7/8，旧默认入口fixture缺真实旧格式归档，仅补实际归档文件后8/8；未放松生产断言、没有超时。随后补当前归档来源新增行必须重解析，build/新8/claim8再次passed。
-- passed build/225闭包/面板2/vm.Script/LF/UTF8，新分析8/claim8/项目8/归档8/解析9/读取7/契约7及4个面板证据回归，20秒串行/Python10秒；日志mac-005ak-final-66eb8875-c662-4228-b09a-5f3c92906565.log与followup-c23af941-77d0-42a0-b7d1-308d002bac46.log。仅真实AST和编译消费者、本机文件及捕获发布，无科研/SSH/归档删除/安装。
-- 下一批mac-doc-032同步两仓README/配置、真实分析门禁和发布说明，再配套.302/.96；完整报告原子性/revision/归档执行/M5仍pending。
+### 旧分析读取批次
+- 代码eb7197917417dfae2d9fa06e48196437a7ce5047、.302/.96已普通推送；完整失败/验证/局限见Git与保留产物。
 
 ### .301/.95 已交付历史
 - 来源Exp738f9e271bd908c8341cc80a704f383e8a755499/SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96，交付a0d00c9bec05a620aa7ec9d0e2e665cedcca320f；76串行目标/十七实际VSIX/40匿名请求。claim代码dda0b5ccc3a26f6fedfc3fd9539453169ec596a7、文档ef649df249df511af258f0a3f6f5c075b0063b9e/fdac594ac94c411a895a1e5009599d1799dbd3d9均普通推送/fetch相等。String.raw反引号、严格runs候选与registry fixture修复后真实8等passed，完整失败、来源与证据保留Git/release-artifacts，M5 pending。
