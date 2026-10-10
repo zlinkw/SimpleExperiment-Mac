@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005al-case-read（running）
+## 当前批次 mac-release-040（running，0.5.303/0.2.96）
+- 源码f22544521b3a52b645c42f6f272344fba9d29aeb已普通提交推送/fetch相等，SFca2ddc26a5fe634c0498f01feebfb046503dbe2c同步干净；重读事实/计划/版本/门禁/包runner，无活动测试过程。
+- 范围4文件：Exp package/lock/runtime/计划，仅Exp递增补丁；SF无功能变化保持.96，配套清单仍含两包及真实提交。完整78串行目标、十九实际VSIX、源快照/草稿附件与匿名.302/.96→.303/.96仅Exp待更新、SF同版跳过。保护旧入口/三拓扑/科研/未确认删除，不安装开发机扩展、不触发Actions。
+- README/配置按用户要求累计阶段更新；完整导出、原子写入、归档执行/revision证明及M5仍pending。下一边界为样本分析导出原始路径与受检表输入，至多3问题/8文件。
+
+- passed metadata两仓build/runtimeManifest1/225与26闭包/面板2/vm.Script/UTF8/diff，mac-release-040-metadata.log；Exp package/lock/runtime为.303，SF保持.96。下一步完整串行prepare、十九实际包及匿名同版跳过验证。
+
+## 前批 mac-005al-case-read（passed）
 - 前轮progress：文档节奏修订47a8736已同步；.302/.96已完成77串行目标、十八实际包和41匿名请求。无活动测试/发布过程，起始Exp47a8736与SFTPca2ddc26a5fe634c0498f01feebfb046503dbe2c干净且fetch确认master相等。新用户AGENTS、事实/计划/实际case路径、读取与入口重读。
 - 范围7文件：case受检输入、Agent三入口与请求身份、真实AST/编译消费者Node/Python回归、prepare门禁/发布说明、门禁回归及计划。三问题：原始Plan/revision与发现集合；实际CSV/UTF8/行归属；泄漏/子组使用当前可信样本、不借缓存全局索引。保留旧默认入口/统计实现/API/三拓扑；没有科研/SSH/归档删除或开发机安装。
 - 依据最新文档节奏，本批操作入口不变，README/配置累计后集中更新；代码验证后发布.303，SFTP源码与版本不变则保留.96并验证相同版本跳过。科研/M5、完整导出/写入原子性与revision证明仍pending。
