@@ -10,9 +10,17 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-034（running，0.5.297/0.2.91）
+## 当前批次 mac-release-034（passed，0.5.297/0.2.91）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。文档批 Exp `0924896882fe97031337c9400c3a4afcf2d4e82e`/SFTP `735f16fa99567ac0d30b79198cc7cf2d601295c4` 已普通推送/fetch 相等，工作区干净；事实/计划/版本及门禁重读。
 - passed metadata 两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致/UTF8/diff；初次误用不存在的 runtimeManifestConsistency 文件，未启动测试，定位真实 test/runtimeManifest.test.js 后通过。来源提交同步后完整 prepare 72 文件串行20秒、实际 VSIX 十三份（新增读取产生端 7）及快照对应验证，完整三附件草稿核验后发布并匿名 .296/.90→.297/.91 下载。不得覆盖旧版本/附件，不触发 Actions/自动安装/真实科研；下一边界限其他 Agent 结果动作，M5 延后。
+
+- passed 完整 prepare：两仓 build/225 与 26 闭包/面板 2/vm.Script、72 目标文件串行20秒/73 含面板标记，新增 Agent 读取 7/既有 Agent 7/快照 8；真实浅深高对比通过，日志 prepare-0.5.297.log exit0，无测试超时。
+- passed 实际 VSIX 十三份：读取产生端→编译消费 7、请求/报告/事件产生端 7、回执 8/解析 8/读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/结果链 6。所有报告绑定同步来源/包 hash，包内实际生成 Agent 与 compiled 模块及文档字节匹配；共享真实 NTFS/POSIX helper 一并用于隔离测试。无整个 Agent 执行/真实科研/SSH/远端启动停止删除/安装。快照对应验证：SFTP 82 源/25 原字节包文件，Exp 1514 源/412 原字节包文件，只有 VSCE 正式 package/README 转换与 CHANGELOG 改名。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.297；releaseId 408458524，完整三附件草稿大小/hash/集合核验后公开。来源 Exp `406d87a63d9aa2dbfd706189d311de5e5bbe0b3a`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` 均已普通推送/fetch 相等；历史资产保留，无 Actions/自动安装。
+- passed 匿名 .296/.90→.297/.91：36 公开请求，prerelease/清单/大小/SHA-256/CRC/身份/darwin-arm64/VS Code 要求，下载字节等于十三份受检 VSIX，新读取模块/生成 Agent/两仓 README/包内 Mac 配置与发布说明匹配同步来源；同版跳过/不降级。M5 更新/科研验收仍 pending，用户延后。
+
+### 下一批 mac-005ag-agent-parse（pending）
+- 限指定 Plan 的 parse_results_action 原始声明/候选/受检读取与报告身份，复用本批只读输入边界；至多 8 文件/3 相关问题，真实生成函数隔离与实际编译消费验证，保留原入口/API/Plan 格式/三拓扑。其他运行/写操作、删除/归档、原子写入、完整 revision 内容/M5 不扩入；README/配置优先同步，再通过同一配套通道发布。
 
 ### 前批 mac-doc-027（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/发布门禁回归与计划。优先同步指定 Plan 输出契约的真实 YAML/原始路径/5 MiB UTF8 快照读取、失败处理与主动 Agent 升级入口，并将新产生端 7 项纳入串行发布门禁。
@@ -44,10 +52,10 @@
 ### 已交付 .294/.88 与压缩历史（passed，完整证据见 Git）
 - .294 来源 Exp `1dd2e0a80adc8a29b7ae5310c03d197d5214459e`/SFTP `8cceeee9ee706fc5cf25d3df66c02070f8386950`；交付 `02a425ccb84e7ad1fce5313c792d93596000a759` 已推送/fetch 相等。69 文件串行 prepare/build/225 与 26 闭包/面板/浅深高对比；十一份实际 VSIX（回执 8/解析 8/读 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/结果链 6）、34 公开匿名请求 passed。仅本机/模拟/AST，M5 pending。
 - .287 至 .293 来源/交付已普通推送，完整测试/失败修复与证据见对应 Git 版本及保留的 release-artifacts。一次旧 E2E 基线重现，后续实际编译替代；包测试上下文与报告聚合断言修正，无生产放松。保留更新、路径、Plan/启动/结果身份、摘要/候选/受检读写与解析、手动端点/认证/双 SSH 本机中转、README/主题交付；旧入口/三拓扑/删除确认边界受保护。
-- 历史实际提交（完整分批状态见 Git）：`6307ebdd39d21ac1e22d545a7d3717b1a59c063e`、`38f582bddcc1a98f65772d8b3a640a896ea86693`、`1dd2e0a80adc8a29b7ae5310c03d197d5214459e`、`8cceeee9ee706fc5cf25d3df66c02070f8386950`、`289f1537970550cfef59eb258ac1b34b77f64e64`、`5e5cab27c1f4a05e67f83e0c5881794d906aac23`、`e9affcea0cc296588e537f26e51c0c8ecc28459f`、`c4b50b61106f17933c053e2befaf25cdd84db51e`、`ee9d1850ee36e33a02587769af41fb9f48083735`、`c9d079c761e2b02fae150df843266df2ca2a0bd5`、`8e2dc489b8dd60ef03eed1b8bcbd1766c85b9120`、`4fe3c9cb4c10f84203fed4037123a87700fca926`、`8d7a7ddec754ad0219fff4829a5a1758782124b3`、`b60b98a6decd583149bfbb5894824b15e1683836`、`1f36111a37072df960a6ef8d404b883ebc409953`、`364aae7125a32815afad6bf4e22b0d9f916baf1d`、`5b43362749404eec5c68750d082278bbfbc646e6`、`be6fb9478d467f9dd1e721f9d856e46c70ab1e36`、`e9e4a6c8e20505fbc10d3cce767e7db47971c4c0`、`21b43698021ed95314cdbf7059ec87d47f9610c0`、`b75ce34e24e7fb4a7fb5a0d8b157a9a1300fa906`、`1fd09da53283b579a72552e06e48195cf845e674`、`1611211fc2e903df729dc1c62ae3e2f8551dd5f1`、`6d55583cd93743583934d0e554481ac2f5be493b`、`faf3c228d6b543d8ba3bf02a075a723a27f65ce6`、`0145e4fc3e1bb8ee1ccd68058ae88b970ec6a47c`、`99ae1fc1941642c520112d064f923c07abe58796`、`963ee809e8d0449d0eb56d3387a37eaa119023ac`、`a50acfbe3dc99e043e0e9ba024199ca8f7a653df`、`173bd71c476d36b7e6038a394ba4e2f96153da3f`、`134dec12ca34adb9e65c6324b4a64a75db21bce8`、`72b0ce05b0a11e92cf3f3e4d3c367c2cc3968c2e`、`d31223805cc3a201ce0c37b4772238e236b40e20`、`28a85dd829e7e61799066621e3ac096570acd2f0`、`17ba8b376231633cdd062306b287f46b26d68078`、`466f9651324ec905ac01a57d210e45e93048b807`、`a3c763e6f9eaec56c2c3cb213fd089c8dab781e9`、`33fe795f88ac8e50c035dac7b452b2faf652be9f`、`1a87364fc251e9dbdcf8267ebdeadf614298e2ab`、`2ff50131c2204fce96fffc21c78fc6353f55dd40`、`f59da55da05270aa346eddd65c03b12b1de7558d`、`2bcb6c752c0a5ef251482b008a087567d8e0bebe`、`a3c6bfdef7240035ba93e523932c2891fd9a802d`、`d504d052cc8b668cacdaeb22e56083e171fc516b`、`bc9e2bc9e525fcd65399485b0944d8fccea6d58e`、`fcff4d065efaa0450455c27aeb5b998cdd4e00f9`。
+- 历史分批实际提交、原失败与验证命令已随对应版本保存于 Git；最新来源与交付提交在本计划明确记录，未改写历史。
 
 ## 未完成与下一边界
-- pending mac-005：其他运行/写操作回执来源授权、映射原子下载发布、Webview 行字段序列化、完整 Agent 结果路径/YAML/读取、完整 Mac 本机解析与来源、归档、其余 Windows 专属业务依赖，逐批适配。输出契约 Plan 产生端局部完成不代表这些链路已验收。
-- 物理检查与启动/写入间尚非原子锁定，完整 YAML 特性及 suite/config 等其他 scalar 不在本批证据内。
+- pending mac-005：其他运行/写操作回执来源授权、映射原子下载发布、Webview 行字段序列化、其他 Agent 结果动作的路径/YAML/读取、完整 Mac 本机解析与来源、归档、其余 Windows 专属业务依赖，逐批适配。输出契约 Plan 产生端局部完成不代表这些链路已验收。
+- 物理检查与启动/写入间尚非原子锁定，其他 Agent 动作的 YAML 与 suite/config 等其他 scalar 不在本批证据内。
 - pending mac-006：真实 M5 首装→更新/设置保留/重载/部分失败补装；Termius、独立密钥/密码传输/中文路径/断连；单 Worker、多 Worker、Hub/Worker科研主流程。
 - 本地更新链路、VM/AST 与 headless 通过不能宣称完整科研或 M5 验收。用户延后真机验收，不阻塞可继续的本地适配。
