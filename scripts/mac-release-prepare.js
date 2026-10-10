@@ -20,6 +20,7 @@ function main() {
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macAgentParseResults.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macArchiveEvidenceRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macProjectAggregateRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macClaimEvidenceRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/scripts/macPackageProjection.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/core/workspacePathMapper.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   for (const file of ["macBootstrap", "macCliLauncher", "macCliApi", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths", "macAuthentication", "macRelay", "macPosixPaths", "macRelativePaths", "macDownloadScope", "apiUploadProgress"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
@@ -47,13 +48,13 @@ function main() {
   const notes = `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-README/配置同步 Mac 项目汇总操作与失败处理。指定 Plan 的最终表按当前归档记录计算，完整预览种子表保留；跨 Plan 项目表核对原始 Plan/索引/数据集/CSV 与目录集合，从受检真实 Plan、原始 CSV 和当前归档重计算核验实际表。缓存归档标记、其他 Plan 或过期表不能代替当前来源；缺少归档时最终表无记录。报告来源不符或 revision 冲突时，选择对应完整 Plan 重新解析再重试。没有改动归档/删除执行器。
+README/配置按 Mac 操作说明论文证据检查与原始路径引用。严格 Plan 支持 experiments/runs 的实际结果来源；claims.md 使用受检 UTF8 描述符，Markdown URI 解码一次，反引号保留原名，ID 精确匹配。只从当前 Plan/revision 归档与实际重解析来源关联证据，不借缓存 ID、相似文件名或其他 Plan。读取期间声明/来源/归档变更会拒绝报告发布；缺证据保持 unsupported / needs experiment，supported 仅为证据关联，不代表科学结论已验证。旧默认入口保留，归档/删除执行器未改动。
 
 本地验证
-两仓 build、包依赖闭包、面板语法、目标测试逐文件串行通过。新增实际生成 Agent 项目聚合/产生端/当前归档→编译CSV消费 8 项，保留只读归档 8、解析/handler/摘要 9、输出契约 7、读取 7、真实 pinned VSCE/源快照 8 项。浅色/深色/高对比 headless 渲染及文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 已核验。本机文件/模拟 API/隔离 AST/POSIX 证据没有运行真实科研、SSH、远端启动/停止/删除。
+两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。新增实际生成 Agent claim/解析→编译摘要消费者 8 项，保留项目聚合 8、归档 8、解析 9、输出契约 7、读取 7及真实 pinned VSCE/快照验证。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。只用本机文件/隔离 AST/POSIX 与捕获发布，没有运行真实科研、SSH、远端启动/停止/删除。
 
 M5 真机验证
-尚未执行，用户已延后。更新/设置保留/重载/补装、Termius、独立认证传输、中文路径/断连和三拓扑主流程仍需真机验证。完整项目聚合发布、claim 文本/引用读取、归档执行、其他运行/写回执、完整 revision 内容证明和物理原子发布继续适配；本机受检输入与重计算不代表完整科研验收。
+尚未执行，用户已延后。更新/设置保留/重载/补装、Termius、独立认证传输、中文路径/断连及三拓扑主流程仍需真机验证。完整 claim/聚合报告发布、归档执行、其他运行/写回执、revision 内容证明和物理原子发布继续适配；本机受检证据不能代替完整科研验收。
 
 首次安装与更新
 先安装 SimpleSFTP Mac，再安装 SimpleExperiment Mac。以后点击底部右侧 Mac preview 状态栏，按 ⇧⌘P 运行“检查 preview 配套更新”，或在面板“设置 → 插件配套更新”点击“检查更新”，发现新版点击“更新并重载”。服务器 Agent 需主动通过“准备项目与 Agent”确认上传，在 Termius 手动处理后“检测全部”，保留正在运行的实验。只有 preview，无 Actions，不安装开发机扩展。

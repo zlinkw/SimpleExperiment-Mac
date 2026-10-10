@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005aj-claim-read（passed）
+## 当前批次 mac-doc-031（passed）
+- 范围6文件：两仓README、Mac配置、prepare/门禁回归与计划。代码已普通提交推送 `dda0b5ccc3a26f6fedfc3fd9539453169ec596a7`并fetch相等；SFTP `12d726fbddbe033aa203bb1725149c0411905beb`干净同步；事实/计划/文档/实际入口与门禁重读。
+- 说明结果区“检查论文证据”/UTF8 claims.md、原始路径与一次URI解码/ID、当前来源/归档及失败处理，supported仅为证据关联。新claim8加入76逐文件串行发布门禁。安装/更新/Termius/认证/CLI与三拓扑入口保留；不宣称完整科学结论/原子发布/归档执行/M5。
+
+- passed 两仓build/225与26闭包/面板2/vm.Script、Mac配置1/发布门禁4、脚本语法/UTF8/diff；mac-doc-031.log。新claim8纳入76目标门禁；下一批 .301/.95，不宣称完整claim/聚合发布、归档执行、原子写入或M5。
+
+## 前批 mac-005aj-claim-read（passed）
 - 上轮progress：.300/.94已发布，Mac说明/聚合代码/76含面板门禁/十六实际VSIX/39匿名请求passed。起始Exp `d569ef1c825f492b7f66374e5a4aebb81ee4693c`/SFTP `12d726fbddbe033aa203bb1725149c0411905beb`master干净且同步；无活动过程。事实/计划/实际claim、产生端/归档、受检输入及旧回归已重读。
 - 范围6文件：独立claim只读输入模块、严格来源候选、Agent严格入口接线、真实生成函数/编译消费者Node/Python回归和计划。三个问题：原始Markdown/路径/ID引用；当前Plan/归档与实际CSV重解析；UTF8/物理身份快照在报告发布前核验。旧未标记入口/API/Plan/三拓扑保留，不调用归档/删除执行器、科研/SSH或安装。
 - claims语义状态是证据关联，不能证明科学结论正确；完整revision内容/归档执行与写入原子锁定/M5仍pending。完成后先同步README/配置/门禁，再发布 .301/.95。
