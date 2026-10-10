@@ -10,12 +10,17 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-040（running，0.5.303/0.2.96）
+## 当前批次 mac-release-040（passed，0.5.303/0.2.96）
 - 源码f22544521b3a52b645c42f6f272344fba9d29aeb已普通提交推送/fetch相等，SFca2ddc26a5fe634c0498f01feebfb046503dbe2c同步干净；重读事实/计划/版本/门禁/包runner，无活动测试过程。
 - 范围4文件：Exp package/lock/runtime/计划，仅Exp递增补丁；SF无功能变化保持.96，配套清单仍含两包及真实提交。完整78串行目标、十九实际VSIX、源快照/草稿附件与匿名.302/.96→.303/.96仅Exp待更新、SF同版跳过。保护旧入口/三拓扑/科研/未确认删除，不安装开发机扩展、不触发Actions。
 - README/配置按用户要求累计阶段更新；完整导出、原子写入、归档执行/revision证明及M5仍pending。下一边界为样本分析导出原始路径与受检表输入，至多3问题/8文件。
 
 - passed metadata两仓build/runtimeManifest1/225与26闭包/面板2/vm.Script/UTF8/diff，mac-release-040-metadata.log；Exp package/lock/runtime为.303，SF保持.96。下一步完整串行prepare、十九实际包及匿名同版跳过验证。
+
+- passed 完整prepare78目标文件/79含面板标记，20秒单文件串行，两仓build/闭包/面板/vm.Script/主题门禁，无超时，prepare-0.5.303.log。十九实际VSIX含新增case8及三个真实请求AST→编译回执，保留既有十八报告；只捕获发布，无整Agent/科研/SSH/删除或安装。
+- 源码批f22544521b3a52b645c42f6f272344fba9d29aeb、发布来源Expacaa9840861ea6082d62b457172ac11bbe72c18f/SFca2ddc26a5fe634c0498f01feebfb046503dbe2c均已普通推送/fetch相等。真实保留快照SF82源/25包原字节、Exp1538源/418包原字节，仅正式VSCE package/README转换和CHANGELOG改名。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.303，releaseId408595159；草稿三附件集合/大小/hash后公开。passed匿名.302/.96→.303/.96：42公开请求，实际PreviewReleaseClient只列Exp待更新，SF同版跳过，同时下载核验两包字节等于十九受检VSIX；prerelease/清单/身份/平台/VS Code/CRC/大小/SHA-256及源文件对应、同版跳过/禁止降级通过。anonymous-verification.json/十九包报告/快照保留。M5继续pending。
+- 下一批mac-005am-case-export：样本分析导出仍normalize Plan与旧slug表路径，受检读取/三入口已局部完成；至多3问题/8文件，保留原始Plan/revision、当前子组表输入和导出回执/路径。保护旧入口/三拓扑，不执行科研/SSH/删除；README/配置集中阶段更新，不再单独插文档批。完整报告原子性、归档/revision内容、其他运行/写操作及M5仍pending。
 
 ## 前批 mac-005al-case-read（passed）
 - 前轮progress：文档节奏修订47a8736已同步；.302/.96已完成77串行目标、十八实际包和41匿名请求。无活动测试/发布过程，起始Exp47a8736与SFTPca2ddc26a5fe634c0498f01feebfb046503dbe2c干净且fetch确认master相等。新用户AGENTS、事实/计划/实际case路径、读取与入口重读。
