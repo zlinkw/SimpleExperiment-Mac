@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-030（passed）
+## 当前批次 mac-release-037（running，0.5.300/0.2.94）
+- 范围6文件：两仓package/lock、Experiment runtime/计划。文档Exp `398f8797aafc5c50dcc97dd81f7d16a02c018391`/SFTP `78f6f8e1b827dc497119c623ddfb94aaa801d368`均普通推送/fetch相等；两仓干净，事实/计划/版本/发布门禁重读。
+- 保留原JSON格式，仅递增版本。metadata两仓build/runtimeManifest/闭包/面板/vm.Script通过后提交同步，完整prepare75目标逐文件20秒、十六实际VSIX含新项目聚合8、快照/草稿完整附件及匿名 .299/.93→.300/.94核验。无Actions/自动安装/真实科研/归档删除执行；M5延后。
+- 下一代码批 mac-005aj-claim-read：claim文本/引用的原始受检读取；完整聚合原子发布/归档执行/revision内容证明及其他Mac业务继续pending。
+
+- passed metadata两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、版本/UTF8/diff；日志 mac-release-037-metadata-e35e2c6b-2e76-4528-bf29-c3030fc4a63b.log。完整prepare/实际VSIX/发布及匿名下载待核验。
+
+## 前批 mac-doc-030（passed）
 - 范围6文件：两仓README、Mac配置、prepare/发布门禁回归与计划。起始Exp `d88402159c600afd550e8f593608768b2d8997e9`/SFTP `8113c9deea20c38e1b8399b3a6806ef087769749`master干净且同步；事实/计划/README/配置/实际解析标签/门禁重读。
 - 说明完整预览种子表与当前归档最终表、跨Plan受检重计算/不符失败及对应Plan重解析，保留安装/更新/Termius/认证/CLI与三拓扑入口。新真实聚合8加入逐文件串行发布门禁，不宣称完整SCI/M5/原子写入或归档执行通过。
 
