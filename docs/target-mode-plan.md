@@ -13,7 +13,14 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005as-command-palette-migration（passed，纠正门禁）
+## 当前批次 mac-release-045（running，0.5.308/0.2.97）
+- 起始Expf7e477114a526b4f82b3e76d0667e50b4c58e3b4=origin/master、SF2f464eb75e362150de5cbe61e1946504c3497a0a干净；重读事实/计划/Git/元数据/发布门禁。
+- 范围4文件：Exp package/lock/runtime/计划；仅递增.308交付已证实的Termius入口修复与门禁补正，SF保留.97。保护业务API/Plan/已有入口/远端实验，M5延期，剩余15/29。
+- pending metadata build/runtime/225闭包/vm/UTF8/diff；普通同步后prepare82目标文件、实际VSIX指引/更新消费者、源码快照与公开匿名索引/两包核验。完整附件后发布及索引普通推送，不安装/Actions/删除。
+- 已验证修复提交744563d0841c20cd5b90a84409bcadf4b11b439e、门禁补正f7e477114a526b4f82b3e76d0667e50b4c58e3b4，均普通推送/fetch相等；命令门禁原失败保留。下一边界只据具体反馈适配，缺真机部分不追加推测完善。
+- metadata passed：package/lock/runtime统一.308，build面板2/runtimeManifest1/225闭包/vm.Script/UTF8/diff通过；即将同步受检源码，完整prepare/真实包与公开网络验证待执行。
+
+## 前批 mac-005as-command-palette-migration（passed，纠正门禁）
 - 起始Exp744563d0841c20cd5b90a84409bcadf4b11b439e=origin/master、SF2f464eb75e362150de5cbe61e1946504c3497a0a干净；重读事实/计划/Git/消费者与发布门禁。
 - 上批额外commandPaletteClarity检查失败2/2：旧测试引用Windows命令/设置命名空间与已替换的README；提交时未拦截失败，不能记录该门禁通过。本批以新提交纠正，不改写历史。
 - 范围3文件：命令面板测试迁移至现有Mac身份、保留高级handler/默认主入口并核对Termius标题；prepare纳入此门禁；本计划修正证据。pending目标单文件串行、build/闭包/vm/UTF8/diff。
