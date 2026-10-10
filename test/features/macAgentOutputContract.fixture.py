@@ -20,46 +20,8 @@ base = os.path.abspath(base)
 if os.name == "nt" and not base.startswith("\\\\?\\"):
     base = "\\\\?\\" + base
 os.makedirs(base, exist_ok=True)
-# The Agent runs on POSIX servers. Bridge POSIX calls to retained real NTFS
-# fixtures on the Windows build host; do not weaken production path validators.
-def native(value):
-    text = os.fspath(value)
-    if os.name == "nt" and (text == "/fixture" or text.startswith("/fixture/")):
-        return os.path.join(base, *text[len("/fixture"):].lstrip("/").split("/"))
-    return text
-
-def virtual(value):
-    text = os.fspath(value)
-    if os.name != "nt":
-        return text
-    plain = os.path.normpath(text).removeprefix("\\\\?\\")
-    plain_base = os.path.normpath(base).removeprefix("\\\\?\\")
-    try:
-        if os.path.normcase(os.path.commonpath([plain_base, plain])) != os.path.normcase(plain_base):
-            return "/outside"
-        relative = os.path.relpath(plain, plain_base).replace("\\", "/")
-        return "/fixture" if relative == "." else "/fixture/" + relative
-    except ValueError:
-        return "/outside"
-
-if os.name == "nt":
-    class Proxy(SimpleNamespace):
-        def __getattr__(self, key):
-            return getattr(os, key)
-    paths = SimpleNamespace(**{key:getattr(posixpath,key) for key in ["join","dirname","basename","splitext","isabs","normpath","relpath","commonpath"]})
-    paths.abspath = lambda value: posixpath.normpath(value if str(value).startswith("/") else posixpath.join("/fixture",value))
-    paths.realpath = lambda value: virtual(os.path.realpath(native(value)))
-    for key in ["exists","isfile","isdir","lexists","getsize","getmtime"]:
-        setattr(paths,key,lambda value,key=key:getattr(os.path,key)(native(value)))
-    def walk(value, *args, **kwargs):
-        for current, dirs, files in os.walk(native(value), *args, **kwargs):
-            yield virtual(current), dirs, files
-    agent.os = Proxy(path=paths,sep="/",listdir=lambda value:os.listdir(native(value)),
-        stat=lambda value:os.stat(native(value)),lstat=lambda value:os.lstat(native(value)),walk=walk)
-    agent.open = lambda value,*args,**kwargs:open(native(value),*args,**kwargs)
-    agent.pathlib = SimpleNamespace(Path=lambda value:pathlib.Path(native(value)))
-    original_glob = agent.glob
-    agent.glob = SimpleNamespace(glob=lambda value,*args,**kwargs:[virtual(item) for item in original_glob.glob(native(value),*args,**kwargs)])
+from posixRuntimeFixture import bind_posix_runtime
+native, virtual = bind_posix_runtime(agent, base)
 events, writes = [], []
 agent.append_event = lambda root, event: events.append(copy.deepcopy(event))
 agent.atomic_write = lambda file, report: writes.append((file, copy.deepcopy(report)))

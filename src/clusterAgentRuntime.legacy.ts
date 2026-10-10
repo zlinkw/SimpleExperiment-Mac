@@ -1,5 +1,6 @@
 import { RESULT_LAYOUT_PYTHON } from "./results/ResultLayout";
 import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
+import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -9,6 +10,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 
 ${RESULT_LAYOUT_PYTHON}
 ${PLAN_EXISTING_ARTIFACTS_PYTHON}
+${OUTPUT_CONTRACT_FILES_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -7048,6 +7050,8 @@ def discover_result_files(root, limit=240, max_dirs=4000, max_depth=8, deadline_
     return sorted(dict.fromkeys(out))
 
 def plan_suite_value(root, plan, strict_plan=False):
+    if strict_plan:
+        return output_contract_plan(root, durable_plan_path(plan, "输出契约 Plan"))["suite"]
     plan_norm = durable_plan_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
     if not plan_norm:
         return ""
@@ -7059,16 +7063,23 @@ def plan_suite_value(root, plan, strict_plan=False):
         return ""
 
 
-def job_result_candidates(root, limit=240, plan=None, strict_plan=False):
+def job_result_candidates(root, limit=240, plan=None, strict_plan=False, snapshots=None):
     path = os.path.join(root, "experiments", "results", "jobs.csv")
-    if not safe_small_file(path):
+    if not strict_plan and not safe_small_file(path):
         return []
     out = []
     plan_norm = durable_plan_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
     plan_suite = "" if strict_plan else plan_suite_value(root, plan_norm)
     try:
-        rows = read_csv_dicts(open(path, "r", encoding="utf-8", errors="replace").read())
+        snapshot = output_contract_read_snapshot(root, "experiments/results/jobs.csv") if strict_plan else None
+        if snapshot and isinstance(snapshots, list):
+            snapshots.append(("experiments/results/jobs.csv", snapshot))
+        rows = read_csv_dicts(snapshot["text"] if snapshot else open(path, "r", encoding="utf-8", errors="replace").read())
+    except FileNotFoundError:
+        return []
     except Exception:
+        if strict_plan:
+            raise
         return []
     for row in rows:
         if plan_norm:
@@ -7089,16 +7100,18 @@ def job_result_candidates(root, limit=240, plan=None, strict_plan=False):
             elif not plan_suite:
                 continue
         for key in ("result_csv", "resultCsv", "results_csv", "resultsCsv", "metrics_csv", "metricsCsv", "summary_csv", "summaryCsv", "output_csv", "outputCsv", "result_json", "resultJson", "metrics_json", "metricsJson", "summary_txt", "summaryTxt", "log_file", "logFile", "metrics_summary", "metricsSummary", "metrics_case", "metricsCase", "result_path", "resultPath", "output_path", "outputPath"):
-            candidate = normalize_result_candidate(row.get(key))
+            candidate = output_contract_candidate(row.get(key)) if strict_plan else normalize_result_candidate(row.get(key))
             if candidate:
                 out.append(candidate)
         for key in ("output_dir", "outputDir", "work_dir", "workDir", "result_dir", "resultDir", "results_dir", "resultsDir", "log_dir", "logDir"):
-            out.extend(default_result_candidates_for_dir(row.get(key)))
+            out.extend(default_result_candidates_for_dir(row.get(key), strict_paths=strict_plan))
         if len(out) >= limit:
             break
     return sorted(dict.fromkeys(out))
 
-def plan_scoped_discover_candidates(root, plan, limit=120, strict_plan=False):
+def plan_scoped_discover_candidates(root, plan, limit=120, strict_plan=False, contract=None):
+    if strict_plan:
+        return output_contract_discover_candidates(root, contract or output_contract_plan(root, plan), limit)
     declared = plan_declared_result_candidates(root, plan, limit=limit, strict_plan=strict_plan)
     plan_suite = plan_suite_value(root, plan, strict_plan=strict_plan)
     if not strict_plan:
@@ -7245,14 +7258,13 @@ def metric_value(value, metric, source_col, source_rel):
         "sourceFile": source_rel,
     }
 
-def parse_csv_result_file(root, source_rel, policy=None):
+def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
     if str(source_rel or "").replace("\\", "/").lower() in IGNORED_RESULT_FILES or os.path.basename(str(source_rel or "")).lower() == "jobs.csv":
         return []
     if os.path.basename(str(source_rel or "")).lower() == "metrics_case.csv":
         return []
     policy = policy or read_project_metric_policy(root)
-    path = safe_project_path(root, source_rel)
-    text = open(path, "r", encoding="utf-8-sig", errors="replace").read()
+    text = source_text if source_text is not None else open(safe_project_path(root, source_rel), "r", encoding="utf-8-sig", errors="replace").read()
     rows = read_csv_dicts(text)
     if not rows:
         return []
@@ -7452,11 +7464,10 @@ def json_metric_storage_key(metrics, splits, metric, split):
     splits[key] = split
     return key
 
-def parse_json_result_file(root, source_rel, policy=None):
+def parse_json_result_file(root, source_rel, policy=None, source_text=None):
     policy = policy or read_project_metric_policy(root)
     aliases = policy.get("metricAliases") or {}
-    path = safe_project_path(root, source_rel)
-    data = read_json(path, None)
+    data = json.loads(source_text) if source_text is not None else read_json(safe_project_path(root, source_rel), None)
     if data is None:
         return []
     rows = data.get("results") if isinstance(data, dict) and isinstance(data.get("results"), list) else data
@@ -7490,10 +7501,9 @@ def parse_json_result_file(root, source_rel, policy=None):
             records.append(make_result_record(source_rel, normalized_row, metrics, i))
     return records
 
-def parse_text_result_file(root, source_rel, policy=None):
+def parse_text_result_file(root, source_rel, policy=None, source_text=None):
     policy = policy or read_project_metric_policy(root)
-    path = safe_project_path(root, source_rel)
-    text = open(path, "r", encoding="utf-8", errors="replace").read()
+    text = source_text if source_text is not None else open(safe_project_path(root, source_rel), "r", encoding="utf-8", errors="replace").read()
     metrics = {}
     import re
     custom = str(policy.get("metricRegex") or "").strip()
@@ -7528,16 +7538,39 @@ def parse_text_result_file(root, source_rel, policy=None):
         return []
     return [make_result_record(source_rel, {}, metrics, 0)]
 
-def parse_result_file(root, source_rel, policy=None):
-    lower = source_rel.lower()
-    if not parseable_result_candidate(source_rel):
+def parse_result_file(root, source_rel, policy=None, strict_paths=False, snapshots=None):
+    if not strict_paths:
+        if not parseable_result_candidate(source_rel):
+            return []
+        policy = policy or read_project_metric_policy(root)
+        if source_rel.lower().endswith(".csv"):
+            return parse_csv_result_file(root, source_rel, policy)
+        if source_rel.lower().endswith(".json"):
+            return parse_json_result_file(root, source_rel, policy)
+        return parse_text_result_file(root, source_rel, policy)
+    lower = source_rel.rstrip().lower() if strict_paths else source_rel.lower()
+    if not (output_contract_candidate(source_rel) if strict_paths else parseable_result_candidate(source_rel)):
         return []
     policy = policy or read_project_metric_policy(root)
+    snapshot = output_contract_read_snapshot(root, source_rel) if strict_paths else None
+    text = snapshot["text"] if snapshot else None
+    if snapshot and isinstance(snapshots, list):
+        snapshots.append((source_rel, snapshot))
     if lower.endswith(".csv"):
-        return parse_csv_result_file(root, source_rel, policy)
-    if lower.endswith(".json"):
-        return parse_json_result_file(root, source_rel, policy)
-    return parse_text_result_file(root, source_rel, policy)
+        records = parse_csv_result_file(root, source_rel, policy, source_text=text)
+    elif lower.endswith(".json"):
+        records = parse_json_result_file(root, source_rel, policy, source_text=text)
+    else:
+        records = parse_text_result_file(root, source_rel, policy, source_text=text)
+    if strict_paths:
+        source_type = "csv" if lower.endswith(".csv") else "json" if lower.endswith(".json") else "log"
+        for record in records:
+            for source in record.get("sourceFiles", []):
+                if source.get("path") == source_rel:
+                    source["type"] = source_type
+    if snapshot:
+        output_contract_verify_snapshot(root, source_rel, snapshot)
+    return records
 
 def plan_summary_slug(plan):
     text = normalize_result_candidate(plan) if plan else ""
@@ -8892,13 +8925,17 @@ def plan_result_candidate_values(value):
                 out.append(candidate)
     return unique_values(filter(None, (parseable_result_candidate(item) for item in out)))
 
-def plan_command_result_candidates(command_text):
+def plan_command_result_candidates(command_text, strict_paths=False):
+    if strict_paths and not isinstance(command_text, str):
+        return []
     text = str(command_text or "").replace("\\\n", " ").replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ")
     if not text.strip():
         return []
     try:
         parts = shlex.split(text, posix=True)
     except Exception:
+        if strict_paths:
+            return []
         parts = text.split()
     flags = {
         "result-csv", "result_csv", "results-csv", "results_csv",
@@ -8934,29 +8971,33 @@ def plan_command_result_candidates(command_text):
                     value = str(parts[index + 1])
             normalized_flag = flag.replace("_", "-").lower()
             if normalized_flag in {item.replace("_", "-") for item in flags}:
-                candidate = normalize_result_candidate(value)
+                candidate = output_contract_candidate(value) if strict_paths else normalize_result_candidate(value)
                 if candidate:
                     out.append(candidate)
             elif normalized_flag in {item.replace("_", "-") for item in dir_flags}:
-                out.extend(default_result_candidates_for_dir(value))
+                out.extend(default_result_candidates_for_dir(value, strict_paths=strict_paths))
             continue
         if "=" in token:
             key, value = token.split("=", 1)
             normalized_key = key.replace("_", "-").lower()
             if normalized_key in dir_flag_aliases or re.search(r"(?:output_dir|output-dir|outputDir|out_dir|out-dir|work_dir|work-dir|workDir|workdir|save_dir|save-dir|saveDir|log_dir|log-dir|logDir|logging_dir|logging-dir|loggingDir|tensorboard_log_dir|tensorboard-log-dir|tensorboardLogDir|tb_log_dir|tb-log-dir|tbLogDir|run_dir|run-dir|runDir|rundir|result_dir|result-dir|resultDir|results_dir|results-dir|resultsDir|default_root_dir|default-root-dir|defaultRootDir|dirpath|hydra\.run\.dir|hydra\.sweep\.dir|logger\.save_dir|logger\.save-dir|trainer\.default_root_dir|trainer\.default-root-dir)$", key):
-                out.extend(default_result_candidates_for_dir(value))
+                out.extend(default_result_candidates_for_dir(value, strict_paths=strict_paths))
+    if strict_paths:
+        return sorted(dict.fromkeys(item for item in out if output_contract_candidate(item)))
     return unique_values(filter(None, (parseable_result_candidate(item) for item in out)))
 
-def default_result_candidates_for_dir(value):
-    raw = normalize_result_candidate(value)
+def default_result_candidates_for_dir(value, strict_paths=False):
+    raw = output_contract_directory(value) if strict_paths else normalize_result_candidate(value)
     if not raw or re.search(r"/?[^/]+\.[A-Za-z0-9]{1,8}$", raw):
         return []
-    prefix = "" if raw == "." else raw.strip("/") + "/"
+    prefix = raw + "/" if strict_paths else "" if raw == "." else raw.strip("/") + "/"
     # output_dir 只推导结构化指标文件；stdout/stderr 仍保留为诊断证据。
     candidates = [
         prefix + "metrics_summary.csv",
         prefix + "metrics_case.csv",
     ]
+    if strict_paths:
+        return [candidate for candidate in candidates if output_contract_candidate(candidate)]
     return [candidate for candidate in (normalize_result_candidate(item) for item in candidates) if candidate and allowed_result_candidate(candidate)]
 
 def plan_mode_command_keys(text):
@@ -8996,6 +9037,8 @@ def discover_plan_files(root, plan_dir=None, limit=500):
     return out
 
 def plan_declared_result_candidates(root, plan=None, limit=240, strict_plan=False):
+    if strict_plan:
+        return output_contract_plan(root, durable_plan_path(plan, "输出契约 Plan"), limit)["candidates"]
     plans = []
     if plan:
         plans.append(plan)
@@ -10936,23 +10979,23 @@ def diagnose_result_anomaly_action(root, payload=None):
 
 OUTPUT_CONTRACT_SNAPSHOT_FILES = ("env_snapshot.json", "config_snapshot.yaml")
 
-def output_contract_result_candidate(value):
-    return parseable_result_candidate(value)
+def output_contract_result_candidate(value, strict_paths=False):
+    return output_contract_candidate(value) if strict_paths else parseable_result_candidate(value)
 
-def output_contract_search_roots(values):
+def output_contract_search_roots(values, strict_paths=False):
     roots = []
     for item in values or []:
-        text = normalize_result_candidate(item)
+        text = output_contract_directory(item) if strict_paths else normalize_result_candidate(item)
         if not text:
             continue
-        if re.search(r"\.(?:csv|json|txt|log|out)$", text, re.I):
+        if re.search(r"\.(?:csv|json|txt|log|out)$", text.rstrip() if strict_paths else text, re.I):
             parent = "/".join(text.split("/")[:-1]) or "."
         else:
             parent = text
         if any(ch in parent for ch in "*?[]"):
             continue
         roots.append(parent)
-    return unique_values(roots)[:32]
+    return list(dict.fromkeys(roots))[:32] if strict_paths else unique_values(roots)[:32]
 
 def output_contract_unparseable_error(value):
     lower = str(value or "").lower()
@@ -11008,30 +11051,39 @@ def check_output_contract_action(root, plan=None):
     if plan_norm:
         worker_plan_project_path(root, plan_norm, require_file=True)
     required = list(OUTPUT_CONTRACT_SNAPSHOT_FILES)
+    snapshots = []
+    contract = None
     if plan_norm:
-        declared = plan_declared_result_candidates(root, plan_norm, strict_plan=True)
-        jobs = job_result_candidates(root, plan=plan_norm, strict_plan=True)
+        contract = output_contract_plan(root, plan_norm)
+        snapshots.append((plan_norm, contract["snapshot"]))
+        declared = contract["candidates"]
+        jobs = job_result_candidates(root, plan=plan_norm, strict_plan=True, snapshots=snapshots)
         files = sorted(dict.fromkeys([
-            *expand_result_candidates(root, declared),
-            *expand_result_candidates(root, jobs),
-            *expand_result_candidates(root, plan_scoped_discover_candidates(root, plan_norm, strict_plan=True)),
+            *output_contract_expand(root, declared),
+            *output_contract_expand(root, jobs, patterns=False),
+            *plan_scoped_discover_candidates(root, plan_norm, strict_plan=True, contract=contract),
         ]))
-        search_roots = output_contract_search_roots([*declared, *jobs, *files])
+        search_roots = output_contract_search_roots([*declared, *jobs, *files], strict_paths=True)
     else:
         files = discover_result_files(root)
         search_roots = [".", "experiments", "work_dirs", "results", "simple_cluster"]
     present = {os.path.basename(path).lower() for path in files if os.path.basename(path).lower() in required}
     for top in search_roots:
-        base = root if top == "." else (safe_project_path(root, top) if plan_norm else os.path.join(root, top))
+        try:
+            base = root if top == "." else (output_contract_path(root, top, directory=True) if plan_norm else os.path.join(root, top))
+        except FileNotFoundError:
+            continue
         if not os.path.isdir(base):
             continue
         if plan_norm:
             for name in os.listdir(base):
-                lower_name = name.lower()
                 path = os.path.join(base, name)
-                if lower_name in required and os.path.isfile(path):
-                    present.add(lower_name)
-                    files.append(relpath(root, path))
+                if name in required:
+                    relative = os.path.relpath(path, root)
+                    snapshot = output_contract_read_snapshot(root, relative)
+                    snapshots.append((relative, snapshot))
+                    present.add(name)
+                    files.append(relative)
             if required and all(name in present for name in required):
                 break
             continue
@@ -11057,8 +11109,8 @@ def check_output_contract_action(root, plan=None):
             break
     files = sorted(dict.fromkeys(files))
     missing = [name for name in required if name not in present]
-    result_files = sorted(dict.fromkeys(filter(None, (output_contract_result_candidate(item) for item in files))))
-    metric_files = [item for item in result_files if os.path.basename(str(item)).lower() == "metrics_summary.csv"]
+    result_files = sorted(dict.fromkeys(filter(None, (output_contract_result_candidate(item, strict_paths=bool(plan_norm)) for item in files))))
+    metric_files = [item for item in result_files if (os.path.basename(item).strip().lower() if plan_norm else os.path.basename(str(item)).lower()) == "metrics_summary.csv"]
     if not result_files:
         missing.append("parseable_result_file")
     policy = read_project_metric_policy(root)
@@ -11067,7 +11119,7 @@ def check_output_contract_action(root, plan=None):
     parseable_result_count = 0
     for item in result_files:
         try:
-            parsed = parse_result_file(root, item, policy)
+            parsed = parse_result_file(root, item, policy, strict_paths=True, snapshots=snapshots) if plan_norm else parse_result_file(root, item, policy)
             if parsed:
                 parseable_files.append(item)
                 parseable_result_count += len(parsed)
@@ -11087,6 +11139,8 @@ def check_output_contract_action(root, plan=None):
     else:
         message = f"输出契约完整：已确认 {len(required)} 个快照文件，并从 {len(parseable_files)} 个结果文件解析到 {parseable_result_count} 条结果"
     report = {"schemaVersion": 1, "status": "failed" if issue_type else "ok", "issueType": issue_type, "files": files, "missing": missing, "missingCount": len(missing), "requiredSnapshots": required, "resultFiles": result_files, "metricFiles": metric_files, "parseableResultFiles": parseable_files, "parseableResultCount": parseable_result_count, "unparseable": unparseable, "unparseableFiles": unparseable_files, "unparseableCount": len(unparseable_files), "checkedAt": now_iso(), "planFile": plan_norm or "", "message": message}
+    for relative, snapshot in snapshots:
+        output_contract_verify_snapshot(root, relative, snapshot)
     report_rel = f"simple_cluster/contracts/contract_check_reports/by_plan/{result_plan_directory_key(plan_norm)}/latest.json" if plan_norm else "simple_cluster/contracts/contract_check_reports/latest.json"
     report["path"] = report_rel
     target = safe_project_path(root, report_rel)
