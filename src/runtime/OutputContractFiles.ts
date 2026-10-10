@@ -68,7 +68,7 @@ def output_contract_candidate(value, pattern=False):
     base = lower[-1].strip()
     if not re.search(r"\.(csv|json|txt|log|out)$", base):
         return ""
-    eligible = (base in RESULT_ROOT_FILES or tuple([*lower[:-1], base]) in RESULT_EXACT_PAIRS
+    eligible = (base in RESULT_ROOT_FILES or tuple([*lower[:-1], base]) in RESULT_EXACT_PAIRS or lower[:2] == ["experiments", "runs"]
                 or len(parts) >= 2 and (lower[0] in RESULT_TOP_DIRS or tuple(lower[:2]) in RESULT_PREFIX_PAIRS))
     if (not eligible or candidate.lower() in IGNORED_RESULT_FILES or base in NON_RESULT_METADATA_FILES
             or candidate.lower().startswith("simple_cluster/results/")

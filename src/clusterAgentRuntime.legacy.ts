@@ -4,6 +4,7 @@ import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
 import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
 import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
 import { PROJECT_AGGREGATE_READ_PYTHON } from "./runtime/ProjectAggregateRead";
+import { CLAIM_EVIDENCE_READ_PYTHON } from "./runtime/ClaimEvidenceRead";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -17,6 +18,7 @@ ${OUTPUT_CONTRACT_FILES_PYTHON}
 ${RESULT_PARSE_INPUTS_PYTHON}
 ${ARCHIVE_EVIDENCE_READ_PYTHON}
 ${PROJECT_AGGREGATE_READ_PYTHON}
+${CLAIM_EVIDENCE_READ_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -8497,6 +8499,8 @@ def claim_known_key_matches(text, catalog):
     return sorted(dict.fromkeys(matches))
 
 def evaluate_claim_evidence(root, summary=None):
+    if isinstance(summary, dict) and summary.get("resultPathIdentity") == "posix-v1":
+        return checked_claim_evidence(root, summary)
     claims_path = os.path.join(root, "paper", "claims.md")
     catalog = discover_claim_evidence_catalog(root, summary or {})
     plan_norm = result_summary_plan(summary or {})
@@ -9391,7 +9395,7 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         files = sorted(dict.fromkeys([*plan_files, *policy_files]))
     else:
         files = sorted(dict.fromkeys([*expand_result_candidates(root, policy_result_candidates(policy)), *expand_result_candidates(root, plan_declared_result_candidates(root, plan)), *expand_result_candidates(root, job_result_candidates(root)), *discover_result_files(root)]))
-    files = [item for item in files if structured_result_candidate(item)]
+    files = [item for item in files if (output_contract_candidate(item) if strict_plan else structured_result_candidate(item))]
     records, failures, used_files = [], [], []
     if not strict_plan:
         plan_norm = normalize_result_candidate(plan) if plan else ""
