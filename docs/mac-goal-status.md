@@ -19,7 +19,7 @@
 | 13 | darwin-arm64、真实身份/版本/平台、损坏与兼容性拒绝 | 已验证 | Vsix、macVsix 与实际两包的 CRC/大小/SHA/版本/平台核验 |
 | 14 | 选择有效 preview，不用 latest | 已验证 | 用户2026-10-10授权由静态 preview.json 索引替代用户端预发布REST查询；保留 preview 筛选与语义排序，当前迁移本地验证中 |
 | 15 | 匿名公开下载、请求合并/缓存/403429退避、失败正确显示 | 剩余 | 用户授权改用静态preview索引；本地客户端15/按钮4回归通过，用户检查不调用REST API，索引清单大小/SHA核验。发布及真实匿名静态请求待完成；.306公开清单/两包下载通过，M5首个403修复效果仍待复验 |
-| 16 | 本机 prepare/publish、完整草稿核验后发布、不安装/Actions | 已验证 | mac-release-prepare/publish/common、macRelease；历史本机发布记录 |
+| 16 | 本机 prepare/publish、完整草稿核验后发布、不安装/Actions | 已验证 | mac-release-prepare/publish/common、macRelease；静态索引在确认完整公开附件后单独普通提交推送，回执补推和远端推进阻断有本地回归；新流程实际发布待验证 |
 | 17 | 版本不可覆盖、更高版本修复、保留历史附件不清理 | 已验证 | assertNewerPreview/发布附件集合核验，历史 preview 保留，macRelease |
 | 18 | 验证批次分别提交普通推送 master，包绑定同步提交 | 已验证 | 历史批次计划、两仓 Git 提交/fetch 记录、清单 sourceCommit 与源码快照 |
 | 19 | Mac 数据目录/POSIX/大小写/中文空格/锁/退出/CLI/执行依赖 | 剩余 | MacPaths/PosixPath、共享租约、CLI、Darwin 退出证明已有局部回归；完整业务依赖和真实进程/路径行为仍待核验 |

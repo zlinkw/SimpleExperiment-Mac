@@ -8,8 +8,8 @@
 2. 在 SimpleExperiment-Mac 执行 `npm run release:prepare`。默认配套目录为 `../SimpleSFTP-Mac`，也可设置 `SIMPLE_SFTP_MAC_SOURCE`。脚本执行本地构建、目标测试串行、闭包与脚本校验，再打包 darwin-arm64 与生成 release.json。
    主题门禁使用本机 Chromium 无界面渲染浅色、深色及高对比主题，检测文字/背景对比。默认检测本机 Chrome 路径；其他位置可设置 `SIMPLE_MAC_THEME_BROWSER` 为已有 Chromium 可执行文件。不会启动可见浏览器或安装浏览器，缺少测试环境时 prepare 失败。
    闭包校验和 VSIX 打包从受检源快照运行相同的本地 pinned VSCE，保持原有文件选择规则：Experiment 使用 `.vscodeignore`，SFTP 未设置该文件时使用 `package.json` 的 `files`。不生成替代 ignore 文件。快照保留全部已跟踪源码和构建 `dist`；源/快照字节、文件集合及身份在工具运行前后核验。快照与绑定记录保存在各仓 `release-artifacts/package-sources/`，不进入 VSIX。历史附件不参与扫描，不为加速清理附件或扩大校验超时。失败时保留证据，核对 sourceCommit、构建与快照，修复后使用更高版本发布。
-3. 在同一提交执行 `npm run release:publish`。需要发布者的 gh 登录。脚本创建 draft，上传两个 VSIX 与清单，核验附件完整集合、大小及 GitHub SHA-256 后发布 prerelease。测试用户公开下载不需要登录。
-4. 产物和发布回执保留在 `release-artifacts/preview-v<版本>/`，不提交。prepare 禁止复用已有版本目录。发布过的 tag/资产不覆盖，修复必须递增版本。失败的 draft 只允许凭本地回执恢复，并逐项核验已上传资产；未识别的 draft 保留供人工检查。
+3. 在同一提交执行 `npm run release:publish`。需要发布者的 gh 登录。脚本创建 draft，上传两个 VSIX 与清单，核验附件完整集合、大小及 GitHub SHA-256 后发布 prerelease；确认公开附件后，单独提交仓库根目录 `preview.json` 并普通推送 origin/master。Release 清单记录构建源码提交，之后的索引提交只改变通道元数据。测试用户通过公开原始文件地址检查更新，不调用 Release REST API，不需要登录。
+4. 产物和发布回执保留在 `release-artifacts/preview-v<版本>/`，不提交。prepare 禁止复用已有版本目录。发布过的 tag/资产及已索引条目不覆盖，修复必须递增版本。失败的 draft 或已发布但索引提交/推送失败，只允许凭本地回执重新执行 `npm run release:publish -- preview-v<版本>` 恢复；脚本逐项核验附件，补推同一索引提交，不重复发布或改源码。存在无关本地修改、远端推进或身份不符时停止，保留证据供人工检查。
 
 两个命令不安装开发机扩展，不触发 Actions，不清理历史附件。构建检查在开发机执行；发布说明中的“本地验证”不代表 M5 上的 Extension Host 或实际网络安装验收。
 
@@ -25,6 +25,6 @@
 - M5 真机验证：尚未执行。不得把 mock 安装测试写成真实 VS Code 安装通过。
 - 科研业务：仍在 mac 适配。Termius 隧道、密钥/ssh-agent/密码/私钥口令、中文和空格路径、断连恢复、三拓扑主流程需要后续本地与真机证据。
 
-更新源不可达或限流显示“检查失败”，不会显示“已是最新”。更新期间新业务操作被阻止；已有本地传输和子进程退出证明完成后才安装，远端实验不会被更新流程停止。
+更新源为 `https://raw.githubusercontent.com/zlinkw/SimpleExperiment-Mac/master/preview.json`，仅接受完整公开 preview 的索引记录，继续校验清单大小/SHA和安装包平台/身份/版本/SHA。插件不调用 GitHub REST API，因此不消耗其每出口每小时60次匿名额度；网络故障或其他访问限制仍显示“检查失败”。按钮、启动/30分钟检查和安装顺序不变。更新期间新业务操作被阻止；已有本地传输和子进程退出证明完成后才安装，远端实验不会被更新流程停止。
 
 GitHub 发布附件与 Actions 额度分别管理，发布附件规则参见 [GitHub Releases 文档](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)。

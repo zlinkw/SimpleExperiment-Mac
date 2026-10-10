@@ -13,12 +13,18 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ap-static-index（passed，本地实现）
+## 当前批次 mac-005aq-index-publisher（passed，本地实现）
+- 起始Exp119fdb82f700553e0d1b4662e5c17cb7edc1d76b=origin/master，SF2f464eb75e362150de5cbe61e1946504c3497a0a 未改；事实/计划/Git/发布源码与测试已重读。
+- 范围7文件以内：静态索引发布模块、publish/prepare、发布模块回归、发布操作说明、目标状态及计划。完整公开附件后单独提交并普通推送preview.json；仅凭回执恢复索引写入/提交/推送，不覆盖资产或历史记录，远端推进/无关改动停止。
+- passed macPreviewIndex6/macRelease4逐文件串行20秒、npm run build面板2/225闭包/vm.Script/UTF8/diff；覆盖失败补推、提交后回执故障恢复、历史不可覆盖及无关变更阻断。源码普通提交后下批记录SHA。
+- 下批仅递增Experiment补丁/打包及真实公开静态请求验证，SFTP.97保持来源。M5 deferred，剩余15/29。
+
+## 前批 mac-005ap-static-index（passed，本地实现）
 - 起始 Exp8715b399f4c82893f67016301380ebb12c515975/SF2f464eb75e362150de5cbe61e1946504c3497a0a 干净且 origin/master 相等；重读事实、计划、源码/发布脚本及相关测试。
 - 本批范围5文件：PreviewRelease、客户端与按钮测试、状态清单及本计划。静态索引 preview 筛选/语义排序、清单大小/SHA 验证、无 API 请求；保护安装事务/平台/传输/科研/现有入口。
 - 检查：目标单文件串行20秒、build、包闭包、面板vm、UTF8/diff；发布索引及本机发布恢复属于下一批，不修改真机业务功能。
 - passed typecheck；macPreviewRelease15/macBootstrap4/macUpdateTransaction6逐文件串行20秒；npm run build（面板2）、verify:package-runtime225闭包、面板vm.Script、UTF8/diff。无服务器操作/安装/Actions。
-- 下一批发布完整公开资产后提交静态索引并普通推送，同步发布恢复和必要操作说明。代码提交由本批普通提交/fetch记录，下一批记录真实SHA；M5 deferred，剩余15/29。
+- 普通提交119fdb82f700553e0d1b4662e5c17cb7edc1d76b，推送/fetch HEAD=origin/master；M5 deferred，剩余15/29。
 
 ## 前批 mac-release-043（published；匿名列表核验受真实配额阻挡，0.5.306/0.2.97）
 - 起始Exp71e72dec321d6e366649db1fd4c7288a898297dd/SF2f464eb75e362150de5cbe61e1946504c3497a0a同步，事实/计划/版本/客户端及发布门禁已重读。范围4文件：Exp package/lock/runtime/计划；SF保留.97来源，包作为配套。

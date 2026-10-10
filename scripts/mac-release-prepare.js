@@ -24,6 +24,7 @@ function main() {
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macPlanAnalysisRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macCaseAnalysisRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/scripts/macPackageProjection.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  for (const file of ["macRelease", "macPreviewIndex"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/scripts/${file}.test.js`], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/core/workspacePathMapper.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   for (const file of ["macBootstrap", "macCliLauncher", "macCliApi", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths", "macAuthentication", "macRelay", "macPosixPaths", "macRelativePaths", "macDownloadScope", "apiUploadProgress", "macTransferExitProof"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
   npm(["run", "verify:package-runtime"], EXPERIMENT_ROOT);
@@ -50,10 +51,10 @@ function main() {
   const notes = `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-修正检查更新时所有 HTTP 403 都被判为限流、非零额度也使用一小时额度重置时间的问题。普通拒绝显示检查失败与请求入口，允许再次手动检查；真正额度耗尽、明确 Retry-After 或次级限流继续退避，只有额度为零才使用额度重置时间。保留 preview 元数据语义排序与最新有效清单选择，减少历史附件请求。配套 SimpleSFTP 增加 macOS 只读退出核验，不停止用户 SSH 或远端实验。先完成后完善，真机相关完善延后等待反馈；README/配置说明按功能阶段集中更新。
+检查更新改用 GitHub 仓库公开 preview.json 静态索引，不再调用用户端 Release REST API，避开每出口每小时60次匿名API配额；清单及两包仍来自同一 GitHub Release。发布者先核验完整公开预发布附件，再单独提交/普通推送索引；失败可凭本机回执补推，不覆盖历史版本。保留语义排序、平台/兼容性/清单与包SHA验证、同版跳过、禁止降级及更新按钮。保留0.5.306的403误判修复和SimpleSFTP macOS只读退出核验。先完成后完善，缺少真机证据的部分延后。
 
 本地验证
-两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。真实客户端连续两次手动检查、实际更新按钮消费者覆盖普通403/非零额度、一小时重置、次级限流、429、明确 Retry-After、过大拒绝响应与失败状态；preview 选择覆盖跨页排序及新版本网络错误。macOS 退出核验覆盖活跃进程、PID复用、损坏输出、Windows兼容及真实恢复消费者，系统进程查询使用注入替身。保留既有结果/Plan/更新/认证/中转与 pinned VSCE 快照门禁。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。没有运行真实科研、SSH、远端启动/停止/删除。
+两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。静态索引覆盖无REST请求、preview筛选/语义排序、清单大小/SHA、网络失败不回落历史、缓存/合并、403429和实际按钮消费者；发布索引覆盖完整公开附件前置、历史不可覆盖、拒绝倒退、单文件提交、失败补推及远端推进阻断。保留既有结果/Plan/更新/认证/中转与 pinned VSCE 快照门禁。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。没有运行真实科研、SSH、远端启动/停止/删除。
 
 M5 真机验证
 收到首个真机问题：检查更新首次403，随后提示限流一小时。原始错误找不到，实际HTTP原因尚未确定；本版修正已复现的限流误判，仍待真机复验。设置保留/重载/补装、Termius、认证传输、中文路径/断连及三拓扑完整验收待用户反馈。缺少真机证据的完善延后，不将本机通过写成真机或完整科研通过。
