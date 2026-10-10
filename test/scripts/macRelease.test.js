@@ -37,6 +37,7 @@ test("paired release gates include both repositories' POSIX path regressions", (
   assert.match(prepare, /"test\/features\/macProjectAggregateRead\.test\.js"/);
   assert.match(prepare, /"test\/features\/macClaimEvidenceRead\.test\.js"/);
   assert.match(prepare, /"test\/features\/macPlanAnalysisRead\.test\.js"/);
+  assert.match(prepare, /"test\/features\/macCaseAnalysisRead\.test\.js"/);
   assert.match(prepare, /"test\/scripts\/macPackageProjection\.test\.js"/);
   assert.equal((prepare.match(/"macCliLauncher"/g) || []).length, 2);
   assert.equal((prepare.match(/"macCliApi"/g) || []).length, 2);

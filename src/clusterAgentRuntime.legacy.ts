@@ -6,6 +6,7 @@ import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
 import { PROJECT_AGGREGATE_READ_PYTHON } from "./runtime/ProjectAggregateRead";
 import { CLAIM_EVIDENCE_READ_PYTHON } from "./runtime/ClaimEvidenceRead";
 import { PLAN_ANALYSIS_READ_PYTHON } from "./runtime/PlanAnalysisRead";
+import { CASE_ANALYSIS_READ_PYTHON } from "./runtime/CaseAnalysisRead";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -21,6 +22,7 @@ ${ARCHIVE_EVIDENCE_READ_PYTHON}
 ${PROJECT_AGGREGATE_READ_PYTHON}
 ${CLAIM_EVIDENCE_READ_PYTHON}
 ${PLAN_ANALYSIS_READ_PYTHON}
+${CASE_ANALYSIS_READ_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -10194,7 +10196,9 @@ def discover_case_files(root, plan=None, limit=120):
                         return sorted(dict.fromkeys(out))
     return sorted(dict.fromkeys(out))
 
-def parse_case_level_action(root, plan=None):
+def parse_case_level_action(root, plan=None, plan_revision=""):
+    if plan is not None and plan != "":
+        return checked_case_level_action(root, plan, plan_revision)
     plan_norm = normalize_result_candidate(plan) if plan else ""
     rows = []
     failures = []
@@ -10237,15 +10241,12 @@ def parse_case_level_action(root, plan=None):
     index = {**index, "path": relpath(root, target)}
     return index
 
-def run_leakage_check_action(root, plan=None):
-    plan_norm = normalize_result_candidate(plan) if plan else ""
-    index = {}
-    if plan_norm:
-        index = read_json(safe_project_path(root, plan_results_artifact_relpath(plan_norm, "case_level_index.json")), {})
-    if not index.get("cases"):
-        index = read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
-    if (not index.get("cases")) or (plan_norm and normalize_result_candidate(index.get("planFile") or "") != plan_norm):
-        index = parse_case_level_action(root, plan_norm or None)
+def run_leakage_check_action(root, plan=None, plan_revision=""):
+    context = case_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
+    plan_norm = plan if context else ""
+    index = context["index"] if context else read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
+    if not context and not index.get("cases"):
+        index = parse_case_level_action(root)
     issues = []
     patients = {}
     for row in index.get("cases") or []:
@@ -10258,7 +10259,15 @@ def run_leakage_check_action(root, plan=None):
             issues.append({"severity": "critical", "type": "patient_overlap", "patientId": patient, "splits": sorted(splits), "message": "同一 patient_id 出现在多个 split"})
     if not patients and (index.get("cases") or []):
         issues.append({"severity": "warning", "type": "patient_id_missing", "message": "缺少 patient_id，无法做病人级泄漏检查"})
+    if context and not index.get("cases"):
+        issues.append({"severity": "warning", "type": "no_verified_cases", "message": "当前 Plan 没有受检样本，无法判断泄漏"})
     report = {"schemaVersion": 1, "status": "failed" if any(i["severity"] == "critical" for i in issues) else "warning" if issues else "ok", "issues": issues, "checkedAt": now_iso(), "planFile": plan_norm or ""}
+    if context:
+        report.update(planRevision=plan_revision, caseCount=index["caseCount"], sourceFiles=index["sourceFiles"])
+        case_analysis_verify(root, context)
+        plan_analysis_publish_report(root, index, "case_level_index.json")
+        plan_analysis_publish_report(root, report, "leakage_check.json")
+        return report
     rel_target = plan_results_artifact_relpath(plan_norm, "leakage_check.json")
     target = safe_project_path(root, rel_target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -10267,15 +10276,12 @@ def run_leakage_check_action(root, plan=None):
     report = {**report, "path": relpath(root, target)}
     return report
 
-def run_subgroup_analysis_action(root, plan=None):
-    plan_norm = normalize_result_candidate(plan) if plan else ""
-    index = {}
-    if plan_norm:
-        index = read_json(safe_project_path(root, plan_results_artifact_relpath(plan_norm, "case_level_index.json")), {})
-    if not index.get("cases"):
-        index = read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
-    if (not index.get("cases")) or (plan_norm and normalize_result_candidate(index.get("planFile") or "") != plan_norm):
-        index = parse_case_level_action(root, plan_norm or None)
+def run_subgroup_analysis_action(root, plan=None, plan_revision=""):
+    context = case_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
+    plan_norm = plan if context else ""
+    index = context["index"] if context else read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
+    if not context and not index.get("cases"):
+        index = parse_case_level_action(root)
     groups = {}
     for row in index.get("cases") or []:
         subgroup = row.get("subgroup") if isinstance(row.get("subgroup"), dict) else {}
@@ -10292,6 +10298,12 @@ def run_subgroup_analysis_action(root, plan=None):
             metrics[metric] = {"mean": sum(values) / len(values), "n": len(values)}
         rows.append({"group": item["group"], "count": item["count"], "metrics": metrics})
     report = {"schemaVersion": 1, "generatedAt": now_iso(), "rows": rows, "planFile": plan_norm or ""}
+    if context:
+        report.update(planRevision=plan_revision, caseCount=index["caseCount"], sourceFiles=index["sourceFiles"], status="available" if rows else "empty")
+        case_analysis_verify(root, context)
+        plan_analysis_publish_report(root, index, "case_level_index.json")
+        plan_analysis_publish_report(root, report, "subgroup_analysis.json")
+        return report
     rel_target = plan_results_artifact_relpath(plan_norm, "subgroup_analysis.json")
     target = safe_project_path(root, rel_target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -13641,14 +13653,17 @@ def handle_action(root, action, payload, operation_id, op_id):
     if action == "check-output-contract":
         return output_contract_receipt(root, payload, operation_id, op_id)
     if action == "parse-case-level":
-        report = parse_case_level_action(root, action_plan_file(payload))
+        identity = output_contract_request_identity(payload)
+        report = parse_case_level_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
         return terminal_action(root, action, operation_id, op_id, "completed", f"Case-level 解析完成：{report.get('caseCount', 0)} 条", {"caseLevel": report, "caseLevelPath": report.get("path") or "simple_cluster/results/case_level_index.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "run-leakage-check":
-        report = run_leakage_check_action(root, action_plan_file(payload))
+        identity = output_contract_request_identity(payload)
+        report = run_leakage_check_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
         status = "failed" if report.get("status") == "failed" else "completed"
         return terminal_action(root, action, operation_id, op_id, status, f"泄漏检查：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"leakageCheck": report, "leakageCheckPath": report.get("path") or "simple_cluster/results/leakage_check.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "run-subgroup-analysis":
-        report = run_subgroup_analysis_action(root, action_plan_file(payload))
+        identity = output_contract_request_identity(payload)
+        report = run_subgroup_analysis_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
         return terminal_action(root, action, operation_id, op_id, "completed", f"亚组分析完成：{len(report.get('rows') or [])} 组", {"subgroupAnalysis": report, "subgroupAnalysisPath": report.get("path") or "simple_cluster/results/subgroup_analysis.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "export-case-analysis":
         report = export_case_analysis_action(root, action_plan_file(payload))

@@ -10,7 +10,15 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-039（passed，0.5.302/0.2.96）
+## 当前批次 mac-005al-case-read（running）
+- 前轮progress：文档节奏修订47a8736已同步；.302/.96已完成77串行目标、十八实际包和41匿名请求。无活动测试/发布过程，起始Exp47a8736与SFTPca2ddc26a5fe634c0498f01feebfb046503dbe2c干净且fetch确认master相等。新用户AGENTS、事实/计划/实际case路径、读取与入口重读。
+- 范围7文件：case受检输入、Agent三入口与请求身份、真实AST/编译消费者Node/Python回归、prepare门禁/发布说明、门禁回归及计划。三问题：原始Plan/revision与发现集合；实际CSV/UTF8/行归属；泄漏/子组使用当前可信样本、不借缓存全局索引。保留旧默认入口/统计实现/API/三拓扑；没有科研/SSH/归档删除或开发机安装。
+- 依据最新文档节奏，本批操作入口不变，README/配置累计后集中更新；代码验证后发布.303，SFTP源码与版本不变则保留.96并验证相同版本跳过。科研/M5、完整导出/写入原子性与revision证明仍pending。
+
+- passed build/225闭包/面板2/vm.Script/UTF8/diff，新样本8、发布门禁4、分析8/claim8/聚合8/归档8/解析9/读取7/契约7及四个既有结果界面回归，单文件20秒/Python10秒串行，mac-005al-final.log。首次6/8及随后7/8失败为fixture把末尾空格改为字面%20后缀、glob漏原文件名首空格；修正真实输入后8/8，未放宽生产校验/超时。
+- 原始Plan/revision、实际CSV/config/jobs/插件策略及缺失输入、发现集合在发布前受检；全局缓存不再借给指定Plan，空样本泄漏warning/子组empty。实际三请求AST分支和编译回执消费者通过；只捕获发布，完整多文件原子性/导出/revision内容/M5仍pending。范围7文件，文档按阶段集中，下一批仅Exp版本.303，SF.96保持并测试同版跳过。
+
+## 前批 mac-release-039（passed，0.5.302/0.2.96）
 - 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp d3840a06518607d942848f9a14bef5ddfcdceb17/SFTP6a7537468b64d363ed04d2cf5cff4bc274262d1b普通推送/fetch相等，起始干净；事实/计划/版本/门禁和实际包runner重读。
 - 递增版本保留原格式，metadata验证后普通提交推送；完整77串行目标、十八实际VSIX含新分析8、快照/完整草稿附件与匿名.301/.95→.302/.96。无Actions/自动安装/科研/SSH/归档删除，M5延后。
 - 下一边界：其他Agent结果动作仍旧路径/读取，完整报告发布/归档执行/revision内容和物理原子锁定继续分批。
@@ -38,36 +46,8 @@
 - passed build/225闭包/面板2/vm.Script/LF/UTF8，新分析8/claim8/项目8/归档8/解析9/读取7/契约7及4个面板证据回归，20秒串行/Python10秒；日志mac-005ak-final-66eb8875-c662-4228-b09a-5f3c92906565.log与followup-c23af941-77d0-42a0-b7d1-308d002bac46.log。仅真实AST和编译消费者、本机文件及捕获发布，无科研/SSH/归档删除/安装。
 - 下一批mac-doc-032同步两仓README/配置、真实分析门禁和发布说明，再配套.302/.96；完整报告原子性/revision/归档执行/M5仍pending。
 
-## 前批 mac-release-038（passed，0.5.301/0.2.95）
-- 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp `ef649df249df511af258f0a3f6f5c075b0063b9e`/SFTP `fdac594ac94c411a895a1e5009599d1799dbd3d9`普通推送/fetch相等，起始两仓干净；事实/计划/版本/门禁与现有实际包runner重读。
-- 版本原格式递增，metadata两仓build/runtimeManifest/闭包/面板/vm.Script后提交同步；完整prepare76逐文件20秒、十七实际VSIX含新claim8、快照/草稿完整附件与匿名 .300/.94→.301/.95核验。无Actions/自动安装/真实科研/SSH/归档删除，M5延后。
-- 下一代码边界：其他Agent结果动作的回执/报告来源与写入发布。完整归档执行、revision内容证明、物理原子发布及M5保持pending，须按当前事实继续，不缩小全目标。
-
-- passed metadata两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；mac-release-038-metadata.log。完整交付证据见以下记录。
-
-
-- passed 完整prepare76目标文件/20秒串行、77含面板标记、两仓build/225与26闭包/面板2/vm.Script/真实浅深高对比；prepare-0.5.301.log exit0，无测试超时。
-- passed 十七实际VSIX：新增claim读取/实际解析→编译scope与科研表消费8；既有项目8/归档8/解析9/读取7/契约7/回执8/解析8/读8/映射11/摘要7/YAML7/候选6/结果8/CLI2/启动8/结果链6。新ClaimEvidenceRead/严格experiments/runs输入及生成Agent/编译消费者对应受检包，两来源/hash绑定；仅AST隔离、本机文件与捕获发布，没有整Agent/科研/SSH/归档删除或安装。
-- passed 保留源快照/实际包：SFTP82源/25原字节包文件，Exp1530源/416原字节包文件；只允许正式VSCE package/README转换及CHANGELOG改名，历史附件保留。
-- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.301，releaseId408548625，草稿三附件集合/大小/hash核验后公开；来源Exp `738f9e271bd908c8341cc80a704f383e8a755499`/SFTP `068ec5fe6244f5d8e4b7d7152764773631a84d96`普通推送/fetch相等。
-- passed 匿名 .300/.94→.301/.95：40公开请求，prerelease/清单/身份/darwin-arm64/VS Code要求/大小/SHA-256/CRC；下载字节等于十七受检包。新claim/聚合模块/生成Agent/两仓README/包内Mac说明对应来源，同版跳过/不降级；anonymous-verification.json、package-projection-verification.json及十七报告保留。M5及完整科研仍pending。
-- 下一批 mac-005ak-analysis-read：质量门禁/统计/论文表沿用当前受检摘要后仍normalize原始Plan、用旧配置读取与旧artifact命名，当前归档记录的metrics仍来自缓存。按3相关问题/8文件预算处理原始归属、真实来源/配置和受检报告输入，保留原入口/API/三拓扑；不执行科研/SSH/归档删除。claim对生成表及完整报告发布、物理原子锁定、完整revision和M5仍pending。完成后先同步README/配置，再配套发布。
-
-## 前批 mac-doc-031（passed）
-- 范围6文件：两仓README、Mac配置、prepare/门禁回归与计划。代码已普通提交推送 `dda0b5ccc3a26f6fedfc3fd9539453169ec596a7`并fetch相等；SFTP `12d726fbddbe033aa203bb1725149c0411905beb`干净同步；事实/计划/文档/实际入口与门禁重读。
-- 说明结果区“检查论文证据”/UTF8 claims.md、原始路径与一次URI解码/ID、当前来源/归档及失败处理，supported仅为证据关联。新claim8加入76逐文件串行发布门禁。安装/更新/Termius/认证/CLI与三拓扑入口保留；不宣称完整科学结论/原子发布/归档执行/M5。
-
-- passed 两仓build/225与26闭包/面板2/vm.Script、Mac配置1/发布门禁4、脚本语法/UTF8/diff；mac-doc-031.log。新claim8纳入76目标门禁；下一批 .301/.95，不宣称完整claim/聚合发布、归档执行、原子写入或M5。
-
-## 前批 mac-005aj-claim-read（passed）
-- 上轮progress：.300/.94已发布，Mac说明/聚合代码/76含面板门禁/十六实际VSIX/39匿名请求passed。起始Exp `d569ef1c825f492b7f66374e5a4aebb81ee4693c`/SFTP `12d726fbddbe033aa203bb1725149c0411905beb`master干净且同步；无活动过程。事实/计划/实际claim、产生端/归档、受检输入及旧回归已重读。
-- 范围6文件：独立claim只读输入模块、严格来源候选、Agent严格入口接线、真实生成函数/编译消费者Node/Python回归和计划。三个问题：原始Markdown/路径/ID引用；当前Plan/归档与实际CSV重解析；UTF8/物理身份快照在报告发布前核验。旧未标记入口/API/Plan/三拓扑保留，不调用归档/删除执行器、科研/SSH或安装。
-- claims语义状态是证据关联，不能证明科学结论正确；完整revision内容/归档执行与写入原子锁定/M5仍pending。完成后先同步README/配置/门禁，再发布 .301/.95。
-
-- 首次build暴露String.raw内反引号模板语法，改用chr(96)后build通过；新回归2/8暴露实际严格Plan产生端仍用旧结构候选范围，experiments/runs被丢弃。仅严格来源边界支持科研证据目录并按严格候选过滤，旧默认入口不扩。未发生测试超时，断言保持。
-
-- 严格来源修正后新回归6/8，两个Node断言误以为科研表registry保存claim状态，按真实registry契约改核对原始Plan/两行科研记录，claim状态单独经实际scope消费者验证；未改生产断言。补Markdown标题/一次解码/裸前缀边界及ID线性查找/预算后8/8。
-- passed build/225闭包/面板2/vm.Script/UTF8/LF/Python AST；新claim8/项目8/归档8/解析9/读取7/输出契约7/claim面板fallback1逐文件20秒、Python10秒无超时；mac-005aj-final.log。来源/归档/claims变更、缺失文件出现、实际handler与旧默认入口均验证，发布executor捕获。下一批mac-doc-031同步README/配置/门禁，再 .301/.95配套发布。
+### .301/.95 已交付历史
+- 来源Exp738f9e271bd908c8341cc80a704f383e8a755499/SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96，交付a0d00c9bec05a620aa7ec9d0e2e665cedcca320f；76串行目标/十七实际VSIX/40匿名请求。claim代码dda0b5ccc3a26f6fedfc3fd9539453169ec596a7、文档ef649df249df511af258f0a3f6f5c075b0063b9e/fdac594ac94c411a895a1e5009599d1799dbd3d9均普通推送/fetch相等。String.raw反引号、严格runs候选与registry fixture修复后真实8等passed，完整失败、来源与证据保留Git/release-artifacts，M5 pending。
 
 ### .299/.93—.300/.94 已交付历史
 - .300/.94 来源Exp59ecb3f5c68bd3085f43f91ec30ed238107a7afe/SFTP12d726fbddbe033aa203bb1725149c0411905beb；交付d569ef1c825f492b7f66374e5a4aebb81ee4693c。聚合代码d88402159c600afd550e8f593608768b2d8997e9、文档398f8797aafc5c50dcc97dd81f7d16a02c018391/78f6f8e1b827dc497119c623ddfb94aaa801d368；75串行目标/十六实际VSIX/39匿名请求passed，全部普通推送/fetch相等。
