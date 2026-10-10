@@ -1,12 +1,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {spawnSync}=require('node:child_process');
 const {createPackageProjection,assertPackageProjection}=require('../../scripts/mac-package-projection');
-function fixture(){
+function fixture(ignore=true){
  const root=path.resolve(__dirname,'../../release-artifacts','打包快照测试 '+crypto.randomUUID());fs.mkdirSync(root,{recursive:true});
  const write=(relative,bytes)=>{const file=path.join(root,...relative.split('/'));fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes,{flag:'wx'});};
- const trackedFiles=['package.json','.vscodeignore','README.md','docs/中文 guide.md','src/unpackaged.js'];
- write('package.json',JSON.stringify({name:'fixture',publisher:'simple-local',version:'0.1.0',engines:{vscode:'^1.100.0'},main:'./dist/extension.js',activationEvents:['onStartupFinished']}));
- write('.vscodeignore','src/**\nrelease-artifacts/**\n');write('README.md','Mac 使用说明\n');write('docs/中文 guide.md','中文与空格\n');write('src/unpackaged.js','source');write('dist/extension.js','module.exports={}');
+ const trackedFiles=['package.json',...(ignore?['.vscodeignore']:[]),'README.md','docs/中文 guide.md','src/unpackaged.js'];
+ write('package.json',JSON.stringify({name:'fixture',publisher:'simple-local',version:'0.1.0',engines:{vscode:'^1.100.0'},main:'./dist/extension.js',activationEvents:['onStartupFinished'],...(!ignore?{files:['dist/**','README.md','docs/**']}:{} )}));
+ if(ignore)write('.vscodeignore','src/**\nrelease-artifacts/**\n');write('README.md','Mac 使用说明\n');write('docs/中文 guide.md','中文与空格\n');write('src/unpackaged.js','source');write('dist/extension.js','module.exports={}');
  write('release-artifacts/retained/old.log','evidence');return {root,write,options:{trackedFiles}};
 }
 test('real pinned VSCE selects snapshot files using the unchanged source ignore policy',()=>{
@@ -26,6 +26,13 @@ test('snapshot mutation and new runtime files invalidate the package source bind
  assert.throws(()=>assertPackageProjection(p),/changed/);
  const g=fixture(),q=createPackageProjection(g.root,g.options);g.write('dist/new.js','new');assert.throws(()=>assertPackageProjection(q),/file set changed/);
 });
+test('real pinned VSCE preserves package files policy when vscodeignore is absent',()=>{
+ const f=fixture(false),p=createPackageProjection(f.root,f.options),r=spawnSync(process.execPath,[require.resolve('@vscode/vsce/vsce'),'ls','--no-dependencies'],{cwd:p.directory,encoding:'utf8',timeout:8000,windowsHide:true});
+ assert.equal(r.status,0,r.stderr||r.error?.message);const files=r.stdout.split(/\r?\n/).filter(Boolean);
+ for(const file of ['package.json','README.md','docs/中文 guide.md','dist/extension.js'])assert.ok(files.includes(file),file);
+ assert.ok(!files.some(file=>file.startsWith('src/')||file.startsWith('release-artifacts/')));assert.equal(assertPackageProjection(p),true);
+ f.write('.vscodeignore','dist/**\n');assert.throws(()=>assertPackageProjection(p),/ignore policy is not bound/);
+});
 test('an extra snapshot file cannot enter the package without a source binding',()=>{
  const f=fixture(),p=createPackageProjection(f.root,f.options);
  fs.writeFileSync(path.join(p.directory,'unexpected.js'),'extra',{flag:'wx'});
@@ -42,7 +49,8 @@ test('directory links are rejected before a package source can be borrowed',()=>
  assert.throws(()=>createPackageProjection(f.root,{trackedFiles:[...f.options.trackedFiles,'linked/data.js']}),/directory identity/);
  assert.equal(fs.readFileSync(path.join(outside,'data.js'),'utf8'),'source');
 });
-test('source manifest and ignore policy are mandatory and tracked budgets remain bounded',()=>{
- const f=fixture();assert.throws(()=>createPackageProjection(f.root,{trackedFiles:['README.md']}),/manifest or ignore/);
+test('source manifest and existing ignore policy are bound and tracked budgets remain bounded',()=>{
+ const f=fixture(false);assert.throws(()=>createPackageProjection(f.root,{trackedFiles:['README.md']}),/manifest/);
+ const g=fixture();assert.throws(()=>createPackageProjection(g.root,{trackedFiles:g.options.trackedFiles.filter(file=>file!=='.vscodeignore')}),/ignore policy is not bound/);
  assert.throws(()=>createPackageProjection(f.root,{trackedFiles:Array.from({length:8193},(_,i)=>'files/'+i)}),/budget/);
 });

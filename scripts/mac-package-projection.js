@@ -22,6 +22,8 @@ function trackedFiles(root) {
 }
 function sourceFiles(root, tracked) {
   const files = new Set(tracked.map(relativePath));
+  const ignore = path.join(root, ".vscodeignore");
+  if (fs.existsSync(ignore) && !files.has(".vscodeignore")) throw new Error("Package ignore policy is not bound to tracked source");
   function walk(relative) {
     const directory = path.join(root, ...relative.split("/"));
     ordinaryDirectory(directory);
@@ -88,7 +90,7 @@ function checkedBytes(root, relative, directories) {
 function createPackageProjection(sourceRoot, options = {}) {
   const root = path.resolve(sourceRoot), rootStat = ordinaryDirectory(root);
   const tracked = options.trackedFiles || trackedFiles(root), files = sourceFiles(root, tracked);
-  if (!files.includes("package.json") || !files.includes(".vscodeignore")) throw new Error("Package source manifest or ignore policy is absent");
+  if (!files.includes("package.json")) throw new Error("Package source manifest is absent");
   let parent = root;
   for (const name of ["release-artifacts", "package-sources"]) {
     parent = path.join(parent, name);

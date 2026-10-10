@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-032（running，0.5.295/0.2.89）
+## 当前批次 mac-tool-003（passed，提交推送待记录）
+- 范围至多 5 文件：源快照工具/回归、发布说明/prepare 文案与计划。prepare 所有 71 目标文件/72 含面板标记通过，225 闭包通过；打包前因 SFTP 无 .vscodeignore 而使用 package.json files，快照工具错误要求 ignore 存在，失败。保留 prepare-0.5.295.log 与空 .295 目录/来源，不覆盖。仅修正快照保留真实 VSCE 规则的缺省机制，新增真实 CLI files 策略证明/策略变化拒绝，不扩大超时或放松来源字节检查。
+- Exp `f9d988dd44642d8a9100478c3ab8760e60f6bee9`/SFTP `0abf9794021d3bd86e8af61478fe8b7e4d0db06c` master 同步且干净；重读事实/计划/源快照/实际 SFTP files 与 pinned VSCE 缺省源码。工具批验证提交后改用更高 .296/.90，不重试任何超时测试。
+- passed 快照 8（含无 ignore 的真实 files 机制/策略突现拒绝）、225 闭包、闭包 2/发布门禁 4 串行，实际 SFTP 真实 pinned VSCE 27 文件符合原 files、无脚本/测试/历史证据；源/快照字节检查未改变，UTF8/diff。完整打包仍须新版本 prepare/实际 VSIX，不把 ls 当作包验收。
+
+### 未发布 mac-release-032（failed prepare，0.5.295/0.2.89 保留）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。mac-doc-026 Exp `ffee575f5714fdbbfa6c79fbf92f375324d9a8e9`/SFTP `363a13a5a3ada307ff3f2cc49018197614d3ef9a` 已普通推送/fetch 相等，两仓干净；项目事实/计划/版本及发布门禁重读。
 - pending 两仓 build/闭包/面板/runtime 一致、完整 prepare、实际 VSIX/匿名更新，三附件完整草稿核验后发布。不得覆盖 .294 历史目录/tag，不触发 Actions/安装；下一边界仍为局部 Agent 结果读取适配，M5 延后。
 - passed 元数据子批：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 版本、UTF8/diff；来源提交同步后才执行完整 prepare，实际包/匿名下载证据后续记录。
