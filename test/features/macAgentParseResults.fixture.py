@@ -28,7 +28,7 @@ agent.write_atomic_csv = lambda file, header, rows: csv_outputs.append((file, li
 agent.write_atomic_text = lambda file, text: None
 agent.publish_dataset_outputs = lambda root, outputs: csv_outputs.extend(copy.deepcopy(outputs))
 agent.apply_final_evidence_summary = lambda root, summary: summary.update(finalResultCount=0, pendingReviewCount=len(summary["results"]))
-agent.final_analysis_results = lambda root, summary: []
+agent.final_analysis_results = lambda root, summary, snapshots=None: []
 agent.evaluate_claim_evidence = lambda root, summary: {"status": "needs_experiment", "claims": []}
 agent.apply_claim_evidence_summary = lambda summary, report: None
 # Project-level table merging and archival evidence are separate boundaries; keep Plan seed/CSV/registry writers real.

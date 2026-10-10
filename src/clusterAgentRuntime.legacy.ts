@@ -3,6 +3,7 @@ import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts"
 import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
 import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
 import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
+import { PROJECT_AGGREGATE_READ_PYTHON } from "./runtime/ProjectAggregateRead";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -15,6 +16,7 @@ ${PLAN_EXISTING_ARTIFACTS_PYTHON}
 ${OUTPUT_CONTRACT_FILES_PYTHON}
 ${RESULT_PARSE_INPUTS_PYTHON}
 ${ARCHIVE_EVIDENCE_READ_PYTHON}
+${PROJECT_AGGREGATE_READ_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -7696,6 +7698,8 @@ def result_column_mapping_preview(root, source, policy):
     return {"source": source, "headers": headers[:120], "mapping": mapping, "metricColumns": metrics[:120], "configured": configured, "sampleValues": sample_values}
 
 def project_dataset_table_outputs(root, current_summary, kind):
+    if isinstance(current_summary, dict) and current_summary.get("resultPathIdentity") == "posix-v1":
+        return checked_project_dataset_table_outputs(root, current_summary, kind)
     parent = safe_project_path(root, "simple_cluster/results/by_plan")
     saved_by_plan = {}
     if os.path.isdir(parent):
@@ -7746,6 +7750,10 @@ def project_dataset_table_outputs(root, current_summary, kind):
                             group["headers"].append(header)
                     group["rows"].append({**row, "plan_file": plan, "dataset": dataset})
                     total += 1
+    return project_dataset_table_outputs_from_groups(root, groups, kind)
+
+def project_dataset_table_outputs_from_groups(root, groups, kind, before_publish=None):
+    source_field = "aggregateCsvPath" if kind == "seed" else "finalCsvPath"
     partitions = dataset_partitions(list(groups))
     outputs, tables = [], []
     for partition in partitions:
@@ -7775,6 +7783,8 @@ def project_dataset_table_outputs(root, current_summary, kind):
             outputs.append(("text", md_rel, result_markdown_table(markdown_headers, markdown_rows, (partition["dataset"] or "Unassigned") + " project results")))
             table["finalMarkdownPath"] = md_rel
         tables.append(table)
+    if before_publish is not None:
+        before_publish()
     publish_dataset_outputs(root, outputs)
     return tables
 
@@ -7972,13 +7982,17 @@ def write_plan_seed_aggregate(root, summary, policy):
             if table.get("aggregateStatus") == "ready":
                 table["aggregateStatus"] = "batch_blocked"
         return
+    if summary.get("resultPathIdentity") == "posix-v1":
+        for relative, snapshot in policy.get("_strictResultSnapshots") or []:
+            output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     publish_dataset_outputs(root, outputs)
     if len(tables) == 1:
         for field in ("aggregateCsvPath", "finalCsvPath", "finalMarkdownPath", "finalRowCount"):
             summary[field] = tables[0][field]
     summary["aggregateIncompleteCount"] = sum(int(table.get("aggregateIncompleteCount") or 0) for table in tables)
     index_rel = f"simple_cluster/results/by_plan/{result_plan_directory_key(plan)}/dataset-index.json"
-    atomic_write(safe_project_path(root, index_rel), {"planFile": plan, "aggregateStatus": "ready", "datasetResultTables": tables})
+    atomic_write(safe_project_path(root, index_rel), {"planFile": plan, "aggregateStatus": "ready", "datasetResultTables": tables,
+        **({"planRevision": summary.get("planRevision", ""), "resultPathIdentity": "posix-v1"} if summary.get("resultPathIdentity") == "posix-v1" else {})})
 
 def _write_dataset_seed_aggregate(root, summary, policy, dataset, outputs):
     plan = result_summary_plan(summary)
@@ -8069,7 +8083,11 @@ def _write_dataset_seed_aggregate(root, summary, policy, dataset, outputs):
     summary["aggregateRowCount"] = len(rows)
     summary["aggregateIncompleteCount"] = sum(row[header.index("complete")] == "incomplete" for row in rows)
     summary["aggregateMessage"] = f"已生成 {len(rows)} 行；不完整 {summary['aggregateIncompleteCount']} 行。"
-    write_plan_final_summary(root, summary, policy, group_keys, groups, metric_names, expected_seeds, dataset, outputs)
+    final_groups = groups
+    if summary.get("resultPathIdentity") == "posix-v1":
+        final_records = final_analysis_results(root, {**summary, "results": relevant}, snapshots=policy.get("_strictResultSnapshots"))
+        final_groups = project_result_seed_groups(final_records, group_keys)
+    write_plan_final_summary(root, summary, policy, group_keys, final_groups, metric_names, expected_seeds, dataset, outputs)
 
 def archive_plan_copy_action(root, plan, snapshot_name=""):
     plan = normalize_result_candidate(plan)
@@ -8367,13 +8385,13 @@ def annotate_final_evidence(root, records, plan=None, plan_revision="", strict_p
         out.append(item)
     return out
 
-def final_analysis_results(root, summary):
+def final_analysis_results(root, summary, snapshots=None):
     records = (summary or {}).get("results") or []
     if not records:
         return []
     strict_plan = (summary or {}).get("resultPathIdentity") == "posix-v1"
     if strict_plan or not all(isinstance(record, dict) and "eligibleForFinalAnalysis" in record for record in records):
-        records = annotate_final_evidence(root, records, result_summary_plan(summary) or None, (summary or {}).get('planRevision') or "", strict_plan=strict_plan)
+        records = annotate_final_evidence(root, records, result_summary_plan(summary) or None, (summary or {}).get('planRevision') or "", strict_plan=strict_plan, snapshots=snapshots)
     return [record for record in records if isinstance(record, dict) and str(record.get("finalEvidenceState") or "").lower() == "archived"]
 
 def apply_final_evidence_summary(root, summary, snapshots=None):

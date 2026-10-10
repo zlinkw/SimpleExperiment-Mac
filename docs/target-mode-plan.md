@@ -10,9 +10,18 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-036（passed，0.5.299/0.2.93）
+## 当前批次 mac-005ai-project-read（passed）
+- 上轮为progress：.299/.93已发布，README/配置重整、归档读取、75含面板门禁/十五实际包/38匿名请求通过。起始 Exp `c341b259b2102335ea6dd0cd6a6d3f9d0a6a4aa8`/SFTP `8113c9deea20c38e1b8399b3a6806ef087769749` 干净且master=origin/master；无活动过程。事实/计划/实际聚合、归档及产生端/旧隔离测试已重读。
+- 范围至多7文件：独立项目聚合只读模块、Agent接线、旧解析隔离stub快照参数、共享真实POSIX fixture的islink桥接、实际生成函数/编译CSV隔离Node/Python回归与计划。三问题：Plan/索引/表原始归属；目录集合/描述符/重解析来源绑定；严格Plan最终表仅由当前归档结果生成并核对，保持完整预览种子表与旧默认入口。
+- 真实源码表明严格Plan final.csv仍沿用完整预览groups；本批一并修正当前归档筛选，并在跨Plan读取时从受检真实Plan/原始CSV和当前归档重新计算核对表，而非借缓存归档标记。保护API/三拓扑/Plan格式、旧入口和删除确认；不执行整个Agent、科研、SSH、归档删除执行或安装。
+- 首轮新回归1/8：公用渲染器拆分漏传source_field，已补回真实上下文；legacy fixture误用旧入口不支持的末尾空格来源，改为旧协议普通路径。第二轮7/8暴露共享POSIX fixture缺少实际islink桥接，仅加入原生判断，未放松生产断言。随后8/8。
+- passed build/225闭包/面板2/vm.Script/LF，新真实聚合8/既有归档8/解析9/读取7/输出契约7，20秒串行、Python10秒无超时；日志 mac-005ai-final-88d2229a-e5d0-4237-923f-1bbeeed3a09d.log。补原始Plan/来源错误定位与128MiB即时追加预算后build/新8/225再通过；实际producer来源变更、目录新增及旧默认入口都核验，发布executor捕获。
+- 下一批mac-doc-030：两仓README/配置/prepare门禁/回归与计划，说明完整预览种子表与仅当前归档最终表、跨Plan重计算不符处理，不宣称全科研/M5。随后 .300/.94 配套发布。
+- claim文本/引用的原始读取顺延下一批，避免与本批3问题混合；完整原子发布/归档执行/revision内容证明与M5仍pending。代码通过后先同步README/配置/门禁，再配套发布。
+
+## 前批 mac-release-036（passed，0.5.299/0.2.93）
 - 范围6文件：两仓package/lock、Experiment runtime/计划。文档Exp `95856c8568e56c8fdf3987ba890d3361b83a1343`/SFTP `97e104e58930a085eda466e7dd8d66c95694955e`均普通推送/fetch相等；两仓干净，事实/计划/版本/门禁重读。
-- passed metadata 两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；日志 mac-release-036-metadata-d69614cc-66d3-4b18-85c3-6b1a0ecbc861.log。完整prepare/实际VSIX/发布和匿名下载仍待本批后续验证。
+- passed metadata 两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；日志 mac-release-036-metadata-d69614cc-66d3-4b18-85c3-6b1a0ecbc861.log。完整prepare/实际VSIX/发布和匿名下载已在以下交付证据完成。
 - 验证 metadata/build/闭包/面板/runtime一致性，源码同步后完整prepare74目标串行20秒、十五份实际VSIX（新增只读归档8）/快照/草稿完整附件/匿名更新。不得覆盖历史版本，无Actions/自动安装/实际科研/归档删除执行，M5延后。下一代码批仅跨Plan聚合与claim读取来源。
 
 - passed 完整prepare74目标文件/20秒串行、75含面板标记、两仓build/225与26闭包/面板2/vm.Script/真实浅深高对比；日志 prepare-0.5.299.log exit0，无测试超时。辅助日志检查首轮误将命令中的 --test-timeout 匹配为失败，改按真实失败标记与退出码核对，未重跑或放松生产门禁。
@@ -46,8 +55,8 @@
 - 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.298，releaseId408474609；完整三附件草稿集合/大小/hash核验后公开。来源 Exp `7d29548990cab73ca8e5cd0dff48caaabbf4fb85`/SFTP `2006c5b49bb28c57a124938aff456fcef7d6de98` 均已普通推送/fetch相等，无Actions/自动安装。
 - passed 匿名 .297/.91→.298/.92：37公开请求，有效prerelease/清单/大小/SHA-256/CRC/身份/darwin-arm64/VS Code要求；下载字节等于十四份受检VSIX，新解析模块/生成Agent/两仓README/包内Mac配置与发布说明匹配同步来源，同版跳过/不降级。M5真实更新/科研验收仍pending，用户延后。
 
-### 后续代码批 mac-005ai-project-read（pending）
-- 至多8文件/3相关问题，仅跨Plan聚合/claim读取来源与明确原始Plan/产物身份。归档只读证据与结果行受支持 plan 别名已局部适配；保留旧/新入口及三拓扑，不改删除/归档执行，不执行实际科研/传输/远端命令。完整原子写入、其他运行/写回执及M5继续后续；README/配置同步优先，再配套发布。
+### 后续代码批 mac-005aj-claim-read（pending）
+- 至多8文件/3相关问题，仅claim文本/引用/目录来源与原始Plan/产物身份。归档及项目表读取已局部适配，claim已存在的大小写/空格/basename匹配与未经核验文本后续接线；保留旧/新入口及三拓扑，不改删除/归档执行，不执行实际科研/传输/远端命令。完整原子写入、其他运行/写回执及M5继续后续；README/配置同步优先，再配套发布。
 
 ### 前批 mac-doc-028（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/发布门禁回归与计划。同步结果区解析/刷新指定 Plan 的真实选择、空选择不扩大范围、原始结果行归属与受检摘要读回，明确 Agent 手动升级/失败处理及逐 seed 表验收边界；新隔离实际 9 项纳入发布串行门禁。
@@ -60,14 +69,8 @@
 - 初轮隔离 Python 8 个场景均退出成功，Node 总体 2/8，原因是回归误写 TS key 导出名；按真实 planDirectoryKey 修正，不改生产身份断言。后续 Node 4/8、7/8 暴露回归错误假定 JSON/空结果可直接登记逐 seed 表，按实际编译表消费者明确拒绝的契约修正断言，生产没有放松。共享 helper 的 makedirs 现在映射真实 fixture 根，避免在虚拟 /fixture 创建目录；早期证据保留，不执行清理。
 - passed build/225 闭包/面板 2/vm.Script/LF，新实际解析/三动作真实 handler 分支/摘要读回→编译表消费 9、既有 Agent 读取 7/输出契约 7/结果身份 8/回执 8，单文件串行20秒/隔离 Python10秒无超时；日志 mac-005ag-final-gates-4e58335ef5ca4256b8e0b4a37361115a.log。追加旧摘要同一受检描述符与精确 Plan 兼容读回后 build/225/新 9 再次通过。完整聚合/归档读写、revision 内容与原子写入/M5 后续继续，不以局部快照代表全科研。下一批 README/配置/门禁同步后配套发布。
 
-### 前批 mac-release-034（passed，0.5.297/0.2.91）
-- 范围 6 文件：两仓 package/lock、Experiment runtime/计划。文档批 Exp `0924896882fe97031337c9400c3a4afcf2d4e82e`/SFTP `735f16fa99567ac0d30b79198cc7cf2d601295c4` 已普通推送/fetch 相等，工作区干净；事实/计划/版本及门禁重读。
-- passed metadata 两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致/UTF8/diff；初次误用不存在的 runtimeManifestConsistency 文件，未启动测试，定位真实 test/runtimeManifest.test.js 后通过。来源提交同步后完整 prepare 72 文件串行20秒、实际 VSIX 十三份（新增读取产生端 7）及快照对应验证，完整三附件草稿核验后发布并匿名 .296/.90→.297/.91 下载。不得覆盖旧版本/附件，不触发 Actions/自动安装/真实科研；下一边界限其他 Agent 结果动作，M5 延后。
-
-- passed 完整 prepare：两仓 build/225 与 26 闭包/面板 2/vm.Script、72 目标文件串行20秒/73 含面板标记，新增 Agent 读取 7/既有 Agent 7/快照 8；真实浅深高对比通过，日志 prepare-0.5.297.log exit0，无测试超时。
-- passed 实际 VSIX 十三份：读取产生端→编译消费 7、请求/报告/事件产生端 7、回执 8/解析 8/读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/结果链 6。所有报告绑定同步来源/包 hash，包内实际生成 Agent 与 compiled 模块及文档字节匹配；共享真实 NTFS/POSIX helper 一并用于隔离测试。无整个 Agent 执行/真实科研/SSH/远端启动停止删除/安装。快照对应验证：SFTP 82 源/25 原字节包文件，Exp 1514 源/412 原字节包文件，只有 VSCE 正式 package/README 转换与 CHANGELOG 改名。
-- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.297；releaseId 408458524，完整三附件草稿大小/hash/集合核验后公开。来源 Exp `406d87a63d9aa2dbfd706189d311de5e5bbe0b3a`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` 均已普通推送/fetch 相等；历史资产保留，无 Actions/自动安装。
-- passed 匿名 .296/.90→.297/.91：36 公开请求，prerelease/清单/大小/SHA-256/CRC/身份/darwin-arm64/VS Code 要求，下载字节等于十三份受检 VSIX，新读取模块/生成 Agent/两仓 README/包内 Mac 配置与发布说明匹配同步来源；同版跳过/不降级。M5 更新/科研验收仍 pending，用户延后。
+### .297/.91 已交付历史
+- 来源 Exp `406d87a63d9aa2dbfd706189d311de5e5bbe0b3a`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5`，交付 `8c2c387ae08339a72830650202c1ecaa275a4191` 普通推送/fetch相等；72串行目标/十三实际VSIX/36匿名请求 passed。完整证据见Git与保留产物，M5 pending。
 
 ### 已完成局部边界 mac-005ag-agent-parse
 - 限指定 Plan 的 parse_results_action 原始声明/候选/受检读取与报告身份，复用本批只读输入边界；至多 8 文件/3 相关问题，真实生成函数隔离与实际编译消费验证，保留原入口/API/Plan 格式/三拓扑。其他运行/写操作、删除/归档、原子写入、完整 revision 内容/M5 不扩入；README/配置优先同步，再通过同一配套通道发布。

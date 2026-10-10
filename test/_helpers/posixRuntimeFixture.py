@@ -74,7 +74,7 @@ def bind_posix_runtime(agent, base):
         paths = SimpleNamespace(**{key: getattr(posixpath, key) for key in ("join", "dirname", "basename", "splitext", "isabs", "normpath", "relpath", "commonpath")})
         paths.abspath = lambda value: posixpath.normpath(value if str(value).startswith("/") else posixpath.join("/fixture", value))
         paths.realpath = lambda value: virtual(os.path.realpath(native(value)))
-        for key in ("exists", "isfile", "isdir", "lexists", "getsize", "getmtime"):
+        for key in ("exists", "isfile", "isdir", "islink", "lexists", "getsize", "getmtime"):
             setattr(paths, key, lambda value, key=key: getattr(os.path, key)(native(value)))
 
         def walk(value, *args, **kwargs):
