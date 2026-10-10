@@ -10,9 +10,18 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-035（running，0.5.298/0.2.92）
+## 当前批次 mac-release-035（passed，0.5.298/0.2.92）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。文档批 Exp `765b222667bb6c5d750f3806c81a6395e3970869`/SFTP `79185c7b4c5dae4e571d440a39f9b562369ddc54` 已普通推送/fetch 相等，两仓干净；事实/计划/版本及门禁重读。
 - passed metadata 两仓 build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致/UTF8/diff；来源同步后完整 prepare73目标文件/串行20秒、十四份实际VSIX（新增实际解析9）与快照对应，再完整三附件草稿核验发布及匿名 .297/.91→.298/.92 下载。不得覆盖历史版本/附件，无 Actions/自动安装/真实科研；M5延后。下一边界限旧归档证据读取与聚合身份，保留完整目标。
+
+- passed 完整 prepare：两仓 build/225与26闭包/面板2/vm.Script、73目标文件串行20秒/74含面板标记；新解析9、既有Agent输出契约7/读取7/快照8，真实浅深高对比通过。日志 prepare-0.5.298.log exit0，无测试超时。
+- passed 十四份实际 VSIX：新解析/三动作实际 handler 分支/摘要读回→编译表9、读取产生端7/契约产生端7、回执8/解析8/读取8/映射11/摘要7/YAML7/候选6/结果8/CLI2/启动8/结果链6。实际生成 Agent、ResultParseInputs/编译表/文档字节对应当前受检包，报告绑定两来源/包hash；Python AST隔离、本机真实NTFS/POSIX与捕获发布，无整个Agent执行/真实科研/SSH/远端启停删除/安装。完整归档和跨Plan聚合仍pending，不把受控fixture聚合当作科学验收。
+- passed 源快照/实际包对应：SFTP82源/25原字节包文件，Exp1518源/413原字节包文件；只有VSCE正式package/README转换与CHANGELOG改名，历史附件保留。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.298，releaseId408474609；完整三附件草稿集合/大小/hash核验后公开。来源 Exp `7d29548990cab73ca8e5cd0dff48caaabbf4fb85`/SFTP `2006c5b49bb28c57a124938aff456fcef7d6de98` 均已普通推送/fetch相等，无Actions/自动安装。
+- passed 匿名 .297/.91→.298/.92：37公开请求，有效prerelease/清单/大小/SHA-256/CRC/身份/darwin-arm64/VS Code要求；下载字节等于十四份受检VSIX，新解析模块/生成Agent/两仓README/包内Mac配置与发布说明匹配同步来源，同版跳过/不降级。M5真实更新/科研验收仍pending，用户延后。
+
+### 下一批 mac-005ah-archive-read（pending）
+- 至多8文件/3相关问题，仅旧归档证据的只读Plan/产物/revision身份与跨Plan聚合读取来源。重读实际协议后核对结果行的全部受支持归属字段；保留旧/新入口及三拓扑，不改删除/归档执行，不执行实际科研/传输/远端命令。完整原子写入、其他运行/写回执及M5继续后续；README/配置同步优先，再配套发布。
 
 ### 前批 mac-doc-028（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/发布门禁回归与计划。同步结果区解析/刷新指定 Plan 的真实选择、空选择不扩大范围、原始结果行归属与受检摘要读回，明确 Agent 手动升级/失败处理及逐 seed 表验收边界；新隔离实际 9 项纳入发布串行门禁。
@@ -34,7 +43,7 @@
 - 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.297；releaseId 408458524，完整三附件草稿大小/hash/集合核验后公开。来源 Exp `406d87a63d9aa2dbfd706189d311de5e5bbe0b3a`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` 均已普通推送/fetch 相等；历史资产保留，无 Actions/自动安装。
 - passed 匿名 .296/.90→.297/.91：36 公开请求，prerelease/清单/大小/SHA-256/CRC/身份/darwin-arm64/VS Code 要求，下载字节等于十三份受检 VSIX，新读取模块/生成 Agent/两仓 README/包内 Mac 配置与发布说明匹配同步来源；同版跳过/不降级。M5 更新/科研验收仍 pending，用户延后。
 
-### 已接入本批边界 mac-005ag-agent-parse
+### 已完成局部边界 mac-005ag-agent-parse
 - 限指定 Plan 的 parse_results_action 原始声明/候选/受检读取与报告身份，复用本批只读输入边界；至多 8 文件/3 相关问题，真实生成函数隔离与实际编译消费验证，保留原入口/API/Plan 格式/三拓扑。其他运行/写操作、删除/归档、原子写入、完整 revision 内容/M5 不扩入；README/配置优先同步，再通过同一配套通道发布。
 
 ### 前批 mac-doc-027（passed）
