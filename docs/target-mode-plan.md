@@ -10,10 +10,16 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-036（running，0.5.299/0.2.93）
+## 当前批次 mac-release-036（passed，0.5.299/0.2.93）
 - 范围6文件：两仓package/lock、Experiment runtime/计划。文档Exp `95856c8568e56c8fdf3987ba890d3361b83a1343`/SFTP `97e104e58930a085eda466e7dd8d66c95694955e`均普通推送/fetch相等；两仓干净，事实/计划/版本/门禁重读。
 - passed metadata 两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；日志 mac-release-036-metadata-d69614cc-66d3-4b18-85c3-6b1a0ecbc861.log。完整prepare/实际VSIX/发布和匿名下载仍待本批后续验证。
 - 验证 metadata/build/闭包/面板/runtime一致性，源码同步后完整prepare74目标串行20秒、十五份实际VSIX（新增只读归档8）/快照/草稿完整附件/匿名更新。不得覆盖历史版本，无Actions/自动安装/实际科研/归档删除执行，M5延后。下一代码批仅跨Plan聚合与claim读取来源。
+
+- passed 完整prepare74目标文件/20秒串行、75含面板标记、两仓build/225与26闭包/面板2/vm.Script/真实浅深高对比；日志 prepare-0.5.299.log exit0，无测试超时。辅助日志检查首轮误将命令中的 --test-timeout 匹配为失败，改按真实失败标记与退出码核对，未重跑或放松生产门禁。
+- passed 十五份实际VSIX：新增只读归档证据/真实解析→编译表8；既有解析9/读取7/输出契约7/回执8/解析8/读8/映射11/摘要7/YAML7/候选6/结果8/CLI2/启动8/结果链6。实际生成Agent、新ArchiveEvidenceRead/ResultParseInputs/编译表及文档字节对应受检包，报告绑定两来源与hash；隔离AST/POSIX、本机文件和捕获发布，不执行整个Agent、科研、SSH、归档删除或安装。
+- passed 源快照/实际包：SFTP82源/25原字节包文件，Exp1522源/414原字节包文件；只有正式VSCE package/README转换及CHANGELOG改名。历史附件保留。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.299，releaseId408490784，三附件草稿集合/大小/hash核验后公开；来源Exp `cb2e182e03c81614bd4b0f1749be58c1e0f03130`/SFTP `8113c9deea20c38e1b8399b3a6806ef087769749`已普通推送/fetch相等。
+- passed 匿名 .298/.92→.299/.93：38公开请求，prerelease/清单/身份/darwin-arm64/VS Code要求/大小/SHA-256/CRC，下载字节等于十五份受检包。新归档模块/生成Agent/两仓README/包内Mac说明对应来源，同版跳过/不降级。M5更新/科研验收仍pending，用户延后；完整归档执行与跨Plan聚合后续继续。
 
 ## 前批 mac-doc-029（passed）
 - 范围6文件：两仓README、Mac配置说明、prepare/发布门禁回归及计划。按真实Mac操作重整结果说明，收拢历史技术叙述；保留安装/更新/Termius/认证/CLI入口。
