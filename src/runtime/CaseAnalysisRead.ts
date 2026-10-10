@@ -149,4 +149,27 @@ def checked_case_level_action(root, plan, revision=""):
     case_analysis_verify(root, context)
     plan_analysis_publish_report(root, context["index"], "case_level_index.json")
     return context["index"]
+
+def checked_case_analysis_export(root, plan, revision=""):
+    context = case_analysis_context(root, plan, revision)
+    subgroup = run_subgroup_analysis_action(root, plan, revision, _analysis=context, _publish=False)
+    relative = "paper/tables/simple_case_analysis__" + result_plan_directory_key(plan) + ".csv"
+    latest = "paper/tables/simple_case_analysis.csv"
+    rows = [[row["group"], row["count"], json.dumps(row["metrics"], ensure_ascii=False)] for row in subgroup["rows"]]
+    # Prepare serialization and all destinations before the first publication.
+    buffer = io.StringIO(newline="")
+    csv.writer(buffer).writerows([["group", "count", "metrics"], *rows])
+    if len(buffer.getvalue().encode("utf-8")) > 16 * 1024 * 1024:
+        raise ValueError("样本分析导出表超出大小预算")
+    paths = [worker_plan_project_path(root, target) for target in (relative, latest)]
+    for filename in ("case_level_index.json", "subgroup_analysis.json"):
+        worker_plan_project_path(root, plan_results_artifact_relpath(plan, filename, strict_plan=True))
+        worker_plan_project_path(root, "simple_cluster/results/" + filename)
+    case_analysis_verify(root, context)
+    for path in paths:
+        write_atomic_csv(path, ["group", "count", "metrics"], rows)
+    plan_analysis_publish_report(root, context["index"], "case_level_index.json")
+    plan_analysis_publish_report(root, subgroup, "subgroup_analysis.json")
+    return {"schemaVersion": 1, "path": relative, "latestPath": latest, "rows": len(rows), "caseCount": subgroup["caseCount"],
+            "status": subgroup["status"], "planFile": plan, "planRevision": revision, "resultPathIdentity": "posix-v1", "sourceFiles": subgroup["sourceFiles"]}
 `;

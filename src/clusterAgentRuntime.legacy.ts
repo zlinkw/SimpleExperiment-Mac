@@ -10276,8 +10276,10 @@ def run_leakage_check_action(root, plan=None, plan_revision=""):
     report = {**report, "path": relpath(root, target)}
     return report
 
-def run_subgroup_analysis_action(root, plan=None, plan_revision=""):
-    context = case_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
+def run_subgroup_analysis_action(root, plan=None, plan_revision="", _analysis=None, _publish=True):
+    context = (_analysis if _analysis is not None else case_analysis_context(root, plan, plan_revision)) if plan is not None and plan != "" else None
+    if context is not None and (not isinstance(context, dict) or context.get("index", {}).get("planFile") != plan or context.get("index", {}).get("planRevision") != plan_revision):
+        raise ValueError("样本子组输入不属于当前 Plan/revision")
     plan_norm = plan if context else ""
     index = context["index"] if context else read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
     if not context and not index.get("cases"):
@@ -10299,10 +10301,12 @@ def run_subgroup_analysis_action(root, plan=None, plan_revision=""):
         rows.append({"group": item["group"], "count": item["count"], "metrics": metrics})
     report = {"schemaVersion": 1, "generatedAt": now_iso(), "rows": rows, "planFile": plan_norm or ""}
     if context:
-        report.update(planRevision=plan_revision, caseCount=index["caseCount"], sourceFiles=index["sourceFiles"], status="available" if rows else "empty")
+        report.update(planRevision=plan_revision, caseCount=index["caseCount"], sourceFiles=index["sourceFiles"], status="available" if rows else "empty",
+                      resultPathIdentity="posix-v1", path=plan_results_artifact_relpath(plan, "subgroup_analysis.json", strict_plan=True))
         case_analysis_verify(root, context)
-        plan_analysis_publish_report(root, index, "case_level_index.json")
-        plan_analysis_publish_report(root, report, "subgroup_analysis.json")
+        if _publish:
+            plan_analysis_publish_report(root, index, "case_level_index.json")
+            plan_analysis_publish_report(root, report, "subgroup_analysis.json")
         return report
     rel_target = plan_results_artifact_relpath(plan_norm, "subgroup_analysis.json")
     target = safe_project_path(root, rel_target)
@@ -10312,7 +10316,9 @@ def run_subgroup_analysis_action(root, plan=None, plan_revision=""):
     report = {**report, "path": relpath(root, target)}
     return report
 
-def export_case_analysis_action(root, plan=None):
+def export_case_analysis_action(root, plan=None, plan_revision=""):
+    if plan is not None and plan != "":
+        return checked_case_analysis_export(root, plan, plan_revision)
     plan_norm = normalize_result_candidate(plan) if plan else ""
     subgroup = run_subgroup_analysis_action(root, plan_norm or None)
     out_dir = safe_project_path(root, "paper/tables")
@@ -13666,7 +13672,8 @@ def handle_action(root, action, payload, operation_id, op_id):
         report = run_subgroup_analysis_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
         return terminal_action(root, action, operation_id, op_id, "completed", f"亚组分析完成：{len(report.get('rows') or [])} 组", {"subgroupAnalysis": report, "subgroupAnalysisPath": report.get("path") or "simple_cluster/results/subgroup_analysis.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "export-case-analysis":
-        report = export_case_analysis_action(root, action_plan_file(payload))
+        identity = output_contract_request_identity(payload)
+        report = export_case_analysis_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
         return terminal_action(root, action, operation_id, op_id, "completed", f"Case 分析已导出：{report.get('path')}", {"caseAnalysis": report, "caseAnalysisPath": report.get("path"), "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "plan-checkpoint-retention":
         report = checkpoint_retention_action(root, payload)

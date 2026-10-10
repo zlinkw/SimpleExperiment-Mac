@@ -17,15 +17,17 @@ for (const scenario of ['workflow', 'paths', 'ownership', 'fresh', 'identity', '
     const out = JSON.parse(result.stdout);
     assert.equal(out.passed, true); assert.equal(out.remoteOperations, 0); assert.equal(out.archiveMutations, 0);
     assert.equal(out.capturedPublicationsOnly, true); assert.equal(out.publicationExecutorsInvoked, false);
+    assert.equal(out.actualCaseExportChecked, true);
     for (const item of out.planKeys || []) assert.equal(item.key, layout.planDirectoryKey(item.plan));
     for (const receipt of out.receipts || []) {
       const own = scope.scopeMacResultOperation(receipt, out.report.planFile);
       assert.equal(own.payloads.length, 2);
       assert.equal(own.payloads[0].planRevision, out.report.planRevision);
       assert.equal(own.payloads[1].planFile, out.report.planFile);
-      const report = own.payloads[1].caseLevel || own.payloads[1].leakageCheck || own.payloads[1].subgroupAnalysis;
+      const report = own.payloads[1].caseLevel || own.payloads[1].leakageCheck || own.payloads[1].subgroupAnalysis || own.payloads[1].caseAnalysis;
       assert.equal(report.caseCount, 2); assert.equal(report.resultPathIdentity, 'posix-v1');
       assert.ok(report.path.includes(layout.planDirectoryKey(out.report.planFile)));
+      if (receipt.action === 'export-case-analysis') assert.equal(own.payloads[1].caseAnalysisPath, report.path);
       assert.equal(scope.scopeMacResultOperation(receipt, out.report.planFile.trim()).payloads.length, 0);
     }
   });
