@@ -146,3 +146,26 @@ test("Mac plan preserves evidence below its character threshold and compacts at 
   assert.match(result, /commit abc/);
   assert.match(result, /passed/);
 });
+
+test("Mac legacy headings retain the active goal, all boundaries and pause instruction at the cap", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-mac-plan-headings-")), filePath = path.join(dir, "plan.md");
+  const fixed = Array.from({ length: 11 }, (_, i) => "- boundary " + i).join("\n");
+  const base = "# 目标模式当前计划：Mac 原目标\n字符上限 2000\n## 固定边界\n" + fixed +
+    "\n## 当前批次 mac-local（running）\n- 完成本地事项后暂停目标模式\n- actual commit abc\n- 原始目标剩余15/29\n";
+  fs.writeFileSync(filePath, base + "## 前批 release\n" + "旧记录\n".repeat(450) + "## 下一边界\n- M5 真机延期\n", "utf8");
+  const result = compactTargetModePlanFile({ rootDir: dir, filePath });
+  assert.equal(result.changed, true);
+  const output = fs.readFileSync(filePath, "utf8");
+  for (const value of ["Mac 原目标", "字符上限 2000", "mac-local（running）", "暂停目标模式", "actual commit abc", "15/29", "M5 真机延期", ...fixed.split("\n")]) assert.ok(output.includes(value), value);
+  assert.doesNotMatch(output, /待刷新|待填写|旧记录/); assert.ok(output.length < 1800);
+});
+
+test("uncompressible or missing active Mac goals fail without overwriting the source", () => {
+  for (const current of ["", "## 当前批次：big\n" + "必须保留的活动说明\n".repeat(300)]) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-mac-plan-preserve-")), filePath = path.join(dir, "plan.md");
+    const source = "# 目标模式当前计划：Mac\n字符上限 2000\n## 固定边界\n- 保护\n" + current + "## 前批\n" + "旧记录\n".repeat(450);
+    fs.writeFileSync(filePath, source, "utf8");
+    assert.throws(() => compactTargetModePlanFile({ rootDir: dir, filePath }), /active|character cap/i);
+    assert.equal(fs.readFileSync(filePath, "utf8"), source);
+  }
+});

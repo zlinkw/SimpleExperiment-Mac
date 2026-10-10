@@ -24,9 +24,10 @@ function main() {
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macPlanAnalysisRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macCaseAnalysisRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/scripts/macPackageProjection.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
-  for (const file of ["macRelease", "macPreviewIndex"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/scripts/${file}.test.js`], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  for (const file of ["compactTargetModePlan", "macRelease", "macPreviewIndex"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/scripts/${file}.test.js`], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/core/workspacePathMapper.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   for (const file of ["macBootstrap", "macCliLauncher", "macCliApi", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths", "macAuthentication", "macRelay", "macPosixPaths", "macRelativePaths", "macDownloadScope", "apiUploadProgress", "macTransferExitProof"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
+  run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/ui/cacheCleanupPanel.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   npm(["run", "verify:package-runtime"], EXPERIMENT_ROOT);
   run(process.execPath, ["-e", "new (require('vm').Script)(require('fs').readFileSync('dist/ui/PanelHtml.js','utf8'))"], EXPERIMENT_ROOT);
   const tag = `preview-v${packages[1].version}`, directory = path.join(EXPERIMENT_ROOT, "release-artifacts", tag);
@@ -51,13 +52,13 @@ function main() {
   const notes = `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-补齐高级隧道指引入口：保留原命令ID，Mac上显示当前配置的Termius隧道与Agent/tmux操作说明，不再执行Windows Xshell校验或保存bat/ps1启动脚本。覆盖单Worker、多Worker与Hub/Worker，不自动启动隧道或停止实验。保留0.5.307静态preview.json更新索引，用户检查不调用Release REST API；清单及两包仍来自同一GitHub Release，平台/兼容性/清单与包SHA验证、同版跳过、禁止降级及更新按钮不变。先完成后完善，缺少真机证据的部分延后。
+本机缓存回收已替换Windows PowerShell执行依赖，Mac使用当前Extension Host的Node子进程；保留两次完整路径确认、物理直接父目录、最短子项、文件身份及SHA复核和删除结果核验。缺少配套SimpleSFTP时改为说明Mac VSIX安装顺序，命令ABI不完整时指向preview配套更新。修复本地发布工具在计划达到字符阈值时丢失Mac活动目标的问题。保留静态preview.json更新入口，用户检查不调用Release REST API；SimpleSFTP版本未变化时跳过安装。
 
 本地验证
-两仓build、包依赖闭包、面板语法及目标测试逐文件串行通过。实际编译的隧道指引入口覆盖三种拓扑、动态端点与中文路径，禁止访问Windows校验/保存框/会话启动项，生成说明不泄露token。静态索引覆盖无REST请求、preview筛选/语义排序、清单大小/SHA、网络失败不回落历史、缓存/合并、403429和实际按钮消费者；发布索引覆盖完整公开附件前置、历史不可覆盖、拒绝倒退、单文件提交、失败补推及远端推进阻断。保留既有结果/Plan/更新/认证/中转与pinned VSCE快照门禁。浅色/深色/高对比headless与文字对比通过；VSIX身份、版本、darwin-arm64、CRC、大小和SHA-256核验。没有运行真实科研、SSH、远端启动/停止/删除。
+两仓build、包依赖闭包、面板语法及目标测试逐文件串行通过。实际编译的缓存回收消费者使用虚拟文件系统/进程叶子，覆盖中文空格和字面%20路径、双确认、父目录失败、链接与跨文件系统拒绝、文件变化/哈希不符和结果核验；没有执行真实删除。配套ABI及缓存面板上下文通过。两插件实际租约模块共享虚拟POSIX注册目录，双向冲突/释放后接管、大小写及发现目录通过；这不替代真实macOS磁盘/锁/进程验证。压缩器覆盖达到阈值时保留完整边界/当前目标/暂停指令、旧节标题及无法安全压缩时不覆盖。保留既有三拓扑、Termius手动准备、Plan/结果、更新、认证中转、主题和源码快照门禁。没有运行真实科研、SSH、远端启动/停止/删除或开发机扩展安装。
 
 M5 真机验证
-收到首个真机问题：检查更新首次403，随后提示限流一小时。原始错误找不到，实际HTTP原因尚未确定；本版修正已复现的限流误判，仍待真机复验。设置保留/重载/补装、Termius、认证传输、中文路径/断连及三拓扑完整验收待用户反馈。缺少真机证据的完善延后，不将本机通过写成真机或完整科研通过。
+仍待用户验证启动、在线安装/重载/补装、Termius、真实认证传输、中文路径断连及三拓扑完整科研主流程。首个更新403的原始错误找不到，实际原因未知；此前已修正403分类并改为静态索引，公开匿名检查已通过，M5效果仍待反馈。新增缓存回收的Electron运行入口、O_NOFOLLOW及实际macOS文件系统同样未真机验收。不会把本地替身或打包通过写成完整科研/真机通过。
 
 首次安装与更新
 先安装 SimpleSFTP Mac，再安装 SimpleExperiment Mac。以后点击底部右侧 Mac preview 状态栏，按 ⇧⌘P 运行“检查 preview 配套更新”，或在面板“设置 → 插件配套更新”点击“检查更新”，发现新版点击“更新并重载”。服务器 Agent 需主动通过“准备项目与 Agent”确认上传，在 Termius 手动处理后“检测全部”，保留正在运行的实验。只有 preview，无 Actions，不安装开发机扩展。

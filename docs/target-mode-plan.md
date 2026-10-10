@@ -15,7 +15,15 @@
 - 修复已证实Windows依赖和错误安装提示，核查两插件协作与职责边界；发布真实包后暂停目标。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；模拟不替代真机。
 
-## 当前批次 mac-005at-local-boundaries（passed，本地）
+## 当前批次 mac-005au-local-completion（passed，本地）
+- 起始Exp36f880f7284bc82220e0b9aa9f929e1922493b2e/SF2f464eb75e362150de5cbe61e1946504c3497a0a同步干净；重读事实/计划/Git/压缩器、租约与发布源码。
+- 范围至多6文件：压缩器/压缩测试、Mac租约实际跨插件消费者、prepare发布说明/门禁、状态清单/计划。修复达到字符阈值时丢失Mac活动目标的已证实缺陷，核验POSIX两插件租约协议。不执行真实删除或传输，不改变业务职责。
+- pending压缩边界回归、虚拟POSIX跨插件冲突/释放/大小写、相关本地目标单文件串行20秒、build/226闭包/vm/UTF8/diff及普通同步。
+- 本地核查范围明确：平台入口/Windows依赖、路径/CLI/发现、租约/ABI、手动准备与远端职责、防删除确认；M5 OS/磁盘/系统agent/真实传输/完整科研验收延期。交付.309/.97后按用户要求暂停目标；剩余15/29。
+- 压缩器新回归先失败2条，修复后5/5；保留Mac旧标题、全部11条边界与当前批/证据/暂停授权，缺活动目标或无法安全压缩时不覆盖。两插件实际模块共享虚拟POSIX注册目录、双向冲突/释放后接管/大小写/中文%20路径通过（macHostLeasePaths3）。build面板2/226闭包/vm/发布门禁4/UTF8/diff通过，单文件串行20秒。
+- 本轮源入口核查：CacheCleanupPanel是已确认的活跃Windows执行缺口，已修正；剩余Xshell启动由Mac提前分支转手动指引，未引用TmuxRemoteExecutor及排除PPT不改。真实SSH/传输由SimpleSFTP认证中转，Mac代码明确避开服务器间免密直连。源码核查不证明真实OS行为。
+
+## 前批 mac-005at-local-boundaries（passed，本地）
 - 起始Exp4f4e942f7f264503f8c3b9a590e31857730dc272/SF2f464eb75e362150de5cbe61e1946504c3497a0a同步干净；事实/计划/Git/实际业务测试已重读。
 - 确认本机缓存删除固定spawn pwsh.exe；配套SFTP缺失提示仍要求Windows安装ps1。范围8文件：CacheCleanupPanel/Mac删除助手/实际消费者测试/legacy/ABI测试/prepare/状态清单/计划。
 - Mac使用当前Extension Host的Node子进程，物理直接父目录与最短子项，身份/大小/时间/SHA再验并核对删除结果；UI两次完整路径确认保留。只注入虚拟文件系统/进程，不执行真实删除。

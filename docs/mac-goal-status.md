@@ -26,7 +26,7 @@
 | 20 | Termius 手动登录隧道、保存检测端点与 Agent/tmux 指引 | 剩余 | ManualTunnel/macManualTunnel/macProjectPrepare；补齐遗留高级脚本命令的Mac分支，显示动态三拓扑Agent/tmux指引，不执行Windows校验/保存框；真实Termius尚待验收 |
 | 21 | SFTP 密钥/agent/密码/口令，会话记忆与可选 SecretStorage | 剩余 | mac-auth、macAuthentication、本机认证替身；真实密钥/密码服务器和用户系统 agent 未验收 |
 | 22 | SSH/tar 流、本机跨服务器中转、两端独立认证 | 剩余 | macRelay、tar-writer/relay 实际消费者回归；真实双服务器认证/断连尚未验收 |
-| 23 | 一致 Mac 路径/租约、独立 AppSupport 发现、兼容 API/Plan | 剩余 | macHostLeasePaths/macLeasePaths/API/Plan 回归通过；完整真实插件协作仍待验证 |
+| 23 | 一致 Mac 路径/租约、独立 AppSupport 发现、兼容 API/Plan | 剩余 | macHostLeasePaths3包含两插件实际模块共享虚拟POSIX租约目录、双向冲突、释放后接管、大小写与中文%20路径；macLeasePaths/API/Plan回归通过。完整真实插件协作、系统磁盘/进程行为仍待M5验证 |
 | 24 | 删除规范化/直接父目录/两确认，保留 Agent 职责边界 | 剩余 | Mac本机删除助手6防护回归：双确认、规范直接父目录、最短子项、身份/SHA、链接/跨文件系统/变化拒绝及结果核验；缓存面板上下文7通过。仅虚拟文件系统，不执行真实删除，macOS完整边界待验 |
 | 25 | M5 首装→下一版 GitHub 更新、版本/设置/重载功能 | 剩余 | 用户延后；匿名下载及模拟事务不能替代安装证据 |
 | 26 | 不可达/限流/筛选/错平台/哈希/重复点击/部分失败补装 | 已验证 | macPreviewRelease/macVsix/macUpdateTransaction/macBootstrap/macUpdateGate 单文件串行回归 |
@@ -37,3 +37,5 @@
 用户追加要求单列，不改变原方案分母：Mac README 与配置说明、更新按钮入口已经集中整理并通过 macSetupGuide；主题已通过 macPanelTheme 的浅色/深色/高对比本地检查，M5 实际显示仍未验收。后续文档按功能里程碑集中更新。每批报告剩余目标的要求从本文件生效。
 
 最新执行顺序：先完成后完善。有效 preview 查询和 Darwin 退出证明已有本地实现；优先交付已报告的 403 故障修复。缺少真机证据的部分延后等待验证结果，之后只根据具体反馈修正，不继续追加推测性完善。
+
+2026-10-10 用户要求先完成本地事项再暂停：已核查活跃平台入口、Windows执行依赖、两插件路径/发现/ABI/租约协作、手动准备及远端职责和删除确认边界；修复缓存回收Windows依赖、Mac配套安装提示及计划压缩丢目标问题。相关本地/虚拟POSIX消费者与完整发布门禁将在.309交付中记录；未执行真实科研、服务器通信或删除。此记录只证明所列本地范围，不把剩余15条整体或真实M5行为标为完成。

@@ -157,6 +157,23 @@ function readPackageVersion(rootDir) {
   }
 }
 
+function compactMacTargetModePlan(text, cap) {
+  const sections = splitSections(text);
+  const title = sections.find(section => sectionKind(section.title) === "title");
+  const fixed = sections.find(section => sectionKind(section.title) === "fixed");
+  const current = sections.find(section => sectionKind(section.title) === "current");
+  if (!title || !fixed || !current || /待刷新|待填写/.test(current.lines.join("\n"))) {
+    throw new Error("Persistent Mac plan lacks a valid active goal; source preserved.");
+  }
+  // Do not trim active facts, approvals or boundaries to a bullet/line count.
+  // Completed batch detail remains in Git; the active batch and record remain verbatim.
+  const selected = new Set([title, fixed, current, ...sections.filter(section =>
+    ["priority", "record"].includes(sectionKind(section.title)) || section.title === "下一边界")]);
+  const output = sections.filter(section => selected.has(section)).map(section => section.lines.join("\n").trimEnd()).join("\n\n") + "\n";
+  if (output.length >= cap * 0.9) throw new Error("Active Mac plan exceeds character cap threshold; source preserved for manual condensation.");
+  return { text: output, changed: normalizeNewlines(text).trimEnd() + "\n" !== output, reason: "mac-history-compacted", lineCount: output.split("\n").length };
+}
+
 function compactTargetModePlanFile(options = {}) {
   const root = path.resolve(options.rootDir || process.cwd());
   const filePath = path.resolve(root, options.filePath || DEFAULT_PATH);
@@ -171,7 +188,8 @@ function compactTargetModePlanFile(options = {}) {
   if (characterCap && original.length < Number(characterCap[1]) * 0.9) {
     return { root, filePath, dryRun, changed: false, reason: "below-character-threshold", lineCount: original.split("\n").length };
   }
-  const result = compactTargetModePlan(original, { maxLines: options.maxLines, versionHint: options.versionHint || readPackageVersion(root) });
+  const result = characterCap ? compactMacTargetModePlan(original, Number(characterCap[1]))
+    : compactTargetModePlan(original, { maxLines: options.maxLines, versionHint: options.versionHint || readPackageVersion(root) });
   if (characterCap && result.text.length >= Number(characterCap[1])) {
     throw new Error("Persistent plan still exceeds character cap; preserve the source and condense completed history before continuing.");
   }
