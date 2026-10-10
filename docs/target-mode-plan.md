@@ -13,12 +13,19 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ar-manual-guide-entry（passed，本地修复）
+## 当前批次 mac-005as-command-palette-migration（passed，纠正门禁）
+- 起始Exp744563d0841c20cd5b90a84409bcadf4b11b439e=origin/master、SF2f464eb75e362150de5cbe61e1946504c3497a0a干净；重读事实/计划/Git/消费者与发布门禁。
+- 上批额外commandPaletteClarity检查失败2/2：旧测试引用Windows命令/设置命名空间与已替换的README；提交时未拦截失败，不能记录该门禁通过。本批以新提交纠正，不改写历史。
+- 范围3文件：命令面板测试迁移至现有Mac身份、保留高级handler/默认主入口并核对Termius标题；prepare纳入此门禁；本计划修正证据。pending目标单文件串行、build/闭包/vm/UTF8/diff。
+- 下一批仅.308元数据/打包发布及实际包指引验证。M5延期，剩余15/29。
+- 修正后commandPaletteClarity2/macManualTunnel10单文件串行20秒、build面板2/225闭包/vm.Script/UTF8/diff通过；prepare将此门禁纳入，失败即停止发布。上批失败原记录保留，源码行为未为旧测试回退。
+
+## 前批 mac-005ar-manual-guide-entry（代码已同步，额外门禁失败）
 - 用户继续按计划推进；保留先完成后完善及延后真机的约束。本轮重读事实/计划/两仓Git与入口源码，Exp e1450e49176ffca1454b1ae325e358d7b704bcc5、SF2f464eb75e362150de5cbe61e1946504c3497a0a同步干净。
 - 已证实未适配入口：高级命令generateXshellTunnelScript仍直接执行Windows Xshell校验并提供bat/ps1保存框；其他手动隧道入口已转Termius。本批修复此遗留入口，保留命令ID，在Mac显示现有动态端点/Agent/tmux指引，不自动启动隧道或读取Termius私有状态。
 - 范围至多7文件：legacy、Mac隧道实际消费者测试、package/CommandFactory命令标题、发布说明模板、本计划/状态清单。保护三拓扑、业务API/Plan/更新、Windows原项目及已有命令。pending真实编译入口复现/回归、build/闭包/vm/UTF8/diff。
 - 下一批仅补丁版本与发布，真机相关行为deferred；剩余15/29。不重复修改README/配置说明。
-- 回归先在实际编译入口失败：Windows session launch items must not be queried；补齐Mac早返回后macManualTunnel10/macProjectPrepare16、命令标题门禁、build面板2/225闭包/vm/UTF8/diff通过，单文件串行20秒，无超时/远端操作。真实提交在普通同步后由发布批记录SHA。
+- 回归先在实际编译入口失败：Windows session launch items must not be queried；补齐Mac早返回后macManualTunnel10/macProjectPrepare16、build面板2/225闭包/vm/UTF8/diff通过。额外commandPaletteClarity失败2/2被漏拦；已普通同步744563d0841c20cd5b90a84409bcadf4b11b439e，命令门禁由mac-005as补正。单文件串行20秒，无超时/远端操作。
 
 ## 前批 mac-release-044（published，0.5.307/0.2.97）
 - 起始Expf633c5bb6dfb0771238e89498096b898dba02159=origin/master，SF2f464eb75e362150de5cbe61e1946504c3497a0a 干净且来源不变；重读事实/计划/版本/发布门禁。本批4文件：Exp package/lock/runtime/计划，索引作为独立发布元数据提交。
