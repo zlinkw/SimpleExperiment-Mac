@@ -8,7 +8,7 @@
 - 排除 PPT 绘图、Dev Containers、Intel Mac、Actions、zlinkw.shop、历史附件自动清理、开发机自动安装。
 - 保护三拓扑、业务 API、Plan 格式、远端实验、删除直接父目录校验/两次确认及原入口。
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
-- README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
+- 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
 ## 当前批次 mac-release-039（passed，0.5.302/0.2.96）
 - 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp d3840a06518607d942848f9a14bef5ddfcdceb17/SFTP6a7537468b64d363ed04d2cf5cff4bc274262d1b普通推送/fetch相等，起始干净；事实/计划/版本/门禁和实际包runner重读。
