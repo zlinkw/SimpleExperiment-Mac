@@ -5,7 +5,7 @@
 | 编号 | 原始目标 | 状态 | 证据与尚缺内容 |
 | --- | --- | --- | --- |
 | 01 | 两个公开独立仓库，从已提交源码复制 | 已验证 | `mac-project-facts.md` 记录基线提交；两个 origin/master，独立提交和发布源码快照 |
-| 02 | Apple Silicon、macOS 26+，M5/24 GB/27.0 验收 | 剩余 | Bootstrap 平台/版本守卫已实现；M5 尚无验收记录 |
+| 02 | Apple Silicon、macOS 26+，M5/24 GB/27.0 验收 | 剩余 | Bootstrap 平台/版本守卫已实现；收到首个403反馈，尚无完整通过验收记录 |
 | 03 | 全部本机构建及用户真机验证，不使用 Actions | 剩余 | 本机 prepare/publish 已验证，仍缺用户真机部分 |
 | 04 | 保留三拓扑与完整科研主流程，排除指定范围 | 剩余 | topologyMode、distributedPlan/Project 目标回归；三拓扑完整真机主流程未验收 |
 | 05 | 独立扩展身份、依赖、命令/设置/发现与更新源 | 已验证 | 两仓 package、MacPaths/mac-paths、Bootstrap、PreviewRelease；macBootstrap、publicBranding 回归及实际 VSIX |
@@ -18,7 +18,7 @@
 | 12 | release.json 协议/通道/时间及所有组件字段 | 已验证 | prepare 生成、parseManifest 校验、实际公开清单与下载核验 |
 | 13 | darwin-arm64、真实身份/版本/平台、损坏与兼容性拒绝 | 已验证 | Vsix、macVsix 与实际两包的 CRC/大小/SHA/版本/平台核验 |
 | 14 | 从预发布列表选择有效 preview，不用 latest | 已验证 | PreviewRelease、macPreviewRelease 及实际匿名客户端 |
-| 15 | 匿名公开下载、请求合并/缓存/403429退避、失败正确显示 | 剩余 | M5 首次检查 403 后提示等待一小时，原始错误已不可取得；已构造真实客户端/按钮同流程复现，修正普通403与真正限流的区分后仍需 M5 复验 |
+| 15 | 匿名公开下载、请求合并/缓存/403429退避、失败正确显示 | 剩余 | .306已修正普通403/次级限流误判，本地真实客户端与按钮回归通过；匿名列表实测403且remaining=0，须等GitHub reset后验证。公开清单/两包匿名下载200并核验通过。M5原始错误已不可取得，修复效果仍待复验 |
 | 16 | 本机 prepare/publish、完整草稿核验后发布、不安装/Actions | 已验证 | mac-release-prepare/publish/common、macRelease；历史本机发布记录 |
 | 17 | 版本不可覆盖、更高版本修复、保留历史附件不清理 | 已验证 | assertNewerPreview/发布附件集合核验，历史 preview 保留，macRelease |
 | 18 | 验证批次分别提交普通推送 master，包绑定同步提交 | 已验证 | 历史批次计划、两仓 Git 提交/fetch 记录、清单 sourceCommit 与源码快照 |
@@ -30,7 +30,7 @@
 | 24 | 删除规范化/直接父目录/两确认，保留 Agent 职责边界 | 剩余 | 现有防护和只读回归保留；真实完整业务边界与 macOS 文件行为未整体验收，无真实删除验证 |
 | 25 | M5 首装→下一版 GitHub 更新、版本/设置/重载功能 | 剩余 | 用户延后；匿名下载及模拟事务不能替代安装证据 |
 | 26 | 不可达/限流/筛选/错平台/哈希/重复点击/部分失败补装 | 已验证 | macPreviewRelease/macVsix/macUpdateTransaction/macBootstrap/macUpdateGate 单文件串行回归 |
-| 27 | 本地 build/依赖闭包/面板脚本与串行超时门禁 | 已验证 | .304 prepare 78 目标文件、闭包与面板校验；本批继续沿用门禁 |
+| 27 | 本地 build/依赖闭包/面板脚本与串行超时门禁 | 已验证 | .306 prepare 79目标文件/80含面板标记、两仓build/闭包/面板/vm通过；实际两包客户端/按钮/退出消费者及源码快照通过 |
 | 28 | 真机 Termius/认证/中文路径/断连及三拓扑主流程 | 剩余 | 缺全部 M5 真机证据，暂不要求用户立即提供 |
 | 29 | 发布说明区分本地/M5，明确阶段局限并持续同通道交付 | 已验证 | 各版 release-notes、README、计划均标记 M5 pending，并持续 preview 发布 |
 
