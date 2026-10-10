@@ -19,7 +19,45 @@ test("anonymous releases list filters stable/draft/invalid previews and sorts se
   });
   const result = await client.check("1.100.0", () => "0.1.1");
   assert.equal(result.manifest.releaseTag, "preview-v0.1.10"); assert.equal(result.pending.length, 2);
-  await client.check("1.100.0", () => "0.1.10"); assert.equal(calls.length, 4);
+  await client.check("1.100.0", () => "0.1.10"); assert.equal(calls.length, 3);
+  assert.ok(!calls.includes(old.info.assets[0].browser_download_url));
+});
+test("valid newest preview does not request unreadable older manifests, including manual checks", async () => {
+  const latest = release("0.1.20"), old = release("0.1.19"), calls = [];
+  const client = new PreviewReleaseClient(async url => {
+    calls.push(url);
+    if (url.includes("?per_page")) return Response.json([old.info, latest.info, null, { ...old.info, tag_name: "preview-v00.1.19" }]);
+    if (url === latest.info.assets[0].browser_download_url) return Response.json(latest.manifest);
+    throw Error("old manifest is offline");
+  });
+  for (const manual of [false, true]) assert.equal((await client.check("1.100.0", () => "0.1.1", manual)).manifest.releaseTag, latest.manifest.releaseTag);
+  assert.equal(calls.length, 4);
+  assert.ok(!calls.includes(old.info.assets[0].browser_download_url));
+});
+test("semantic newest on later metadata page beats publication order", async () => {
+  const older = release("0.1.9"), newer = release("0.1.10"), calls = [];
+  const client = new PreviewReleaseClient(async url => {
+    calls.push(url);
+    if (url.endsWith("page=1")) return Response.json([older.info, ...Array.from({ length: 99 }, () => ({ prerelease: false }))]);
+    if (url.endsWith("page=2")) return Response.json([newer.info]);
+    assert.equal(url, newer.info.assets[0].browser_download_url);
+    return Response.json(newer.manifest);
+  });
+  assert.equal((await client.check("1.100.0", () => "0.1.1")).manifest.releaseTag, newer.manifest.releaseTag);
+  assert.equal(calls.length, 3);
+});
+test("higher preview transport failure cannot fall back to an older version", async () => {
+  for (const failure of [async () => { throw Error("offline"); }, async () => new Response("unavailable", { status: 503 })]) {
+    const older = release("0.1.9"), newer = release("0.1.10"), calls = [];
+    const client = new PreviewReleaseClient(async url => {
+      calls.push(url);
+      if (url.includes("?per_page")) return Response.json([older.info, newer.info]);
+      assert.equal(url, newer.info.assets[0].browser_download_url);
+      return failure();
+    });
+    await assert.rejects(client.check("1.100.0", () => "0.1.1"), /offline|检查失败/);
+    assert.equal(calls.length, 2);
+  }
 });
 test("same versions and newer installed versions skip without downgrading", () => {
   const { manifest } = release();

@@ -106,29 +106,33 @@ export class PreviewReleaseClient {
     return this.checking;
   }
   private async checkReleases(vscodeVersion: string, installedVersion: (id: string) => string, manual: boolean): Promise<PreviewPlan> {
-    const validManifests: Array<{ manifest: PreviewManifest; release: any }> = [];
+    const previews: any[] = [];
     let invalid = 0;
-    // Releases are returned newest first. Bound API traffic and preserve a clear
-    // failure if there is no compatible preview in the inspected 300 releases.
+    // Fetch metadata first: publication order is not semantic version order.
+    // A tag is bound to the Experiment version by parseManifest, so after sorting
+    // a validated candidate cannot be superseded by an older manifest.
     for (let page = 1; page <= 3; page++) {
       const releases = JSON.parse((await this.request(`https://api.github.com/repos/${RELEASE_REPOSITORY}/releases?per_page=100&page=${page}`, 4 * 1024 * 1024, manual)).toString("utf8"));
       if (!Array.isArray(releases)) throw new Error("GitHub Release 列表无效");
-      for (const release of releases) {
-        if (release.draft || release.prerelease !== true || !/^preview-v\d+\.\d+\.\d+$/.test(release.tag_name || "")) continue;
-        const candidates = (release.assets || []).filter((asset: any) => asset.name === "release.json" && asset.browser_download_url === `https://github.com/${RELEASE_REPOSITORY}/releases/download/${release.tag_name}/release.json`);
-        if (candidates.length !== 1) { invalid++; continue; }
-        // Network errors must remain check failures; only malformed/incompatible
-        // manifests are skipped while searching another preview.
-        const bytes = await this.request(candidates[0].browser_download_url, 1024 * 1024, manual);
-        try { validManifests.push({ manifest: parseManifest(JSON.parse(bytes.toString("utf8")), release, vscodeVersion), release }); }
-        catch { invalid++; }
-      }
+      for (const release of releases) if (release && !release.draft && release.prerelease === true
+        && typeof release.tag_name === "string" && /^preview-v\d+\.\d+\.\d+$/.test(release.tag_name)
+        && valid(release.tag_name.slice("preview-v".length))) previews.push(release);
       if (releases.length < 100) break;
     }
-    if (!validManifests.length) throw new Error(`检查失败：没有有效兼容 preview${invalid ? `，拒绝 ${invalid} 个清单` : ""}`);
-    validManifests.sort((a, b) => compare(b.manifest.components[1].version, a.manifest.components[1].version) || compare(b.manifest.components[0].version, a.manifest.components[0].version));
-    const selected = validManifests[0];
-    return planPreview(selected.manifest, installedVersion, `https://github.com/${RELEASE_REPOSITORY}/releases/tag/${selected.manifest.releaseTag}`);
+    previews.sort((a, b) => compare(b.tag_name.slice("preview-v".length), a.tag_name.slice("preview-v".length)));
+    for (const release of previews) {
+      const candidates = (Array.isArray(release.assets) ? release.assets : []).filter((asset: any) => asset?.name === "release.json"
+        && asset.browser_download_url === `https://github.com/${RELEASE_REPOSITORY}/releases/download/${release.tag_name}/release.json`);
+      if (candidates.length !== 1) { invalid++; continue; }
+      // A higher candidate's transport failure remains a failed check. Only an
+      // explicitly malformed/incompatible manifest permits trying the next tag.
+      const bytes = await this.request(candidates[0].browser_download_url, 1024 * 1024, manual);
+      let manifest: PreviewManifest;
+      try { manifest = parseManifest(JSON.parse(bytes.toString("utf8")), release, vscodeVersion); }
+      catch { invalid++; continue; }
+      return planPreview(manifest, installedVersion, `https://github.com/${RELEASE_REPOSITORY}/releases/tag/${manifest.releaseTag}`);
+    }
+    throw new Error(`检查失败：没有有效兼容 preview${invalid ? `，拒绝 ${invalid} 个清单` : ""}`);
   }
   async download(component: ReleaseComponent, vscodeVersion: string): Promise<Buffer> {
     const bytes = await this.request(component.downloadUrl, Math.max(component.size, 4 * 1024 * 1024 + 1), true);

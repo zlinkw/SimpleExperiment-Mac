@@ -30,6 +30,7 @@ test("paired release gates include both repositories' POSIX path regressions", (
   assert.equal((prepare.match(/"macPosixPaths"/g) || []).length, 2);
   assert.match(prepare, /"macRelativePaths"/);
   assert.match(prepare, /"macDownloadScope"/);
+  assert.match(prepare, /"macTransferExitProof"/);
   assert.match(prepare, /"test\/features\/macAgentOutputContract\.test\.js"/);
   assert.match(prepare, /"test\/features\/macAgentResultFiles\.test\.js"/);
   assert.match(prepare, /"test\/features\/macAgentParseResults\.test\.js"/);

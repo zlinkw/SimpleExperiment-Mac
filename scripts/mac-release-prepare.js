@@ -25,7 +25,7 @@ function main() {
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macCaseAnalysisRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/scripts/macPackageProjection.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/core/workspacePathMapper.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
-  for (const file of ["macBootstrap", "macCliLauncher", "macCliApi", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths", "macAuthentication", "macRelay", "macPosixPaths", "macRelativePaths", "macDownloadScope", "apiUploadProgress"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
+  for (const file of ["macBootstrap", "macCliLauncher", "macCliApi", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths", "macAuthentication", "macRelay", "macPosixPaths", "macRelativePaths", "macDownloadScope", "apiUploadProgress", "macTransferExitProof"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
   npm(["run", "verify:package-runtime"], EXPERIMENT_ROOT);
   run(process.execPath, ["-e", "new (require('vm').Script)(require('fs').readFileSync('dist/ui/PanelHtml.js','utf8'))"], EXPERIMENT_ROOT);
   const tag = `preview-v${packages[1].version}`, directory = path.join(EXPERIMENT_ROOT, "release-artifacts", tag);
@@ -50,10 +50,10 @@ function main() {
   const notes = `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-指定 Plan 的样本分析导出保留原始路径与 revision，表文件按原始 Plan 区分，读取当前受检样本和子组结果。先准备完整 CSV、核验全部目的路径及输入，再发布本次表与对应报告；中文、引号和换行字段保持完整，空样本标记为空。导出回执带原始 Plan、revision、来源、样本数与表路径，不借全局缓存或其他 Plan。保留旧默认入口、统计计算及最新表别名；SimpleSFTP 本次功能未变，保持 0.2.96，更新时同版本跳过。README/配置说明按功能阶段集中更新。
+更新检查先读取 Release 元数据并按版本排序，找到有效兼容的最新 preview 后停止下载历史清单。较新候选的网络错误仍显示检查失败，只有明确无效或不兼容才尝试下一版本。SimpleSFTP 增加 macOS 只读进程退出核验；断连后两次核验本机旧进程和传输进程，取得完整证据并保存回执后才允许重新请求。进程仍活跃、核验不可用或保存失败时保留未知状态，不停止用户 SSH 或远端实验。README/配置说明按功能阶段集中更新。
 
 本地验证
-两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。实际生成 Agent 样本/泄漏/子组/导出及四个请求入口→编译回执消费者 8 项，包含真实 CSV 序列化、目标预检、输入变化及旧默认导出；保留分析 8、claim 8、项目聚合 8、归档 8、解析 9、输出契约 7、读取 7及真实 pinned VSCE/快照验证。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。只用本机文件/隔离 AST/POSIX 与捕获发布，没有运行真实科研、SSH、远端启动/停止/删除。多文件物理原子发布仍未验收。
+两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。preview 选择覆盖历史清单不可达、跨页语义排序及新版本网络错误；macOS 退出核验覆盖只读 ps 输出、活跃进程、PID 复用、不完整/损坏输出、Windows 兼容及真实恢复消费者，操作系统进程查询使用注入替身。保留既有结果/Plan/更新/认证/中转与真实 pinned VSCE 快照门禁。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。只用本机文件/隔离 AST/POSIX 与捕获发布，没有运行真实科研、SSH、远端启动/停止/删除。多文件物理原子发布与真实 macOS 进程查询仍未验收。
 
 M5 真机验证
 尚未执行，用户已延后。更新/设置保留/重载/补装、Termius、独立认证传输、中文路径/断连及三拓扑主流程仍需真机验证。完整 claim/聚合报告发布、归档执行、其他运行/写回执、revision 内容证明和物理原子发布继续适配；本机受检证据不能代替完整科研验收。
