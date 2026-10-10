@@ -10,7 +10,14 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-031（passed）
+## 当前批次 mac-release-038（running，0.5.301/0.2.95）
+- 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp `ef649df249df511af258f0a3f6f5c075b0063b9e`/SFTP `fdac594ac94c411a895a1e5009599d1799dbd3d9`普通推送/fetch相等，起始两仓干净；事实/计划/版本/门禁与现有实际包runner重读。
+- 版本原格式递增，metadata两仓build/runtimeManifest/闭包/面板/vm.Script后提交同步；完整prepare76逐文件20秒、十七实际VSIX含新claim8、快照/草稿完整附件与匿名 .300/.94→.301/.95核验。无Actions/自动安装/真实科研/SSH/归档删除，M5延后。
+- 下一代码边界：其他Agent结果动作的回执/报告来源与写入发布。完整归档执行、revision内容证明、物理原子发布及M5保持pending，须按当前事实继续，不缩小全目标。
+
+- passed metadata两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；mac-release-038-metadata.log。完整prepare/十七实际VSIX/发布及匿名下载尚待核验。
+
+## 前批 mac-doc-031（passed）
 - 范围6文件：两仓README、Mac配置、prepare/门禁回归与计划。代码已普通提交推送 `dda0b5ccc3a26f6fedfc3fd9539453169ec596a7`并fetch相等；SFTP `12d726fbddbe033aa203bb1725149c0411905beb`干净同步；事实/计划/文档/实际入口与门禁重读。
 - 说明结果区“检查论文证据”/UTF8 claims.md、原始路径与一次URI解码/ID、当前来源/归档及失败处理，supported仅为证据关联。新claim8加入76逐文件串行发布门禁。安装/更新/Termius/认证/CLI与三拓扑入口保留；不宣称完整科学结论/原子发布/归档执行/M5。
 
