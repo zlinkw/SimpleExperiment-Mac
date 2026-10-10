@@ -10,7 +10,11 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-027（passed）
+## 当前批次 mac-release-034（running，0.5.297/0.2.91）
+- 范围 6 文件：两仓 package/lock、Experiment runtime/计划。文档批 Exp `0924896882fe97031337c9400c3a4afcf2d4e82e`/SFTP `735f16fa99567ac0d30b79198cc7cf2d601295c4` 已普通推送/fetch 相等，工作区干净；事实/计划/版本及门禁重读。
+- passed metadata 两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致/UTF8/diff；初次误用不存在的 runtimeManifestConsistency 文件，未启动测试，定位真实 test/runtimeManifest.test.js 后通过。来源提交同步后完整 prepare 72 文件串行20秒、实际 VSIX 十三份（新增读取产生端 7）及快照对应验证，完整三附件草稿核验后发布并匿名 .296/.90→.297/.91 下载。不得覆盖旧版本/附件，不触发 Actions/自动安装/真实科研；下一边界限其他 Agent 结果动作，M5 延后。
+
+### 前批 mac-doc-027（passed）
 - 范围 6 文件：两仓 README、Mac 配置说明、prepare/发布门禁回归与计划。优先同步指定 Plan 输出契约的真实 YAML/原始路径/5 MiB UTF8 快照读取、失败处理与主动 Agent 升级入口，并将新产生端 7 项纳入串行发布门禁。
 - 起始 Exp `bb9a5988e81d0c31ab848c4151a1412dcf3760ea`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3` master 同步、工作区干净；事实/计划/README/配置/门禁重读。代码批已提交推送并 fetch 相等；此前计划编辑首个 shell Python 命令引号失败，未写文件，改用 UTF8 stdin 后通过。
 - passed 两仓 build/225 与 26 闭包/面板 2、Mac 配置 1/发布门禁 4 串行、严格 UTF8/更新入口/发布脚本语法/diff；实际 M5、完整 revision 内容、其他动作与原子写入仍 pending。下一批仅配套 metadata/prepare/真实包/匿名下载发布。
