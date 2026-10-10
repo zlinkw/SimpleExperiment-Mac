@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005af-agent-result（passed）
+## 当前批次 mac-doc-027（passed）
+- 范围 6 文件：两仓 README、Mac 配置说明、prepare/发布门禁回归与计划。优先同步指定 Plan 输出契约的真实 YAML/原始路径/5 MiB UTF8 快照读取、失败处理与主动 Agent 升级入口，并将新产生端 7 项纳入串行发布门禁。
+- 起始 Exp `bb9a5988e81d0c31ab848c4151a1412dcf3760ea`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3` master 同步、工作区干净；事实/计划/README/配置/门禁重读。代码批已提交推送并 fetch 相等；此前计划编辑首个 shell Python 命令引号失败，未写文件，改用 UTF8 stdin 后通过。
+- passed 两仓 build/225 与 26 闭包/面板 2、Mac 配置 1/发布门禁 4 串行、严格 UTF8/更新入口/发布脚本语法/diff；实际 M5、完整 revision 内容、其他动作与原子写入仍 pending。下一批仅配套 metadata/prepare/真实包/匿名下载发布。
+
+### 前批 mac-005af-agent-result（passed）
 - 范围至多 7 文件：独立 Agent 输出契约读取模块/原始候选接线、共享真实 NTFS/POSIX 描述符 fixture 桥接及原回归接入、新隔离 Python/实际编译消费回归与计划。三个关联问题：不 trim/修复路径或把坏类型变成字符串；真实 Plan YAML/命令/明确 job 的声明与有界 glob 保留大小写/Unicode/真实空格；同一受检 UTF8 描述符快照交给既有 CSV/JSON/text 解析，读取/解析后核验身份，原入口兼容。
 - 首次既有产生端回归 4/7，Windows CRT 文本 fd 读少了 CRLF 字节，且 Python lstat 的 creation time 与 fstat 的 change time 语义不同；真实原生元数据观测证实。仅调整本机 POSIX fixture 的二进制 fd 与真实 NTFS ChangeTime 映射，保持生产原始大小/身份/ctime 断言，不按失败降低门禁；原回归 7/7 与新回归 7/7 均通过。
 - 起始 Exp `5075d8595586e90932b81fe545c31378482d7b93`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3` 干净且 master=origin/master；事实/计划/候选/实际解析/YAML scheduler 依赖与回归重读。前批 progress：.296/.90 实际包、快照、公开下载发布完成，无活跃进程。PyYAML 为既有科研环境依赖，严格读取不回退损坏或不支持 YAML。
