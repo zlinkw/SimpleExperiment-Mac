@@ -10,10 +10,18 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-033（running，0.5.296/0.2.90）
+## 当前批次 mac-release-033（passed，0.5.296/0.2.90）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。mac-tool-003 `4f0f295707f0f142e852184e162e92c81b7a3547` 与 SFTP `0abf9794021d3bd86e8af61478fe8b7e4d0db06c` 已普通推送/fetch 相等，工作区干净；重读事实/计划/来源/版本。失败 .295/.89 未发布、证据保留，改用更高版本和新目录。
 - pending metadata build/闭包/面板/runtime，再完整 prepare/实际包十二份（新增 Agent 产生端 7）/匿名 .294/.88→.296/.90；核验完整三附件草稿后发布。无 Actions/安装/真实科研，M5 延后；原 Plan 结果读取与其他回执/写动作下一批。
 - passed 新 metadata：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；提交来源后完整 prepare 待执行。
+- passed 完整 prepare：两仓 build/225 与 26 闭包/面板 2/vm.Script、71 目标文件串行/20 秒，72 含面板标记；新增 Agent 7/快照 8、真实浅深高对比通过，无超时。日志 release-artifacts/prepare-0.5.296.log exit0；真实 pinned VSCE 保持 Experiment ignore/SFTP files，全部字节/集合/来源前后校验后打包。
+- passed 实际 VSIX 十二份：Agent 产生端→编译候选/reducer 7、回执 8/解析 8/读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/结果链 6，所有报告绑定两来源/包 hash；本机/模拟/隔离 AST，无真实科研/SSH/远端启动/停止/删除/安装。额外快照与包对应检查：SFTP 82 源文件/25 原字节包文件，Experiment 1509 源/411 原字节包文件；仅 VSCE package/README 正式转换，CHANGELOG 官方改名但字节一致。附加验证初次误计 SFTP 数量及 CHANGELOG 名称，按真实 CLI 规则核验后通过，无生产或测试门禁放松。
+- passed .294/.88→.296/.90 匿名 updater：35 公开请求，清单/有效 prerelease/大小/hash/CRC/身份/darwin-arm64/VS Code 要求；下载字节等于十二份实际测试包，全部业务模块、两仓 README/包内 Mac 配置及发布说明匹配同步来源，同版本跳过/不降级。包源快照证明与匿名下载互相绑定；未实际安装/M5。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.296，完整三附件草稿核验后公开，releaseId 408439949；来源 Exp `5d6c21b74c44cda98e7a570caaf0831dc68ea80c`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3` 均已普通推送/fetch 相等。历史 .295 失败证据及所有旧附件保留；无 Actions/自动安装。
+
+### 下一批 mac-005af-agent-result（pending）
+- 至多 8 文件，限 Agent 检查输出契约中的原始结果候选路径、Plan YAML 声明提取与实际读取身份；隔离实际生成函数/实际编译消费回归，保留 API/Plan 格式/原入口/三拓扑。不得扩入运行/写操作或删除/归档；README/配置说明与后续配套发布继续优先同步。
+- revision 内容证明、物理检查到读写的原子锁定、完整 YAML 特性、其他动作和 M5 保持 pending，不以本批局部身份/本机验证替代验收。
 
 ### 前批 mac-tool-003（passed）
 - 范围至多 5 文件：源快照工具/回归、发布说明/prepare 文案与计划。prepare 所有 71 目标文件/72 含面板标记通过，225 闭包通过；打包前因 SFTP 无 .vscodeignore 而使用 package.json files，快照工具错误要求 ignore 存在，失败。保留 prepare-0.5.295.log 与空 .295 目录/来源，不覆盖。仅修正快照保留真实 VSCE 规则的缺省机制，新增真实 CLI files 策略证明/策略变化拒绝，不扩大超时或放松来源字节检查。
