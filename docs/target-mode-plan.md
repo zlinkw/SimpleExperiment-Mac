@@ -10,12 +10,19 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005am-case-export（running）
+## 当前批次 mac-release-041（running，0.5.304/0.2.96）
+- 代码2f65ed6bb87af8842188f866e6e92c835f121449已普通推送/fetch相等，SFca2ddc26a5fe634c0498f01feebfb046503dbe2c同步干净；重读事实/计划/版本/门禁和实际包runner，起始无活动进程。修正上一记录回执Scope计数为实际8，日志保留。
+- 范围4文件：Exp package/lock/runtime/计划，补丁.304，SF源码/版本.96保留；完整78串行目标/十九实际包，扩展既有case8覆盖导出/真实CSV和第四入口，不新增重复测试文件。源快照/完整草稿附件与匿名.303/.96→.304/.96仅Exp更新、SF跳过；不安装开发机扩展，不用Actions或科研/SSH/删除。
+- README/配置阶段集中；发布后先执行完整目标证据核验，列明已知功能缺口与M5缺失证据，避免范围漂移。多文件原子性/归档执行/revision内容现存风险不自动当作额外首版需求。
+
+- passed metadata两仓build/runtimeManifest1/225与26闭包/面板2/vm.Script、版本一致/UTF8/diff，mac-release-041-metadata.log；Exp.304、SF.96。下一步完整78目标串行、十九实际VSIX、源快照及匿名更新/同版跳过。
+
+## 前批 mac-005am-case-export（passed）
 - 前轮progress：样本三入口代码f22544521b3a52b645c42f6f272344fba9d29aeb、.303/.96源码acaa9840861ea6082d62b457172ac11bbe72c18f/ca2ddc26a5fe634c0498f01feebfb046503dbe2c与交付48568ac6e091fcf74d0201d3d3bc4dacdc9c1ac1已同步；78串行目标/十九实际包/42匿名请求passed。两仓起始干净，fetch确认master相等，无活动进程；事实/计划/实际导出/子组、CSV写入与回执、隔离回归重读。
 - 范围6文件：共享case输入与导出、Agent子组私有不发布计算/导出入口与请求身份、现有真实AST/编译回执Node/Python回归、prepare说明/既有门禁与计划。三问题：原始Plan/revision与表路径；当前受检子组/CSV完整准备后发布；实际导出回执和失效/空样本。保留旧默认入口/统计算法/API/三拓扑，写入executor捕获，不执行整Agent/科研/SSH/删除/安装。
 - README/配置阶段集中，入口无新增；代码验证后Exp.304，SF无变化保持.96。完整多文件原子性/归档执行/revision内容/M5仍pending。
 
-- passed实际生成case/泄漏/子组/导出及四请求AST→编译回执8，真实write_atomic_csv序列化捕获、中文/引号/换行、原始Plan/来源和路径、旧默认导出；无超时。build/225闭包/面板2/vm.Script/UTF8/diff、既有发布门禁4及回执Scope7通过，mac-005am-final.log与本轮case目标输出。六文件，完整输入和全部CSV/报告目标先准备再发布，不能视为多文件物理原子或M5验收。
+- passed实际生成case/泄漏/子组/导出及四请求AST→编译回执8，真实write_atomic_csv序列化捕获、中文/引号/换行、原始Plan/来源和路径、旧默认导出；无超时。build/225闭包/面板2/vm.Script/UTF8/diff、既有发布门禁4及回执Scope8通过，mac-005am-final.log与本轮case目标输出。六文件，完整输入和全部CSV/报告目标先准备再发布，不能视为多文件物理原子或M5验收。
 - 下一边界：.304/.96发布后，按完整目标逐项核验本机已实现证据、Mac专属执行依赖和三拓扑链路，区分可继续修复的已知缺口与用户延后的真机证据；不把未要求的额外完善无限追加为首版阻塞项。
 
 ## 前批 mac-release-040（passed，0.5.303/0.2.96）
