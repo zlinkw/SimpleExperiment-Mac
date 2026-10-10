@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-doc-029（passed）
+## 当前批次 mac-release-036（running，0.5.299/0.2.93）
+- 范围6文件：两仓package/lock、Experiment runtime/计划。文档Exp `95856c8568e56c8fdf3987ba890d3361b83a1343`/SFTP `97e104e58930a085eda466e7dd8d66c95694955e`均普通推送/fetch相等；两仓干净，事实/计划/版本/门禁重读。
+- passed metadata 两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；日志 mac-release-036-metadata-d69614cc-66d3-4b18-85c3-6b1a0ecbc861.log。完整prepare/实际VSIX/发布和匿名下载仍待本批后续验证。
+- 验证 metadata/build/闭包/面板/runtime一致性，源码同步后完整prepare74目标串行20秒、十五份实际VSIX（新增只读归档8）/快照/草稿完整附件/匿名更新。不得覆盖历史版本，无Actions/自动安装/实际科研/归档删除执行，M5延后。下一代码批仅跨Plan聚合与claim读取来源。
+
+## 前批 mac-doc-029（passed）
 - 范围6文件：两仓README、Mac配置说明、prepare/发布门禁回归及计划。按真实Mac操作重整结果说明，收拢历史技术叙述；保留安装/更新/Termius/认证/CLI入口。
 - 起始 Exp `852d7e08c7e91898ce7e0f1eab6fb90318d8a013`/SFTP `2006c5b49bb28c57a124938aff456fcef7d6de98`，两仓master干净，普通推送/fetch相等；事实/当前计划/README/配置/实际入口与发布门禁已重读。
 - passed 两仓build/225与26闭包/面板2、Mac配置1/发布门禁4、脚本语法、UTF8/diff；日志 mac-doc-029-90051e8b-e269-43ad-a2b3-0dd6abeb316e.log。结果说明重整为操作步骤/路径示例/旧归档不足处理，保护入口；跨Plan聚合/完整归档执行/原子写入/M5继续后续。
