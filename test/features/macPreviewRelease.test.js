@@ -1,20 +1,27 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { PreviewReleaseClient, parseManifest, planPreview, COMPONENT_IDS } = require("../../dist/mac/PreviewRelease");
+const { createHash } = require("node:crypto");
+const { PreviewReleaseClient, parseManifest, planPreview, parsePreviewIndex, PREVIEW_INDEX_URL, COMPONENT_IDS } = require("../../dist/mac/PreviewRelease");
+const index = releases => ({ protocolVersion: 1, channel: "preview", updatedAt: "2026-10-10T00:00:00Z", releases });
+function refresh(item) {
+  const bytes = Buffer.from(JSON.stringify(item.manifest));
+  Object.assign(item.info.assets[0], { size: bytes.length, digest: "sha256:" + createHash("sha256").update(bytes).digest("hex") });
+  return item;
+}
 
 function release(version = "0.1.2") {
   const tag = `preview-v${version}`;
   const prefix = `https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/${tag}/`;
   const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: "2026-10-09T12:00:00Z", components: COMPONENT_IDS.map(extensionId => ({ extensionId, version, sourceCommit: "a".repeat(40), targetPlatform: "darwin-arm64", vscodeEngine: "^1.100.0", downloadUrl: prefix + `${extensionId.split(".")[1]}-${version}-darwin-arm64.vsix`, size: 100, sha256: "b".repeat(64) })) };
-  const info = { tag_name: tag, prerelease: true, draft: false, assets: [{ name: "release.json", browser_download_url: prefix + "release.json", size: 1000 }, ...manifest.components.map(item => ({ name: item.downloadUrl.split("/").at(-1), browser_download_url: item.downloadUrl, size: item.size }))] };
-  return { manifest, info };
+  const info = { tag_name: tag, prerelease: true, draft: false, published_at: manifest.publishedAt, assets: [{ name: "release.json", browser_download_url: prefix + "release.json" }, ...manifest.components.map(item => ({ name: item.downloadUrl.split("/").at(-1), browser_download_url: item.downloadUrl, size: item.size, digest: "sha256:" + item.sha256 }))] };
+  return refresh({ manifest, info });
 }
-test("anonymous releases list filters stable/draft/invalid previews and sorts semantic versions", async () => {
-  const old = release("0.1.9"), current = release("0.1.10"), broken = release("0.1.11"); broken.manifest.components[0].targetPlatform = "win32-arm64";
+test("anonymous static index filters stable/draft/invalid previews without any REST API request", async () => {
+  const old = release("0.1.9"), current = release("0.1.10"), broken = release("0.1.11"); broken.manifest.components[0].targetPlatform = "win32-arm64"; refresh(broken);
   const calls = [];
   const client = new PreviewReleaseClient(async (url, options) => {
-    calls.push(url); assert.equal(options.headers.Authorization, undefined); assert.ok(!url.includes("/latest"));
-    if (url.includes("?per_page")) return Response.json([{ ...release("9.0.0").info, prerelease: false }, { ...release("8.0.0").info, draft: true }, old.info, broken.info, current.info]);
+    calls.push(url); assert.equal(options.headers.Authorization, undefined); assert.ok(!url.includes("/latest")); assert.notEqual(new URL(url).hostname, "api.github.com");
+    if (url === PREVIEW_INDEX_URL) return Response.json(index([{ ...release("9.0.0").info, prerelease: false }, { ...release("8.0.0").info, draft: true }, old.info, broken.info, current.info]));
     return Response.json([old, broken, current].find(item => item.info.assets[0].browser_download_url === url).manifest);
   });
   const result = await client.check("1.100.0", () => "0.1.1");
@@ -26,7 +33,7 @@ test("valid newest preview does not request unreadable older manifests, includin
   const latest = release("0.1.20"), old = release("0.1.19"), calls = [];
   const client = new PreviewReleaseClient(async url => {
     calls.push(url);
-    if (url.includes("?per_page")) return Response.json([old.info, latest.info, null, { ...old.info, tag_name: "preview-v00.1.19" }]);
+    if (url === PREVIEW_INDEX_URL) return Response.json(index([old.info, latest.info, null, { ...old.info, tag_name: "preview-v00.1.19" }]));
     if (url === latest.info.assets[0].browser_download_url) return Response.json(latest.manifest);
     throw Error("old manifest is offline");
   });
@@ -34,24 +41,23 @@ test("valid newest preview does not request unreadable older manifests, includin
   assert.equal(calls.length, 4);
   assert.ok(!calls.includes(old.info.assets[0].browser_download_url));
 });
-test("semantic newest on later metadata page beats publication order", async () => {
+test("semantic newest in static history beats publication order", async () => {
   const older = release("0.1.9"), newer = release("0.1.10"), calls = [];
   const client = new PreviewReleaseClient(async url => {
     calls.push(url);
-    if (url.endsWith("page=1")) return Response.json([older.info, ...Array.from({ length: 99 }, () => ({ prerelease: false }))]);
-    if (url.endsWith("page=2")) return Response.json([newer.info]);
+    if (url === PREVIEW_INDEX_URL) return Response.json(index([older.info, ...Array.from({ length: 99 }, () => ({ prerelease: false })), newer.info]));
     assert.equal(url, newer.info.assets[0].browser_download_url);
     return Response.json(newer.manifest);
   });
   assert.equal((await client.check("1.100.0", () => "0.1.1")).manifest.releaseTag, newer.manifest.releaseTag);
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 2);
 });
 test("higher preview transport failure cannot fall back to an older version", async () => {
   for (const failure of [async () => { throw Error("offline"); }, async () => new Response("unavailable", { status: 503 })]) {
     const older = release("0.1.9"), newer = release("0.1.10"), calls = [];
     const client = new PreviewReleaseClient(async url => {
       calls.push(url);
-      if (url.includes("?per_page")) return Response.json([older.info, newer.info]);
+      if (url === PREVIEW_INDEX_URL) return Response.json(index([older.info, newer.info]));
       assert.equal(url, newer.info.assets[0].browser_download_url);
       return failure();
     });
@@ -64,6 +70,27 @@ test("same versions and newer installed versions skip without downgrading", () =
   assert.equal(planPreview(manifest, () => "0.1.2").pending.length, 0);
   assert.equal(planPreview(manifest, () => "0.2.0").pending.length, 0);
   assert.deepEqual(planPreview(manifest, id => id === COMPONENT_IDS[0] ? "0.1.2" : "0.1.1").pending.map(item => item.extensionId), [COMPONENT_IDS[1]]);
+});
+test("index corruption, duplicate tags and forged manifest references fail closed", async () => {
+  const latest = release();
+  for (const value of [{}, index([]), { ...index([latest.info]), channel: "stable" }, index([latest.info, latest.info])])
+    assert.throws(() => parsePreviewIndex(value));
+  for (const mutate of [a => a.browser_download_url = "https://evil.test/release.json", a => a.digest = "bad", a => a.size = 0]) {
+    const forged = release(); mutate(forged.info.assets[0]);
+    const client = new PreviewReleaseClient(async url => { assert.equal(url, PREVIEW_INDEX_URL); return Response.json(index([forged.info])); });
+    await assert.rejects(client.check("1.100.0", () => "0.1.1"), /检查失败/);
+  }
+});
+test("manifest byte size and SHA are verified before compatibility fallback", async () => {
+  for (const tamper of [i => i.info.assets[0].size++, i => i.manifest.components[0].sha256 = "c".repeat(64)]) {
+    const latest = release("0.1.20"), older = release("0.1.19"), calls = []; tamper(latest);
+    const client = new PreviewReleaseClient(async url => {
+      calls.push(url); assert.notEqual(new URL(url).hostname, "api.github.com");
+      return Response.json(url === PREVIEW_INDEX_URL ? index([older.info, latest.info]) : latest.manifest);
+    });
+    await assert.rejects(client.check("1.100.0", () => "0.1.1"), /SHA-256/);
+    assert.equal(calls.length, 2);
+  }
 });
 test("rejects forged assets, duplicate components, malformed commits, protocol and incompatible VS Code", () => {
   for (const mutate of [m => m.protocolVersion = 2, m => m.components[0].sourceCommit = "bad", m => m.components[0].downloadUrl = "https://evil.test/package.vsix", m => m.components[0] = m.components[1]]) {
@@ -104,7 +131,7 @@ test("ordinary 403 with nonzero quota or no rate evidence permits another manual
     const client = new PreviewReleaseClient(async url => {
       count++;
       if (count === 1) return new Response("Forbidden", { status: 403, headers });
-      return Response.json(url.includes("?per_page") ? [latest.info] : latest.manifest);
+      return Response.json(url === PREVIEW_INDEX_URL ? index([latest.info]) : latest.manifest);
     }, () => 0);
     await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /HTTP 403/);
     assert.equal((await client.check("1.100.0", () => "0.1.1", true)).manifest.releaseTag, latest.manifest.releaseTag);
@@ -118,7 +145,7 @@ test("secondary 403 and 429 with nonzero quota ignore the primary one-hour reset
       count++;
       if (count === 1) return Response.json({ message: "You have exceeded a secondary rate limit." }, {
         status, headers: { "x-ratelimit-remaining": "59", "x-ratelimit-reset": "3600" } });
-      return Response.json(url.includes("?per_page") ? [latest.info] : latest.manifest);
+      return Response.json(url === PREVIEW_INDEX_URL ? index([latest.info]) : latest.manifest);
     }, () => now);
     await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /HTTP/);
     now = 59000; await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /限流/); assert.equal(count, 1);
@@ -144,10 +171,10 @@ test("oversized denial body is cancelled, does not leak text and does not establ
       start(controller) { controller.enqueue(new TextEncoder().encode("password=secret".repeat(3000))); },
       cancel() { cancelled = true; },
     }), { status: 403 });
-    return Response.json(url.includes("?per_page") ? [latest.info] : latest.manifest);
+    return Response.json(url === PREVIEW_INDEX_URL ? index([latest.info]) : latest.manifest);
   }, () => 0);
   await assert.rejects(client.check("1.100.0", () => "0.1.1", true), error => {
-    assert.match(error.message, /HTTP 403.*api.github.com/); assert.doesNotMatch(error.message, /password|secret/); return true;
+    assert.match(error.message, /HTTP 403.*raw.githubusercontent.com/); assert.doesNotMatch(error.message, /password|secret/); return true;
   });
   assert.equal(cancelled, true);
   assert.equal((await client.check("1.100.0", () => "0.1.1", true)).pending.length, 2);

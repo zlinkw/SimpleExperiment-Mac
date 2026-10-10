@@ -2,6 +2,7 @@
 字符上限 12000，达到 10800 自动压缩。保留目标、验证、风险、下一批边界和真实提交记录；完整历史见 Git。
 
 ## 固定边界
+- 2026-10-10 用户授权改用公开 preview.json 静态索引发现版本，替代用户端 Release REST 列表查询；发布确认完整公开预发布后更新索引，资产和历史版本保持不可覆盖。旧更新按钮/命令保留，用户无需登录。
 - 当前目标：独立 darwin-arm64 preview 扩展、配套更新、本机 Releases 发布及完整 mac 科研业务适配。
 - 公开 SimpleExperiment-Mac、SimpleSFTP-Mac，普通提交推送 origin/master；Windows 项目独立。
 - 支持 Apple Silicon/macOS 26+；M5/24 GB/macOS 27.0 真机 pending，用户延后并授权持续适配/发布。
@@ -12,7 +13,14 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-043（published；匿名列表核验受真实配额阻挡，0.5.306/0.2.97）
+## 当前批次 mac-005ap-static-index（passed，本地实现）
+- 起始 Exp8715b399f4c82893f67016301380ebb12c515975/SF2f464eb75e362150de5cbe61e1946504c3497a0a 干净且 origin/master 相等；重读事实、计划、源码/发布脚本及相关测试。
+- 本批范围5文件：PreviewRelease、客户端与按钮测试、状态清单及本计划。静态索引 preview 筛选/语义排序、清单大小/SHA 验证、无 API 请求；保护安装事务/平台/传输/科研/现有入口。
+- 检查：目标单文件串行20秒、build、包闭包、面板vm、UTF8/diff；发布索引及本机发布恢复属于下一批，不修改真机业务功能。
+- passed typecheck；macPreviewRelease15/macBootstrap4/macUpdateTransaction6逐文件串行20秒；npm run build（面板2）、verify:package-runtime225闭包、面板vm.Script、UTF8/diff。无服务器操作/安装/Actions。
+- 下一批发布完整公开资产后提交静态索引并普通推送，同步发布恢复和必要操作说明。代码提交由本批普通提交/fetch记录，下一批记录真实SHA；M5 deferred，剩余15/29。
+
+## 前批 mac-release-043（published；匿名列表核验受真实配额阻挡，0.5.306/0.2.97）
 - 起始Exp71e72dec321d6e366649db1fd4c7288a898297dd/SF2f464eb75e362150de5cbe61e1946504c3497a0a同步，事实/计划/版本/客户端及发布门禁已重读。范围4文件：Exp package/lock/runtime/计划；SF保留.97来源，包作为配套。
 - 两仓build/闭包/vm、79单文件串行/20秒、实际两包Preview13/按钮4/SF退出7与快照/匿名更新验证；不重做未经报告的科研完善、不安装/Actions/SSH/删除。剩余15/29，真机403实际成因及修复效果待验。
 

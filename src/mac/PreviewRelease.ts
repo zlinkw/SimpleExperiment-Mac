@@ -1,10 +1,12 @@
 import { ReleaseComponent, verifyVsix } from "./Vsix";
+import { createHash } from "node:crypto";
 const valid = require("../vendor/semver/functions/valid");
 const compare = require("../vendor/semver/functions/compare");
 const satisfies = require("../vendor/semver/functions/satisfies");
 const validRange = require("../vendor/semver/ranges/valid");
 
 export const RELEASE_REPOSITORY = "zlinkw/SimpleExperiment-Mac";
+export const PREVIEW_INDEX_URL = `https://raw.githubusercontent.com/${RELEASE_REPOSITORY}/master/preview.json`;
 export const COMPONENT_IDS = ["simple-local.simple-sftp-mac", "simple-local.simple-experiment-mac"] as const;
 export interface PreviewManifest {
   protocolVersion: 1;
@@ -14,6 +16,32 @@ export interface PreviewManifest {
   components: ReleaseComponent[];
 }
 export interface PreviewPlan { manifest: PreviewManifest; pending: ReleaseComponent[]; releaseUrl: string }
+
+export function parsePreviewIndex(value: any): any[] {
+  if (value?.protocolVersion !== 1 || value.channel !== "preview" || !Number.isFinite(Date.parse(value.updatedAt))
+    || !Array.isArray(value.releases) || !value.releases.length || value.releases.length > 1000) throw new Error("检查失败：无效 preview 静态索引");
+  const tags = new Set<string>();
+  const releases = value.releases.filter((release: any) => {
+    if (!release || release.draft !== false || release.prerelease !== true || !/^preview-v\d+\.\d+\.\d+$/.test(release.tag_name || "")
+      || !valid(release.tag_name.slice("preview-v".length)) || !Number.isFinite(Date.parse(release.published_at))
+      || !Array.isArray(release.assets) || release.assets.length !== 3) return false;
+    const prefix = `https://github.com/${RELEASE_REPOSITORY}/releases/download/${release.tag_name}/`;
+    const names = new Set<string>();
+    for (const asset of release.assets) {
+      if (!asset || typeof asset.name !== "string" || names.has(asset.name)
+        || !/^(release\.json|simple-(sftp|experiment)-mac-\d+\.\d+\.\d+-darwin-arm64\.vsix)$/.test(asset.name)
+        || asset.browser_download_url !== prefix + asset.name || !Number.isSafeInteger(asset.size) || asset.size < 1
+        || asset.size > (asset.name === "release.json" ? 1024 * 1024 : 128 * 1024 * 1024)
+        || !/^sha256:[0-9a-f]{64}$/.test(asset.digest || "")) return false;
+      names.add(asset.name);
+    }
+    if (!names.has("release.json") || ![...names].some(name => name.startsWith("simple-sftp-mac-"))
+      || !names.has(`simple-experiment-mac-${release.tag_name.slice("preview-v".length)}-darwin-arm64.vsix`)) return false;
+    if (tags.has(release.tag_name)) throw new Error("检查失败：preview 静态索引版本重复");
+    tags.add(release.tag_name); return true;
+  });
+  return releases.sort((a: any, b: any) => compare(b.tag_name.slice("preview-v".length), a.tag_name.slice("preview-v".length)));
+}
 
 export function parseManifest(value: any, release: any, vscodeVersion: string): PreviewManifest {
   if (value?.protocolVersion !== 1 || value?.channel !== "preview" || !/^preview-v\d+\.\d+\.\d+$/.test(value.releaseTag || "") || value.releaseTag !== release.tag_name
@@ -125,20 +153,10 @@ export class PreviewReleaseClient {
     return this.checking;
   }
   private async checkReleases(vscodeVersion: string, installedVersion: (id: string) => string, manual: boolean): Promise<PreviewPlan> {
-    const previews: any[] = [];
+    const previews = parsePreviewIndex(JSON.parse((await this.request(PREVIEW_INDEX_URL, 4 * 1024 * 1024, manual)).toString("utf8")));
     let invalid = 0;
-    // Fetch metadata first: publication order is not semantic version order.
-    // A tag is bound to the Experiment version by parseManifest, so after sorting
-    // a validated candidate cannot be superseded by an older manifest.
-    for (let page = 1; page <= 3; page++) {
-      const releases = JSON.parse((await this.request(`https://api.github.com/repos/${RELEASE_REPOSITORY}/releases?per_page=100&page=${page}`, 4 * 1024 * 1024, manual)).toString("utf8"));
-      if (!Array.isArray(releases)) throw new Error("GitHub Release 列表无效");
-      for (const release of releases) if (release && !release.draft && release.prerelease === true
-        && typeof release.tag_name === "string" && /^preview-v\d+\.\d+\.\d+$/.test(release.tag_name)
-        && valid(release.tag_name.slice("preview-v".length))) previews.push(release);
-      if (releases.length < 100) break;
-    }
-    previews.sort((a, b) => compare(b.tag_name.slice("preview-v".length), a.tag_name.slice("preview-v".length)));
+    // The publisher commits this index only after confirming a complete public
+    // prerelease. User checks never access the REST API or its anonymous quota.
     for (const release of previews) {
       const candidates = (Array.isArray(release.assets) ? release.assets : []).filter((asset: any) => asset?.name === "release.json"
         && asset.browser_download_url === `https://github.com/${RELEASE_REPOSITORY}/releases/download/${release.tag_name}/release.json`);
@@ -146,6 +164,8 @@ export class PreviewReleaseClient {
       // A higher candidate's transport failure remains a failed check. Only an
       // explicitly malformed/incompatible manifest permits trying the next tag.
       const bytes = await this.request(candidates[0].browser_download_url, 1024 * 1024, manual);
+      if (bytes.length !== candidates[0].size || `sha256:${createHash("sha256").update(bytes).digest("hex")}` !== candidates[0].digest)
+        throw new Error("检查失败：preview 清单大小或 SHA-256 不符");
       let manifest: PreviewManifest;
       try { manifest = parseManifest(JSON.parse(bytes.toString("utf8")), release, vscodeVersion); }
       catch { invalid++; continue; }

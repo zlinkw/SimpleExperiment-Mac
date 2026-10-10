@@ -30,17 +30,19 @@ test("bootstrap registers updates before loading business code and polls every t
   assert.equal(require("../../package.json").main, "./dist/mac/Bootstrap.js");
 });
 test("real client through update button retains failure state and retries a non-rate 403", async () => {
-  const { PreviewReleaseClient, COMPONENT_IDS } = require("../../dist/mac/PreviewRelease");
+  const { PreviewReleaseClient, PREVIEW_INDEX_URL, COMPONENT_IDS } = require("../../dist/mac/PreviewRelease");
   let requests = 0;
   const tag = "preview-v0.1.2", prefix = `https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/${tag}/`;
   const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: "2026-10-10T00:00:00Z",
     components: COMPONENT_IDS.map(extensionId => ({ extensionId, version: "0.1.2", sourceCommit: "a".repeat(40), targetPlatform: "darwin-arm64",
       vscodeEngine: "^1.100.0", downloadUrl: prefix + extensionId.split(".")[1] + "-0.1.2-darwin-arm64.vsix", size: 100, sha256: "b".repeat(64) })) };
-  const info = { prerelease: true, draft: false, tag_name: tag, assets: [{ name: "release.json", browser_download_url: prefix + "release.json" },
-    ...manifest.components.map(c => ({ name: c.downloadUrl.split("/").at(-1), browser_download_url: c.downloadUrl, size: c.size }))] };
+  const bytes = Buffer.from(JSON.stringify(manifest));
+  const info = { prerelease: true, draft: false, tag_name: tag, published_at: manifest.publishedAt, assets: [{ name: "release.json", browser_download_url: prefix + "release.json", size: bytes.length, digest: "sha256:" + require("node:crypto").createHash("sha256").update(bytes).digest("hex") },
+    ...manifest.components.map(c => ({ name: c.downloadUrl.split("/").at(-1), browser_download_url: c.downloadUrl, size: c.size, digest: "sha256:" + c.sha256 }))] };
   const client = new PreviewReleaseClient(async url => {
     requests++; if (requests === 1) return new Response("Forbidden", { status: 403, headers: { "x-ratelimit-remaining": "59", "x-ratelimit-reset": "3600" } });
-    return Response.json(url.includes("?per_page") ? [info] : manifest);
+    assert.notEqual(new URL(url).hostname, "api.github.com");
+    return Response.json(url === PREVIEW_INDEX_URL ? { protocolVersion: 1, channel: "preview", updatedAt: manifest.publishedAt, releases: [info] } : manifest);
   }, () => 0);
   const f = fixture(client);
   try {
