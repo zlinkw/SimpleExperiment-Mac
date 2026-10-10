@@ -98,3 +98,57 @@ test("oversize responses are refused even without content-length", async () => {
   const client = new PreviewReleaseClient(async () => new Response("oversize"));
   await assert.rejects(client.request("https://test", 3), /上限/);
 });
+test("ordinary 403 with nonzero quota or no rate evidence permits another manual check", async () => {
+  for (const headers of [{ "x-ratelimit-remaining": "59", "x-ratelimit-reset": "3600" }, {}, { "retry-after": "invalid" }]) {
+    let count = 0; const latest = release("0.1.20");
+    const client = new PreviewReleaseClient(async url => {
+      count++;
+      if (count === 1) return new Response("Forbidden", { status: 403, headers });
+      return Response.json(url.includes("?per_page") ? [latest.info] : latest.manifest);
+    }, () => 0);
+    await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /HTTP 403/);
+    assert.equal((await client.check("1.100.0", () => "0.1.1", true)).manifest.releaseTag, latest.manifest.releaseTag);
+    assert.equal(count, 3);
+  }
+});
+test("secondary 403 and 429 with nonzero quota ignore the primary one-hour reset", async () => {
+  for (const status of [403, 429]) {
+    let count = 0, now = 0; const latest = release("0.1.20");
+    const client = new PreviewReleaseClient(async url => {
+      count++;
+      if (count === 1) return Response.json({ message: "You have exceeded a secondary rate limit." }, {
+        status, headers: { "x-ratelimit-remaining": "59", "x-ratelimit-reset": "3600" } });
+      return Response.json(url.includes("?per_page") ? [latest.info] : latest.manifest);
+    }, () => now);
+    await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /HTTP/);
+    now = 59000; await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /限流/); assert.equal(count, 1);
+    now = 61000; assert.equal((await client.check("1.100.0", () => "0.1.1", true)).pending.length, 2);
+    assert.equal(count, 3);
+  }
+});
+test("confirmed zero-quota primary limit and explicit Retry-After are respected", async () => {
+  for (const headers of [{ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "3600" }, { "retry-after": "Thu, 01 Jan 1970 01:00:00 GMT" }]) {
+    let count = 0, now = 0; const client = new PreviewReleaseClient(async () => {
+      count++; return new Response("limited", { status: 403, headers });
+    }, () => now);
+    await assert.rejects(client.check("1.100.0", () => "0.1.1", true));
+    now = 3599000; await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /限流/); assert.equal(count, 1);
+    now = 3601000; await assert.rejects(client.check("1.100.0", () => "0.1.1", true), /HTTP 403/); assert.equal(count, 2);
+  }
+});
+test("oversized denial body is cancelled, does not leak text and does not establish a rate limit", async () => {
+  let count = 0, cancelled = false; const latest = release("0.1.20");
+  const client = new PreviewReleaseClient(async url => {
+    count++;
+    if (count === 1) return new Response(new ReadableStream({
+      start(controller) { controller.enqueue(new TextEncoder().encode("password=secret".repeat(3000))); },
+      cancel() { cancelled = true; },
+    }), { status: 403 });
+    return Response.json(url.includes("?per_page") ? [latest.info] : latest.manifest);
+  }, () => 0);
+  await assert.rejects(client.check("1.100.0", () => "0.1.1", true), error => {
+    assert.match(error.message, /HTTP 403.*api.github.com/); assert.doesNotMatch(error.message, /password|secret/); return true;
+  });
+  assert.equal(cancelled, true);
+  assert.equal((await client.check("1.100.0", () => "0.1.1", true)).pending.length, 2);
+});

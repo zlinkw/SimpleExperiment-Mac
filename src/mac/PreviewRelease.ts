@@ -68,29 +68,33 @@ export class PreviewReleaseClient {
     const timer = setTimeout(() => controller.abort(new Error("GitHub 请求超时")), maxBytes > 4 * 1024 * 1024 ? 120000 : 20000);
     try {
       const response = await this.fetcher(url, { headers: { Accept: "application/vnd.github+json", "User-Agent": "SimpleExperiment-Mac", ...(cached?.etag ? { "If-None-Match": cached.etag } : {}) }, signal: controller.signal });
-      if (response.status === 403 || response.status === 429) {
-        this.failures++;
-        const retry = response.headers.get("retry-after");
-        const retryMs = retry ? (/^\d+$/.test(retry) ? Number(retry) * 1000 : Date.parse(retry) - this.now()) : 0;
-        const resetMs = Number(response.headers.get("x-ratelimit-reset")) * 1000 - this.now();
-        this.retryAt = this.now() + Math.min(24 * 3600000, Math.max(30000, retryMs || 0, Number.isFinite(resetMs) ? resetMs : 0, Math.min(1800000, 30000 * 2 ** Math.min(this.failures, 6))));
-        throw new Error(`GitHub 检查失败：HTTP ${response.status}，进入退避`);
-      }
       if (response.status === 304 && cached) { cached.until = this.now() + 300000; return cached.bytes; }
-      if (!response.ok) throw new Error(`GitHub 检查失败：HTTP ${response.status}`);
-      if (Number(response.headers.get("content-length")) > maxBytes) throw new Error("GitHub 响应过大");
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error("GitHub 响应为空");
-      const chunks: Buffer[] = []; let size = 0;
-      try {
-        for (;;) {
-          const item = await reader.read(); if (item.done) break;
-          size += item.value.byteLength;
-          if (size > maxBytes) throw new Error("GitHub 响应超出上限");
-          chunks.push(Buffer.from(item.value));
+      if (!response.ok) {
+        // A reset header also appears on successful/non-rate API responses.
+        // Ordinary access/proxy 403s must not borrow that one-hour quota reset.
+        const errorBytes = await this.readResponse(response, 16 * 1024).catch(() => Buffer.alloc(0));
+        let rateMessage = false;
+        try {
+          const message = JSON.parse(errorBytes.toString("utf8"))?.message;
+          rateMessage = typeof message === "string" && /secondary rate limit|API rate limit exceeded|abuse detection mechanism/i.test(message);
+        } catch { /* Non-JSON denials do not prove GitHub rate limiting. */ }
+        const retry = response.headers.get("retry-after");
+        const retryValue = retry && (/^\d+$/.test(retry) ? Number(retry) * 1000
+          : /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), \d{2} [A-Z][a-z]{2} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(retry) ? Date.parse(retry) - this.now() : NaN);
+        const retryMs = typeof retryValue === "number" && Number.isFinite(retryValue) && retryValue >= 0 ? retryValue : undefined;
+        const primary = response.headers.get("x-ratelimit-remaining") === "0";
+        const endpoint = new URL(url).hostname + new URL(url).pathname;
+        if (response.status === 429 || response.status === 403 && (primary || retryMs !== undefined || rateMessage)) {
+          this.failures++;
+          const reset = response.headers.get("x-ratelimit-reset");
+          const resetMs = primary && reset && /^\d+$/.test(reset) ? Number(reset) * 1000 - this.now() : 0;
+          this.retryAt = this.now() + Math.min(24 * 3600000, Math.max(60000, retryMs || 0, Number.isFinite(resetMs) ? Number(resetMs) : 0,
+            Math.min(1800000, 60000 * 2 ** Math.min(this.failures - 1, 5))));
+          throw new Error(`GitHub 检查失败：HTTP ${response.status}（${endpoint}），限流至 ${new Date(this.retryAt).toISOString()} 后重试`);
         }
-      } catch (error) { await reader.cancel().catch(() => undefined); throw error; }
-      const bytes = Buffer.concat(chunks, size);
+        throw new Error(`GitHub 检查失败：HTTP ${response.status}（${endpoint}）${response.status === 403 ? "，访问被拒绝；未确认限流" : ""}`);
+      }
+      const bytes = await this.readResponse(response, maxBytes);
       this.failures = 0;
       // Package bytes are retained by the transaction, never in this query cache.
       if (maxBytes <= 4 * 1024 * 1024) {
@@ -99,6 +103,21 @@ export class PreviewReleaseClient {
       }
       return bytes;
     } finally { clearTimeout(timer); }
+  }
+  private async readResponse(response: Response, maxBytes: number): Promise<Buffer> {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("GitHub 响应为空");
+    const chunks: Buffer[] = []; let size = 0;
+    try {
+      if (Number(response.headers.get("content-length")) > maxBytes) throw new Error("GitHub 响应过大");
+      for (;;) {
+        const item = await reader.read(); if (item.done) break;
+        size += item.value.byteLength;
+        if (size > maxBytes) throw new Error("GitHub 响应超出上限");
+        chunks.push(Buffer.from(item.value));
+      }
+    } catch (error) { await reader.cancel().catch(() => undefined); throw error; }
+    return Buffer.concat(chunks, size);
   }
   check(vscodeVersion: string, installedVersion: (id: string) => string, manual = false): Promise<PreviewPlan> {
     if (this.checking) return this.checking;
