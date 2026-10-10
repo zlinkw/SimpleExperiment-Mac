@@ -10,12 +10,20 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-037（running，0.5.300/0.2.94）
+## 当前批次 mac-release-037（passed，0.5.300/0.2.94）
 - 范围6文件：两仓package/lock、Experiment runtime/计划。文档Exp `398f8797aafc5c50dcc97dd81f7d16a02c018391`/SFTP `78f6f8e1b827dc497119c623ddfb94aaa801d368`均普通推送/fetch相等；两仓干净，事实/计划/版本/发布门禁重读。
 - 保留原JSON格式，仅递增版本。metadata两仓build/runtimeManifest/闭包/面板/vm.Script通过后提交同步，完整prepare75目标逐文件20秒、十六实际VSIX含新项目聚合8、快照/草稿完整附件及匿名 .299/.93→.300/.94核验。无Actions/自动安装/真实科研/归档删除执行；M5延后。
 - 下一代码批 mac-005aj-claim-read：claim文本/引用的原始受检读取；完整聚合原子发布/归档执行/revision内容证明及其他Mac业务继续pending。
 
 - passed metadata两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、版本/UTF8/diff；日志 mac-release-037-metadata-e35e2c6b-2e76-4528-bf29-c3030fc4a63b.log。完整prepare/实际VSIX/发布及匿名下载待核验。
+
+
+- passed 完整prepare75目标文件/20秒串行、76含面板标记、两仓build/225与26闭包/面板2/vm.Script/真实浅深高对比；prepare-0.5.300.log exit0，无测试超时。
+- passed 十六份实际VSIX：新增实际项目聚合8；既有归档8/解析9/读取7/契约7/回执8/解析8/读8/映射11/摘要7/YAML7/候选6/结果8/CLI2/启动8/结果链6。新ProjectAggregateRead、当前归档筛选产生端、完整原始CSV重计算及编译CSV消费对应受检包；报告绑定两来源/hash。仅AST隔离、本机文件与捕获发布，不执行整Agent/科研/SSH/归档删除或安装。
+- passed 保留源快照/实际包：SFTP82源/25原字节包文件，Exp1526源/415原字节包文件；只允许正式VSCE package/README转换及CHANGELOG改名，历史附件保留。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.300，releaseId408519818，草稿三附件集合/大小/hash核验后公开；来源Exp `59ecb3f5c68bd3085f43f91ec30ed238107a7afe`/SFTP `12d726fbddbe033aa203bb1725149c0411905beb`已普通推送/fetch相等。
+- passed 匿名 .299/.93→.300/.94：39公开请求，prerelease/清单/身份/darwin-arm64/VS Code要求/大小/SHA-256/CRC；下载字节等于十六份受检包。新聚合模块/生成Agent/两仓README/包内Mac说明对应来源，同版跳过/不降级；anonymous-verification.json、package-projection-verification.json及十六包报告保留。M5与完整科研仍pending。
+- 下一批 mac-005aj-claim-read：读取paper/claims.md及引用的原始物理身份/UTF8/同一当前归档来源；旧读取仍errors=replace，路径引用仍strip/反斜杠转换/basename借用，文本key仍lower匹配，需独立受检边界和真实生成函数/编译消费回归。旧入口保留，不扩入归档写入/删除、科研或物理原子发布；完成后先同步README/配置，再配套发布。
 
 ## 前批 mac-doc-030（passed）
 - 范围6文件：两仓README、Mac配置、prepare/发布门禁回归与计划。起始Exp `d88402159c600afd550e8f593608768b2d8997e9`/SFTP `8113c9deea20c38e1b8399b3a6806ef087769749`master干净且同步；事实/计划/README/配置/实际解析标签/门禁重读。
