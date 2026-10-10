@@ -10,12 +10,18 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-039（running，0.5.302/0.2.96）
+## 当前批次 mac-release-039（passed，0.5.302/0.2.96）
 - 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp d3840a06518607d942848f9a14bef5ddfcdceb17/SFTP6a7537468b64d363ed04d2cf5cff4bc274262d1b普通推送/fetch相等，起始干净；事实/计划/版本/门禁和实际包runner重读。
 - 递增版本保留原格式，metadata验证后普通提交推送；完整77串行目标、十八实际VSIX含新分析8、快照/完整草稿附件与匿名.301/.95→.302/.96。无Actions/自动安装/科研/SSH/归档删除，M5延后。
 - 下一边界：其他Agent结果动作仍旧路径/读取，完整报告发布/归档执行/revision内容和物理原子锁定继续分批。
 
 - passed metadata两仓build/runtimeManifest1/225与26闭包/面板2/vm.Script、版本一致/UTF8/diff，mac-release-039-metadata.log。下一步完整prepare77目标串行、十八实际VSIX、快照与匿名更新核验；M5继续pending。
+
+- passed 完整prepare77目标文件/20秒串行，78含面板标记；两仓build/225与26闭包/面板2/vm.Script/浅深高对比，prepare-0.5.302.log exit0，无超时。
+- passed 十八实际VSIX：新增实际质量/统计/论文表→编译摘要消费者8；保留claim8/项目8/归档8/解析9/读取7/契约7和既有十一回执/解析/读/映射/摘要/YAML/候选/结果/CLI/启动/结果链报告。全部绑定来源与hash，发布executor捕获，没有整Agent/科研/SSH/归档删除或安装；完整执行/报告原子性仍pending。
+- passed 保留源快照与实际包：SFTP82源/25原字节包文件，Exp1534源/417原字节包文件；仅正式VSCE package/README转换与CHANGELOG改名。来源Exp2aa52511813aa944c2cf68af717ad29aab025c19/SFTPca2ddc26a5fe634c0498f01feebfb046503dbe2c已普通推送/fetch相等。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.302，releaseId408572983，草稿三附件集合/大小/hash核验后公开。passed 匿名.301/.95→.302/.96：41公开请求，prerelease/清单/身份/darwin-arm64/VS Code要求/大小/SHA-256/CRC，下载字节等于十八受检包；README/配置/新分析模块/生成Agent对应来源，同版跳过/禁止降级。anonymous-verification.json及快照/十八包报告保留。
+- 下一代码批mac-005al-case-read：样本级发现/解析、泄漏与子组读取仍normalize Plan、errors=replace且借旧全局index。至多3相关问题/8文件，保留原始Plan与来源、受检CSV/index、现有统计计算/API/三拓扑；不执行科研/SSH/归档删除。完整claim生成表关联、分析导出共用输入预算与报告原子发布、归档执行、revision内容证明及M5仍pending。代码后先同步Mac README/配置，再配套发布。
 
 ## 前批 mac-doc-032（passed）
 - 范围6文件：两仓README、Mac配置、prepare/发布门禁回归和计划。代码来源eb7197917417dfae2d9fa06e48196437a7ce5047已普通推送/fetch相等；SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96同步干净，事实/计划/实际入口与门禁重读。
