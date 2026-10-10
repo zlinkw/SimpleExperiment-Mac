@@ -10,12 +10,20 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-038（running，0.5.301/0.2.95）
+## 当前批次 mac-release-038（passed，0.5.301/0.2.95）
 - 范围6文件：两仓package/lock、Exp runtime/计划。文档Exp `ef649df249df511af258f0a3f6f5c075b0063b9e`/SFTP `fdac594ac94c411a895a1e5009599d1799dbd3d9`普通推送/fetch相等，起始两仓干净；事实/计划/版本/门禁与现有实际包runner重读。
 - 版本原格式递增，metadata两仓build/runtimeManifest/闭包/面板/vm.Script后提交同步；完整prepare76逐文件20秒、十七实际VSIX含新claim8、快照/草稿完整附件与匿名 .300/.94→.301/.95核验。无Actions/自动安装/真实科研/SSH/归档删除，M5延后。
 - 下一代码边界：其他Agent结果动作的回执/报告来源与写入发布。完整归档执行、revision内容证明、物理原子发布及M5保持pending，须按当前事实继续，不缩小全目标。
 
-- passed metadata两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；mac-release-038-metadata.log。完整prepare/十七实际VSIX/发布及匿名下载尚待核验。
+- passed metadata两仓build/225与26闭包/面板2/vm.Script、runtimeManifest1、package/lock/runtime一致与UTF8/diff；mac-release-038-metadata.log。完整交付证据见以下记录。
+
+
+- passed 完整prepare76目标文件/20秒串行、77含面板标记、两仓build/225与26闭包/面板2/vm.Script/真实浅深高对比；prepare-0.5.301.log exit0，无测试超时。
+- passed 十七实际VSIX：新增claim读取/实际解析→编译scope与科研表消费8；既有项目8/归档8/解析9/读取7/契约7/回执8/解析8/读8/映射11/摘要7/YAML7/候选6/结果8/CLI2/启动8/结果链6。新ClaimEvidenceRead/严格experiments/runs输入及生成Agent/编译消费者对应受检包，两来源/hash绑定；仅AST隔离、本机文件与捕获发布，没有整Agent/科研/SSH/归档删除或安装。
+- passed 保留源快照/实际包：SFTP82源/25原字节包文件，Exp1530源/416原字节包文件；只允许正式VSCE package/README转换及CHANGELOG改名，历史附件保留。
+- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.301，releaseId408548625，草稿三附件集合/大小/hash核验后公开；来源Exp `738f9e271bd908c8341cc80a704f383e8a755499`/SFTP `068ec5fe6244f5d8e4b7d7152764773631a84d96`普通推送/fetch相等。
+- passed 匿名 .300/.94→.301/.95：40公开请求，prerelease/清单/身份/darwin-arm64/VS Code要求/大小/SHA-256/CRC；下载字节等于十七受检包。新claim/聚合模块/生成Agent/两仓README/包内Mac说明对应来源，同版跳过/不降级；anonymous-verification.json、package-projection-verification.json及十七报告保留。M5及完整科研仍pending。
+- 下一批 mac-005ak-analysis-read：质量门禁/统计/论文表沿用当前受检摘要后仍normalize原始Plan、用旧配置读取与旧artifact命名，当前归档记录的metrics仍来自缓存。按3相关问题/8文件预算处理原始归属、真实来源/配置和受检报告输入，保留原入口/API/三拓扑；不执行科研/SSH/归档删除。claim对生成表及完整报告发布、物理原子锁定、完整revision和M5仍pending。完成后先同步README/配置，再配套发布。
 
 ## 前批 mac-doc-031（passed）
 - 范围6文件：两仓README、Mac配置、prepare/门禁回归与计划。代码已普通提交推送 `dda0b5ccc3a26f6fedfc3fd9539453169ec596a7`并fetch相等；SFTP `12d726fbddbe033aa203bb1725149c0411905beb`干净同步；事实/计划/文档/实际入口与门禁重读。
