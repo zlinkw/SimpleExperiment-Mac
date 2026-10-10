@@ -19,6 +19,7 @@
 - pending metadata build/runtime/225闭包/vm/UTF8/diff；普通同步后prepare82目标文件、实际VSIX指引/更新消费者、源码快照与公开匿名索引/两包核验。完整附件后发布及索引普通推送，不安装/Actions/删除。
 - 已验证修复提交744563d0841c20cd5b90a84409bcadf4b11b439e、门禁补正f7e477114a526b4f82b3e76d0667e50b4c58e3b4，均普通推送/fetch相等；命令门禁原失败保留。下一边界只据具体反馈适配，缺真机部分不追加推测完善。
 - metadata passed：package/lock/runtime统一.308，build面板2/runtimeManifest1/225闭包/vm.Script/UTF8/diff通过；即将同步受检源码，完整prepare/真实包与公开网络验证待执行。
+- 元数据提交0a06f95818aebca3c5973afe941f46a8f78a28f3已普通同步；runtimeManifest首次命令误写features路径未运行，纠正为test/runtimeManifest.test.js后1/1通过。该验证先后顺序错误以新记录补正，原失败保留；完整打包仍未开始。
 
 ## 前批 mac-005as-command-palette-migration（passed，纠正门禁）
 - 起始Exp744563d0841c20cd5b90a84409bcadf4b11b439e=origin/master、SF2f464eb75e362150de5cbe61e1946504c3497a0a干净；重读事实/计划/Git/消费者与发布门禁。
