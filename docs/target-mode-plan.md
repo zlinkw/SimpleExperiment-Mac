@@ -10,12 +10,19 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ah-archive-read（passed）
+## 当前批次 mac-doc-029（passed）
+- 范围6文件：两仓README、Mac配置说明、prepare/发布门禁回归及计划。按真实Mac操作重整结果说明，收拢历史技术叙述；保留安装/更新/Termius/认证/CLI入口。
+- 起始 Exp `852d7e08c7e91898ce7e0f1eab6fb90318d8a013`/SFTP `2006c5b49bb28c57a124938aff456fcef7d6de98`，两仓master干净，普通推送/fetch相等；事实/当前计划/README/配置/实际入口与发布门禁已重读。
+- passed 两仓build/225与26闭包/面板2、Mac配置1/发布门禁4、脚本语法、UTF8/diff；日志 mac-doc-029-90051e8b-e269-43ad-a2b3-0dd6abeb316e.log。结果说明重整为操作步骤/路径示例/旧归档不足处理，保护入口；跨Plan聚合/完整归档执行/原子写入/M5继续后续。
+- 先更新使用说明：明确解析步骤、原始路径、旧归档身份不足与失败处理，逐seed/跨Plan聚合/归档写入及M5边界；新增实际只读归档8项纳入串行发布门禁。
+
+## 前批 mac-005ah-archive-read（passed）
 - 起始 Exp `86fabf48bcfe00d9dc9e924c90ac812c936ada03`、SFTP `2006c5b49bb28c57a124938aff456fcef7d6de98`，master 与工作区重读，干净。事实/计划/实际归档状态协议、结果行协议及隔离回归已重读。
 - 范围至多6文件：独立只读归档证据模块、Agent接线、结果行受支持的 `plan` 别名、实际生成函数隔离 Node/Python 回归及计划。三个关联问题：归档状态/条目的原始 Plan 与 revision；产物键及受检来源；缓存归档标记不能绕过当前证据。旧归档写入和删除执行器不修改、不运行，原入口/API/三拓扑保留。
 - 跨 Plan 聚合读取顺延下一代码批。完整原子写入及 M5 仍 pending；先同步 README/配置/发布门禁，再配套发布。
 - 新隔离 Python 八场景首轮均通过，Node 7/8 因 fixture 未提供实际拓扑的 Worker 归属而缺少正式表登记；按既有真实请求 ownership 修正 fixture 后 8/8，通过真实编译消费者，生产门禁未降低。
 - passed build/225闭包/面板2/vm.Script/LF，新归档证据8、解析9及既有读取7/输出契约7/结果身份8/回执8；20秒串行/Python10秒无超时。新增旧格式当前摘要重新解析，保留只读旧摘要入口；最终门禁日志 mac-005ah-final-cc923a5d-b5a7-440e-8351-24102dffdfd8.log、回归 mac-005ah-regressions-7994644a-de46-45ba-af27-0a92c68fc523.log。最后补空Plan前置拒绝后build/新8/解析9/闭包再次核验。
+- 代码已提交推送 `852d7e08c7e91898ce7e0f1eab6fb90318d8a013`，fetch等于origin/master；无活动测试进程。
 - 下一批 mac-doc-029：两仓README、Mac配置、prepare/发布门禁及计划，说明旧归档只明确同一原始Plan/revision才进入统计，归档执行/跨Plan聚合/M5仍未验收；随后配套 .299/.93。
 
 ## 前批 mac-release-035（passed，0.5.298/0.2.92）
