@@ -13,13 +13,16 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-045（running，0.5.308/0.2.97）
+## 当前批次 mac-release-045（published，0.5.308/0.2.97）
 - 起始Expf7e477114a526b4f82b3e76d0667e50b4c58e3b4=origin/master、SF2f464eb75e362150de5cbe61e1946504c3497a0a干净；重读事实/计划/Git/元数据/发布门禁。
 - 范围4文件：Exp package/lock/runtime/计划；仅递增.308交付已证实的Termius入口修复与门禁补正，SF保留.97。保护业务API/Plan/已有入口/远端实验，M5延期，剩余15/29。
 - pending metadata build/runtime/225闭包/vm/UTF8/diff；普通同步后prepare82目标文件、实际VSIX指引/更新消费者、源码快照与公开匿名索引/两包核验。完整附件后发布及索引普通推送，不安装/Actions/删除。
 - 已验证修复提交744563d0841c20cd5b90a84409bcadf4b11b439e、门禁补正f7e477114a526b4f82b3e76d0667e50b4c58e3b4，均普通推送/fetch相等；命令门禁原失败保留。下一边界只据具体反馈适配，缺真机部分不追加推测完善。
 - metadata passed：package/lock/runtime统一.308，build面板2/runtimeManifest1/225闭包/vm.Script/UTF8/diff通过；即将同步受检源码，完整prepare/真实包与公开网络验证待执行。
 - 元数据提交0a06f95818aebca3c5973afe941f46a8f78a28f3已普通同步；runtimeManifest首次命令误写features路径未运行，纠正为test/runtimeManifest.test.js后1/1通过。该验证先后顺序错误以新记录补正，原失败保留；完整打包仍未开始。
+- 已交付来源Expab8bda82da5c5fbc3c950c9413ed37e279628d57/SF2f464eb75e362150de5cbe61e1946504c3497a0a：prepare82目标/83含面板标记、两仓build/闭包/主题/vm通过，真实VSIX更新15/按钮3/三拓扑指引1/SF退出7通过，1542/83源码快照逐文件匹配。运行记录在本版release-artifacts，M5未替代。
+- https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.308 已公开，releaseId408701623，2026-10-10T05:52:35Z；清单SHA3672bde27e8af87fe2cbdb1b588ea6813d4710f56e2a3420501bb724131e439a。三附件完整核验后索引提交41e1aa347fa79d95cac7d5e280d7be9549864460普通推送/fetch相等，indexStatus=published。
+- 实际包客户端4次匿名公开请求全部200、REST请求0；索引/清单/两VSIX字节及身份/版本/平台/CRC/大小/SHA通过，缓存/同版/更高版与SF.97跳过通过。报告anonymous-static-verification-retry.json（本版首次运行），无安装/Actions/服务器或删除操作；剩余15/29，等待具体真机反馈后再完善。
 
 ## 前批 mac-005as-command-palette-migration（passed，纠正门禁）
 - 起始Exp744563d0841c20cd5b90a84409bcadf4b11b439e=origin/master、SF2f464eb75e362150de5cbe61e1946504c3497a0a干净；重读事实/计划/Git/消费者与发布门禁。
