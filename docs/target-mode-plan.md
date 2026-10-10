@@ -10,7 +10,12 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ag-agent-parse（passed）
+## 当前批次 mac-doc-028（passed）
+- 范围 6 文件：两仓 README、Mac 配置说明、prepare/发布门禁回归与计划。同步结果区解析/刷新指定 Plan 的真实选择、空选择不扩大范围、原始结果行归属与受检摘要读回，明确 Agent 手动升级/失败处理及逐 seed 表验收边界；新隔离实际 9 项纳入发布串行门禁。
+- 起始 Exp `13cfff57f77b834a8d25bcd92372f894041f1164`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` master 已同步且干净；事实/计划/README/配置/实际面板标签/门禁重读。前批仅局部产生端/受检读取与摘要 key 完成，归档/完整聚合/M5 不宣称通过。
+- passed 两仓 build/225 与26闭包/面板2/vm.Script、Mac配置1/发布门禁4、文档严格UTF8/更新入口/新使用边界与发布脚本语法/diff；下一批配套版本 .298/.92 与完整 prepare/实际VSIX/匿名更新发布。
+
+### 前批 mac-005ag-agent-parse（passed）
 - 范围至多 7 文件：共享 POSIX fixture 的实际目录创建桥接、独立严格结果解析输入模块、Agent 接线、完整 YAML 内部文档返回、隔离实际 Python/编译消费者回归和计划。三个关联问题：parse/refresh/rescan 请求及明确选择/job 原始身份；指定 Plan 真实声明/策略与受检读取/行归属；解析摘要、事件和 Plan 独立输出命名空间不借修复路径。
 - 起始 Exp `8c2c387ae08339a72830650202c1ecaa275a4191`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` master 同步、两仓干净；事实/计划/实际源码/现有回归重读。前批 progress：.297/.91 实际包/匿名公开下载/发布完成，无活跃过程。保护其他动作与原入口/API/三拓扑，不执行整个 Agent/真实科研/SSH/传输/删除/安装。
 - 初轮隔离 Python 8 个场景均退出成功，Node 总体 2/8，原因是回归误写 TS key 导出名；按真实 planDirectoryKey 修正，不改生产身份断言。后续 Node 4/8、7/8 暴露回归错误假定 JSON/空结果可直接登记逐 seed 表，按实际编译表消费者明确拒绝的契约修正断言，生产没有放松。共享 helper 的 makedirs 现在映射真实 fixture 根，避免在虚拟 /fixture 创建目录；早期证据保留，不执行清理。
@@ -39,14 +44,9 @@
 - 起始 Exp `5075d8595586e90932b81fe545c31378482d7b93`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3` 干净且 master=origin/master；事实/计划/候选/实际解析/YAML scheduler 依赖与回归重读。前批 progress：.296/.90 实际包、快照、公开下载发布完成，无活跃进程。PyYAML 为既有科研环境依赖，严格读取不回退损坏或不支持 YAML。
 - passed build/225 包闭包/面板 2/vm.Script/LF、新实际读取产生端→编译消费 7、既有 Agent 7/回执 8/结果身份 8/Agent Plan 5；单文件串行20秒、隔离 Python10秒，无超时。最后一轮输出因上下文截断不可读，核实进程已退出后保留完整门禁日志 mac-005af-final-gates-4f77fbec26984721baa1f8f32cf097e2.log 重新核验通过；无整个 Agent 执行、真实科研/SSH/传输/安装/删除。其他动作、归档、原子发布/完整 revision 新鲜度/M5 不扩入；下一批先同步两仓 README/配置/门禁，再配套发布。
 
-### 前批 mac-release-033（passed，0.5.296/0.2.90）
-- 范围 6 文件：两仓 package/lock、Experiment runtime/计划。mac-tool-003 `4f0f295707f0f142e852184e162e92c81b7a3547` 与 SFTP `0abf9794021d3bd86e8af61478fe8b7e4d0db06c` 已普通推送/fetch 相等，工作区干净；重读事实/计划/来源/版本。失败 .295/.89 未发布、证据保留，改用更高版本和新目录。
-- pending metadata build/闭包/面板/runtime，再完整 prepare/实际包十二份（新增 Agent 产生端 7）/匿名 .294/.88→.296/.90；核验完整三附件草稿后发布。无 Actions/安装/真实科研，M5 延后；原 Plan 结果读取与其他回执/写动作下一批。
-- passed 新 metadata：两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致、UTF8/diff；提交来源后完整 prepare 待执行。
-- passed 完整 prepare：两仓 build/225 与 26 闭包/面板 2/vm.Script、71 目标文件串行/20 秒，72 含面板标记；新增 Agent 7/快照 8、真实浅深高对比通过，无超时。日志 release-artifacts/prepare-0.5.296.log exit0；真实 pinned VSCE 保持 Experiment ignore/SFTP files，全部字节/集合/来源前后校验后打包。
-- passed 实际 VSIX 十二份：Agent 产生端→编译候选/reducer 7、回执 8/解析 8/读取 8/映射 11/摘要 7/YAML 7/候选 6/结果 8/CLI 2/启动 8/结果链 6，所有报告绑定两来源/包 hash；本机/模拟/隔离 AST，无真实科研/SSH/远端启动/停止/删除/安装。额外快照与包对应检查：SFTP 82 源文件/25 原字节包文件，Experiment 1509 源/411 原字节包文件；仅 VSCE package/README 正式转换，CHANGELOG 官方改名但字节一致。附加验证初次误计 SFTP 数量及 CHANGELOG 名称，按真实 CLI 规则核验后通过，无生产或测试门禁放松。
-- passed .294/.88→.296/.90 匿名 updater：35 公开请求，清单/有效 prerelease/大小/hash/CRC/身份/darwin-arm64/VS Code 要求；下载字节等于十二份实际测试包，全部业务模块、两仓 README/包内 Mac 配置及发布说明匹配同步来源，同版本跳过/不降级。包源快照证明与匿名下载互相绑定；未实际安装/M5。
-- 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.296，完整三附件草稿核验后公开，releaseId 408439949；来源 Exp `5d6c21b74c44cda98e7a570caaf0831dc68ea80c`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3` 均已普通推送/fetch 相等。历史 .295 失败证据及所有旧附件保留；无 Actions/自动安装。
+### 已交付 .296/.90（passed，完整失败/验证见 Git）
+- 来源 Exp `5d6c21b74c44cda98e7a570caaf0831dc68ea80c`/SFTP `7cce33b150473f46a804611f67a0ae465838aeb3`，交付 `5075d8595586e90932b81fe545c31378482d7b93` 已普通推送/fetch 相等。
+- 完整 prepare 71 文件/72 含面板标记、build/225与26闭包、十二份实际 VSIX/源快照对应、35公开匿名请求 .294/.88→.296/.90 通过，releaseId408439949，历史失败 .295/.89 未发布且证据保留。附加 verifier 初次误计 SFTP 文件数/CHANGELOG 名称，按真实 pinned CLI 规则修正后通过，无生产门禁放松；M5 pending。
 
 ### 已完成近期批次（详细失败与证据见 Git 和保留的 release-artifacts）
 - mac-tool-002 `ed5f6fa57e8fecc8182fff1eff97dd6b72d0fc7e`：真实 pinned VSCE 源快照/字节/身份/集合验证，解决旧 collectAllFiles 扫描保留附件的 8 秒超时，不扩大预算/不清理。
