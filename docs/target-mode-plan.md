@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-034（passed，0.5.297/0.2.91）
+## 当前批次 mac-005ag-agent-parse（passed）
+- 范围至多 7 文件：共享 POSIX fixture 的实际目录创建桥接、独立严格结果解析输入模块、Agent 接线、完整 YAML 内部文档返回、隔离实际 Python/编译消费者回归和计划。三个关联问题：parse/refresh/rescan 请求及明确选择/job 原始身份；指定 Plan 真实声明/策略与受检读取/行归属；解析摘要、事件和 Plan 独立输出命名空间不借修复路径。
+- 起始 Exp `8c2c387ae08339a72830650202c1ecaa275a4191`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` master 同步、两仓干净；事实/计划/实际源码/现有回归重读。前批 progress：.297/.91 实际包/匿名公开下载/发布完成，无活跃过程。保护其他动作与原入口/API/三拓扑，不执行整个 Agent/真实科研/SSH/传输/删除/安装。
+- 初轮隔离 Python 8 个场景均退出成功，Node 总体 2/8，原因是回归误写 TS key 导出名；按真实 planDirectoryKey 修正，不改生产身份断言。后续 Node 4/8、7/8 暴露回归错误假定 JSON/空结果可直接登记逐 seed 表，按实际编译表消费者明确拒绝的契约修正断言，生产没有放松。共享 helper 的 makedirs 现在映射真实 fixture 根，避免在虚拟 /fixture 创建目录；早期证据保留，不执行清理。
+- passed build/225 闭包/面板 2/vm.Script/LF，新实际解析/三动作真实 handler 分支/摘要读回→编译表消费 9、既有 Agent 读取 7/输出契约 7/结果身份 8/回执 8，单文件串行20秒/隔离 Python10秒无超时；日志 mac-005ag-final-gates-4e58335ef5ca4256b8e0b4a37361115a.log。追加旧摘要同一受检描述符与精确 Plan 兼容读回后 build/225/新 9 再次通过。完整聚合/归档读写、revision 内容与原子写入/M5 后续继续，不以局部快照代表全科研。下一批 README/配置/门禁同步后配套发布。
+
+### 前批 mac-release-034（passed，0.5.297/0.2.91）
 - 范围 6 文件：两仓 package/lock、Experiment runtime/计划。文档批 Exp `0924896882fe97031337c9400c3a4afcf2d4e82e`/SFTP `735f16fa99567ac0d30b79198cc7cf2d601295c4` 已普通推送/fetch 相等，工作区干净；事实/计划/版本及门禁重读。
 - passed metadata 两仓 build/225 与 26 闭包/面板 2/vm.Script、runtimeManifest 1、package/lock/runtime 一致/UTF8/diff；初次误用不存在的 runtimeManifestConsistency 文件，未启动测试，定位真实 test/runtimeManifest.test.js 后通过。来源提交同步后完整 prepare 72 文件串行20秒、实际 VSIX 十三份（新增读取产生端 7）及快照对应验证，完整三附件草稿核验后发布并匿名 .296/.90→.297/.91 下载。不得覆盖旧版本/附件，不触发 Actions/自动安装/真实科研；下一边界限其他 Agent 结果动作，M5 延后。
 
@@ -19,7 +25,7 @@
 - 已发布 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.297；releaseId 408458524，完整三附件草稿大小/hash/集合核验后公开。来源 Exp `406d87a63d9aa2dbfd706189d311de5e5bbe0b3a`/SFTP `35731fa41a8d9f1d8aa8e342b95ad3d7c5feede5` 均已普通推送/fetch 相等；历史资产保留，无 Actions/自动安装。
 - passed 匿名 .296/.90→.297/.91：36 公开请求，prerelease/清单/大小/SHA-256/CRC/身份/darwin-arm64/VS Code 要求，下载字节等于十三份受检 VSIX，新读取模块/生成 Agent/两仓 README/包内 Mac 配置与发布说明匹配同步来源；同版跳过/不降级。M5 更新/科研验收仍 pending，用户延后。
 
-### 下一批 mac-005ag-agent-parse（pending）
+### 已接入本批边界 mac-005ag-agent-parse
 - 限指定 Plan 的 parse_results_action 原始声明/候选/受检读取与报告身份，复用本批只读输入边界；至多 8 文件/3 相关问题，真实生成函数隔离与实际编译消费验证，保留原入口/API/Plan 格式/三拓扑。其他运行/写操作、删除/归档、原子写入、完整 revision 内容/M5 不扩入；README/配置优先同步，再通过同一配套通道发布。
 
 ### 前批 mac-doc-027（passed）

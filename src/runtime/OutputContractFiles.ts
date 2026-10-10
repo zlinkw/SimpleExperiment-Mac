@@ -229,7 +229,7 @@ def output_contract_plan(root, plan, limit=240):
         active.remove(id(value))
     visit(document)
     output_contract_verify_snapshot(root, plan, snapshot)
-    return {"plan": plan, "suite": suite, "candidates": sorted(out), "snapshot": snapshot}
+    return {"plan": plan, "suite": suite, "candidates": sorted(out), "snapshot": snapshot, "document": document}
 
 def output_contract_discover_candidates(root, contract, limit=120):
     directories, out = [], []

@@ -82,6 +82,7 @@ def bind_posix_runtime(agent, base):
                 yield virtual(current), dirs, files
 
         agent.os = Proxy(path=paths, sep="/", listdir=lambda value: os.listdir(native(value)),
+                         makedirs=lambda value, *args, **kwargs: os.makedirs(native(value), *args, **kwargs),
                          stat=path_info, lstat=lambda value: path_info(value, False), fstat=descriptor_info, walk=walk,
                          open=lambda value, flags, *args, **kwargs: os.open(native(value), flags | os.O_BINARY, *args, **kwargs))
         agent.open = lambda value, *args, **kwargs: open(native(value), *args, **kwargs)

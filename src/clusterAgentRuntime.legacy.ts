@@ -1,6 +1,7 @@
 import { RESULT_LAYOUT_PYTHON } from "./results/ResultLayout";
 import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
 import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
+import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -11,6 +12,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 ${RESULT_LAYOUT_PYTHON}
 ${PLAN_EXISTING_ARTIFACTS_PYTHON}
 ${OUTPUT_CONTRACT_FILES_PYTHON}
+${RESULT_PARSE_INPUTS_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -7216,7 +7218,7 @@ def record_identity(source_rel, row, index=0):
         run_key = experiment_id
     return experiment_id, run_key
 
-def make_result_record(source_rel, row, metrics, index=0):
+def make_result_record(source_rel, row, metrics, index=0, strict_identity=False):
     experiment_id, run_key = record_identity(source_rel, row, index)
     now = now_iso()
     suite = str(row_dimension_value(row, "suite") or row.get("study") or (source_rel.split("/")[1] if "/" in source_rel else "default"))
@@ -7227,6 +7229,7 @@ def make_result_record(source_rel, row, metrics, index=0):
             dimensions[key] = coerce_metric_value(value) if key in ("fold", "seed") else str(value)
     method = str(dimensions.get("method") or "")
     result_id = sha256_text(source_rel + ":" + experiment_id + ":" + run_key + ":" + str(index) + ":" + method)[:16]
+    row_plan = result_parse_row_identity(row) if strict_identity else normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")
     return {
         "schemaVersion": 1,
         "resultId": result_id,
@@ -7244,9 +7247,9 @@ def make_result_record(source_rel, row, metrics, index=0):
         "parsedAt": now,
         "createdAt": now,
         "updatedAt": now,
-        "provenance": {"artifactKey": source_rel, **({"planFile": normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")} if normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "") else {})},
+        "provenance": {"artifactKey": source_rel, **({"planFile": row_plan} if row_plan else {})},
         **({"method": method} if method else {}),
-        **({"planFile": normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")} if normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "") else {}),
+        **({"planFile": row_plan} if row_plan else {}),
     }
 
 def metric_value(value, metric, source_col, source_rel):
@@ -7266,6 +7269,8 @@ def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
     policy = policy or read_project_metric_policy(root)
     text = source_text if source_text is not None else open(safe_project_path(root, source_rel), "r", encoding="utf-8-sig", errors="replace").read()
     rows = read_csv_dicts(text)
+    if policy.get("_strictResultIdentity"):
+        rows = [row for row in rows if result_parse_row_matches(row, policy["_strictResultPlan"], policy.get("_strictResultSuite", ""), anonymous=not policy.get("_strictResultRequireOwner"))]
     if not rows:
         return []
     headers = list(rows[0].keys())
@@ -7301,7 +7306,7 @@ def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
             item["metrics"][metric] = metric_value(value, metric, value_col, source_rel)
         for item in grouped.values():
             if item["metrics"]:
-                records.append(make_result_record(source_rel, item["row"], item["metrics"], item["index"]))
+                records.append(make_result_record(source_rel, item["row"], item["metrics"], item["index"], strict_identity=bool(policy.get("_strictResultIdentity"))))
         return records
     metric_headers = []
     mapped_dimension_headers = {column for column in dimension_columns.values() if column}
@@ -7321,7 +7326,7 @@ def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
                 continue
             metrics[metric] = metric_value(row.get(h), metric, h, source_rel)
         if metrics:
-            records.append(make_result_record(source_rel, row, metrics, i))
+            records.append(make_result_record(source_rel, row, metrics, i, strict_identity=bool(policy.get("_strictResultIdentity"))))
     return records
 
 def flatten_json(prefix, value, out):
@@ -7479,6 +7484,8 @@ def parse_json_result_file(root, source_rel, policy=None, source_text=None):
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
             continue
+        if policy.get("_strictResultIdentity") and not result_parse_row_matches(row, policy["_strictResultPlan"], policy.get("_strictResultSuite", ""), anonymous=not policy.get("_strictResultRequireOwner")):
+            continue
         normalized_row = normalize_json_result_row(row)
         entries, _explicit_container = json_metric_entries(normalized_row)
         metrics = {}
@@ -7498,7 +7505,7 @@ def parse_json_result_file(root, source_rel, policy=None, source_text=None):
                 metric_item["split"] = split
             metrics[storage_key] = metric_item
         if metrics:
-            records.append(make_result_record(source_rel, normalized_row, metrics, i))
+            records.append(make_result_record(source_rel, normalized_row, metrics, i, strict_identity=bool(policy.get("_strictResultIdentity"))))
     return records
 
 def parse_text_result_file(root, source_rel, policy=None, source_text=None):
@@ -7572,27 +7579,29 @@ def parse_result_file(root, source_rel, policy=None, strict_paths=False, snapsho
         output_contract_verify_snapshot(root, source_rel, snapshot)
     return records
 
-def plan_summary_slug(plan):
+def plan_summary_slug(plan, strict_plan=False):
+    if strict_plan:
+        return result_plan_directory_key(plan) if plan else ""
     text = normalize_result_candidate(plan) if plan else ""
     if not text:
         return ""
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", text.replace("\\", "/")).strip("._-")
     return (slug or "plan")[:120]
 
-def plan_results_summary_relpath(plan):
-    slug = plan_summary_slug(plan)
+def plan_results_summary_relpath(plan, strict_plan=False):
+    slug = plan_summary_slug(plan, strict_plan=strict_plan)
     if not slug:
         return "simple_cluster/results/summary.json"
     return f"simple_cluster/results/by_plan/{slug}/summary.json"
 
-def plan_results_registry_relpath(plan):
-    slug = plan_summary_slug(plan)
+def plan_results_registry_relpath(plan, strict_plan=False):
+    slug = plan_summary_slug(plan, strict_plan=strict_plan)
     if not slug:
         return "simple_cluster/results/result_registry.json"
     return f"simple_cluster/results/by_plan/{slug}/result_registry.json"
 
-def plan_results_artifact_relpath(plan, filename):
-    slug = plan_summary_slug(plan)
+def plan_results_artifact_relpath(plan, filename, strict_plan=False):
+    slug = plan_summary_slug(plan, strict_plan=strict_plan)
     name = str(filename or "").strip().lstrip("/")
     if not name:
         raise ValueError("artifact filename required")
@@ -7648,7 +7657,15 @@ def result_seed_key(value):
 
 def result_column_mapping_preview(root, source, policy):
     try:
-        with open(safe_project_path(root, source), "r", encoding="utf-8-sig", newline="") as stream:
+        if policy.get("_strictResultIdentity"):
+            snapshot = next((snapshot for relative, snapshot in policy["_strictResultSnapshots"] if relative == source), None)
+            if snapshot is None:
+                raise ValueError("结果列映射缺少受检来源")
+            output_contract_verify_snapshot(root, source, snapshot)
+            stream = io.StringIO(snapshot["text"])
+        else:
+            stream = open(safe_project_path(root, source), "r", encoding="utf-8-sig", newline="")
+        with stream:
             reader = csv.DictReader(stream)
             headers = reader.fieldnames or []
             samples = [row for _, row in zip(range(20), reader)]
@@ -7795,7 +7812,7 @@ def result_markdown_table(headers, rows, title, notes=None):
     return "\n".join(lines) + "\n"
 
 def write_plan_final_summary(root, summary, policy, group_keys, groups, metric_names, expected_seeds, dataset, outputs):
-    plan = normalize_result_candidate(summary.get("planFile") or "")
+    plan = result_summary_plan(summary)
     derived = policy.get("derivedMetric") if isinstance(policy.get("derivedMetric"), dict) else {}
     derived_metric = metric_name(derived.get("metric"), policy.get("metricAliases") or {}) if derived else ""
     left, right = str(derived.get("leftEndpoint") or "").strip(), str(derived.get("rightEndpoint") or "").strip()
@@ -7923,7 +7940,7 @@ def publish_dataset_outputs(root, outputs):
         write_atomic_text(target, content)
 
 def write_plan_seed_aggregate(root, summary, policy):
-    plan = normalize_result_candidate(summary.get("planFile") or "")
+    plan = result_summary_plan(summary)
     if not plan:
         return
     records = [row for row in (summary.get("results") or []) if isinstance(row, dict)]
@@ -7962,18 +7979,26 @@ def write_plan_seed_aggregate(root, summary, policy):
     atomic_write(safe_project_path(root, index_rel), {"planFile": plan, "aggregateStatus": "ready", "datasetResultTables": tables})
 
 def _write_dataset_seed_aggregate(root, summary, policy, dataset, outputs):
-    plan = normalize_result_candidate(summary.get("planFile") or "")
+    plan = result_summary_plan(summary)
     if not plan:
         return
-    expected_seeds, expected_cases = plan_result_identity(root, plan)
+    if policy.get("_strictResultIdentity"):
+        document = policy["_strictPlanContract"]["document"]
+        seeds, cases = document.get("seeds", []), document.get("cases", [])
+        expected_seeds = [str(value) for value in seeds] if isinstance(seeds, list) else []
+        expected_cases = [str(value["case"]) for value in cases if isinstance(value, dict) and "case" in value] if isinstance(cases, list) else []
+    else:
+        expected_seeds, expected_cases = plan_result_identity(root, plan)
     expected_seeds = list(dict.fromkeys(result_seed_key(item) for item in expected_seeds))
-    declared = [item for item in plan_declared_result_candidates(root, plan) if str(item).lower().endswith(".csv")]
+    declared = output_contract_expand(root, policy["_strictPlanContract"]["candidates"]) if policy.get("_strictResultIdentity") else plan_declared_result_candidates(root, plan)
+    declared = [item for item in declared if (item.rstrip() if policy.get("_strictResultIdentity") else str(item)).lower().endswith(".csv")]
     records = [record for record in (summary.get("results") or []) if isinstance(record, dict)]
     source_records = {}
     for record in records:
         source_files = record.get("sourceFiles") or []
-        source = normalize_result_candidate((source_files[0] or {}).get("path") if source_files and isinstance(source_files[0], dict) else "")
-        if source and source.lower().endswith(".csv"):
+        raw_source = (source_files[0] or {}).get("path") if source_files and isinstance(source_files[0], dict) else ""
+        source = output_contract_candidate(raw_source) if policy.get("_strictResultIdentity") else normalize_result_candidate(raw_source)
+        if source and (source.rstrip() if policy.get("_strictResultIdentity") else source).lower().endswith(".csv"):
             source_records.setdefault(source, []).append(record)
     candidates = [source for source in declared if source in source_records]
     if not candidates:
@@ -8183,10 +8208,10 @@ def result_csv_rows(records):
             ])
     return rows
 
-def write_result_csv_views(root, summary, plan):
-    plan_norm = normalize_result_candidate(plan) if plan else ""
-    preview_rel = plan_results_artifact_relpath(plan_norm, "results_preview_all.csv")
-    effective_rel = plan_results_artifact_relpath(plan_norm, "results_effective_archived.csv")
+def write_result_csv_views(root, summary, plan, strict_plan=False):
+    plan_norm = durable_plan_path(plan, "结果视图 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
+    preview_rel = plan_results_artifact_relpath(plan_norm, "results_preview_all.csv", strict_plan=strict_plan)
+    effective_rel = plan_results_artifact_relpath(plan_norm, "results_effective_archived.csv", strict_plan=strict_plan)
     records = [record for record in (summary.get("results") or []) if isinstance(record, dict)]
     effective = [record for record in records if str(record.get("finalEvidenceState") or "").lower() == "archived"]
     header = ["result_id", "experiment_id", "run_key", "method", "dataset", "split", "seed", "metric", "value", "source_file", "artifact_path", "final_evidence_state", "eligible_for_final_analysis"]
@@ -8201,13 +8226,14 @@ def write_result_csv_views(root, summary, plan):
     summary["previewResultCount"] = len(records)
 
 def write_results_summary_v2(root, summary):
-    plan = normalize_result_candidate((summary or {}).get("planFile") or "")
-    summary_rel = plan_results_summary_relpath(plan) if plan else "simple_cluster/results/summary.json"
+    plan = result_summary_plan(summary or {})
+    strict_plan = summary.get("resultPathIdentity") == "posix-v1"
+    summary_rel = plan_results_summary_relpath(plan, strict_plan=strict_plan) if plan else "simple_cluster/results/summary.json"
     if isinstance(summary, dict):
         summary["summaryPath"] = summary_rel
         if plan and not summary.get("planFile"):
             summary["planFile"] = plan
-        write_result_csv_views(root, summary, plan)
+        write_result_csv_views(root, summary, plan, strict_plan=strict_plan)
         if plan:
             seeds = write_project_seed_aggregate(root, summary)
             finals = write_project_final_summary(root, summary)
@@ -8228,7 +8254,7 @@ def write_results_summary_v2(root, summary):
     # Keep a project-latest copy for unscoped consumers / offline diagnostics.
     atomic_write(safe_project_path(root, "simple_cluster/results/summary.json"), summary)
     atomic_write(safe_project_path(root, "simple_cluster/results_summary.json"), summary)
-    registry = safe_project_path(root, plan_results_registry_relpath(plan) if plan else "simple_cluster/results/result_registry.json")
+    registry = safe_project_path(root, plan_results_registry_relpath(plan, strict_plan=strict_plan) if plan else "simple_cluster/results/result_registry.json")
     os.makedirs(os.path.dirname(registry), exist_ok=True)
     final_records = final_analysis_results(root, summary)
     atomic_write(registry, {"schemaVersion": 1, "records": final_records, "pendingReviewRecords": [record for record in (summary.get("results") or []) if isinstance(record, dict) and not record.get("eligibleForFinalAnalysis")], "inclusionPolicy": summary.get("inclusionPolicy") or "archived_or_manual_verified", "updatedAt": summary.get("generatedAt"), "planFile": plan or ""})
@@ -8450,8 +8476,8 @@ def claim_known_key_matches(text, catalog):
 def evaluate_claim_evidence(root, summary=None):
     claims_path = os.path.join(root, "paper", "claims.md")
     catalog = discover_claim_evidence_catalog(root, summary or {})
-    plan_norm = normalize_result_candidate((summary or {}).get("planFile") or "")
-    rel_target = plan_results_artifact_relpath(plan_norm, "claim_evidence.json")
+    plan_norm = result_summary_plan(summary or {})
+    rel_target = plan_results_artifact_relpath(plan_norm, "claim_evidence.json", strict_plan=summary.get("resultPathIdentity") == "posix-v1")
     target = safe_project_path(root, rel_target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     if not os.path.isfile(claims_path):
@@ -9151,7 +9177,7 @@ def plan_output_capture_evidence(root, plan):
         "message": "" if ok else ("runner.outputs 声明包含越界或不安全路径，已阻止运行。" if invalid_outputs else "未识别到可用的结果捕获规则，已阻止运行实验。请在 Plan 中声明 runner.outputs，或为需要指标的任务配置 paper.result_csv、执行命令的结果参数、expectedResults 或 stdout/stderr 捕获。"),
     }
 
-def read_project_metric_policy(root):
+def read_project_metric_policy(root, strict_paths=False, snapshots=None):
     policy = {
         "taskType": "classification",
         "primaryMetric": "AUC",
@@ -9171,9 +9197,19 @@ def read_project_metric_policy(root):
         "explicitResultCandidates": [],
     }
     config = os.path.join(root, "experiments", "simple_project.yaml")
-    if os.path.isfile(config):
+    config_snapshot = None
+    contract = None
+    if strict_paths:
         try:
-            text = open(config, "r", encoding="utf-8", errors="replace").read()
+            contract = output_contract_plan(root, "experiments/simple_project.yaml")
+            config_snapshot = contract["snapshot"]
+            if isinstance(snapshots, list):
+                snapshots.append(("experiments/simple_project.yaml", config_snapshot))
+        except FileNotFoundError:
+            pass
+    if config_snapshot or not strict_paths and os.path.isfile(config):
+        try:
+            text = config_snapshot["text"] if config_snapshot else open(config, "r", encoding="utf-8", errors="replace").read()
             outputs = yaml_section_text(text, "outputs")
             policy["taskType"] = yaml_scalar(text, "taskType", policy["taskType"]) or policy["taskType"]
             policy["primaryMetric"] = metric_name(yaml_scalar(text, "primaryMetric", policy["primaryMetric"]) or policy["primaryMetric"])
@@ -9205,17 +9241,57 @@ def read_project_metric_policy(root):
             for key, value in list(policy["metricAliases"].items()):
                 policy["metricAliases"][str(key).lower()] = value
         except Exception:
+            if strict_paths:
+                raise
             pass
-    plugin_policy = read_json(path_for(root, "result_policy.json"), {})
+    if strict_paths:
+        path_keys = ("summaryCsv", "caseCsv", "candidateCsv", "candidateJson", "consoleLogs", "textLogs")
+        document = contract["document"] if contract else {}
+        outputs = document.get("outputs", {})
+        if not isinstance(outputs, dict):
+            raise ValueError("项目 outputs 必须是对象")
+        for key in path_keys:
+            value = outputs[key] if key in outputs else document.get(key, policy[key])
+            if key in ("summaryCsv", "caseCsv"):
+                if not isinstance(value, str):
+                    raise ValueError("项目结果路径必须是字符串")
+            elif not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+                raise ValueError("项目结果候选必须是字符串列表")
+            policy[key] = value
+        policy["explicitResultCandidates"] = list(dict.fromkeys([policy["summaryCsv"], policy["caseCsv"], *policy["candidateCsv"], *policy["candidateJson"], *policy["consoleLogs"], *policy["textLogs"]]))
+        try:
+            relative = "result_policy.json"
+            state_root = agent_dir(root)
+            snapshot = output_contract_read_snapshot(state_root, relative)
+            snapshot["root"] = state_root
+            if isinstance(snapshots, list):
+                snapshots.append((relative, snapshot))
+            plugin_policy = json.loads(snapshot["text"])
+            if not isinstance(plugin_policy, dict):
+                raise ValueError("插件结果策略必须是对象")
+        except FileNotFoundError:
+            plugin_policy = {}
+    else:
+        plugin_policy = read_json(path_for(root, "result_policy.json"), {})
     if isinstance(plugin_policy, dict):
+        if strict_paths:
+            for key in ("summaryCsv", "caseCsv", "candidateCsv", "candidateJson", "consoleLogs", "textLogs"):
+                if key not in plugin_policy:
+                    continue
+                value = plugin_policy[key]
+                if key in ("summaryCsv", "caseCsv"):
+                    if not isinstance(value, str):
+                        raise ValueError("插件结果路径必须是字符串")
+                elif not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+                    raise ValueError("插件结果候选必须是字符串列表")
         for key in ("taskType", "primaryMetric", "metricRegex", "summaryCsv", "caseCsv"):
             value = plugin_policy.get(key)
             if isinstance(value, str) and value.strip():
-                policy[key] = value.strip()
+                policy[key] = value if strict_paths and key in ("summaryCsv", "caseCsv") else value.strip()
         for key in ("secondaryMetrics", "classificationMetrics", "segmentationMetrics", "candidateCsv", "candidateJson", "consoleLogs", "textLogs"):
             values = plugin_policy.get(key)
             if isinstance(values, list):
-                policy[key] = [value.strip() for value in values if isinstance(value, str) and value.strip()][:100]
+                policy[key] = [value if strict_paths and key in ("candidateCsv", "candidateJson", "consoleLogs", "textLogs") else value.strip() for value in values if isinstance(value, str) and value.strip()][:100]
         mapping = plugin_policy.get("csvColumnMapping")
         if isinstance(mapping, dict):
             policy["csvColumnMapping"] = {key: value.strip() for key, value in mapping.items() if key in ("case", "seed", "split", "dataset", "method", "eval_protocol", "rate_percent", "train_rate", "metric", "value") and isinstance(value, str) and value.strip()}
@@ -9225,7 +9301,8 @@ def read_project_metric_policy(root):
         aliases = plugin_policy.get("metricAliases")
         if isinstance(aliases, dict):
             policy["metricAliases"] = {str(key): metric_name(value) for key, value in aliases.items() if isinstance(value, str) and value.strip()}
-        policy["explicitResultCandidates"] = unique_values([*(policy.get("explicitResultCandidates") or []), *(policy.get("candidateCsv") or []), *(policy.get("candidateJson") or []), *(policy.get("consoleLogs") or []), *(policy.get("textLogs") or [])])
+        all_candidates = [*(policy.get("explicitResultCandidates") or []), *(policy.get("candidateCsv") or []), *(policy.get("candidateJson") or []), *(policy.get("consoleLogs") or []), *(policy.get("textLogs") or [])]
+        policy["explicitResultCandidates"] = list(dict.fromkeys(all_candidates)) if strict_paths else unique_values(all_candidates)
     policy["primaryMetric"] = metric_name(policy.get("primaryMetric") or "AUC")
     policy["secondaryMetrics"] = unique_metric_names(policy.get("secondaryMetrics") or [])
     policy["classificationMetrics"] = unique_metric_names([policy["primaryMetric"], *(policy.get("secondaryMetrics") or []), *(policy.get("classificationMetrics") or [])])
@@ -9269,10 +9346,16 @@ def apply_result_ownership(summary, ownership=None):
     return summary
 
 def parse_results_action(root, selected=None, plan=None, plan_revision="", ownership=None):
-    policy = read_project_metric_policy(root)
-    selected_files = selected_result_candidates(root, selected)
+    strict_plan = plan is not None and plan != ""
+    identity = output_contract_request_identity({"planFile": plan, "planRevision": plan_revision}) if strict_plan else {}
+    plan_norm = identity.get("planFile", "")
+    snapshots = []
+    policy = read_project_metric_policy(root, strict_paths=True, snapshots=snapshots) if strict_plan else read_project_metric_policy(root)
+    selected_files = [] if strict_plan else selected_result_candidates(root, selected)
     policy_only_files = set()
-    if selected_files:
+    if strict_plan:
+        files, policy_only_files, plan_suite = result_parse_inputs(root, plan_norm, selected, policy, snapshots)
+    elif selected_files:
         files = selected_files
     elif plan:
         plan_files = sorted(dict.fromkeys([
@@ -9287,14 +9370,17 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         files = sorted(dict.fromkeys([*expand_result_candidates(root, policy_result_candidates(policy)), *expand_result_candidates(root, plan_declared_result_candidates(root, plan)), *expand_result_candidates(root, job_result_candidates(root)), *discover_result_files(root)]))
     files = [item for item in files if structured_result_candidate(item)]
     records, failures, used_files = [], [], []
-    plan_norm = normalize_result_candidate(plan) if plan else ""
-    plan_suite = plan_suite_value(root, plan_norm) if plan_norm else ""
+    if not strict_plan:
+        plan_norm = normalize_result_candidate(plan) if plan else ""
+        plan_suite = plan_suite_value(root, plan_norm) if plan_norm else ""
     for source_rel in files:
         try:
-            parsed = parse_result_file(root, source_rel, policy)
-            if source_rel in policy_only_files and plan_norm:
+            if strict_plan:
+                policy["_strictResultRequireOwner"] = source_rel in policy_only_files
+            parsed = parse_result_file(root, source_rel, policy, strict_paths=True, snapshots=snapshots) if strict_plan else parse_result_file(root, source_rel, policy)
+            if source_rel in policy_only_files and plan_norm and not strict_plan:
                 parsed = [record for record in parsed if result_record_matches_plan(record, plan_norm, plan_suite)]
-            if parsed or source_rel not in policy_only_files:
+            if parsed or not strict_plan and source_rel not in policy_only_files:
                 used_files.append(source_rel)
             if plan_norm:
                 for record in parsed:
@@ -9329,15 +9415,18 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         "failures": failures,
         "qualityWarnings": 0,
         "planFile": plan_norm or "",
-        "planRevision": str(plan_revision or "").strip(),
+        "planRevision": identity.get("planRevision", "") if strict_plan else str(plan_revision or "").strip(),
+        **({"resultPathIdentity": "posix-v1"} if strict_plan else {}),
     }
+    for relative, snapshot in snapshots:
+        output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     apply_result_ownership(summary, ownership)
     apply_final_evidence_summary(root, summary)
     write_plan_seed_aggregate(root, summary, policy)
     claim_report = evaluate_claim_evidence(root, summary)
     apply_claim_evidence_summary(summary, claim_report)
     target = write_results_summary_v2(root, summary)
-    append_event(root, {"type": "result_parsed", "payload": {"resultCount": len(records), "parseFailed": len(failures), "summaryPath": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or ""}})
+    append_event(root, {"type": "result_parsed", "payload": {"resultCount": len(records), "parseFailed": len(failures), "summaryPath": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or "", **({"planRevision": summary["planRevision"]} if strict_plan and summary["planRevision"] else {})}})
     return summary
 
 
@@ -11769,7 +11858,7 @@ def action_event_fields(extra=None, request=None):
     return fields
 
 def action_receipt_fields(action, request=None):
-    identity = output_contract_request_identity({} if request is None else request) if action == "check-output-contract" else {}
+    identity = result_parse_request({} if request is None else request)[0] if action in RESULT_PARSE_ACTIONS else output_contract_request_identity({} if request is None else request) if action == "check-output-contract" else {}
     return {**action_operation_fields(request), **identity}
 
 def terminal_action(root, action, operation_id, op_id, status, message, extra=None, request=None):
@@ -12913,10 +13002,11 @@ def handle_action(root, action, payload, operation_id, op_id):
         except Exception as exc:
             return terminal_action(root, action, operation_id, op_id, "failed", str(exc), request=payload)
     if action in ("refresh-results", "rescan-results", "parse-results"):
-        selected = action_values(payload, "selectedRunKeys", "selectedArchiveKeys", "selectedExperimentIds", "runKey", "archiveKey", "experimentId", "remotePath", "path") + action_task_target_values(payload)
-        operation_fields = action_operation_fields(payload)
-        summary = parse_results_action(root, selected, action_plan_file(payload), operation_fields.get("planRevision") or "", operation_fields)
-        return terminal_action(root, action, operation_id, op_id, "completed", f"解析完成：{summary.get('resultCount', 0)} 条结果，最终纳入 {summary.get('finalResultCount', 0)} 条，待审核 {summary.get('pendingReviewCount', 0)} 条，失败 {summary.get('parseFailed', 0)} 个文件", {"summaryPath": summary.get("summaryPath") or plan_results_summary_relpath(action_plan_file(payload) or summary.get("planFile") or ""), "resultCount": summary.get("resultCount", 0), "finalResultCount": summary.get("finalResultCount", 0), "pendingReviewCount": summary.get("pendingReviewCount", 0), "inclusionPolicy": summary.get("inclusionPolicy"), "parseFailed": summary.get("parseFailed", 0), "planFile": action_plan_file(payload) or summary.get("planFile") or ""}, request=payload)
+        identity, selections = result_parse_request(payload)
+        selected = selections if identity.get("planFile") else action_values(payload, "selectedRunKeys", "selectedArchiveKeys", "selectedExperimentIds", "runKey", "archiveKey", "experimentId", "remotePath", "path") + action_task_target_values(payload)
+        operation_fields = {**action_operation_fields(payload), **identity}
+        summary = parse_results_action(root, selected, identity.get("planFile") or None, identity.get("planRevision") or "", operation_fields)
+        return terminal_action(root, action, operation_id, op_id, "completed", f"解析完成：{summary.get('resultCount', 0)} 条结果，最终纳入 {summary.get('finalResultCount', 0)} 条，待审核 {summary.get('pendingReviewCount', 0)} 条，失败 {summary.get('parseFailed', 0)} 个文件", {"summaryPath": summary.get("summaryPath") or plan_results_summary_relpath(identity.get("planFile") or summary.get("planFile") or "", strict_plan=bool(identity.get("planFile"))), "resultCount": summary.get("resultCount", 0), "finalResultCount": summary.get("finalResultCount", 0), "pendingReviewCount": summary.get("pendingReviewCount", 0), "inclusionPolicy": summary.get("inclusionPolicy"), "parseFailed": summary.get("parseFailed", 0), "planFile": identity.get("planFile") or summary.get("planFile") or ""}, request=payload)
     if action == "validate-plan":
         plan = action_plan_file(payload)
         default_result_csv_dir = str(action_options(payload).get("defaultResultCsvDir") or action_options(payload).get("default_result_csv_dir") or "experiments/results")
@@ -13881,16 +13971,36 @@ def read_audit_tail(root, lines=100):
     return ""
 
 def read_results_summary(root, plan=None, cached=False):
+    if plan is not None and plan != "":
+        raw_plan = durable_plan_path(plan, "结果摘要 Plan")
+        relative = plan_results_summary_relpath(raw_plan, strict_plan=True)
+        try:
+            snapshot = output_contract_read_snapshot(root, relative)
+        except FileNotFoundError:
+            snapshot = None
+        if snapshot is not None:
+            data = json.loads(snapshot["text"])
+            if not isinstance(data, dict) or data.get("resultPathIdentity") != "posix-v1" or result_parse_row_identity(data) != raw_plan:
+                raise ValueError("结果摘要来源与原始 Plan 不一致")
+            output_contract_verify_snapshot(root, relative, snapshot)
+            return data
     read_summary = read_runtime_json_cached if cached else read_json
     plan_norm = normalize_result_candidate(plan) if plan else ""
-    if plan_norm:
-        plan_path = os.path.join(root, *plan_results_summary_relpath(plan_norm).split("/"))
-        data = read_summary(plan_path, None)
+    if plan is not None and plan != "":
+        legacy_relative = plan_results_summary_relpath(plan_norm)
+        try:
+            snapshot = output_contract_read_snapshot(root, legacy_relative)
+            data = json.loads(snapshot["text"])
+            output_contract_verify_snapshot(root, legacy_relative, snapshot)
+        except FileNotFoundError:
+            data = None
         if isinstance(data, dict):
-            if not data.get("planFile"):
-                data = {**data, "planFile": plan_norm}
-            return data
-        return {"schemaVersion": SCHEMA_VERSION, "results": [], "planFile": plan_norm}
+            try:
+                if result_parse_row_identity(data) == raw_plan:
+                    return data
+            except (ValueError, UnicodeError):
+                pass
+        return {"schemaVersion": SCHEMA_VERSION, "results": [], "planFile": raw_plan}
     candidates = [
         os.path.join(root, "simple_cluster", "results_summary.json"),
         os.path.join(root, "simple_cluster", "results", "summary.json"),
@@ -13905,9 +14015,11 @@ def read_results_summary(root, plan=None, cached=False):
 
 def read_current_results_summary(root, plan=None, plan_revision=""):
     summary = read_results_summary(root, plan)
-    revision = str(plan_revision or "").strip()
-    summary_revision = str(summary.get("planRevision") or summary.get("plan_revision") or "").strip() if isinstance(summary, dict) else ""
-    plan_matches = not plan or normalize_result_candidate(summary.get("planFile") or "") == normalize_result_candidate(plan)
+    strict_plan = plan is not None and plan != ""
+    identity = output_contract_request_identity({"planFile": plan, "planRevision": plan_revision}) if strict_plan else {}
+    revision = identity.get("planRevision", "") if strict_plan else str(plan_revision or "").strip()
+    summary_revision = output_contract_request_identity(summary).get("planRevision", "") if strict_plan else str(summary.get("planRevision") or summary.get("plan_revision") or "").strip() if isinstance(summary, dict) else ""
+    plan_matches = not strict_plan or result_parse_row_identity(summary) == identity["planFile"]
     revision_matches = not revision or summary_revision == revision
     if not summary.get("results") or not plan_matches or not revision_matches:
         return parse_results_action(root, None, plan, revision)
