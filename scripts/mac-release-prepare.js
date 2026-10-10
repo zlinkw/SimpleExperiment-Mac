@@ -21,6 +21,7 @@ function main() {
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macArchiveEvidenceRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macProjectAggregateRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macClaimEvidenceRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/macPlanAnalysisRead.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/scripts/macPackageProjection.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/core/workspacePathMapper.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   for (const file of ["macBootstrap", "macCliLauncher", "macCliApi", "publicBranding", "api", "workspacePathMapper", "workspaceIntegration", "macLeasePaths", "macAuthentication", "macRelay", "macPosixPaths", "macRelativePaths", "macDownloadScope", "apiUploadProgress"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", `test/${file}.test.js`], SFTP_ROOT, { inherit: true, timeout: 20000 });
@@ -48,10 +49,10 @@ function main() {
   const notes = `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-README/配置按 Mac 操作说明论文证据检查与原始路径引用。严格 Plan 支持 experiments/runs 的实际结果来源；claims.md 使用受检 UTF8 描述符，Markdown URI 解码一次，反引号保留原名，ID 精确匹配。只从当前 Plan/revision 归档与实际重解析来源关联证据，不借缓存 ID、相似文件名或其他 Plan。读取期间声明/来源/归档变更会拒绝报告发布；缺证据保持 unsupported / needs experiment，supported 仅为证据关联，不代表科学结论已验证。旧默认入口保留，归档/删除执行器未改动。
+README/配置按 Mac 操作说明运行质量门禁、统计和论文表导出，保留首次安装及三个更新入口。指定 Plan 的分析保留原始身份与 revision，实际重解析当前归档来源，使用受检当前配置；不借缓存指标或其他 Plan。来源 ID/行集合不一致先重新解析；读取期间来源/声明/配置/归档变化会拒绝本次分析。论文导出先验证统计/表格/声明输入，再发布本次产物。旧默认入口与统计实现保留，supported 仍仅为证据关联。
 
 本地验证
-两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。新增实际生成 Agent claim/解析→编译摘要消费者 8 项，保留项目聚合 8、归档 8、解析 9、输出契约 7、读取 7及真实 pinned VSCE/快照验证。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。只用本机文件/隔离 AST/POSIX 与捕获发布，没有运行真实科研、SSH、远端启动/停止/删除。
+两仓 build、包依赖闭包、面板语法及目标测试逐文件串行通过。新增实际生成 Agent 质量/统计/论文表→编译摘要消费者 8 项，保留 claim 8、项目聚合 8、归档 8、解析 9、输出契约 7、读取 7及真实 pinned VSCE/快照验证。浅色/深色/高对比 headless 与文字对比通过；VSIX 身份、版本、darwin-arm64、CRC、大小和 SHA-256 核验。只用本机文件/隔离 AST/POSIX 与捕获发布，没有运行真实科研、SSH、远端启动/停止/删除。
 
 M5 真机验证
 尚未执行，用户已延后。更新/设置保留/重载/补装、Termius、独立认证传输、中文路径/断连及三拓扑主流程仍需真机验证。完整 claim/聚合报告发布、归档执行、其他运行/写回执、revision 内容证明和物理原子发布继续适配；本机受检证据不能代替完整科研验收。

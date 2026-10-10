@@ -10,7 +10,13 @@
 - 每批至多 3 个相关问题、8 个源/文档/测试文件；测试单文件串行/20 秒，Python AST 隔离/10 秒；build/包闭包/面板语法门禁。
 - README/配置说明按 Mac 用法持续同步，优先于配色。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-005ak-analysis-read（passed）
+## 当前批次 mac-doc-032（passed）
+- 范围6文件：两仓README、Mac配置、prepare/发布门禁回归和计划。代码来源eb7197917417dfae2d9fa06e48196437a7ce5047已普通推送/fetch相等；SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96同步干净，事实/计划/实际入口与门禁重读。
+- 补结果区质量门禁→统计→论文表步骤、当前来源/配置/归档与失败重解析、近似统计复核和写入限制；安装/更新/Termius/认证/CLI/三拓扑入口保留。新分析8加入77串行目标，不宣称M5/科研/原子发布已验收。
+
+- passed 两仓build/225与26闭包/面板2/vm.Script、Mac配置1/发布门禁4、脚本语法/UTF8/diff，mac-doc-032.log。文档编辑器首次变量重复语法错误未执行任何修改，另存修正脚本后完成；未改变门禁或超时。下一批 .302/.96 配套发布，科研/M5/原子发布仍pending。
+
+## 前批 mac-005ak-analysis-read（passed）
 - 起始Exp a0d00c9bec05a620aa7ec9d0e2e665cedcca320f/SFTP068ec5fe6244f5d8e4b7d7152764773631a84d96干净，master=origin/master已fetch确认；重读事实/计划/实际质量、统计、论文表、claim/归档输入与隔离回归。
 - 范围6文件：共享真实记录只读模块、claim共享调用、Agent三个分析入口、实际隔离Node/Python回归与计划。三问题为原始Plan/revision/报告路径、当前CSV/配置/归档重计算、报告输入发布前受检；沿用统计计算，不把fixture视为科研证据。
 - 保护旧入口/API/三拓扑/Plan格式；不执行整Agent/科研/SSH/归档删除/安装。摘要缺失/旧协议仍由既有解析迁移；多文件原子发布、完整revision与M5 pending。代码验证后同步Mac README/配置与配套发布。
