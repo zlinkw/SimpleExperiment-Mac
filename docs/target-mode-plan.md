@@ -13,11 +13,17 @@
 - 用户新增批次汇报要求：每个已完成批次报告剩余原始目标X/29；以docs/mac-goal-status.md为计数依据，未证实的验收条目也计入剩余，不用源码批次数替代目标数。
 - 文档节奏按用户最新要求：集中推进功能，累计到阶段完成后统一更新 README/配置说明；实际入口或操作方式改变时，仅同步必要说明。文档仍按 Mac 用法、优先于配色；不再把每轮文档同步作为独立交付重点。汇报以实际功能变化、修复及验证结果为主。更新入口：底部右侧 Mac preview、命令面板检查 preview 配套更新、设置→插件配套更新→检查更新。
 
-## 当前批次 mac-release-044（running，0.5.307/0.2.97）
+## 当前批次 mac-release-044（published，0.5.307/0.2.97）
 - 起始Expf633c5bb6dfb0771238e89498096b898dba02159=origin/master，SF2f464eb75e362150de5cbe61e1946504c3497a0a 干净且来源不变；重读事实/计划/版本/发布门禁。本批4文件：Exp package/lock/runtime/计划，索引作为独立发布元数据提交。
 - 静态客户端及发布恢复已本地通过；本批仅交付，不扩科研适配。pending metadata build/runtime/闭包/vm；同步后prepare81目标文件、实际包客户端/按钮/源码快照、publish三附件及索引普通提交/推送、真实匿名静态检查和下载。保护M5待验/Windows/已有入口/远端实验，无安装/Actions/删除。
 - 静态索引替代旧匿名列表等待，不再以API reset作为本次用户更新验证入口；M5 deferred，剩余15/29。
 - metadata passed：package/lock/runtime统一.307；build面板2、runtimeManifest1、225闭包、vm/UTF8/diff通过。即将普通同步该受检源码，再进行既有prepare门禁和公开发布；发布产物保持不可覆盖。
+- 源码Exp0b9b344c00894fb18bfe9c245296a81611ba5d55/SF2f464eb75e362150de5cbe61e1946504c3497a0a；prepare81目标文件/82含面板标记通过，两仓build/闭包/主题/vm。实际包客户端15/按钮3/SF退出7通过；快照逐文件1541/83匹配。证据见本版release-artifacts。
+- 已公开 https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.307，releaseId408686018、发布时间2026-10-10T05:33:43Z、清单SHA736863f138a15d1fd0a0d6faa8733e895ee6e30ec1f43f7b11911cd1d09a85a0。三附件完整大小/SHA确认后，preview.json单文件提交2d90061942351b2780671f67e6784116745885d6并普通推送/fetch HEAD=origin/master。
+- 首次索引提交后Git TLS EOF失败，原日志/回执保留；同一回执补推同一索引提交成功，无重复发布/提交、无覆盖/重写历史。索引SHA8bd6ddaba7200b54aa3cb10adb9b561e20e6ab2972aa20bace154e8cfc61ac65，indexStatus=published。
+- 首次匿名验证索引200后清单fetch网络失败，trace保留；同一实际包客户端重试通过4匿名请求：索引、清单、两包均200，REST请求0。清单/包字节匹配、身份/平台/CRC/大小/SHA，缓存/同版/更高版本跳过和SFTP.97不重复安装通过；未安装，M5pending。报告anonymous-static-verification-retry.json。
+- Exp2594936字节/SHA c836120706a9efe2fb2a55d5c50cc75ee3d83e38796da87f72a230c45669cc7e；SF150756字节/SHA2daa900dc9773566a456e71c0bd7fd57a61f6da41991b3f84eee4d1e4205dc12。无安装/Actions/真实科研、SSH或删除。
+- 剩余15/29，静态索引完成本地与公开网络验证；只等待M5反馈，不追加未经报告的完善。交付计划/清单只同步必要证据，不重复改README/配置说明。
 
 ## 前批 mac-005aq-index-publisher（passed，本地实现）
 - 起始Exp119fdb82f700553e0d1b4662e5c17cb7edc1d76b=origin/master，SF2f464eb75e362150de5cbe61e1946504c3497a0a 未改；事实/计划/Git/发布源码与测试已重读。
@@ -60,5 +66,5 @@
 - .264首版以来两仓独立namespace/更新通道、Mac路径/CLI、Termius手动端点、独立认证与本机中转、主题、Plan/结果路径适配分批实现，源码及交付均普通推送/fetch相等。完整历史、失败与局限保留在Git和产物，无自动安装/Actions/未经授权清理。
 
 ## 下一边界
-- 先完成后完善：交付已复现更新故障，不把潜在科研增强/原子性等追加为首版阻塞。缺少真机证据的完善延期，收到用户明确验证结果后再处理具体问题。
-- M5待验：更新/两插件启动/设置与重载/部分失败补装、Termius、独立认证/中文路径/断连、三拓扑完整科研主流程；不得用本机VM/AST/headless替代。目标清单docs/mac-goal-status.md固定29条，当前15项待验/整体核验。真正匿名API额度耗尽时保留错误和等待时间；若插件内检查不可用，用户可从公开Release手动按SF→Exp安装，再重载并复验。
+- 先完成后完善：静态索引.307已交付，用户端无REST请求；只等待真机反馈，不把潜在科研增强追加为首版阻塞。缺少真机证据的完善延期，收到明确结果后再处理具体问题。
+- M5待验：更新/两插件启动/设置与重载/部分失败补装、Termius、独立认证/中文路径/断连、三拓扑完整科研主流程；不得用本机VM/AST/headless替代。目标清单固定29条，当前15项待验/整体核验。旧版API受限时可从.307公开Release按SF→Exp手动安装一次并重载；新版本沿静态preview通道更新，按钮不变。

@@ -10,16 +10,16 @@
 | 04 | 保留三拓扑与完整科研主流程，排除指定范围 | 剩余 | topologyMode、distributedPlan/Project 目标回归；三拓扑完整真机主流程未验收 |
 | 05 | 独立扩展身份、依赖、命令/设置/发现与更新源 | 已验证 | 两仓 package、MacPaths/mac-paths、Bootstrap、PreviewRelease；macBootstrap、publicBranding 回归及实际 VSIX |
 | 06 | Mac 最小启动，更新不依赖服务器/Termius/面板 | 剩余 | macBootstrap 验证独立激活顺序、错误状态和入口；M5 启动尚待验证 |
-| 07 | 两包与清单同一 Release，绑定两提交及首次安装顺序 | 已验证 | .304 三附件、release.json、真实快照与匿名下载核验；README 首装顺序 |
+| 07 | 两包与清单同一 Release，绑定两提交及首次安装顺序 | 已验证 | .307三附件、release.json、真实快照与匿名下载核验；README首装顺序 |
 | 08 | preview、启动一次、30 分钟、手动、每版提醒一次 | 已验证 | Bootstrap 定时与通知记录；macBootstrap、macUpdatePanel 回归 |
 | 09 | 全部下载验证后按 SFTP→Experiment 安装重载，同版跳过/不降级 | 剩余 | UpdateTransaction、macUpdateTransaction 及匿名包验证通过；实际 M5 安装/重载未知 |
 | 10 | 部分安装补装、阻止新操作、等待本机传输、保留远端实验 | 剩余 | UpdateTransaction/UpdateGate 的本地模拟回归通过；真实传输与失败补装仍待真机 |
 | 11 | 直接 GitHub Releases，首版不接 shop/Actions | 已验证 | PreviewRelease 固定公开 Releases 源，release 脚本无 Actions/install；macRelease 门禁 |
 | 12 | release.json 协议/通道/时间及所有组件字段 | 已验证 | prepare 生成、parseManifest 校验、实际公开清单与下载核验 |
 | 13 | darwin-arm64、真实身份/版本/平台、损坏与兼容性拒绝 | 已验证 | Vsix、macVsix 与实际两包的 CRC/大小/SHA/版本/平台核验 |
-| 14 | 选择有效 preview，不用 latest | 已验证 | 用户2026-10-10授权由静态 preview.json 索引替代用户端预发布REST查询；保留 preview 筛选与语义排序，当前迁移本地验证中 |
-| 15 | 匿名公开下载、请求合并/缓存/403429退避、失败正确显示 | 剩余 | 用户授权改用静态preview索引；本地客户端15/按钮4回归通过，用户检查不调用REST API，索引清单大小/SHA核验。发布及真实匿名静态请求待完成；.306公开清单/两包下载通过，M5首个403修复效果仍待复验 |
-| 16 | 本机 prepare/publish、完整草稿核验后发布、不安装/Actions | 已验证 | mac-release-prepare/publish/common、macRelease；静态索引在确认完整公开附件后单独普通提交推送，回执补推和远端推进阻断有本地回归；新流程实际发布待验证 |
+| 14 | 选择有效 preview，不用 latest | 已验证 | 用户2026-10-10授权静态preview.json替代用户端预发布REST查询；.307客户端15回归及实际包公开匿名索引选择通过，保留preview筛选与语义排序 |
+| 15 | 匿名公开下载、请求合并/缓存/403429退避、失败正确显示 | 剩余 | .307静态索引已发布，客户端15/按钮4回归及实际包公开匿名4请求通过，REST请求0；清单/两包大小/SHA/身份/平台与缓存跳过核验。首轮清单网络失败保留，原样重试通过；M5首次403实际原因未知，待用户使用反馈 |
+| 16 | 本机 prepare/publish、完整草稿核验后发布、不安装/Actions | 已验证 | .307完整公开附件后索引普通提交推送/fetch通过；实际Git TLS故障凭同一回执补推同一索引提交成功，无重复发布/覆盖/安装；发布模块6回归与门禁4通过 |
 | 17 | 版本不可覆盖、更高版本修复、保留历史附件不清理 | 已验证 | assertNewerPreview/发布附件集合核验，历史 preview 保留，macRelease |
 | 18 | 验证批次分别提交普通推送 master，包绑定同步提交 | 已验证 | 历史批次计划、两仓 Git 提交/fetch 记录、清单 sourceCommit 与源码快照 |
 | 19 | Mac 数据目录/POSIX/大小写/中文空格/锁/退出/CLI/执行依赖 | 剩余 | MacPaths/PosixPath、共享租约、CLI、Darwin 退出证明已有局部回归；完整业务依赖和真实进程/路径行为仍待核验 |
@@ -30,7 +30,7 @@
 | 24 | 删除规范化/直接父目录/两确认，保留 Agent 职责边界 | 剩余 | 现有防护和只读回归保留；真实完整业务边界与 macOS 文件行为未整体验收，无真实删除验证 |
 | 25 | M5 首装→下一版 GitHub 更新、版本/设置/重载功能 | 剩余 | 用户延后；匿名下载及模拟事务不能替代安装证据 |
 | 26 | 不可达/限流/筛选/错平台/哈希/重复点击/部分失败补装 | 已验证 | macPreviewRelease/macVsix/macUpdateTransaction/macBootstrap/macUpdateGate 单文件串行回归 |
-| 27 | 本地 build/依赖闭包/面板脚本与串行超时门禁 | 已验证 | .306 prepare 79目标文件/80含面板标记、两仓build/闭包/面板/vm通过；实际两包客户端/按钮/退出消费者及源码快照通过 |
+| 27 | 本地 build/依赖闭包/面板脚本与串行超时门禁 | 已验证 | .307 prepare81目标文件/82含面板标记，两仓build/闭包/主题/vm、实际两包客户端15/按钮3/退出7及完整快照绑定通过；单文件串行20秒 |
 | 28 | 真机 Termius/认证/中文路径/断连及三拓扑主流程 | 剩余 | 缺全部 M5 真机证据，暂不要求用户立即提供 |
 | 29 | 发布说明区分本地/M5，明确阶段局限并持续同通道交付 | 已验证 | 各版 release-notes、README、计划均标记 M5 pending，并持续 preview 发布 |
 
