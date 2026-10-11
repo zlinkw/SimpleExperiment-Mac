@@ -105,8 +105,9 @@ export class MultiEndpointRealtimeClient {
       throw rejected?.reason || new Error("No realtime endpoint returned GPU state.");
     }
     const gpu = fulfilled.reduce<Record<string, unknown[]>>((out, entry) => Object.assign(out, apiGpu(entry.value.value, entry.value.endpoint)), {});
-    this.mergedState = { ...this.mergedState, gpu, lastKnownGood: { ...(this.mergedState.lastKnownGood || {}), gpu } };
-    this.onState(this.mergedState);
+    // HTTP reads update each endpoint's authoritative cache. Re-merge that
+    // cache so another heartbeat cannot restore pre-refresh GPU rows.
+    this.updateMergedState();
     return gpu;
   }
 

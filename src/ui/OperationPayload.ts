@@ -1,6 +1,6 @@
 // Only the webview projection is bounded; runtime evidence and persisted history stay intact.
 const cache = new WeakMap<object, Record<string, unknown>>();
-const identityKeys = new Set(["operationId", "opId", "id", "type", "action", "status", "state", "planFile", "planRevision", "workerId", "schedulerOwnerWorkerId", "resultOwnerWorkerId", "runKey", "runId", "experimentId", "archiveKey", "tmuxSession", "tmuxTarget", "tmuxPane", "pid", "startedAt", "updatedAt", "finishedAt", "localSubmissionProgress", "reconcileEvidenceActive"]);
+const identityKeys = new Set(["operationId", "opId", "id", "type", "action", "status", "state", "planFile", "planRevision", "workerId", "schedulerOwnerWorkerId", "resultOwnerWorkerId", "runKey", "runId", "workflowId", "experimentId", "archiveKey", "tmuxSession", "tmuxTarget", "tmuxPane", "pid", "startedAt", "createdAt", "enqueuedAt", "updatedAt", "finishedAt", "localSubmissionProgress", "reconcileEvidenceActive"]);
 
 export function compactOperationsForWebview(input: Record<string, unknown>): Record<string, unknown> {
   if (cache.has(input)) return cache.get(input)!;
@@ -40,6 +40,12 @@ export function compactOperationsForWebview(input: Record<string, unknown>): Rec
       const next = identityKeys.has(key) && (item === null || typeof item !== "object") ? item : compact(item, 0);
       if (next !== undefined) row[key] = next;
     }
+    // Keep workflow binding even if optional logs exhaust the nested payload budget.
+    const source = value as Record<string, unknown>;
+    const payload = source.payload as Record<string, unknown> | undefined;
+    const latestEvent = source.latestEvent as { payload?: Record<string, unknown> } | undefined;
+    const workflowId = source.workflowId || payload?.workflowId || latestEvent?.payload?.workflowId;
+    if (typeof workflowId === "string" && workflowId) row.workflowId = workflowId;
     if (omitted) row.webviewDetailsOmitted = true;
     output[id] = row;
   }

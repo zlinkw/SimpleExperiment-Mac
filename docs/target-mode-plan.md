@@ -16,7 +16,11 @@
 - 范围：持久面板恢复、GPU快照与本机派发归属、失败召回/明确不可用、结果进度与正式路径/内存汇总、PLAN清理审核及配套受限接口、启动前拒绝回执。8b4aed70用户隔离和GPU窗口已同步，核对保留；不复制Windows发布/安装/入口默认值。
 - 分批：061队列与GPU/召回基础；062实时快照；063清理协调基础；064配套清理接口；065清理宿主/API；066正式runtime；067结果契约；068面板集成；069完整回归/发布。每批至多8文件，必要时细分；不执行真实传输/清理/Agent更新或任务操作。原目标18已验证11剩余，整体paused，仅执行本次授权。
 
-## 当前批次 mac-sync-061（passed，队列与GPU/召回基础）
+## 当前批次 mac-sync-062（passed，实时快照及操作载荷）
+- 061提交11ae916已普通同步。062边界：RealtimeTunnelClient/MultiEndpointRealtimeClient/OperationPayload、GPU快照恢复测试、本计划。保留Mac动态端点与身份，验证build/面板vm/实时快照后同步；原目标18已验证11剩余。
+- build/面板2/vm、GPU快照恢复8通过，diff通过；所有HTTP/WS均测试替身，零服务器通信。
+
+## 已完成批次 mac-sync-061
 - 8文件边界：DistributedPlanQueue/DistributedSchedulingPolicy/GpuJobOwnership/FailedJobRecovery/PanelPlanStatusSummary、两个对应纯接口测试、本计划。三方内容合并只写当前批次，验证build/面板vm和逐文件目标后普通同步。
 - build/面板2/vm、GPU纯接口6及召回3通过。Windows旧召回6例未跟随正式任务退休而失败，已改为验证正式重试委托/历史只读/上下文拒绝；GPU最后1项依赖未同步宿主UI，留至068补回并执行。原目标18已验证11剩余，不以基础模块通过冒充页面集成。
 
