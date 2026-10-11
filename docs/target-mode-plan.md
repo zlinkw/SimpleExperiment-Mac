@@ -15,7 +15,12 @@
 - 所列不依赖真机的本地修复、协作核查和发布已交付；用户暂停授权的前提已满足，收尾提交同步后将目标设为paused，未经用户恢复不继续批次。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；收到反馈后再考虑完善，模拟不替代真机。
 
-## 当前批次 mac-release-051（metadata passed，发布pending）
+## 当前批次 mac-release-052（passed，本地门禁修正；发布pending）
+- 起始Exp43f7a72312af51863544a2240bfb4112517bb741/SF60fe32015a07e29f1235d17da815af936707fa79同步干净；完整目标paused，原目标剩余12/29。
+- prepare首次在resultsSummaryWebviewCache普通断言失败2项，读取CRLF源码却仅用LF定位声明；生产声明未改变。2文件边界仅测试换行规范化与本计划，不改生产行为。保留失败日志；尚未创建.310产物目录或发布。
+- 单文件6、build/面板2、227闭包/vm/UTF8/diff通过；提交普通同步后重跑完整prepare与实际包验证。生产源码不因测试改变，失败日志保留。
+
+## 前批 mac-release-051（metadata passed，发布pending）
 - 起始Expc48747160215cb0c9866abf4dcf39394595e875c/SF10670081f62c3dd1f544900e2d5c47e75b3dfe1d同步；完整目标保持paused，只完成本次新授权请求。
 - 8文件：两仓package/lock、Exp runtime版本/prepare/common/计划；递增.310/.98，prepare纳入用户前缀/UI/关闭/隔离GPU调度/停止/单文件上传恢复目标，发布说明区分.309/.97部分真机与新版待复验，强调远端Agent必须用户空闲时主动更新。发布源仅fetch已核定origin/master。
 - metadata两仓build、227/26闭包、面板2/vm、runtimeManifest1/发布脚本4、UTF8/版本/差异通过；runtimeManifest首次命令路径误写features，按rg所得实际test/runtimeManifest.test.js通过。SF元数据60fe32015a07e29f1235d17da815af936707fa79已普通同步。Exp提交后源同步再prepare真实darwin-arm64两VSIX及清单，实际包消费者、源码快照与匿名索引/附件验证，再发布索引；发布尚未完成。无开发机安装、Actions或服务器通信，原方案剩余12/29。

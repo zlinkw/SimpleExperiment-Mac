@@ -5,7 +5,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 const { readSource } = require("../_helpers/sourceReader");
 
-const extension = readSource("src/extension.ts");
+const extension = readSource("src/extension.ts").replace(/\r\n/g, "\n");
 
 function extractFunction(name) {
   const start = extension.indexOf(`function ${name}(`);
