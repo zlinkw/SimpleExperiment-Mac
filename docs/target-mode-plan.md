@@ -15,7 +15,13 @@
 - 所列不依赖真机的本地修复、协作核查和发布已交付；用户暂停授权的前提已满足，收尾提交同步后将目标设为paused，未经用户恢复不继续批次。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；收到反馈后再考虑完善，模拟不替代真机。
 
-## 当前批次 mac-native-048（passed，本地调度GPU标签页）
+## 当前批次 mac-native-050（passed，部分真机证据归档）
+- .309/.97用户报告按证据归档至mac-native-acceptance-2026-10-11.md，不发布个人目录/服务器地址/用户名，不假称读取原始Mac截图回执。4文档：报告摘要、事实、固定目标状态及计划。
+- 原02环境、06无服务器启动及四入口、15失败/恢复检查取得完整条目所需补证；17已验证/12剩余。认证、Termius attach、真实在线安装/补装、三拓扑及独立Agent版本按钮最终回执仍待验；旧历史15/29仅历史记录。
+- mac-native-049 SFTP8源测试文件已验证提交10670081f62c3dd1f544900e2d5c47e75b3dfe1d，TLS多次失败后普通fetch master/push/fetch确认HEAD=origin/master；未修改origin或关闭TLS校验。取消回调/双端只读认证前置、旧upload.files退出证明与已确认新请求安全恢复；新原生消费者5/auth9/relay9/旧退出7/recovery25/settlement3/API进度4、build26闭包及diff通过。仅本地替身，现有远端任务保持不动。
+- 前批UI ec4f7a41ea25aefce54b7747a797d09fa87a365d，调度32a5ee0e3a96d65c1c31fd98fc728ca6289ee64a均普通同步。下一批只更新.310/.98元数据、prepare新增门禁/发布说明并交付。完整目标维持paused。
+
+## 前批 mac-native-048（passed，本地调度GPU标签页）
 - 起始ec4f7a41ea25aefce54b7747a797d09fa87a365d=origin/master；重读实际调度launch、存活、停止、tmux元数据与目标测试，保护原远端任务/旧入口。
 - 5文件：Agent runtime模板、隔离编译消费者JS/Python、既有停止消费者测试及计划；新run-plan按本机真实GPU编号共享容器新建标签，Hub无GPU使用共享control容器；绑定稳定pane与PID启动身份，不杀整个GPU容器。旧sch记录仍可显式精确停止，不迁移或自动关闭。GPU任务创建失败不再新建独立任务会话。
 - build/面板2、隔离Python5（10秒）、Planlaunch8/身份5/队列29/停止路由5/PlanStopClear33逐文件20秒通过。PlanStopClear先发现两个既有Mac夹具缺实际require/执行模式，补齐实际模块与显式train输入后通过，未为夹具改变生产行为。闭包第一次vsce ls在8秒超时，独立检查后同一门禁通过227模块；vm/UTF8/diff通过。没有执行真实远端任务或GPU命令。
