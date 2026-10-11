@@ -15,7 +15,13 @@
 - 所列不依赖真机的本地修复、协作核查和发布已交付；用户暂停授权的前提已满足，收尾提交同步后将目标设为paused，未经用户恢复不继续批次。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；收到反馈后再考虑完善，模拟不替代真机。
 
-## 当前批次 mac-release-053（passed，本地测试读取修正；发布pending）
+## 当前批次 mac-release-054（交付passed，证据收尾同步）
+- .310/.98已公开：https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.310。Exp源码5c93ff7271071dbe68c5e412435ba67a78061db7，SF源码60fe32015a07e29f1235d17da815af936707fa79；静态索引5a0b05b43f8c349c11127e4cadff91aeb80bdd3d已普通推送/fetch相等。当前4文档仅记录发布事实、验收边界与计数，不重复改README/配置说明。
+- prepare重试2完整97目标文件/98测试标记（含build面板）、227/26闭包/面板vm通过；实际两VSIX消费者115项及1552/84源快照通过。保留前两轮旧测试换行断言失败日志，未为测试改变生产行为，未覆盖旧产物。
+- 发布三附件经完整草稿大小/SHA核验后公开；实际包客户端匿名4请求全部200、REST0，索引/清单/两包逐字节、CRC/身份/版本/平台/大小/SHA、缓存与同版/高版/未变化组件跳过通过。证据位于release-artifacts/preview-v0.5.310；发布回执status/indexStatus均published。
+- 未执行服务器通信、Agent部署/重启、现有任务启停/迁移、真实科研、开发机安装、Actions或删除。新的调度创建规则必须用户空闲后主动更新远端Agent才能生效；旧Agent保持旧行为。用户.309/.97部分真机报告已区分，新修复待M5复验；17已验证/12剩余，完整目标继续paused。收尾UTF8/计数/链接/字符上限/diff通过后普通同步，最终提交以Git记录为准。
+
+## 前批 mac-release-053（passed，本地测试读取修正）
 - 起始Exp34f712d/SF60fe320同步；prepare重试到resultCsvDirectoryConfig出现1项220字符跨度断言，CRLF增加字符但监听逻辑未改变。4文件：sourceReader、新增LF/CRLF消费者测试、prepare门禁、本计划。仅统一测试文本为LF，生产不变；旧失败日志保留，.310产物目录仍未创建。
 - 新增读取器2、结果目录6/缓存6逐文件20秒、build/面板2、227闭包/vm/UTF8/diff通过。普通同步后重跑完整prepare，结果以保留日志为准。目标仍paused，剩余12/29；发布pending。
 
