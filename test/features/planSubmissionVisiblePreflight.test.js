@@ -556,6 +556,7 @@ test("missing explicit historical-output choice cannot skip every job or close a
   const previous = { id: "deferred-drf", planFile: drf, revision: "rev-drf", codeFingerprint: "new-code", status: "blocked", confirmedOutputChoice: false };
   const host = {
     distributedQueueTickPromise: undefined,
+    workerActionTargets: () => [],
     lastCodeSyncState: { fingerprint: "new-code" },
     queue: { schemaVersion: 1, plans: [], deferred: [previous] },
     async loadDistributedQueue() { return this.queue; },
@@ -591,7 +592,7 @@ function progressState(host) {
 }
 
 function renderExecution(state) {
-  return renderPanel(["distributedPlanRecoveryView", "executionPlanGroupKey", "executionCurrentDistributedJobs", "executionSubmissionLabel", "executionNewerSubmission", "executionDeferredView", "operationIsActive", "operationIsFailureLike", "operationHasDeadEvidence", "renderPlanTaskCards", "renderTaskCards", "renderExecutionPlanList"], state, ["executionPlanList"]);
+  return renderPanel(["executionOperationWorkflowId", "distributedPlanRecoveryView", "executionPlanGroupKey", "executionCurrentDistributedJobs", "executionSubmissionLabel", "executionNewerSubmission", "executionDeferredView", "operationIsActive", "operationIsFailureLike", "operationHasDeadEvidence", "renderPlanTaskCards", "renderTaskCards", "renderExecutionPlanList"], state, ["executionPlanList"]);
 }
 
 
@@ -609,6 +610,7 @@ test("Plan progress keeps tasks beyond twenty reachable without a global workben
 function renderPanel(names, state, ids) {
   const html = {};
   const sandbox = {
+    asArray: value => Array.isArray(value) ? value : [],
     executionHistoryRowsCacheState: null,
     executionHistoryRowsCacheValue: null,
     taskSectionViewCacheState: null,

@@ -90,7 +90,7 @@ test("tuning Plan submission automatically validates on one Worker and allocates
       calls.push(body.schedulerOwnerWorkerId);
       const jobs = Array.from({ length: 36 }, (_, index) => ({ index, case: `case-${Math.floor(index / 3)}`, seed: 42 + index % 3, outputDir: `work_dirs/tuning/job-${index}` }));
       const pending = queue.enqueuePlan(queue.emptyDistributedQueue(), { planFile: body.planFile, revision: "revision", codeFingerprint: "code", jobs }, "run-tuning");
-      const allocation = queue.allocateAvailable(pending, availability.map(row => ({ workerId: row.workerId, idleGpuIds: row.availableGpuIds, online: true })));
+      const allocation = queue.allocateAvailable(pending, availability.map(row => ({ workerId: row.workerId, idleGpuIds: row.availableGpuIds, online: true, declaredJobPaths: true })));
       assert.equal(allocation.queue.plans[0].jobs.length, 36);
       assert.equal(allocation.dispatches.length, 4);
       assert.deepEqual(new Set(allocation.dispatches.map(job => job.workerId)), new Set(["worker-b", "worker-c"]));
