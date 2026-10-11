@@ -12,98 +12,13 @@
 - 固定分母29；报告已取得M5环境、最小启动及匿名检查证据后核实原条目，缺证据整条保留剩余。完整目标维持paused；仅执行用户新授权的缺陷修复及功能同步发布。
 - 当前授权为2026-10-12 Windows从8934ed8b分叉后功能页/方法同步；冻结参考Exp42902a5a/SFacae730。Mac身份/更新/Termius/POSIX/租约/GPU内部标签保留；不复制Windows安装、部署、发布设置，不触碰现有任务。
 
-## 当前授权：Windows分叉后功能同步
-- 2026-10-12用户追加：检查Windows从8934ed8b分叉之后的提交，将对应功能页和方法适配到Mac。参考冻结Exp42902a5a、SFacae730，Windows未提交pyc仅只读；Mac身份/路径/Termius/静态更新/传输退出证明/GPU内部标签保留。
-- 范围：持久面板恢复、GPU快照与本机派发归属、失败召回/明确不可用、结果进度与正式路径/内存汇总、PLAN清理审核及配套受限接口、启动前拒绝回执。8b4aed70用户隔离和GPU窗口已同步，核对保留；不复制Windows发布/安装/入口默认值。
-- 分批：061队列与GPU/召回基础；062实时快照；063清理协调基础；064配套清理接口；065清理宿主/API；066正式runtime；067结果契约；068面板集成；069完整回归/发布。每批至多8文件，必要时细分；不执行真实传输/清理/Agent更新或任务操作。原目标18已验证11剩余，整体paused，仅执行本次授权。
-
-## 已完成批次 mac-sync-072（配套版本与完整发布门禁）
-- 071提交e81201e已同步。SF package/lock/readme递增0.2.100，Exp package/lock/runtime/prepare及本计划递增0.5.313；合计8源文档文件，生成产物另计。将本轮新增回归加入prepare，所有旧门禁保留；build/闭包/面板vm/版本与清理门禁后分别普通同步，再完整prepare及实际包验证发布。原目标18/11。
-- SF build28闭包/清理18/真机缺陷消费者6通过并同步2d5d5ac；Exp build234闭包/面板2/vm/版本注入1/发布4/runtime1/UTF8通过。新增28 Exp及1 SF目标门禁，原98保留；完整prepare与实际包发布留073，当前不声称发布或M5通过。误写runtime测试目录更正为test/runtimeManifest.test.js执行通过，无超时。原目标18已验证11剩余。
-
-## 已完成批次 mac-sync-071（集中功能说明）
-- 070c提交2389ab0已同步。4文件边界：README/Mac配置说明/17提交功能页对照/本计划。统一补正式路径、内存结果及审核页入口，明确Mac句柄证明缺失仍阻断、Agent需空闲后用户手动升级；不重复宣称真机通过。macSetupGuide/UTF8/diff后同步；原目标18/11。
-
-## 已完成批次 mac-sync-070c（正式队列发布门禁）
-- 070b提交5f3d53f已同步。5文件边界：DistributedPlanQueue/DistributedJobAutoRetry/DistributedPlanSubmissionRouting/PlanSubmissionVisiblePreflight测试、本计划；旧增attempt重试改为正式目录只读冲突回归，保留历史恢复与明确手动重试。逐文件串行20秒，无实际派发/清理。原目标18/11。
-- 队列29/正式失败策略21/提交路由5/提交进度19通过，历史恢复保持旧协议，正式回执按真实序列化不带attempt。首次重复formal目录和显式零哨兵夹具失败后纠正，仅改测试；没有跳过检查、重试超时或真实派发。原目标18已验证11剩余。
-
-## 已完成批次 mac-sync-067a（版本注入构建门禁修正）
-- 067七个源/测试文件保持未提交，未计通过。正式测试揭示Mac旧构建注入会改写新协议re.search字符串；Windows42902a5a构建脚本已有整行常量门禁。067a只改构建脚本、实际纯函数回归和本计划3文件，build/面板vm/版本注入测试后独立同步；不改运行中的远端runtime。
-- build/面板2/vm、实际版本注入1通过，完整常量更新/正则字符串与注释不改/重复注入幂等。067宿主确认测试留至068整合后补回，不以依赖未接入的测试调整生产逻辑；原目标18/11。
-
-## 已完成批次 mac-sync-069c（结果与历史契约回归）
-- 069b提交7311a8c已同步。8文件边界：PlanRunFreshness/WrapperResultPersistence/RemoteResultInspection/PlanOutputRetention测试及夹具、PanelStateProjection、JobTmuxLogNavigation、本计划。保留Mac路径与scope，验证当前正式结果内存读取及历史只读，不执行真实同步/删除。原目标18/11。
-- 逐文件新鲜度10/Wrapper26/远端检查13/历史保留20/面板投影5/日志跳转10通过。日志夹具初次缺Mac严格归属函数而失败，补入实际渲染函数与服务器明确前缀后复验；不放宽缺前缀拒绝。原目标18已验证11剩余，无真实文件清理/传输。
-
-## 已完成批次 mac-sync-069d（载荷/归属与历史接口闭包）
-- 069c提交94f671b已同步。6文件边界：MergedGpuCache/ExtensionStatePost/GpuOwnerMatching/VsixRuntimeClosure/FailedAttemptQuarantine测试、本计划；既有Mac其他会话披露13用例保持更严格缺前缀拒绝并复验。旧隔离仅测试精确授权接口，不恢复自动隔离。原目标18/11。
-- 逐文件缓存5/推送5/归属4/披露13/闭包2/旧接口1通过。闭包断言修正为Mac既有短期限，不复制Windows30秒期望；旧接口移动仅新建夹具、安全父目录及精确身份，零真实任务/目录。原目标18已验证11剩余。
-
-## 已完成批次 mac-sync-070a（Mac身份与启动门禁回归）
-- 069d提交53e1741已同步。6文件边界：PlanStopClear/MacWorkflowBinding/MacPlanFiles测试、MacAgentPlanIdentity/MacPlanLaunchPaths夹具、本计划。发布旧门禁暴露formal能力/零版本及新增依赖缺失；按正式契约更新仍保留大小写/中文/空格/%20/物理叶子拒绝。其他结果及队列旧回归纳入后续批次；不得跳过失败门禁。原目标18/11。
-- 逐文件StopClear33/工作区绑定10/Plan文件9/Agent身份5/启动路径8通过。新正式预检在专属完整夹具已覆盖，本批物理路径夹具只替换文件系统/预检叶子，不改变路径校验；不同Plan使用独立目录，旧attempt仅只读拒绝。原目标18已验证11剩余。
-
-## 已完成批次 mac-sync-070b（发布结果门禁回归）
-- 070a提交997e7f7已同步。7文件边界：MacMappedResultIdentity/MacLocalMetricParsing/PendingResultMetricSync/MetricsDownloadEndToEnd/ManualDistributedResultSync/ProjectResultSyncCompleteness测试、本计划。旧disk fallback取消，补memoryWrapperResults能力证据，正式镜像使用owner证明；不放宽历史路径或下载校验。原目标18/11。
-- 逐文件Mac映射11/本机解析8/待收集39/端到端6/手动镜像25/完整性18通过。既有原始文件保留、二进制SHA/原名/本地物理别名拒绝与scope继续通过；新增owner清单使108任务为432片段/20任务为120完整文件。所有服务器/传输均替身。原目标18已验证11剩余。
-
-## 已完成批次 mac-sync-069b（模式与启动前拒绝契约回归）
-- 069a提交bc35d2e已同步。8文件边界：distributedPlanExecutionMode测试/夹具、调度模式、空闲GPU派发、preflightDispatchRejection测试/夹具、planRunModeWorkflow夹具、本计划。Mac夹具保留相对schedulerPath，验证train/test/train_test与精确未启动拒绝回执，不启动GPU任务。
-- 逐文件模式9/调度4/派发生命周期19/拒绝6/运行模式5通过。旧测试缺formal能力、零版本哨兵及公共身份依赖而断言失败，按当前正式任务契约补齐夹具；CUDA/项目失败不自动增attempt重跑，旧队列原证据只读保留。临时Python脚本保留，不执行清理；无超时/远端任务操作。原目标18已验证11剩余。
-
-## 已完成批次 mac-sync-069a
-- 068提交4687c88已同步。8文件边界：GPU归属/正式执行两文件补回宿主用例、不可用逻辑及UI、GPU缺服务器行、执行总览、结果进度路由、本计划。分组逐文件串行，原目标18/11；另069b运行/拒绝契约、069c结果/历史、069d载荷及闭包回归，完成后统一文档与发布。
-- 七文件均逐个通过：GPU7、正式6、不可用9/UI2、缺服务器行、总览25、结果进度3；补回061/067宿主用例全部通过，无skip。diff通过，无科研/远端通信；原目标18/11。
-
-## 已完成批次 mac-sync-068
-- 067提交5d2c147已同步。8文件边界：legacy宿主/PanelHtml/PlansSection/ResultsSection/SmallScale/FileTransferTypes、面板长期恢复测试、本计划。三方解决7宿主冲突和1页面冲突：Mac严格路径/设置与缺前缀拒绝保留，正式输出不增attempt，结果全格式只读入内存；cleanup/召回/不可用/GPU归属/拒绝日志入口同步。不复制Windows自动安装/远端部署。
-- build/234闭包清单生成、面板2/vm、长期面板恢复8通过，diff通过。新源码无simpleExperiment原版设置读取，保留binding及Mac结果scope；正式任务/清理/GPU端到端本地回归待069，原目标18/11。
-
-## 已完成批次 mac-sync-067
-- 066提交ac9e0e2已同步。8文件边界：PlanRunFreshness/PlanArtifactSyncStatus/ExperimentRunner/ProjectAdapterTemplates/JobAvailability、正式执行测试及Python夹具、本计划。保留Mac严格路径/空选择拒绝，采用正式身份/结果内存读取和显式不可用判定。正式执行测试使用AST隔离函数及mock工作进程，10秒上限；不运行科研。
-- 067a构建修正a0c5694已同步。build/面板2/vm、正式执行基础5通过；Linux路径逻辑映射Windows临时夹具的文件系统叶子显式注入，保留durable_plan_path检查，未改生产POSIX规则。原宿主输出确认1例待068接入后补回，旧测试与失败回执保留Git/参考快照；原目标18/11。
-
-## 已完成批次 mac-sync-066
-- 065提交a679708已同步。8文件边界：Agent/Scheduler/WrapperResultBundle/FourStateMetricBundle、正式结果契约测试及Python夹具、GPU身份测试、本计划。正式declared路径、训练/测试/预检拒绝及无attempt新执行同步；Agent冲突保留Mac严格POSIX函数并采用历史attempt只读规则。第一次正式结果测试发现collector仍缺新CSV契约，纳入同批依赖后复验。保留Mac物理GPU容器/内部Pane规则；只AST提取函数，Python10秒，不部署runtime。
-- build/面板2/vm、结果契约3/GPU环境身份1/MacGPU内部标签5通过，diff通过。实际科研项目仅纯路径接口只读核对，未执行训练或文件传输；原目标18/11。
-
-## 已完成批次 mac-sync-065
-- 064 SF11d6f7e、Exp记录c9d9823已同步。7文件边界：PlanCleanupHost/PlanCleanupPanel/LocalApiServer、完整清理26/重连9/消息桥9测试、本计划。补回063宿主/UI/API用例，审核页先注册桥、真实阶段进度、过期响应拒绝、独立双确认和重连只读观察，不执行服务器操作。
-- build/面板2/vm、完整清理26/重连9/审核桥12通过，原Windows文档旧9计数以实际12为准。三方合并保留Mac API身份；界面接入待068，原目标18/11。
-
-## 已完成批次 mac-sync-064
-- 063提交2961599已同步。8文件边界：SF extension/api-server/cleanup-file-api/cleanup-files/package/verify-runtime/cleanup测试，加本计划。三方合并保留Mac认证/租约/持久恢复；新增包依赖闭包，VSCE纯元数据枚举上限30秒，Python及测试上限不变。Mac缺可靠句柄证明返回HANDLE_CHECK_UNAVAILABLE，不放行清理。
-- SF build/28闭包及清理18通过；初次VM未注入Mac路径依赖失败，修正为真实workspace-path消费者后通过，未修改生产路径规则。永久删除全模拟，实际移动仅测试新建夹具；未触碰真实目标，原目标18/11。
-
-## 已完成批次 mac-sync-063
-- 062提交913a794已同步。8文件边界：PlanCleanup/PlanCleanupEvidence/PlanArtifactSync/PlanOutputRetention/SimpleSftpProgressWait、清理与重连两测试、本计划。只移植审核/回执/所有权和隔离规则；精确目标、祖先Git、根/父目录/类型/双确认保护保留。Mac文件句柄无法证明时必须阻断，不声称Mac真实清理通过。
-- build/面板2/vm、协调22及重连6通过。初次全文件包含尚未引入的宿主/UI/API依赖而失败，现拆为基础范围；原完整用例保留参考快照，065补回4+3例并完整验证。非清理真实目标，仅临时夹具与模拟执行端；原目标仍18/11。
-
-## 已完成批次 mac-sync-062
-- 061提交11ae916已普通同步。062边界：RealtimeTunnelClient/MultiEndpointRealtimeClient/OperationPayload、GPU快照恢复测试、本计划。保留Mac动态端点与身份，验证build/面板vm/实时快照后同步；原目标18已验证11剩余。
-- build/面板2/vm、GPU快照恢复8通过，diff通过；所有HTTP/WS均测试替身，零服务器通信。
-
-## 已完成批次 mac-sync-061
-- 8文件边界：DistributedPlanQueue/DistributedSchedulingPolicy/GpuJobOwnership/FailedJobRecovery/PanelPlanStatusSummary、两个对应纯接口测试、本计划。三方内容合并只写当前批次，验证build/面板vm和逐文件目标后普通同步。
-- build/面板2/vm、GPU纯接口6及召回3通过。Windows旧召回6例未跟随正式任务退休而失败，已改为验证正式重试委托/历史只读/上下文拒绝；GPU最后1项依赖未同步宿主UI，留至068补回并执行。原目标18已验证11剩余，不以基础模块通过冒充页面集成。
-
-## 已完成批次 mac-native-060
-- 059源码4ee7c34d2e1bb0154800aa01624ea37da9765394、SF源码2f5cec01a2953a0841a1fc11c8280df07648d28e均普通同步master；.312/.99完整prepare98目标/99含面板标记、227/26闭包与vm通过，实际包129场景、1553/84源码快照通过。
-- Release409772036于2026-10-11T16:07:03Z公开，三附件完整核验；静态索引d3fc69e4ed05ab2eeb4ee6e5e547f2d1153af45a已普通推送/fetch。真实包客户端匿名4请求均200、REST0、缓存/同版/高版跳过及两包CRC/身份/平台/大小/SHA通过，无本机安装。
-- 5文档边界：README、事实、验收证据、固定29目标计数、本计划。集中说明旧版更新锁需手动安装一次配套VSIX；不删除真实锁、不连接服务器、不触碰现有任务/Agent。macSetupGuide1/1、UTF8/29条计数18已验证11剩余/字符上限/diff门禁通过，收尾提交普通同步；完整目标保持paused，后续仅按用户反馈修复。
-
-## 已完成批次 mac-native-059
-- .311/.99 prepare98目标/99标记、实际包126及1553/84快照通过但未发布；产物不可覆盖，全部保留。本地追加“没有旧恢复槽时”复现活跃/EPERM/标准身份更新持有者3失败：过期本身不能证明退出，不能抢占混合版本更新门禁。
-- 7文件边界：旧租约源码/实际消费者、Exp package/lock/runtime、prepare说明、本计划。Mac更新租约无论TTL均须ESRCH退出证明，非更新旧入口保留；补例总10。版本递增.312，SF继续已同步.99，真实完整prepare与实际包129场景重做后发布。
-- 18已验证/11剩余，完整目标paused；仅虚拟进程磁盘，未动真实锁、远端任务或Agent。验证后普通同步，保留失败回执，不覆盖.311。
-- .312 build、旧更新租约10/10、更新门禁1/1、共享租约14/14、runtimeManifest1/macRelease4、227模块闭包、面板vm及diff检查通过；正式prepare、实际包及发布证据见060。
+## 当前批次 mac-sync-073（完整验证、发布及收尾）
+- 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
+- .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。
+- Release409806948于2026-10-11T17:13:23Z公开，三附件完全核验；源码Exp1be91b4248518c32d06c667b3c73c8b8d5c4b28c、SF2d5d5aced0a49621d84e5a9f00d65b22c053f2f3，索引bd7e14f0d8c5081031f05be4bc77bad6eed460f9普通推送/fetch。仅本机构建/测试和GitHub发布，不触碰远端任务、Agent、真实传输/清理或开发机安装。新行为M5 pending；Mac清理缺可靠句柄证明仍HANDLE_CHECK_UNAVAILABLE。
+- 收尾6文档边界：README/事实/真机证据/固定29状态/功能同步矩阵/本计划，更新公开版本和证据。UTF8、29条18/11、配置入口1/计划压缩5/diff门禁通过后普通同步origin/master；无后续自动批次。下次只按用户具体反馈处理。
 
 ## 本批记录
-- 历史公开.310/.98：Exp5c93ff7271071dbe68c5e412435ba67a78061db7/SF60fe32015a07e29f1235d17da815af936707fa79；索引5a0b05b43f8c349c11127e4cadff91aeb80bdd3d。新报告仍装.309/.97，原目标当前18已验证/11剩余。
-- 历史公开.309/.97：Exp880b653a8a08024b81446b45b327d2153fe707ff/SF2f464eb75e362150de5cbe61e1946504c3497a0a；回执/实际包/快照/匿名请求证据保留release-artifacts/preview-v0.5.309，历史14已验证/15剩余。
-- 历史公开.308/.97：Expab8bda82da5c5fbc3c950c9413ed37e279628d57/SF2f464eb75e362150de5cbe61e1946504c3497a0a；prepare82目标/83标记、实际包26场景及1542/83源码快照通过。
-- .308 Release408701623，2026-10-10T05:52:35Z，三附件完整核验；索引41e1aa347fa79d95cac7d5e280d7be9549864460普通推送。实际匿名4请求200、REST0、包/SHA与缓存/版本跳过通过，M5pending。
-- .308前门禁漏拦与runtimeManifest误路径均以新提交补正；失败证据和.264以来完整历史保留Git与产物。无自动安装/Actions/真实科研或删除。
-
-- 071配置入口1/1、UTF8四文件及diff门禁通过；不追加M5证据，18已验证11剩余。
+- 061至070c各源码/测试批次已普通同步并分别验证；最新队列契约2389ab0（队列29/失败策略21/路由5/进度19），旧fixture调整保留失败审计、历史只读，不降低生产守卫。
+- 071集中说明e81201e通过配置入口1及UTF8；072版本/发布门禁Exp1be91b4、SF2d5d5ac，新增28 Exp/1 SF目标，所有原98目标保留。运行时注入修正a0c5694只改完整常量声明，不改协议正则。
+- 历史.312/.99：Exp4ee7c34/SF2f5cec0、索引d3fc69e；.311仅本地准备未发布，所有不可变产物/失败回执继续保留。用户真机仍.309/.97，C11补证后固定29条18已验证11剩余，未用本轮模拟增加真机计数。

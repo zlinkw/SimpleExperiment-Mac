@@ -43,3 +43,9 @@
 - P3正式恢复只提供原operationId/operationInstanceId时，使用账本已持久化的精确目标并重新验证原requestKey；缺原目标则明确要求retryMethod/retryParams/requestKey，不能猜配置或重放。两次本机退出、两端远端退出及持久回执仍必需。
 - 中转来源先退出时，旧错误冻结目标undefined。新诊断等待全部本地SSH关闭，再报告两端退出码、信号和stream阶段。恢复27、单文件6及relay10本地通过；真实第二轮失败根因仍未查明，恢复成功不表示文件已上传。
 - C11补证使原目标23通过：固定29条口径现18已验证、11剩余。原报告的历史14/29不替换本仓库逐条计数。
+
+## Windows功能同步交付（2026-10-12）
+
+[preview-v0.5.313](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.313)配套SimpleSFTP Mac 0.2.100已发布，参考Windows至42902a5a/acae730，17提交功能页映射见[同步说明](windows-sync-2026-10-12.md)。本地127目标文件、234/28闭包、面板vm、实际包200消费者、1588/87源码快照以及真实匿名四请求/REST0通过。源码`1be91b4248518c32d06c667b3c73c8b8d5c4b28c`/`2d5d5aced0a49621d84e5a9f00d65b22c053f2f3`，索引`bd7e14f0d8c5081031f05be4bc77bad6eed460f9`。
+
+新正式任务、内存结果、精确GPU归属、启动前拒绝和PLAN审核属于新增本地实现，M5Validation仍pending。macOS缺可靠句柄证明，实际清理仍阻断；用户须任务空闲后主动升级Agent才能验证新runtime。没有连接服务器、启停现有任务、部署Agent、真实清理或开发机安装；本轮无新增真机证据，原目标仍18已验证11剩余。

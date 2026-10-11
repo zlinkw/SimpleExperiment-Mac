@@ -9,4 +9,4 @@
 - 完整复制的旧源码和文档仅是迁移基线，旧安装、发布、更新源和 Windows 说明不能作为 Mac 交付指令。正式发布只使用新的 release:prepare / release:publish。
 
 - 首版发布版本为 Experiment 0.5.264、SFTP 0.2.62，沿源版本递增，保持科研项目最低版本契约及已有 Agent 版本方向。初始化时的 0.1.1 从未发布。
-- 当前配套公开版为[preview-v0.5.312](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.312)：Experiment 0.5.312、SFTP 0.2.99，源码分别绑定`4ee7c34d2e1bb0154800aa01624ea37da9765394`与`2f5cec01a2953a0841a1fc11c8280df07648d28e`。本地98个目标文件、实际VSIX消费者129项、1553/84源码快照及匿名四请求校验通过。新修复尚待M5复验；.311仅本地准备，未发布、未覆盖。发布未触碰任何现有远端任务或Agent。
+- 当前配套公开版为[preview-v0.5.313](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.313)：Experiment 0.5.313、SFTP 0.2.100，源码分别绑定`1be91b4248518c32d06c667b3c73c8b8d5c4b28c`与`2d5d5aced0a49621d84e5a9f00d65b22c053f2f3`。参考Windows分叉后17个提交及SFTP配套历史，功能页与方法见`windows-sync-2026-10-12.md`。本地127个目标文件（含build面板标记128）、实际VSIX消费者200项、1588/87源码快照及匿名四请求/REST0校验通过；234/28依赖闭包及面板vm通过。新增行为尚待M5，18已验证11剩余；完整目标保持paused。旧.311等产物全部保留。发布未触碰任何现有远端任务或Agent。

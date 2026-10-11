@@ -68,7 +68,7 @@ SimpleSFTP Mac 的上传清单、Worker 相对文件路径及映射下载保留�
 
 **检查失败** 表示网络、限流或有效清单读取失败，不代表已是最新。网络恢复后手动检查。部分安装失败会列出已完成与待完成组件；选择 **重载后补装**，重载后只补装剩余组件。混合版本期间暂不接受新业务操作。
 
-**旧版更新锁阻塞的首次修复**：如果0.5.309提示旧`mac-preview-update`租约冲突，等本地传输完成后，从[preview-v0.5.312](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.312)下载两份VSIX，按上文“首次安装”依次安装SimpleSFTP Mac 0.2.99、SimpleExperiment Mac 0.5.312，再重载窗口。旧代码无法通过更新按钮安装自身修复，无需删除锁或传输账本。新版仅在证明旧更新进程已经退出时恢复租约；活跃更新和无法证明退出的记录继续受保护。之后继续使用插件内配套更新。
+**旧版更新锁阻塞的首次修复**：如果0.5.309提示旧`mac-preview-update`租约冲突，等本地传输完成后，从[preview-v0.5.313](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.313)下载两份VSIX，按上文“首次安装”依次安装SimpleSFTP Mac 0.2.100、SimpleExperiment Mac 0.5.313，再重载窗口。旧代码无法通过更新按钮安装自身修复，无需删除锁或传输账本。新版仅在证明旧更新进程已经退出时恢复租约；活跃更新和无法证明退出的记录继续受保护。之后继续使用插件内配套更新。
 
 ## 科研使用与适配边界
 
