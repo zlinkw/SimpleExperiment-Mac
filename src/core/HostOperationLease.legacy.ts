@@ -183,7 +183,10 @@ export class LegacyHostOperationLeaseManager {
                     return this.createHandle(inspection.record, fallbackSession);
                 }
             }
-            if (inspection.expiresAtMs > this.now() && !ownerProcessDefinitelyGone(inspection.record, this.now()))
+            // A Mac update may already have installed one component. Expiry
+            // alone must not let another window steal that live mixed-version gate.
+            const macUpdate = process.platform === "darwin" && inspection.record?.actionType === "mac-preview-update";
+            if ((macUpdate || inspection.expiresAtMs > this.now()) && !ownerProcessDefinitelyGone(inspection.record, this.now()))
                 throw new HostOperationLeaseConflictError(inspection.record || malformedLeaseRecord(this.leasePath, inspection.expiresAtMs));
 
             // This is a single, reusable recovery slot. A random filename here

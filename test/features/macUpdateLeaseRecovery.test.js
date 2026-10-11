@@ -10,7 +10,7 @@ function fixture(options = {}) {
     actionLabel: "Mac 配套更新", createdAt: expired, heartbeatAt: expired, expiresAt: expired, ...options.record };
   let ino = 0; const rows = new Map(), moved = [], probes = [];
   const put = (name, text) => rows.set(name, { text, ino: ++ino });
-  put(file, JSON.stringify(old)); put(file + ".expired", JSON.stringify({ ...old, leaseId: "older" }));
+  put(file, JSON.stringify(old)); if (!options.noSlot) put(file + ".expired", JSON.stringify({ ...old, leaseId: "older" }));
   const absent = () => Object.assign(Error("absent"), { code: "ENOENT" });
   const stat = name => {
     if (!rows.has(name)) throw absent(); const row = rows.get(name);
@@ -49,7 +49,11 @@ test("dead expired legacy Mac updater recovers even when the fixed recovery slot
 for (const [name, options] of [["live owner", { alive: true }], ["unknown permission", { permission: true }],
   ["foreign plugin", { record: { pluginId: "foreign" } }], ["invalid UUID", { record: { windowId: "mac-preview-update:invalid" } }],
   ["different action", { record: { actionType: "upload" } }],
-  ["unexpired receipt", { record: { expiresAt: new Date(Date.now() + 60000).toISOString() } }]]) {
+  ["unexpired receipt", { record: { expiresAt: new Date(Date.now() + 60000).toISOString() } }],
+  ["live owner without a recovery slot", { alive: true, noSlot: true }],
+  ["unknown permission without a recovery slot", { permission: true, noSlot: true }],
+  ["canonical live updater without a recovery slot", { alive: true, noSlot: true,
+    record: { windowId: require("node:os").hostname() + ":86871:mac-preview-update:8b70cef7-e132-44b3-955f-2a735a27b8a8" } }]]) {
   test(`legacy updater recovery preserves ${name}`, async () => {
     const f = fixture(options); await assert.rejects(f.acquire(), error => error.code === "RESOURCE_CONFLICT");
     assert.equal(f.moved.length, 0); assert.equal(JSON.parse(f.rows.get(f.file).text).leaseId, "old");
