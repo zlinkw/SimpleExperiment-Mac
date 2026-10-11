@@ -21,7 +21,7 @@
 
 ## 本地修复
 
-修复已随[preview-v0.5.310](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.310)公开交付，配套SimpleSFTP Mac 0.2.98。本地97个目标测试文件逐文件串行通过，build面板另有2项；实际VSIX消费者115项、源码快照、匿名静态索引与两包校验通过。新版本M5复验仍待用户，不把旧版部分报告计作新版通过。
+前一轮修复随[preview-v0.5.310](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.310)交付SimpleSFTP Mac 0.2.98，97个目标文件与实际VSIX消费者115项通过。续验修复现随[preview-v0.5.312](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.312)交付SimpleSFTP Mac 0.2.99：98个目标文件逐文件串行通过，build面板另有2项；实际VSIX消费者129项、1553/84源码快照和匿名静态索引/两包校验通过，四次公开请求且REST请求为0。两轮新修复仍待M5复验，不把旧版报告计作新版通过。.311准备产物保留但未发布。
 
 - Win11参考提交`8b4aed70d048c96f4a5062f3ec699a3a8449768a`。Mac宿主传递当前设置的tmux前缀；GPU卡片按该前缀及物理编号归属。缺前缀不把其他用户GPU认作当前用户。任务显示在GPU内部，历史会话和未绑定窗口统一折叠。显式关闭仍核验稳定窗口/Pane身份、用户确认及每次执行前重新读取。
 - 新run-plan调度不再创建每Plan的`*-sch-run-plan-*`会话。单Worker/Worker池按运行调度器服务器的真实GPU编号选择固定GPU容器，新任务用独立内部标签；CPU Hub使用一个固定`<prefix>-control`容器。存活、日志与停止绑定稳定Pane和PID启动身份，不关闭共享GPU容器。旧会话/任务记录保持兼容，不自动迁移或清理。GPU任务建标签失败明确失败，不另建独立任务会话。
@@ -39,7 +39,7 @@
 
 ## 续验后的新增本地修复
 
-- P4旧更新窗口的私有UUID不能通过原宿主/PID归属规则，固定恢复槽可能长期阻塞。新窗口使用标准宿主/PID身份；精确旧Mac更新签名仅在过期且ESRCH证明退出时兼容恢复。活跃、EPERM、未知归属及未过期继续保护。本地7个虚拟磁盘/进程消费者通过，没有修改用户真实锁。
+- P4旧更新窗口的私有UUID不能通过原宿主/PID归属规则，固定恢复槽可能长期阻塞。新窗口使用标准宿主/PID身份；精确旧Mac更新签名仅在过期且ESRCH证明退出时兼容恢复。Mac更新租约无论TTL是否过期，都不能仅凭超时抢占活跃更新；EPERM及未知归属继续保护。本地10个虚拟磁盘/进程消费者通过，包括不存在旧恢复槽的活跃/权限未知边界，没有修改用户真实锁。
 - P3正式恢复只提供原operationId/operationInstanceId时，使用账本已持久化的精确目标并重新验证原requestKey；缺原目标则明确要求retryMethod/retryParams/requestKey，不能猜配置或重放。两次本机退出、两端远端退出及持久回执仍必需。
 - 中转来源先退出时，旧错误冻结目标undefined。新诊断等待全部本地SSH关闭，再报告两端退出码、信号和stream阶段。恢复27、单文件6及relay10本地通过；真实第二轮失败根因仍未查明，恢复成功不表示文件已上传。
 - C11补证使原目标23通过：固定29条口径现18已验证、11剩余。原报告的历史14/29不替换本仓库逐条计数。

@@ -9,4 +9,4 @@
 - 完整复制的旧源码和文档仅是迁移基线，旧安装、发布、更新源和 Windows 说明不能作为 Mac 交付指令。正式发布只使用新的 release:prepare / release:publish。
 
 - 首版发布版本为 Experiment 0.5.264、SFTP 0.2.62，沿源版本递增，保持科研项目最低版本契约及已有 Agent 版本方向。初始化时的 0.1.1 从未发布。
-- 当前配套公开版为[preview-v0.5.310](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.310)：Experiment 0.5.310、SFTP 0.2.98，源码分别绑定`5c93ff7271071dbe68c5e412435ba67a78061db7`与`60fe32015a07e29f1235d17da815af936707fa79`。本地完整发布验证和匿名实际包校验通过，新修复尚待M5复验。发布未触碰任何现有远端任务或Agent。
+- 当前配套公开版为[preview-v0.5.312](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.312)：Experiment 0.5.312、SFTP 0.2.99，源码分别绑定`4ee7c34d2e1bb0154800aa01624ea37da9765394`与`2f5cec01a2953a0841a1fc11c8280df07648d28e`。本地98个目标文件、实际VSIX消费者129项、1553/84源码快照及匿名四请求校验通过。新修复尚待M5复验；.311仅本地准备，未发布、未覆盖。发布未触碰任何现有远端任务或Agent。
