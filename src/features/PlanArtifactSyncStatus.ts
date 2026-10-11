@@ -43,17 +43,20 @@ export function assessPlanArtifactSync(plan: QueuedPlan, workerIds: string[], in
   const pending = new Set<string>();
   const unavailable = new Set<string>();
   let missingSource = false;
-  const subtree = (workerId: string, directory: string) => Object.entries(inventories.get(workerId) || {})
-    .filter(([file, hash]) => file.startsWith(directory + "/") && /^[a-f0-9]{64}$/i.test(hash))
+  const subtree = (workerId: string, directory: string, csv?: string) => Object.entries(inventories.get(workerId) || {})
+    .filter(([file, hash]) => (file.startsWith(directory + "/") || csv && file === csv) && /^[a-f0-9]{64}$/i.test(hash))
     .sort(([a], [b]) => a.localeCompare(b));
   for (const job of plan.jobs) {
-    const source = subtree(job.workerId!, job.outputDir);
+    const csv = job.resultPathPolicy === "declared" ? job.collectionResultCsv : undefined;
+    const source = subtree(job.workerId!, job.outputDir, csv);
     const expected = new Map(source);
-    const known = Object.entries(job.artifacts || {}).filter(([file]) => file.startsWith(job.outputDir + "/"));
+    const known = Object.entries(job.artifacts || {}).filter(([file]) => file.startsWith(job.outputDir + "/") || csv && file === csv);
     const runScopedDirectory = job.outputDir.endsWith(`/attempts/${plan.id}`);
     const hasLegacyRunEvidence = requiredPaths.length > 0 && requiredPaths.every(file => known.some(([name, hash]) =>
       name === `${job.outputDir}/${file}` && /^[a-f0-9]{64}$/i.test(hash)));
-    if (!runScopedDirectory && !hasLegacyRunEvidence || !inventories.has(job.workerId!) || !source.length
+    const formalEvidence = job.resultPathPolicy === "declared" && job.globalJobId === `${plan.id}:${job.index}`
+      && known.some(([name, hash]) => name === `${job.outputDir}/formal_job_owner.json` && /^[a-f0-9]{64}$/i.test(hash));
+    if (!(job.resultPathPolicy === "declared" ? formalEvidence : runScopedDirectory || hasLegacyRunEvidence) || !inventories.has(job.workerId!) || !source.length
       || requiredPaths.some(file => !expected.has(`${job.outputDir}/${file}`))
       || known.some(([file, hash]) => expected.get(file)?.toLowerCase() !== hash.toLowerCase())) {
       missingSource = true;
@@ -63,7 +66,7 @@ export function assessPlanArtifactSync(plan: QueuedPlan, workerIds: string[], in
     const sourceKey = JSON.stringify(source.map(([file, hash]) => [file, hash.toLowerCase()]));
     for (const workerId of workerIds) {
       if (!inventories.has(workerId)) { unavailable.add(workerId); continue; }
-      if (JSON.stringify(subtree(workerId, job.outputDir).map(([file, hash]) => [file, hash.toLowerCase()])) !== sourceKey) pending.add(workerId);
+      if (JSON.stringify(subtree(workerId, job.outputDir, csv).map(([file, hash]) => [file, hash.toLowerCase()])) !== sourceKey) pending.add(workerId);
     }
   }
   const syncedCount = missingSource ? 0 : workerIds.filter(id => !pending.has(id) && !unavailable.has(id)).length;

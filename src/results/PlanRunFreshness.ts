@@ -7,6 +7,12 @@ export type AuthoritativeJobIdentity = {
   attempt: number;
   workerId: string;
   outputDir: string;
+  resultPathPolicy?: "declared";
+  globalJobId?: string;
+  collectionResultCsv?: string;
+  checkpointSource?: Record<string, string>;
+  planRevision?: string;
+  codeFingerprint?: string;
   commandId: string;
   artifactHashes: Record<string, string>;
 };
@@ -50,7 +56,8 @@ function authoritativeJob(plan: Record<string, any>, job: Record<string, any>, r
   const outputDir = process.platform === "darwin" ? normalizedOutputPath(job?.outputDir)
     : String(job?.outputDir || "").replace(/\\/g, "/").trim();
   if (!Number.isInteger(index) || index < 0 || !String(job?.case || "").trim() || !Number.isInteger(seed)
-    || !Number.isInteger(attempt) || attempt < 1 || !workerId || !outputDir
+    || !Number.isInteger(attempt) || attempt < 1 && !(attempt === 0 && plan.resultPathPolicy === "declared"
+      && job.globalJobId === `${plan.id}:${index}`) || !workerId || !outputDir
     || outputDir.startsWith("/") || /^[A-Za-z]:/.test(outputDir)
     || outputDir.split("/").some((part) => !part || part === "." || part === "..")) return undefined;
   const artifactHashes: Record<string, string> = {};
@@ -69,6 +76,9 @@ function authoritativeJob(plan: Record<string, any>, job: Record<string, any>, r
     attempt,
     workerId,
     outputDir,
+    ...(plan.resultPathPolicy === "declared" ? { resultPathPolicy: "declared" as const,
+      globalJobId: String(job.globalJobId), collectionResultCsv: String(job.collectionResultCsv || ""), checkpointSource: job.checkpointSource,
+      planRevision: plan.revision, codeFingerprint: plan.codeFingerprint } : {}),
     commandId,
     artifactHashes,
   };
@@ -90,7 +100,7 @@ export function hasExclusiveAttemptOutput(queue: unknown, run: AuthoritativePlan
   const parts = output.split("/");
   if (!run.runId || !output || !normalizedPlanFile(run.plan.planFile || run.plan.file) || output.startsWith("/") || parts.some(part => !part || part === "." || part === ".." || /[:\x00-\x1f]/.test(part))) return false;
   const scoped = parts.some((part, index) => part === "attempts" && (parts[index + 1] === run.runId
-    || job.attempt > 1 && /^(?:distributed-attempt|auto-retry)-[0-9]+-[a-z0-9]+$/.test(parts[index + 1] || "")));
+    || job.attempt > 1 && /^(?:distributed-attempt|auto-retry|attempt)-[0-9]+-[a-z0-9]+$/.test(parts[index + 1] || "")));
   if (!scoped) return false;
   const identity = (plan: Record<string, any>, row: Record<string, any>) => JSON.stringify([
     normalizedPlanFile(plan.planFile || plan.file), String(plan.revision || ""), String(plan.codeFingerprint || ""), String(plan.id || ""),
@@ -118,7 +128,7 @@ export function selectLatestPlanRunPreview(queue: unknown, planFile: string, exp
   if (!selectedPlan) return undefined;
   const rows: Record<string, any>[] = Array.isArray((queue as any)?.plans) ? (queue as any).plans : [];
   const selected = rows.map((plan, order) => ({ plan, order })).filter(({ plan }) =>
-    normalizedPlanFile(plan.planFile || plan.file) === selectedPlan && plan.id && plan.revision
+    !plan.cleanup && normalizedPlanFile(plan.planFile || plan.file) === selectedPlan && plan.id && plan.revision
     && (!expectedRevision || plan.revision === expectedRevision) && !plan.recoveryConflict)
     .sort((left, right) => timestamp(right.plan.enqueuedAt) - timestamp(left.plan.enqueuedAt) || right.order - left.order)[0]?.plan;
   if (!selected) return undefined;
@@ -139,7 +149,7 @@ function selectLatestCompletePlanRunInternal(queue: unknown, planFile: string, e
   if (!selectedPlan) return undefined;
   const revision = String(expectedRevision || "").trim();
   const candidates = rows.map((plan: Record<string, any>, order: number) => ({ plan, order }))
-    .filter(({ plan }) => normalizedPlanFile(plan?.planFile || plan?.file) === selectedPlan
+    .filter(({ plan }) => !plan.cleanup && normalizedPlanFile(plan?.planFile || plan?.file) === selectedPlan
       && Boolean(String(plan?.id || "").trim())
       && Boolean(String(plan?.revision || "").trim())
       && (!revision || String(plan.revision) === revision)

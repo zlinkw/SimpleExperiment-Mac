@@ -67,6 +67,12 @@ export function parseSimpleRunArgs(argv: string[]): SimpleRunOptions {
 
 export function runRecordedExperiment(options: SimpleRunOptions): SimpleRunResult {
   const cwd = path.resolve(options.cwd || process.cwd());
+  const experimentsDir = path.join(cwd, "experiments");
+  const hasResultRegistry = fs.existsSync(experimentsDir) && fs.readdirSync(experimentsDir)
+    .some(name => /^results.*\.csv$/.test(name));
+  if (["experiments/plans", "experiments/simple_project.yaml", "paper/claims.md", "docs/project-constraints.md", "docs/target-mode-plan.md"]
+    .some(relative => fs.existsSync(path.join(cwd, relative))) || hasResultRegistry)
+    throw new Error("FORMAL_PLAN_REQUIRED: research jobs require a declared PLAN, validatePlan/dryRunPlan and runPlan through SimpleExperiment API.");
   const runId = buildRunId(options);
   const runDir = path.join(cwd, "experiments", "runs", runId);
   fs.mkdirSync(runDir, { recursive: true });
@@ -93,10 +99,11 @@ function buildRunId(options: SimpleRunOptions): string {
 function writeMetricsSummary(runDir: string, options: SimpleRunOptions, stdout: string, stderr: string): number {
   const parsed = previewTextMetricParse([stdout, stderr].join("\n"), "stdout.log");
   if (!parsed.records) return 0;
-  const headers = ["experiment_id", "attempt_id", "suite", "method", "dataset", "split", "fold", "seed", "metric", "value", "unit", "higher_is_better", "epoch", "step", "timestamp"];
+  const headers = ["experiment_id", "run_id", "global_job_id", "suite", "method", "dataset", "split", "fold", "seed", "metric", "value", "unit", "higher_is_better", "epoch", "step", "timestamp"];
   const rows: Array<Record<string, string>> = parsed.samples.map((sample) => ({
     experiment_id: path.basename(runDir),
-    attempt_id: "manual-1",
+    run_id: path.basename(runDir),
+    global_job_id: path.basename(runDir) + ":0",
     suite: options.suite || "manual",
     method: options.method || options.name,
     dataset: options.dataset || "unknown",

@@ -16,12 +16,13 @@
 - 范围：持久面板恢复、GPU快照与本机派发归属、失败召回/明确不可用、结果进度与正式路径/内存汇总、PLAN清理审核及配套受限接口、启动前拒绝回执。8b4aed70用户隔离和GPU窗口已同步，核对保留；不复制Windows发布/安装/入口默认值。
 - 分批：061队列与GPU/召回基础；062实时快照；063清理协调基础；064配套清理接口；065清理宿主/API；066正式runtime；067结果契约；068面板集成；069完整回归/发布。每批至多8文件，必要时细分；不执行真实传输/清理/Agent更新或任务操作。原目标18已验证11剩余，整体paused，仅执行本次授权。
 
-## 当前批次 mac-sync-067a（passed，版本注入构建门禁修正）
+## 已完成批次 mac-sync-067a（版本注入构建门禁修正）
 - 067七个源/测试文件保持未提交，未计通过。正式测试揭示Mac旧构建注入会改写新协议re.search字符串；Windows42902a5a构建脚本已有整行常量门禁。067a只改构建脚本、实际纯函数回归和本计划3文件，build/面板vm/版本注入测试后独立同步；不改运行中的远端runtime。
 - build/面板2/vm、实际版本注入1通过，完整常量更新/正则字符串与注释不改/重复注入幂等。067宿主确认测试留至068整合后补回，不以依赖未接入的测试调整生产逻辑；原目标18/11。
 
-## 待完成批次 mac-sync-067（正式队列/结果与不可用判定接口）
+## 当前批次 mac-sync-067（passed，正式队列/结果与不可用判定接口）
 - 066提交ac9e0e2已同步。8文件边界：PlanRunFreshness/PlanArtifactSyncStatus/ExperimentRunner/ProjectAdapterTemplates/JobAvailability、正式执行测试及Python夹具、本计划。保留Mac严格路径/空选择拒绝，采用正式身份/结果内存读取和显式不可用判定。正式执行测试使用AST隔离函数及mock工作进程，10秒上限；不运行科研。
+- 067a构建修正a0c5694已同步。build/面板2/vm、正式执行基础5通过；Linux路径逻辑映射Windows临时夹具的文件系统叶子显式注入，保留durable_plan_path检查，未改生产POSIX规则。原宿主输出确认1例待068接入后补回，旧测试与失败回执保留Git/参考快照；原目标18/11。
 
 ## 已完成批次 mac-sync-066
 - 065提交a679708已同步。8文件边界：Agent/Scheduler/WrapperResultBundle/FourStateMetricBundle、正式结果契约测试及Python夹具、GPU身份测试、本计划。正式declared路径、训练/测试/预检拒绝及无attempt新执行同步；Agent冲突保留Mac严格POSIX函数并采用历史attempt只读规则。第一次正式结果测试发现collector仍缺新CSV契约，纳入同批依赖后复验。保留Mac物理GPU容器/内部Pane规则；只AST提取函数，Python10秒，不部署runtime。
