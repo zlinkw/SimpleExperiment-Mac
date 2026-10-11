@@ -16,7 +16,11 @@
 - 范围：持久面板恢复、GPU快照与本机派发归属、失败召回/明确不可用、结果进度与正式路径/内存汇总、PLAN清理审核及配套受限接口、启动前拒绝回执。8b4aed70用户隔离和GPU窗口已同步，核对保留；不复制Windows发布/安装/入口默认值。
 - 分批：061队列与GPU/召回基础；062实时快照；063清理协调基础；064配套清理接口；065清理宿主/API；066正式runtime；067结果契约；068面板集成；069完整回归/发布。每批至多8文件，必要时细分；不执行真实传输/清理/Agent更新或任务操作。原目标18已验证11剩余，整体paused，仅执行本次授权。
 
-## 当前批次 mac-sync-062（passed，实时快照及操作载荷）
+## 当前批次 mac-sync-063（passed，受限PLAN清理协调基础）
+- 062提交913a794已同步。8文件边界：PlanCleanup/PlanCleanupEvidence/PlanArtifactSync/PlanOutputRetention/SimpleSftpProgressWait、清理与重连两测试、本计划。只移植审核/回执/所有权和隔离规则；精确目标、祖先Git、根/父目录/类型/双确认保护保留。Mac文件句柄无法证明时必须阻断，不声称Mac真实清理通过。
+- build/面板2/vm、协调22及重连6通过。初次全文件包含尚未引入的宿主/UI/API依赖而失败，现拆为基础范围；原完整用例保留参考快照，065补回4+3例并完整验证。非清理真实目标，仅临时夹具与模拟执行端；原目标仍18/11。
+
+## 已完成批次 mac-sync-062
 - 061提交11ae916已普通同步。062边界：RealtimeTunnelClient/MultiEndpointRealtimeClient/OperationPayload、GPU快照恢复测试、本计划。保留Mac动态端点与身份，验证build/面板vm/实时快照后同步；原目标18已验证11剩余。
 - build/面板2/vm、GPU快照恢复8通过，diff通过；所有HTTP/WS均测试替身，零服务器通信。
 

@@ -314,7 +314,12 @@ export async function callSftpWithProgress(
       // explicit retry must reconcile this operation before starting another
       // modifying transfer; the current error response alone may not prove
       // that all remote writers have exited.
-      if (payload.error) throw new Error(`SimpleSFTP ${method}：${payload.error.message || "未知错误"}`);
+      if (payload.error) {
+        const error = new Error(`SimpleSFTP ${method}：${payload.error.message || "未知错误"}`);
+        if (method.startsWith("files.cleanup.")) Object.assign(error, { apiCode: payload.error.code, apiData: payload.error.data,
+          code: payload.error.data?.code });
+        throw error;
+      }
       throw new Error(`SimpleSFTP ${method}：${payload.result.error || payload.result.message || "传输失败"}`);
     }
     forgetStopCheck();

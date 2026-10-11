@@ -2,6 +2,7 @@ import * as crypto from "node:crypto";
 import * as path from "node:path";
 
 export type PlanSyncEntry = {
+  cleanupOperationId?: string;
   planFile: string;
   revision: string;
   runId: string;
@@ -140,6 +141,7 @@ export function pendingPlanSyncs(ledger: PlanSyncLedger): Array<{ key: string; e
     if (entry.runId !== "historic") latestRun.set(scope, key);
   }
   return entries.filter(([key, entry]) => {
+    if (entry.cleanupOperationId) return false;
     const winner = latestRun.get(canonicalPlan(entry.planFile));
     return winner ? key === winner : entry.runId === "historic";
   }).flatMap(([key, entry]) => Object.entries(entry.destinations)
