@@ -29,36 +29,26 @@ export function prequeueGpuWeight(rows: unknown, idleUtil: number, idleMem: numb
   const evidence = freshIdleGpuEvidence({ worker: rows }, ["worker"], idleUtil, idleMem);
   if (!evidence.complete) return 0;
   const ids = new Set(evidence.idleGpuIdsByWorker.get("worker") || []);
-  const users = new Set([owner.currentUser || fallbackUser, ...(owner.currentUserAliases || [])]
-    .map((user) => String(user).trim().toLowerCase()).filter(Boolean));
-  const keywords = (owner.myCommandKeywords || []).map((word) => word.toLowerCase()).filter(Boolean);
   for (const row of rows) {
     const processes = Array.isArray(row.processes) ? row.processes : Array.isArray(row.procs) ? row.procs : [];
     const count = Number(row.processCount ?? row.process_count ?? processes.length);
     if (!processes.length || count > processes.length) continue;
-    const own = (process: Record<string, unknown>) => {
-      if (process.pluginManaged === true) return true;
-      const user = String(process.username ?? process.user ?? process.userName ?? "").trim().toLowerCase();
-      const command = String(process.command ?? process.cmdline ?? process.cmd ?? "").toLowerCase();
-      const userMatch = Boolean(user && users.has(user));
-      const commandMatch = keywords.some((word) => command.includes(word));
-      // A keyword cannot turn another user's or an unidentified process into our capacity.
-      return userMatch && (owner.myProcessMatchMode === "command_contains" ? commandMatch : true);
-    };
+    const own = (process: Record<string, unknown>) => process.submittedByThisClient === true;
     if (processes.every((process: unknown) => process && typeof process === "object" && own(process as Record<string, unknown>)))
       ids.add(String(row.index ?? row.gpu_id ?? row.gpuId ?? row.id));
   }
   return Number.isInteger(capacity) && Number(capacity) > 0 ? Math.min(ids.size, Number(capacity)) : ids.size;
 }
 
-export type PrequeueWorker = { workerId: string; online: boolean; weight: number; codeFingerprint: string };
+export type PrequeueWorker = { workerId: string; online: boolean; weight: number; codeFingerprint: string; declaredJobPaths?: boolean };
 export function allocateServerPrequeue(queue: DistributedQueue, workers: readonly PrequeueWorker[]) {
   const next: DistributedQueue = { ...queue, plans: queue.plans.map((plan) => ({ ...plan,
     jobs: plan.jobs.map((job) => ({ ...job })) })) };
   const assigned: Array<{ planId: string; jobIndex: number; workerId: string; commandId: string; attempt: number }> = [];
   for (const plan of next.plans) {
+    if (plan.resultPathPolicy !== "declared") continue;
     if (plan.executionModeBlocked || schedulingMode(plan.schedulingMode) !== "server_prequeue" || plan.localDispatchOverride === true || plan.recoveryConflict) continue;
-    const eligible = workers.filter((worker) => worker.online && worker.weight > 0
+    const eligible = workers.filter((worker) => worker.declaredJobPaths === true && worker.online && worker.weight > 0
       && worker.codeFingerprint === plan.codeFingerprint && workerCodeVersionAvailable(next, worker.workerId, plan.codeFingerprint));
     if (!eligible.length) continue;
     const weights = plan.prequeueWeights || Object.fromEntries(eligible.map((worker) => [worker.workerId, worker.weight]));

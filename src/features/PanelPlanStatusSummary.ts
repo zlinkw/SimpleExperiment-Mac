@@ -1,3 +1,5 @@
+import { jobIsUnavailable, QueuedPlan, QueuedJob } from "./DistributedPlanQueue";
+
 export type PlanSelectorStatus = "not-started" | "partial" | "running" | "completed" | "failed";
 
 export interface PanelPlanStatusSummary {
@@ -8,6 +10,7 @@ export interface PanelPlanStatusSummary {
   totalCount: number;
   taskCount: number;
   failedCount: number;
+  unavailableCount: number;
   activeCount: number;
   queuedCount: number;
   updatedAt?: string;
@@ -151,6 +154,7 @@ function summarizeEntry(entry: PlanEntry): PanelPlanStatusSummary {
     planFile: entry.file,
     planRevision: firstText(plan.planRevision, plan.plan_revision, plan.revision),
     ...record(job),
+    unavailable: jobIsUnavailable(plan as QueuedPlan, job as QueuedJob),
   }))), false);
   const countRows = distributedJobs.length ? distributedJobs : tasks;
   const taskCounts = countTaskStatuses(tasks);
@@ -188,15 +192,17 @@ function summarizeEntry(entry: PlanEntry): PanelPlanStatusSummary {
     totalCount: boundedCount(totalCount),
     taskCount: boundedCount(countRows.length),
     failedCount: boundedCount(displayedCounts.failedCount),
+    unavailableCount: boundedCount(displayedCounts.unavailableCount),
     activeCount: boundedCount(displayedCounts.activeCount),
     queuedCount: boundedCount(displayedCounts.queuedCount),
     ...(updatedAt ? { updatedAt: updatedAt.slice(0, 64) } : {}),
   };
 }
 
-function countTaskStatuses(rows: Record<string, any>[]): { completedCount: number; failedCount: number; activeCount: number; queuedCount: number } {
-  const statuses = rows.map((row) => taskStatusToken(row.status));
+function countTaskStatuses(rows: Record<string, any>[]): { completedCount: number; failedCount: number; unavailableCount: number; activeCount: number; queuedCount: number } {
+  const statuses = rows.filter(row => row.unavailable !== true).map((row) => taskStatusToken(row.status));
   return {
+    unavailableCount: rows.filter(row => row.unavailable === true).length,
     completedCount: statuses.filter((status) => TASK_COMPLETED.has(status)).length,
     failedCount: statuses.filter((status) => TASK_FAILED.has(status)).length,
     activeCount: statuses.filter((status) => TASK_ACTIVE.has(status)).length,
