@@ -15,7 +15,13 @@
 - 所列不依赖真机的本地修复、协作核查和发布已交付；用户暂停授权的前提已满足，收尾提交同步后将目标设为paused，未经用户恢复不继续批次。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；收到反馈后再考虑完善，模拟不替代真机。
 
-## 当前批次 mac-native-047（passed，本地UI修复）
+## 当前批次 mac-native-048（passed，本地调度GPU标签页）
+- 起始ec4f7a41ea25aefce54b7747a797d09fa87a365d=origin/master；重读实际调度launch、存活、停止、tmux元数据与目标测试，保护原远端任务/旧入口。
+- 5文件：Agent runtime模板、隔离编译消费者JS/Python、既有停止消费者测试及计划；新run-plan按本机真实GPU编号共享容器新建标签，Hub无GPU使用共享control容器；绑定稳定pane与PID启动身份，不杀整个GPU容器。旧sch记录仍可显式精确停止，不迁移或自动关闭。GPU任务创建失败不再新建独立任务会话。
+- build/面板2、隔离Python5（10秒）、Planlaunch8/身份5/队列29/停止路由5/PlanStopClear33逐文件20秒通过。PlanStopClear先发现两个既有Mac夹具缺实际require/执行模式，补齐实际模块与显式train输入后通过，未为夹具改变生产行为。闭包第一次vsce ls在8秒超时，独立检查后同一门禁通过227模块；vm/UTF8/diff通过。没有执行真实远端任务或GPU命令。
+- 完成后普通同步，真实提交记录以Git为准；下一批SFTP认证取消/旧upload.files退出证明，最后统一归档用户部分真机证据、版本元数据及prepare门禁后发布。完整目标继续paused。
+
+## 前批 mac-native-047（passed，本地UI修复）
 - 2026-10-11用户授权参考Win11最新8b4aed70d048c96f4a5062f3ec699a3a8449768a，同步Mac用户识别/GPU标签页并处理真机报告后发布。起始Exp f81d10ee99053ef3f9a0dc6ac0d857d4f3253d44/SF2f464eb75e362150de5cbe61e1946504c3497a0a；两仓master，保护Windows源码、所有现有远端任务与Agent，不执行服务器通信或安装。
 - 8文件边界：两处宿主/UI、新GPU关闭模块、四目标测试与本计划。先复现UI7失败，再移植配置前缀与统一折叠，缺前缀不归属任何用户GPU。GPU关闭仅显式用户确认稳定窗口身份；本批不调用该入口。旧两测试缺配置叶子先失败，移植donor叶子后通过。
 - build/面板2、UI13、GPU关闭8、清标签5、单标签关闭1逐文件串行20秒通过；vm.Script/UTF8/diff通过。提交前diff仅本批8文件，无远端通信；真实GPU/用户隔离复验等待新版。提交以Git记录为准。

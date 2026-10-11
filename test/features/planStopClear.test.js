@@ -333,6 +333,7 @@ function installStopClearHost(sandbox) {
     PlanStopClear_1: require("../../dist/features/PlanStopClear.js"),
     DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
     DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"),
+    PlanExecutionMode: require("../../dist/features/PlanExecutionMode.js"),
     vscode: { window: {
       showWarningMessage: async (text, _options, action) => { notices.push(text); return sandbox.answers.shift() ?? action; },
       showInformationMessage: (text) => { notices.push(text); },
@@ -1176,6 +1177,7 @@ test("handleMessage posts the real stop-clear outcome for failed, cancelled, and
   };
   const context = {
     OperationOutcome_1: OperationOutcome,
+    require: require("node:module").createRequire(path.join(__dirname, "../../dist/extension/legacy.js")),
     getSafeCommand: (message) => message.command,
     stringField: (message, key) => String(message[key] || ""),
     booleanField: () => false,
@@ -1524,7 +1526,7 @@ test("stopping during a hung fingerprint cancels that submission and a new one c
     distributedCodeVersionHold: (body) => new Promise((resolve) => { hashReleases.set(body.planFile, () => resolve(null)); }),
     localDistributedCodeFingerprint: async () => "code-1",
     ensureCodeReadyForRun: async () => undefined,
-    runPlanPreflight: async () => ({ validation: { jobs: [{ index: 0, case: "bus", seed: 1, output_dir: "work/hash" }] } }),
+    runPlanPreflight: async () => ({ validation: { execution_mode: "train", jobs: [{ index: 0, case: "bus", seed: 1, output_dir: "work/hash" }] } }),
     confirmDistributedPlanExistingOutputs: async () => undefined,
     assertExecutionCondaEnvReady: () => undefined,
     reportPlanStage: () => undefined,

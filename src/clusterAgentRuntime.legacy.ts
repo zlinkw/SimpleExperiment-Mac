@@ -4068,6 +4068,13 @@ def tmux_available():
 def tmux_session_alive(session, cwd=None, env=None):
     if not session:
         return False
+    if str(session).startswith("%"):
+        if not re.fullmatch(r"%[0-9]+", str(session)):
+            return False
+        found = subprocess.run(["tmux", "display-message", "-p", "-t", str(session), "#{pane_id}|#{session_name}"], cwd=cwd or None, capture_output=True, text=True, timeout=3, env=env)
+        parts = (found.stdout or "").strip().split("|")
+        prefix = _resolve_tmux_prefix(None, None, env)
+        return found.returncode == 0 and len(parts) == 2 and parts[0] == session and (parts[1] == prefix + "-control" or re.fullmatch(re.escape(prefix) + r"-gpu-[0-9]+", parts[1]) is not None)
     return subprocess.run(["tmux", "has-session", "-t", session], cwd=cwd or None, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).returncode == 0
 
 def tmux_task_pane_alive(pane, session, cwd=None, env=None):
@@ -4895,6 +4902,38 @@ def start_job_in_gpu_pane(gpu_window, args, cwd, env, log_path, exit_code_path):
         ctx_exc = _build_tmux_error_context(gpu_window, None, str(exc), "", cwd, 1, env)
         raise RuntimeError(f"split-window failed for {gpu_window!r}: {exc!r}; cwd={str(cwd)!r}; {ctx_exc}; blocking task dispatch")
 
+def start_scheduler_in_gpu_tab(root, args, env, log_path, exit_code_path):
+    """New schedulers use one stable pane, never a per-Plan session or main shell."""
+    prefix = _resolve_tmux_prefix(None, None, env)
+    if env.get("SIMPLE_EXPERIMENT_TOPOLOGY_MODE") == "hub_worker":
+        # A CPU-only Hub has no physical GPU: use one shared control container.
+        container = prefix + "-control"
+    else:
+        probe = subprocess.run(["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"], cwd=root, capture_output=True, text=True, timeout=5, env=env)
+        ids = [line.strip() for line in (probe.stdout or "").splitlines() if line.strip()]
+        if probe.returncode != 0 or not ids or any(not re.fullmatch(r"[0-9]+", item) for item in ids):
+            raise RuntimeError("cannot prove local physical GPU index; scheduler tab was not started")
+        container = fixed_gpu_window_name(prefix, min(ids, key=int))
+    pane = start_job_in_gpu_pane(container, args, root, env, log_path, exit_code_path)
+    if not re.fullmatch(r"%[0-9]+", str(pane)):
+        raise RuntimeError("scheduler tab has no stable pane identity")
+    identity = subprocess.run(["tmux", "display-message", "-p", "-t", pane, "#{pane_id}|#{session_name}|#{pane_pid}"], cwd=root, capture_output=True, text=True, timeout=3, env=env)
+    parts = (identity.stdout or "").strip().split("|")
+    if identity.returncode != 0 or len(parts) != 3 or parts[:2] != [pane, container] or not re.fullmatch(r"[1-9][0-9]*", parts[2]):
+        raise RuntimeError("scheduler tab identity could not be verified")
+    return int(parts[2]), pane
+
+
+def scheduler_tmux_stop_command(root, target, pid, start_identity):
+    if str(target).startswith("%"):
+        if not re.fullmatch(r"%[0-9]+", str(target)) or not tmux_session_alive(target, root) or not start_identity or tmux_pane_pid(target, root) != pid or process_start_identity(pid) != start_identity:
+            raise ValueError("scheduler tab identity changed; GPU container and other tasks were preserved")
+        return ["tmux", "kill-pane", "-t", target]
+    if not str(target).startswith(_tmux_prefix() + "-sch-"):
+        raise ValueError("scheduler session ownership could not be verified")
+    return ["tmux", "kill-session", "-t", target]
+
+
 def _resolve_dynamic_gpu_ids(root):
     # 动态解析 worker 配置的 gpu_ids：优先 options/env/availableGpuIds，其次遍历 MANAGED GPU 窗口
     try:
@@ -5462,16 +5501,9 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             pid = start_job_in_gpu_pane(gpu_window, args, project_dir, env, log_path, exit_code_path)
             used_tmux = True
         except Exception as exc:
-            try:
-                _fallback_session = simple_tmux_name(session)
-                tmux_session = _fallback_session
-                env["SIMPLE_EXPERIMENT_TMUX_SESSION"] = tmux_session
-                pid = start_simple_tmux_command(tmux_session, args, project_dir, log_path, env, exit_code_path)
-                used_tmux = True
-            except Exception as exc2:
-                if reserved_gpu:
-                    release_distributed_gpu_reservation(gpu_id, command_id)
-                raise RuntimeError(f"tmux launch failed: {exc} / fallback:{exc2}; refusing silent bash fallback")
+            if reserved_gpu:
+                release_distributed_gpu_reservation(gpu_id, command_id)
+            raise RuntimeError(f"GPU task tab launch failed: {exc}; no standalone task session was created")
     if not used_tmux:
         if reserved_gpu:
             release_distributed_gpu_reservation(gpu_id, command_id)
@@ -13231,86 +13263,18 @@ def handle_action(root, action, payload, operation_id, op_id):
         overwrite_existing = any(action_bool(value) for value in (payload.get("overwriteExisting"), payload.get("overwrite_existing"), payload.get("overwrite"), options.get("overwriteExisting"), options.get("overwrite_existing"), options.get("overwrite"), action_operation_fields(payload).get("overwriteExisting"), action_operation_fields(payload).get("overwrite")))
         if overwrite_existing:
             scheduler_args.append("--overwrite")
-        tmux_session = simple_tmux_name(f"sch-{op_id}")
+        tmux_session = ""
         pid = 0
         used_tmux = False
-        scheduler_exit_code_path = ""
-        scheduler_launch_error = ""
-        if tmux_available():
-            try:
-                scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
-                pid = start_simple_tmux_command(tmux_session, scheduler_args, root, log_path, env, scheduler_exit_code_path)
-                used_tmux = True
-            except Exception as exc:
-                scheduler_launch_error = f"scheduler tmux launch failed: {exc}; attempting fallback (main shell bootstrap + Popen)"
-                print(f"[warn] {scheduler_launch_error}", file=sys.stderr, flush=True)
-                try:
-                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                    with open(log_path, "a", encoding="utf-8") as _lf:
-                        _lf.write(f"[{now_iso()}] SCHEDULER LAUNCH FAILED: {exc}\n")
-                        _lf.write(f"session={tmux_session!r} op_id={op_id!r} cwd={str(root)!r}\n")
-                        _lf.write(f"scheduler_args={_truncate_text(' '.join(str(x) for x in scheduler_args), 2000)}\n")
-                        _lf.write(f"[fallback] attempting bootstrap via zlk1:0.0 and Popen fallback\n")
-                        try:
-                            _lf.write(f"tmux_ls={_tmux_ls_snapshot(env)}\n")
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
-                # 宽松建窗：tmux 建窗失败不直接阻断，尝试 Popen 兜底（同时记录 fallback 路径）
-                try:
-                    if not scheduler_exit_code_path:
-                        scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
-                    _popen_pid = _popen_fallback_launch(scheduler_args, root, env, log_path, scheduler_exit_code_path)
-                    if _popen_pid:
-                        pid = _popen_pid
-                        used_tmux = False
-                        scheduler_launch_error = ""
-                        print(f"[info] scheduler Popen fallback succeeded pid={pid} for {tmux_session!r}", file=sys.stderr, flush=True)
-                        try:
-                            with open(log_path, "a", encoding="utf-8") as _lf:
-                                _lf.write(f"[{now_iso()}] FALLBACK Popen scheduler launch pid={pid} (tmux failed, non-blocking)\n")
-                        except Exception:
-                            pass
-                    else:
-                        raise exc
-                except Exception as _fb_exc:
-                    deregister_active_run_plan(root, op_id)
-                    return terminal_action(root, action, operation_id, op_id, "failed", f"scheduler tmux launch failed: {exc}; Popen fallback also failed: {_fb_exc}", {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch", "error": str(exc), "logTail": _truncate_text(str(exc), 4000)}, request=payload)
-        if not used_tmux and not pid:
-            msg = scheduler_launch_error or "tmux available but scheduler launch failed and Popen fallback attempted"
-            # 最后再尝试一次 Popen 兜底（tmux 不可用场景）
-            try:
-                if not scheduler_exit_code_path:
-                    scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
-                _popen_pid2 = _popen_fallback_launch(scheduler_args, root, env, log_path, scheduler_exit_code_path)
-                if _popen_pid2:
-                    pid = _popen_pid2
-                    print(f"[info] scheduler Popen fallback (no tmux) succeeded pid={pid} for {tmux_session!r}", file=sys.stderr, flush=True)
-                    try:
-                        with open(log_path, "a", encoding="utf-8") as _lf2:
-                            _lf2.write(f"[{now_iso()}] FALLBACK Popen scheduler launch pid={pid} (no tmux, non-blocking)\n")
-                    except Exception:
-                        pass
-                else:
-                    try:
-                        os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                        with open(log_path, "a", encoding="utf-8") as _lf2:
-                            _lf2.write(f"[{now_iso()}] SCHEDULER LAUNCH FAILED: {msg}\n")
-                            _lf2.write(f"session={tmux_session!r} op_id={op_id!r} cwd={str(root)!r}\n")
-                    except Exception:
-                        pass
-                    deregister_active_run_plan(root, op_id)
-                    return terminal_action(root, action, operation_id, op_id, "failed", msg, {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch_no_fallback", "error": msg, "logTail": _truncate_text(msg, 4000)}, request=payload)
-            except Exception as _exc2:
-                try:
-                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-                    with open(log_path, "a", encoding="utf-8") as _lf2:
-                        _lf2.write(f"[{now_iso()}] SCHEDULER LAUNCH FAILED: {msg} fallback_exc={_exc2!r}\n")
-                except Exception:
-                    pass
-                deregister_active_run_plan(root, op_id)
-                return terminal_action(root, action, operation_id, op_id, "failed", msg, {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch_no_fallback", "error": msg, "logTail": _truncate_text(str(_exc2), 4000)}, request=payload)
+        scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
+        try:
+            if not tmux_available():
+                raise RuntimeError("tmux unavailable; scheduler tab was not started")
+            pid, tmux_session = start_scheduler_in_gpu_tab(root, scheduler_args, env, log_path, scheduler_exit_code_path)
+            used_tmux = True
+        except Exception as exc:
+            deregister_active_run_plan(root, op_id)
+            return terminal_action(root, action, operation_id, op_id, "failed", f"scheduler GPU tab launch failed: {exc}", {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch", "error": str(exc)}, request=payload)
         # Register the scheduler as a tracked task so it shows up in the task cards and can be
         # stopped from the panel even though it is launched by run-plan (not a worker task). This
         # closes the gap where a stuck scheduler process was invisible to the task UI.
@@ -13328,6 +13292,7 @@ def handle_action(root, action, payload, operation_id, op_id):
             "pid": pid,
             "session": op_id,
             "tmuxSession": tmux_session if used_tmux else "",
+            "tmuxPane": tmux_session if used_tmux else "",
             "exitCodePath": os.path.relpath(scheduler_exit_code_path, root).replace("\\", "/") if used_tmux else "",
             "logPath": log_rel,
             "plan": plan,
@@ -14927,7 +14892,11 @@ def stop_scheduler_operation(root, payload):
     # 用原始会话存活（tmuxShellAlive）决定 kill：即便 pane 内只是空 shell（无 python 进程），
     # 也应 kill 掉，避免中止后 tmux 仍残留把面板判活。
     if before["tmuxShellAlive"]:
-        result = subprocess.run(["tmux", "kill-session", "-t", str(before["checkedTmuxSession"])], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5, check=False)
+        try:
+            stop_command = scheduler_tmux_stop_command(root, before["checkedTmuxSession"], pid_candidate, expected_pid_start)
+        except ValueError as exc:
+            return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", str(exc), {"matchedOperations": [], "planFile": plan}, request=payload)
+        result = subprocess.run(stop_command, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5, check=False)
         if result.returncode == 0:
             terminated_sessions.append(before["checkedTmuxSession"])
         else:
