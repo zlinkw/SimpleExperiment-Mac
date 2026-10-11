@@ -26,7 +26,10 @@ test("extension coalesces webview state posts behind explicit render backpressur
   assert.match(source, /requestPanelStateFlowPost\(this\.panelStateFlow, immediate, bootstrap\)/);
   assert.match(postStateBlock, /decision\.reason === "awaiting-render"/);
   assert.match(postStateBlock, /decision\.reason === "hidden"/);
-  assert.match(source, /resolveWebviewView\(webviewView\)[\s\S]{0,1400}this\.loadPanelHtml\(\)/);
+  const resolveBlock = source.match(/resolveWebviewView\(webviewView\)[\s\S]*?private disposeResolvedWebviewView/)?.[0] || "";
+  assert.match(resolveBlock, /this\.loadPanelHtml\(\)/);
+  assert.match(resolveBlock, /this\.budget\.setHidden\(!webviewView\.visible\)/);
+  assert.match(resolveBlock, /this\.client\.setHidden\(!webviewView\.visible\)/);
   assert.match(source, /renderPanelBootstrapDocument\(renderPanelHtml, renderPanelRecoveryHtml\)/);
   assert.match(postStateBlock, /if \(immediate\)[\s\S]{0,220}this\.flushStatePost\(true\)/);
   assert.match(postStateBlock, /this\.statePostTimer = setTimeout\(\(\) => this\.flushStatePost\(false\), delayMs\)/);
@@ -45,7 +48,7 @@ test("extension coalesces webview state posts behind explicit render backpressur
   assert.match(flushBlock, /maxOutstandingFullStates = Math\.max\(this\.maxOutstandingFullStates[\s\S]{0,140}1\)/);
   assert.match(flushBlock, /catch \(error\) \{\s*reportPostError\(error\)/);
   assert.match(source, /function webviewStatePostSignature\(state: WebviewClusterState\): string/);
-  assert.match(source, /return realtimeUiTopLevelSignature\(state\)/);
+  assert.match(source, /diagnostics: compactPanelDiagnosticsForPostGate\(state\.diagnostics\)/);
   const contextActionSignatureBlock = source.match(/function contextActionStatePostSignature[\s\S]*?function realtimeUiFieldSignature/)?.[0] || "";
   for (const field of ["setup", "integrations", "health", "realtime", "capabilities", "selection", "workerProbes", "plans", "schedulerStates", "operations", "resultsSummary"]) {
     assert.match(contextActionSignatureBlock, new RegExp(`${field}: state\\.${field}`));

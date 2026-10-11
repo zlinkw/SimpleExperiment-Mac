@@ -25,6 +25,10 @@
 - 069b提交7311a8c已同步。8文件边界：PlanRunFreshness/WrapperResultPersistence/RemoteResultInspection/PlanOutputRetention测试及夹具、PanelStateProjection、JobTmuxLogNavigation、本计划。保留Mac路径与scope，验证当前正式结果内存读取及历史只读，不执行真实同步/删除。原目标18/11。
 - 逐文件新鲜度10/Wrapper26/远端检查13/历史保留20/面板投影5/日志跳转10通过。日志夹具初次缺Mac严格归属函数而失败，补入实际渲染函数与服务器明确前缀后复验；不放宽缺前缀拒绝。原目标18已验证11剩余，无真实文件清理/传输。
 
+## 已完成批次 mac-sync-069d（载荷/归属与历史接口闭包）
+- 069c提交94f671b已同步。6文件边界：MergedGpuCache/ExtensionStatePost/GpuOwnerMatching/VsixRuntimeClosure/FailedAttemptQuarantine测试、本计划；既有Mac其他会话披露13用例保持更严格缺前缀拒绝并复验。旧隔离仅测试精确授权接口，不恢复自动隔离。原目标18/11。
+- 逐文件缓存5/推送5/归属4/披露13/闭包2/旧接口1通过。闭包断言修正为Mac既有短期限，不复制Windows30秒期望；旧接口移动仅新建夹具、安全父目录及精确身份，零真实任务/目录。原目标18已验证11剩余。
+
 ## 已完成批次 mac-sync-069b（模式与启动前拒绝契约回归）
 - 069a提交bc35d2e已同步。8文件边界：distributedPlanExecutionMode测试/夹具、调度模式、空闲GPU派发、preflightDispatchRejection测试/夹具、planRunModeWorkflow夹具、本计划。Mac夹具保留相对schedulerPath，验证train/test/train_test与精确未启动拒绝回执，不启动GPU任务。
 - 逐文件模式9/调度4/派发生命周期19/拒绝6/运行模式5通过。旧测试缺formal能力、零版本哨兵及公共身份依赖而断言失败，按当前正式任务契约补齐夹具；CUDA/项目失败不自动增attempt重跑，旧队列原证据只读保留。临时Python脚本保留，不执行清理；无超时/远端任务操作。原目标18已验证11剩余。

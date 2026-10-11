@@ -75,7 +75,7 @@ test("GPU owner normalization derives reusable matching candidates once", () => 
   assert.equal(sandbox.stringArrayCalls, 2);
 });
 
-test("GPU ownership ignores shared Worker login and uses plugin process marker", () => {
+test("GPU ownership requires a submitted job, even with a shared Worker login or plugin marker", () => {
   const sandbox = loadOwnerMatching();
   const setup = { workerTunnels: [
     { id: "nwpu2", workerUser: "qgking" },
@@ -84,7 +84,8 @@ test("GPU ownership ignores shared Worker login and uses plugin process marker",
   const owner = sandbox.normalize({});
   const nwpu2 = sandbox.forServer({ serverId: "NWPU2" }, owner, setup);
   assert.equal(sandbox.ownerState([{ user: "qgking" }], nwpu2).isMine, false);
-  assert.equal(sandbox.ownerState([{ user: "qgking", pluginManaged: true }], nwpu2).isMine, true);
+  assert.equal(sandbox.ownerState([{ user: "qgking", pluginManaged: true }], nwpu2).isMine, false);
+  assert.equal(sandbox.ownerState([{ user: "qgking", submittedByThisClient: true }], nwpu2).isMine, true);
   assert.equal(sandbox.ownerState([{ user: "researcher" }], nwpu2).isMine, false);
   assert.equal(sandbox.forServer({ serverId: "unknown" }, owner, setup), owner);
 
@@ -93,7 +94,7 @@ test("GPU ownership ignores shared Worker login and uses plugin process marker",
   assert.equal(sandbox.ownerState([{ user: "qgking" }], explicit).isMine, false);
 });
 
-test("GPU process matching requires plugin launch marker regardless of username or command", () => {
+test("GPU process matching requires Host-verified job ownership regardless of Plan or username", () => {
   const sandbox = loadOwnerMatching();
   const base = sandbox.normalize({
     currentUser: "alice",
@@ -103,9 +104,10 @@ test("GPU process matching requires plugin launch marker regardless of username 
 
   assert.equal(sandbox.matches({ username: "bob", command: "python eval.py" }, { ...base, myProcessMatchMode: "username" }), false);
   assert.equal(sandbox.matches({ username: "carol", commandLine: "python train.py" }, { ...base, myProcessMatchMode: "command_contains" }), false);
-  assert.equal(sandbox.matches({ owner: "alice", args: "python eval.py", pluginManaged: true }, base), true);
+  assert.equal(sandbox.matches({ owner: "alice", args: "python eval.py", pluginManaged: true }, base), false);
+  assert.equal(sandbox.matches({ owner: "alice", args: "python eval.py", submittedByThisClient: true }, base), true);
   assert.equal(sandbox.matches({ user: "carol", cmd: "python eval.py" }, base), false);
-  assert.equal(sandbox.matches({ username: "raw-user", command: "python eval.py", pluginManaged: true }, { currentUser: " raw-user ", myProcessMatchMode: "username" }), true);
+  assert.equal(sandbox.matches({ username: "raw-user", command: "python eval.py", pluginManaged: true }, { currentUser: " raw-user ", myProcessMatchMode: "username" }), false);
   assert.equal(sandbox.stringArrayCalls, 2);
 });
 
@@ -119,8 +121,8 @@ test("GPU owner state counts processes in one pass without rebuilding raw rules"
   });
 
   const state = sandbox.ownerState([
-    { username: "alice", command: "python eval.py", pluginManaged: true },
-    { username: "carol", command: "python train.py", pluginManaged: true },
+    { username: "alice", command: "python eval.py", submittedByThisClient: true },
+    { username: "carol", command: "python train.py", submittedByThisClient: true },
     { username: "dave", command: "python eval.py" },
   ], config);
 

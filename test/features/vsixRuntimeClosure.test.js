@@ -26,7 +26,8 @@ test("tooling uses pinned local VSCE and npm-cli without shell argument concaten
   assert.match(helper, /command: process\.execPath/);
   assert.match(verifier, /require\.resolve\("@vscode\/vsce\/vsce"\)/);
   assert.match(verifier, /spawnSync\(process\.execPath/);
-  assert.match(verifier, /timeout: 8000/);
+  const timeout = Number(verifier.match(/timeout: ([0-9]+)/)?.[1]);
+  assert.ok(timeout > 0 && timeout <= 10000, "metadata verification must stay within the test process deadline");
   assert.doesNotMatch(verifier, /npmCommand|"exec"/);
   assert.match(acceptance, /function runNpm/);
   assert.doesNotMatch(verifier, /shell\s*:/);
