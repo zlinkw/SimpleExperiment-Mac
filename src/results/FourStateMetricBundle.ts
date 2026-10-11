@@ -6,6 +6,9 @@ import type { ProjectResultFile } from "./ProjectResultPublication";
 
 export type MetricMemoryFile = { remotePath: string; sha256: string; text: string; bytes?: number; encoding?: "base64" };
 export type MetricJob = { runId: string; index: number; attempt: number; case: string; seed: number;
+  resultPathPolicy?: "declared"; collectionResultCsv?: string; globalJobId?: string;
+  planRevision?: string; codeFingerprint?: string;
+  checkpointSource?: Record<string, string>;
   workerId: string; ownerWorkerId?: string; outputDir: string; commandId: string; checkpointPath?: string };
 
 const fingerprint = (text: string | Buffer) => createHash("sha256").update(text).digest("hex");
@@ -14,6 +17,19 @@ function relative(value: string): string {
   if (!text || text.startsWith("/") || text.includes(":") || text.split("/").some(part => !part || part === "." || part === ".."))
     throw new Error("指标来源路径不安全：" + text);
   return text;
+}
+export function boundCheckpointPath(value: string, job: MetricJob): string {
+  const source = job.resultPathPolicy === "declared" ? job.checkpointSource : undefined;
+  const file = String(value || "").replace(/\\/g, "/");
+  if (file.split("/").includes("..") || /[\x00-\x1f]/.test(file)) throw new Error("checkpoint 来源路径不安全");
+  if (source?.checkpoint_path && /^[a-f0-9]{64}$/i.test(source.checkpoint_sha256 || "")
+    && /^[a-f0-9]{64}$/i.test(source.config_sha256 || "") && /^[a-f0-9]{64}$/i.test(source.plan_revision || "")) {
+    const expected = relative(source.checkpoint_path);
+    if (file === expected || file.startsWith("/") && file.endsWith("/" + expected)) return expected;
+  }
+  const result = sourcePath(file, job.outputDir);
+  if (!result.startsWith(job.outputDir + "/")) throw new Error("checkpoint 不属于本次 job 或已核验来源");
+  return result;
 }
 function sourcePath(value: string, output: string): string {
   const text = String(value || "").replace(/\\/g, "/").replace(/\/$/, "");
@@ -39,9 +55,11 @@ function csv(file: MetricMemoryFile): Record<string, string>[] {
 export function validateFourStateMetricPair(job: MetricJob, endpoint: MetricMemoryFile | undefined, four: MetricMemoryFile | undefined): void {
   if (!endpoint || !four) throw new Error("端点或四态指标缺失，保留原有完整结果：" + job.case + "/" + job.seed);
   const output = relative(job.outputDir);
-  if (!job.runId || !job.commandId || !job.workerId || !job.case || !Number.isInteger(job.seed) || !Number.isInteger(job.attempt) || job.attempt < 1)
+  if (!job.runId || !job.commandId || !job.workerId || !job.case || !Number.isInteger(job.seed) || !Number.isInteger(job.attempt)
+    || job.attempt < 1 && !(job.attempt === 0 && job.resultPathPolicy === "declared" && job.globalJobId === `${job.runId}:${job.index}`))
     throw new Error("指标缺少可信 run/attempt/job 身份");
-  for (const file of [endpoint, four]) if (!relative(file.remotePath).startsWith(output + "/")) throw new Error("指标来源不属于本次 attempt");
+  for (const file of [endpoint, four]) if (!relative(file.remotePath).startsWith(output + "/")
+    && !(job.resultPathPolicy === "declared" && file === endpoint && file.remotePath === job.collectionResultCsv)) throw new Error("指标来源不属于本次 job");
   const endpoints = csv(endpoint), states = csv(four);
   const dataset = endpoints[0].dataset, method = endpoints[0].method;
   const checkpoints = new Set<string>();
@@ -49,8 +67,7 @@ export function validateFourStateMetricPair(job: MetricJob, endpoint: MetricMemo
     if (String(row.seed) !== String(job.seed) || row.case && row.case !== job.case || row.run_id && row.run_id !== job.runId
       || !row.dataset || row.dataset !== dataset || !row.method || row.method !== method
       || sourcePath(row.job_dir, output) !== output) throw new Error("端点与四态的运行/Case/seed/数据集身份不一致：" + output);
-    const checkpoint = sourcePath(row.checkpoint_path, output);
-    if (!checkpoint.startsWith(output + "/")) throw new Error("checkpoint 不属于本次 attempt");
+    const checkpoint = boundCheckpointPath(row.checkpoint_path, job);
     if (job.checkpointPath && checkpoint !== job.checkpointPath) throw new Error("checkpoint 与作业契约不一致");
     checkpoints.add(checkpoint);
   }

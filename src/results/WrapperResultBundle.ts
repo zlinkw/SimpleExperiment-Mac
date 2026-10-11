@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
 import { readCsv, writeCsv, datasetPathKey, methodTableName, planDirectoryKey } from "./ProjectResultTables";
-import { validateFourStateMetricPair, type MetricJob, type MetricMemoryFile } from "./FourStateMetricBundle";
+import { boundCheckpointPath, validateFourStateMetricPair, type MetricJob, type MetricMemoryFile } from "./FourStateMetricBundle";
 import type { ProjectResultFile } from "./ProjectResultPublication";
 import { readMacResultBytes } from "../mac/ResultFiles";
 import { normalizePosixRelativePath } from "../mac/PosixPath";
@@ -53,22 +53,32 @@ export async function readVerifiedLocalResult(root: string, entry: { remotePath:
         : { text: bytes.toString("base64"), encoding: "base64" as const }) };
   } finally { await handle.close(); }
 }
-export function jobResultPath(value: string, outputDir: string): string {
+export function jobResultPath(value: string, outputDir: string, declaredCsv = ""): string {
   const output = outputDir.replace(/\\/g, "/");
   let file = String(value || "").replace(/\\/g, "/");
+  if (file.split("/").includes("..") || /[\x00-\x1f]/.test(file)) throw new Error("wrapper 产物路径不安全：" + file);
+  if (declaredCsv && (file === declaredCsv || file.startsWith("/") && file.endsWith("/" + declaredCsv))) {
+    if (declaredCsv.startsWith("/") || declaredCsv.includes(":") || !declaredCsv.endsWith(".csv")
+      || /[\x00-\x1f]/.test(declaredCsv) || declaredCsv.split("/").some(part => !part || part === "." || part === ".."))
+      throw new Error("wrapper declared CSV 不安全");
+    return declaredCsv;
+  }
   if (file.startsWith("/")) {
     const marker = "/" + output;
     const at = file.lastIndexOf(marker);
     if (at < 0 || file[at + marker.length] !== "/") throw new Error("wrapper 来源不属于作业目录：" + file);
     file = file.slice(at + 1);
-  } else if (!file.startsWith(output + "/")) file = output + "/" + file.replace(/^\.\//, "");
+  } else if (!file.startsWith(output + "/")) {
+    if (/^(?:work_dirs|tmp|experiments|configs|simple_cluster|results)\//.test(file)) throw new Error("wrapper 来源不属于作业目录：" + file);
+    file = output + "/" + file.replace(/^\.\//, "");
+  }
   if (!file.startsWith(output + "/") || file.includes(":") || /[\x00-\x1f]/.test(file)
     || file.split("/").some(part => !part || part === "." || part === "..")) throw new Error("wrapper 产物路径不安全：" + file);
   return file;
 }
 
 /** Wrapper manifests may add outputs without teaching the plugin their metric names or schema. */
-export function declaredWrapperResults(text: string, outputDir: string): string[] {
+export function declaredWrapperResults(text: string, outputDir: string, declaredCsv = ""): string[] {
   const manifest = JSON.parse(text.replace(/^\uFEFF/, ""));
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) throw new Error("wrapper manifest 必须是对象");
   if (manifest.output_dir && jobResultPath(String(manifest.output_dir) + "/artifact_manifest.json", outputDir) !== outputDir + "/artifact_manifest.json")
@@ -76,7 +86,7 @@ export function declaredWrapperResults(text: string, outputDir: string): string[
   const files = new Set<string>();
   const visit = (value: unknown, depth: number, field = ""): void => {
     if (depth > 16) throw new Error("wrapper manifest 嵌套过深");
-    if (typeof value === "string" && isWrapperResultFile(value) && (isWrapperTextFile(value) || value.includes("/") || /path|file|outputs|artifacts/i.test(field))) files.add(jobResultPath(value, outputDir));
+    if (typeof value === "string" && isWrapperResultFile(value) && (isWrapperTextFile(value) || value.includes("/") || /path|file|outputs|artifacts/i.test(field))) files.add(jobResultPath(value, outputDir, declaredCsv));
     else if (Array.isArray(value)) value.forEach(entry => visit(entry, depth + 1, field));
     else if (value && typeof value === "object") Object.entries(value).forEach(([key, entry]) => visit(entry, depth + 1, key));
     if (files.size > 1024) throw new Error("wrapper 声明超过 1024 个轻量结果文件");
@@ -102,16 +112,29 @@ function validateIdentity(row: Record<string, any>, job: MetricJob, source: stri
       throw new Error("wrapper 结果身份不匹配：" + field + "（期望 " + expected + "，实际 " + row[field] + "；来源 " + source + "）");
   for (const field of ["job_dir", "output_dir"])
     if (row[field] && jobResultPath(String(row[field]) + "/.identity", job.outputDir) !== job.outputDir + "/.identity") throw new Error("wrapper job_dir 不匹配");
-  return row.checkpoint_path ? jobResultPath(String(row.checkpoint_path), job.outputDir) : undefined;
+  return row.checkpoint_path ? boundCheckpointPath(String(row.checkpoint_path), job) : undefined;
 }
 
 /** Preserve bytes and unknown fields; only the recognized four-state schema uses its stronger validator. */
 export function prepareWrapperJob(job: MetricJob, inputs: MetricMemoryFile[], endpointPath: string,
   requiredPaths: string[], localPath: (file: string) => string): PreparedJob {
-  if (!job.runId || !job.workerId || !job.commandId || !job.case || !Number.isInteger(job.seed) || !Number.isInteger(job.attempt) || job.attempt < 1)
+  if (!job.runId || !job.workerId || !job.commandId || !job.case || !Number.isInteger(job.seed) || !Number.isInteger(job.attempt)
+    || job.attempt < 1 && !(job.attempt === 0 && job.resultPathPolicy === "declared" && job.globalJobId === `${job.runId}:${job.index}`))
     throw new Error("wrapper 结果缺少可信运行及作业身份");
   const byPath = new Map(inputs.map(file => [file.remotePath, file]));
   if (byPath.size !== inputs.length || requiredPaths.some(file => !byPath.has(file))) throw new Error("wrapper 必需结果缺失，保留原有完整结果：" + job.case + "/" + job.seed);
+  if (job.resultPathPolicy === "declared") {
+    const proof = byPath.get(job.outputDir + "/formal_job_owner.json");
+    if (!proof || resultHash(proof.text) !== proof.sha256.toLowerCase()) throw new Error("FORMAL_JOB_OWNER_PROOF_REQUIRED: SHA256");
+    const owner = JSON.parse(proof.text);
+    const expected = { workflowId: job.runId, globalJobId: job.globalJobId, commandId: job.commandId, index: job.index,
+      case: job.case, seed: job.seed, outputDir: job.outputDir, collectionResultCsv: job.collectionResultCsv,
+      ...(job.planRevision ? { planRevision: job.planRevision } : {}), ...(job.codeFingerprint ? { codeFingerprint: job.codeFingerprint } : {}) };
+    if (!["completed", "training_completed"].includes(owner.state) || Object.entries(expected).some(([key, value]) => owner[key] !== value)
+      || JSON.stringify(owner.checkpointSource || null) !== JSON.stringify(job.checkpointSource || null)) throw new Error("FORMAL_JOB_OWNER_IDENTITY_CHANGED");
+    for (const file of inputs) if (file !== proof && owner.sha256?.[file.remotePath] !== file.sha256.toLowerCase())
+      throw new Error("FORMAL_JOB_OWNER_SHA256_CHANGED: " + file.remotePath);
+  }
   const sources: ResultSource[] = [], files: ProjectResultFile[] = [], records: PreparedJob["records"] = [];
   const checkpoints = new Set<string>();
   const primaryPaths = new Set([endpointPath]);
@@ -121,17 +144,17 @@ export function prepareWrapperJob(job: MetricJob, inputs: MetricMemoryFile[], en
     if (resultHash(declaration.text) !== declaration.sha256.toLowerCase()) throw new Error("wrapper manifest SHA256 不符");
     const manifest = JSON.parse(declaration.text.replace(/^\uFEFF/, ""));
     for (const file of [manifest.metrics_summary, manifest.result_csv, manifest.result_rows, manifest.standard_outputs?.metrics_summary])
-      if (typeof file === "string") primaryPaths.add(jobResultPath(file, job.outputDir));
+      if (typeof file === "string") primaryPaths.add(jobResultPath(file, job.outputDir, job.collectionResultCsv));
   }
   for (const file of inputs.slice().sort((left, right) => left.remotePath < right.remotePath ? -1 : left.remotePath > right.remotePath ? 1 : 0)) {
-    if (jobResultPath(file.remotePath, job.outputDir) !== file.remotePath || !isWrapperResultFile(file.remotePath)) throw new Error("wrapper 来源无效");
+    if (jobResultPath(file.remotePath, job.outputDir, job.collectionResultCsv) !== file.remotePath || !isWrapperResultFile(file.remotePath)) throw new Error("wrapper 来源无效");
     const contents = file.encoding === "base64" ? Buffer.from(file.text, "base64") : file.text;
     if (file.encoding === "base64" && (typeof contents === "string" || contents.toString("base64") !== file.text)) throw new Error("wrapper 二进制内容编码无效");
     if (!/^[a-f0-9]{64}$/i.test(file.sha256) || createHash("sha256").update(contents).digest("hex") !== file.sha256.toLowerCase()
       || file.bytes != null && Buffer.byteLength(contents) !== file.bytes) throw new Error("wrapper SHA256 不符：" + file.remotePath);
     const format = path.posix.extname(formatPath(file.remotePath)).slice(1).toLowerCase();
     const source = { remotePath: file.remotePath, localRelativePath: localPath(file.remotePath), sha256: file.sha256.toLowerCase(),
-      bytes: Buffer.byteLength(contents), kind: file.remotePath.slice(job.outputDir.length + 1), format };
+      bytes: Buffer.byteLength(contents), kind: file.remotePath === job.collectionResultCsv ? "declared_metrics.csv" : file.remotePath.slice(job.outputDir.length + 1), format };
     const rows = ["csv", "tsv"].includes(format) ? csvRecords(file.text, format === "tsv" ? "\t" : ",") : undefined;
     const value = file.encoding === "base64" ? { binary: true, sourcePath: source.localRelativePath, sha256: source.sha256 } : format === "json" ? JSON.parse(file.text.replace(/^\uFEFF/, "")) : format === "jsonl"
       ? file.text.split(/\r?\n/).filter(line => line.trim()).map(line => JSON.parse(line)) : rows ? undefined : file.text;
@@ -151,7 +174,7 @@ export function prepareWrapperJob(job: MetricJob, inputs: MetricMemoryFile[], en
   }
   if (checkpoints.size > 1 || job.checkpointPath && checkpoints.size && !checkpoints.has(job.checkpointPath)) throw new Error("wrapper 端点和其它结果不是同一 checkpoint，保留旧完整结果");
   // Queue enrichment (hash caches, sync receipts) is not part of immutable job identity.
-  const identity: MetricJob = { runId: job.runId, index: job.index, attempt: job.attempt, case: job.case, seed: job.seed,
+  const identity: MetricJob = { ...job, runId: job.runId, index: job.index, attempt: job.attempt, case: job.case, seed: job.seed,
     workerId: job.workerId, outputDir: job.outputDir, commandId: job.commandId,
     ...(job.ownerWorkerId ? { ownerWorkerId: job.ownerWorkerId } : {}), ...(job.checkpointPath ? { checkpointPath: job.checkpointPath } : {}) };
   const evidence: WrapperJobEvidence = { job: identity, ...(checkpoints.size ? { checkpointPath: [...checkpoints][0] } : {}), sources };
@@ -189,6 +212,47 @@ export function prepareWrapperPublication(runId: string, expectedJobs: Array<{ c
     || prepared.some(item => item.evidence.job.runId !== runId || !expected.has(key(item.evidence.job)))) throw new Error("wrapper 发布运行或作业清单不一致");
   if (!preview && actual.size !== expected.size) throw new Error("种子/作业不完整，仅可预览，保留原有完整结果");
   return { runId, status: preview ? "preview" : "formal", expectedJobs, jobs: prepared.map(item => item.evidence), files: prepared.flatMap(item => item.files) };
+}
+
+export function assertWrapperSourceHistory(previous: any, publication: WrapperPublication): void {
+  if (previous?.runId !== publication.runId) return;
+  for (const prior of previous.jobs || []) {
+    const current = publication.jobs.find(item => item.job.index === prior.job.index && item.job.commandId === prior.job.commandId
+      && item.job.outputDir === prior.job.outputDir);
+    if (!current) continue; // A separately proven historical retry has a different writer.
+    for (const source of prior.sources || []) {
+      const next = current.sources.find(item => item.remotePath === source.remotePath);
+      if (!next || next.sha256 !== source.sha256 || next.bytes !== source.bytes)
+        throw new Error("历史原始指标已变化，保留已收录汇总：" + source.remotePath);
+    }
+  }
+}
+
+/** Persist counts and source fingerprints only; the input bytes live for this rebuild. */
+export function wrapperSummaryJobs(publication: WrapperPublication) {
+  return publication.jobs.map(evidence => {
+    if (evidence.job.resultPathPolicy !== "declared") return evidence;
+    const { attempt, ...job } = evidence.job;
+    return { ...evidence, job };
+  });
+}
+
+export function wrapperSummaryFiles(resultDir: string, planFile: string, publication: WrapperPublication, prepared: PreparedJob[]): ProjectResultFile[] {
+  const kinds = new Map<string, { kind: string; format: string; files: number; rows: number; columns: Set<string> }>();
+  for (const item of prepared) for (const record of item.records) {
+    const key = record.source.kind;
+    if (!kinds.has(key)) kinds.set(key, { kind: key, format: record.source.format, files: 0, rows: 0, columns: new Set() });
+    const count = kinds.get(key)!;
+    count.files++; count.rows += record.rows?.length || 0;
+    for (const row of record.rows || []) for (const column of Object.keys(row)) count.columns.add(column);
+  }
+  const base = publication.status === "formal" ? path.posix.join("_unassigned", "plans", planDirectoryKey(planFile), "summary")
+    : path.posix.join("_unassigned", "plans", planDirectoryKey(planFile), "summary", "preview__" + resultHash(publication.runId).slice(0, 16));
+  return [{ relativePath: path.posix.join(resultDir, base, "wrapper_summary.json"), contents: JSON.stringify({
+    schemaVersion: 1, storage: "summary-only", planFile, status: publication.status, runId: publication.runId,
+    expectedJobs: publication.expectedJobs, jobs: wrapperSummaryJobs(publication),
+    kinds: [...kinds.values()].map(row => ({ ...row, columns: [...row.columns] })),
+  }, null, 2) + "\n" }];
 }
 
 /** Lossless per-kind collection, not scientific aggregation. Adapters remain responsible for statistics. */

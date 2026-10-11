@@ -16,7 +16,11 @@
 - 范围：持久面板恢复、GPU快照与本机派发归属、失败召回/明确不可用、结果进度与正式路径/内存汇总、PLAN清理审核及配套受限接口、启动前拒绝回执。8b4aed70用户隔离和GPU窗口已同步，核对保留；不复制Windows发布/安装/入口默认值。
 - 分批：061队列与GPU/召回基础；062实时快照；063清理协调基础；064配套清理接口；065清理宿主/API；066正式runtime；067结果契约；068面板集成；069完整回归/发布。每批至多8文件，必要时细分；不执行真实传输/清理/Agent更新或任务操作。原目标18已验证11剩余，整体paused，仅执行本次授权。
 
-## 当前批次 mac-sync-065（passed，清理审核页与API契约）
+## 当前批次 mac-sync-066（passed，正式任务runtime与GPU身份）
+- 065提交a679708已同步。8文件边界：Agent/Scheduler/WrapperResultBundle/FourStateMetricBundle、正式结果契约测试及Python夹具、GPU身份测试、本计划。正式declared路径、训练/测试/预检拒绝及无attempt新执行同步；Agent冲突保留Mac严格POSIX函数并采用历史attempt只读规则。第一次正式结果测试发现collector仍缺新CSV契约，纳入同批依赖后复验。保留Mac物理GPU容器/内部Pane规则；只AST提取函数，Python10秒，不部署runtime。
+- build/面板2/vm、结果契约3/GPU环境身份1/MacGPU内部标签5通过，diff通过。实际科研项目仅纯路径接口只读核对，未执行训练或文件传输；原目标18/11。
+
+## 已完成批次 mac-sync-065
 - 064 SF11d6f7e、Exp记录c9d9823已同步。7文件边界：PlanCleanupHost/PlanCleanupPanel/LocalApiServer、完整清理26/重连9/消息桥9测试、本计划。补回063宿主/UI/API用例，审核页先注册桥、真实阶段进度、过期响应拒绝、独立双确认和重连只读观察，不执行服务器操作。
 - build/面板2/vm、完整清理26/重连9/审核桥12通过，原Windows文档旧9计数以实际12为准。三方合并保留Mac API身份；界面接入待068，原目标18/11。
 
