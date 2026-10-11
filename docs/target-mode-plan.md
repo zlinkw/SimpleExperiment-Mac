@@ -15,7 +15,11 @@
 - 所列不依赖真机的本地修复、协作核查和发布已交付；用户暂停授权的前提已满足，收尾提交同步后将目标设为paused，未经用户恢复不继续批次。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；收到反馈后再考虑完善，模拟不替代真机。
 
-## 当前批次 mac-release-052（passed，本地门禁修正；发布pending）
+## 当前批次 mac-release-053（passed，本地测试读取修正；发布pending）
+- 起始Exp34f712d/SF60fe320同步；prepare重试到resultCsvDirectoryConfig出现1项220字符跨度断言，CRLF增加字符但监听逻辑未改变。4文件：sourceReader、新增LF/CRLF消费者测试、prepare门禁、本计划。仅统一测试文本为LF，生产不变；旧失败日志保留，.310产物目录仍未创建。
+- 新增读取器2、结果目录6/缓存6逐文件20秒、build/面板2、227闭包/vm/UTF8/diff通过。普通同步后重跑完整prepare，结果以保留日志为准。目标仍paused，剩余12/29；发布pending。
+
+## 前批 mac-release-052（passed，本地门禁修正；发布pending）
 - 起始Exp43f7a72312af51863544a2240bfb4112517bb741/SF60fe32015a07e29f1235d17da815af936707fa79同步干净；完整目标paused，原目标剩余12/29。
 - prepare首次在resultsSummaryWebviewCache普通断言失败2项，读取CRLF源码却仅用LF定位声明；生产声明未改变。2文件边界仅测试换行规范化与本计划，不改生产行为。保留失败日志；尚未创建.310产物目录或发布。
 - 单文件6、build/面板2、227闭包/vm/UTF8/diff通过；提交普通同步后重跑完整prepare与实际包验证。生产源码不因测试改变，失败日志保留。

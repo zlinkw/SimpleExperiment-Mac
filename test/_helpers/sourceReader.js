@@ -76,12 +76,12 @@ function readSource(relPath) {
   if (impl) {
     try {
       const content = fs.readFileSync(path.join(ROOT, impl), "utf8");
-      if (content) return content;
+      if (content) return content.replace(/\r\n/g, "\n");
     } catch {
       /* 回退到门面 */
     }
   }
-  return fs.readFileSync(path.join(ROOT, key), "utf8");
+  return fs.readFileSync(path.join(ROOT, key), "utf8").replace(/\r\n/g, "\n");
 }
 
 function readBuiltAgentRuntime() {
