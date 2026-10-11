@@ -38,7 +38,7 @@ test("command receipt changes refresh the log button even when placement and sta
   sandbox.renderExecutionPlanListIfChanged(state("receipt-b"));
   assert.equal(rendered.length, 3);
 });
-function fixture() {
+function fixture(options = {}) {
   const requests = [], navigations = [], notices = [], persisted = [], timers = new Map();
   let nextTimer = 0;
   const elements = Object.fromEntries(["tmuxOverview", "tmuxWorkersOverview", "tmuxListMeta", "tmuxCaptureMeta", "tmuxCapturePre", "tmuxWorkerSelect"].map(id => [id, { innerHTML: "", textContent: "", value: "", dataset: {} }]));
@@ -49,7 +49,7 @@ function fixture() {
     tmuxInitialRetryCount: 0, tmuxInitialRetryTimer: 0,
     tmuxListPendingWorkers: new Set(), tmuxCaptureBusy: new Set(),
     tmuxConfiguredWorkers: [{ id: "worker-a" }, { id: "worker-b" }], tmuxListsByWorker: {},
-    tmuxListCache: { workerId: "worker-b", sessions: [], gpuIds: [] }, tmuxClearTaskTabsBusy: false,
+    tmuxListCache: { workerId: "worker-b", sessions: [], gpuIds: [], tmuxSessionPrefix: "custom" }, tmuxClearTaskTabsBusy: false,
     document: { hidden: false },
     vscode: { postMessage: row => requests.push(row) },
     el: id => elements[id] || null,
@@ -60,8 +60,15 @@ function fixture() {
     setTimeout: callback => { timers.set(++nextTimer, callback); return nextTimer; },
     clearTimeout: id => timers.delete(id),
   };
+  const toastNodes = [];
+  if (options.realToast) {
+    delete sandbox.showToast;
+    sandbox.document.createElement = () => ({ dataset: {}, style: {}, setAttribute() {} });
+    sandbox.document.body = { appendChild: node => { elements[node.id] = node; toastNodes.push(node); } };
+  }
   vm.createContext(sandbox);
-  vm.runInContext(["normalizeTmuxWindowFilter", "classifyTmuxWindow", "tmuxGpuIdFromSession", "tmuxTaskStatusLabel", "tmuxTaskWindowLabel", "getTmuxWindowCandidates",
+  if (options.realToast) vm.runInContext(fn("showToast"), sandbox);
+  vm.runInContext(["normalizeTmuxWindowFilter", "classifyTmuxWindow", "tmuxGpuIdFromSession", "tmuxCurrentGpuIdFromSession", "tmuxTaskStatusLabel", "tmuxTaskWindowLabel", "tmuxWindowCloseButton", "tmuxGpuSessionCloseButton", "getTmuxWindowCandidates",
     "renderTmuxFilterBar", "renderTmuxOverview", "renderTmuxWorkersOverview", "refreshTmuxList", "scheduleTmuxInitialRetry", "finishTmuxListRequest",
     "resolveJobTmuxWindow", "cancelJobTmuxLogJump", "failJobTmuxLogJump", "jumpToJobTmuxLog", "handleJobTmuxLogList", "tmuxResolveCaptureTarget", "refreshTmuxCapture"].map(fn).join("\n"), sandbox);
   const clickStart = script.indexOf('const jobTmuxLogButton = event.target.closest("button[data-job-tmux-log]")');
@@ -77,9 +84,36 @@ function fixture() {
     sandbox.click({ target: { closest: selector => selector === "button[data-job-tmux-log]" ? button : null }, preventDefault() {} });
   };
   const deliver = (workerId, sessions, requestId = sandbox.tmuxListRequestId, extra = {}) => sandbox.deliver({ type: "tmuxList", workerId, sessions,
-    gpuIds: ["0"], workers: sandbox.tmuxConfiguredWorkers, requestId, ...extra });
-  return { sandbox, requests, navigations, notices, persisted, elements, timers, click, deliver };
+    gpuIds: ["0"], tmuxSessionPrefix: "custom", workers: sandbox.tmuxConfiguredWorkers, requestId, ...extra });
+  return { sandbox, requests, navigations, notices, persisted, elements, timers, click, deliver, toastNodes };
 }
+
+test("missing real tmux windows report a bounded toast without a showToast ReferenceError", () => {
+  const f = fixture({ realToast: true });
+  f.click("closed-command", "work_dirs/a/attempts/closed");
+  assert.doesNotThrow(() => f.deliver("worker-a", windows()));
+  assert.equal(f.toastNodes.length, 1);
+  assert.match(f.elements.simpleExperimentToast.textContent, /窗口|标签/);
+  const oldTimer = f.sandbox.showToast.hideTimer;
+  assert.doesNotThrow(() => f.click("", "", ""));
+  assert.equal(f.toastNodes.length, 1);
+  assert.equal(f.timers.has(oldTimer), false);
+  const hide = f.timers.get(f.sandbox.showToast.hideTimer); hide();
+  assert.equal(f.elements.simpleExperimentToast.hidden, true);
+});
+
+test("failed recall click payload and pending state retain the exact attempt and command identity", () => {
+  const sandbox = { RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS: new Set(), ARTIFACT_SCOPE_COMMANDS: new Set(), el: () => null };
+  vm.createContext(sandbox);
+  vm.runInContext(["payloadFromButton", "pendingKeyForAction", "pendingKeyFromButtonDataset"].map(fn).join("\n"), sandbox);
+  const button = { dataset: { command: "recallFailedJob", planFile: "plans/cpsc.yaml", planId: "workflow", jobIndex: "0", attempt: "1", commandId: "old-command" } };
+  const payload = sandbox.payloadFromButton(button);
+  assert.equal(payload.attempt, 1); assert.equal(payload.jobIndex, 0); assert.equal(payload.commandId, "old-command");
+  const key = sandbox.pendingKeyForAction(button.dataset.command, payload);
+  assert.equal(sandbox.pendingKeyFromButtonDataset(button), key);
+  const next = { ...payload, attempt: 2, commandId: "new-command" };
+  assert.notEqual(sandbox.pendingKeyForAction(button.dataset.command, next), key);
+});
 function windows(commandId = "command-new", outputDir = "work_dirs/plan/attempts/new") {
   return [{ name: "custom-gpu-0", windows: [
     { index: "1", target: "custom-gpu-0:1", task: { commandId: "command-old", outputDir: "work_dirs/plan/attempts/old", case: "same", seed: 42, status: "completed" } },

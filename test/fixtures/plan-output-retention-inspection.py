@@ -6,11 +6,12 @@ import pathlib
 import posixpath
 import re
 import stat
+import time
 from types import SimpleNamespace
 
 source = (pathlib.Path(__file__).resolve().parents[2] / "src/clusterAgentRuntime.legacy.ts").read_text(encoding="utf-8")
-code = source.split("def inspect_plan_output_retirement(root, relative):", 1)[1].split("\ndef cache_cleanup_candidates(root):", 1)[0]
-code = "def inspect_plan_output_retirement(root, relative):" + code
+header = next(line for line in source.splitlines() if line.startswith("def inspect_plan_output_retirement("))
+code = header + source.split(header, 1)[1].split("\ndef cache_cleanup_candidates(root):", 1)[0]
 root = "/srv/research"
 relative = "work_dirs/model/job/attempts/a"
 target = root + "/" + relative
@@ -87,7 +88,7 @@ fake_path = SimpleNamespace(abspath=posixpath.abspath, realpath=lambda value: va
                             ismount=lambda value: value in mounts)
 fake_os = SimpleNamespace(path=fake_path, sep="/", walk=walk, lstat=metadata, O_RDONLY=0, O_NOFOLLOW=1,
                           open=open_fd, fdopen=lambda descriptor, _mode: Stream(descriptor), fstat=fstat)
-namespace = {"os": fake_os, "hashlib": hashlib, "json": json, "re": re,
+namespace = {"os": fake_os, "hashlib": hashlib, "json": json, "re": re, "time": time,
              "api_worker_tasks": lambda _root: {"tasks": tasks}}
 exec(compile(code, "inspect_plan_output_retirement", "exec"), namespace)
 inspect = namespace["inspect_plan_output_retirement"]

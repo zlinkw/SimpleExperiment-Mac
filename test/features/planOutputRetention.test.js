@@ -219,7 +219,7 @@ test("an inspection must bind a real configured root, exact parent and immutable
     assert.throws(() => retention.validateOutputInspection(candidate, { ...proof(candidate), ...change }, root), /安全检查/);
 });
 
-test("Host uses the double-confirm review and guarded SimpleSFTP deletion; keep-history does nothing", async () => {
+test("Host cleanup is manual with double-confirmed guarded deletion; background retirement does nothing", async () => {
   const source = fs.readFileSync(require.resolve("../../dist/extension/legacy.js"), "utf8");
   const start = source.indexOf("planOutputRetentionMode(root) {");
   const end = source.indexOf("async retryDistributedJobFromUi(message)", start);
@@ -231,12 +231,12 @@ test("Host uses the double-confirm review and guarded SimpleSFTP deletion; keep-
   const sandbox = { PlanOutputRetention: retention, PlanRunFreshness: freshness, PlanVersionComparison: require('../../dist/results/PlanVersionComparison'),
     remoteActionPendingStatus: (status) => ["accepted", "running"].includes(status), resultStatus: (value) => value.status,
     remoteActionSucceeded: (status) => status === "completed",
-    vscode: { workspace: { getConfiguration: () => ({ get: () => mode }) }, Uri: { file: (value) => value }, window: { showInformationMessage() {} } },
+    vscode: { workspace: { getConfiguration: () => ({ get: () => mode }) }, Uri: { file: (value) => value }, window: { showInformationMessage() {}, showWarningMessage() {} } },
     workspaceRoot: () => "C:/project", compactSensitiveText: (value) => value, errorMessage: (value) => value.message,
     confirmSyncScopePaths: async (title, note, records, label) => { reviews++; assert.equal(records.length, expectedCopies); assert.match(label, /永久删除/); assert.ok(records.every((row) => row.path.startsWith(root + "/"))); return true; },
   };
   sandbox.SyncScopeConfirmation_1 = { confirmSyncScopePaths: sandbox.confirmSyncScopePaths,
-    reviewPlanVersionResults: async (_runs, candidates) => candidates.filter(row => ['/v0', '/v5'].some(leaf => row.outputDir.endsWith(leaf))) };
+    reviewPlanVersionResults: async (_runs, candidates) => candidates.filter(row => ['/a', '/v0', '/v5', '/not-yet-a'].some(leaf => row.outputDir.endsWith(leaf))) };
   vm.createContext(sandbox);
   vm.runInContext(`class Subject { ${methods} }; this.methods = Object.fromEntries(Object.getOwnPropertyNames(Subject.prototype).filter(name => name !== 'constructor').map(name => [name, Subject.prototype[name]]));`, sandbox);
   const host = { ...sandbox.methods,
@@ -255,6 +255,9 @@ test("Host uses the double-confirm review and guarded SimpleSFTP deletion; keep-
     recordActionError(value) { errors.push(value); }, postState() {},
   };
   await host.retainLatestDistributedPlanOutputs("C:/project", ["b"]);
+  assert.equal(apiCalls.length, 0);
+  assert.equal(reviews, 0);
+  await host.retainLatestDistributedPlanOutputs("C:/project", ["b"], [], true);
   assert.deepEqual(errors, []);
   assert.equal(reviews, 1);
   assert.equal(apiCalls.length, 12);
@@ -278,7 +281,7 @@ test("Host uses the double-confirm review and guarded SimpleSFTP deletion; keep-
   assert.ok(state.plans[6].jobs.every(job => !job.outputRetiredAt));
   state = queue(plan('not-yet-a', 5000), plan('not-yet-b', 6000));
   published = false;
-  await host.retainLatestDistributedPlanOutputs('C:/project', ['not-yet-b']);
+  await host.retainLatestDistributedPlanOutputs('C:/project', ['not-yet-b'], [], true);
   assert.equal(apiCalls.length, 36, 'a completed but unpublished replacement must keep the old complete results');
   assert.match(errors.at(-1).message, /尚未正式收录/);
 });
@@ -346,12 +349,12 @@ test('cache review exposes the Plan history entry independently of temporary-fil
   disposed();
 });
 
-test("formal publication calls replacement only after rebuilding and mirroring the latest complete run", async () => {
+test("formal publication rebuilds and mirrors without retiring historical attempts", async () => {
   const source = fs.readFileSync(require.resolve("../../dist/extension/legacy.js"), "utf8");
   const start = source.indexOf("async rebuildDistributedResults(");
   const end = source.indexOf("planOutputRetentionMode(root)", start);
   assert.ok(start >= 0 && end > start);
-  const sandbox = { PlanOutputRetention: retention, PlanRunFreshness: freshness, crypto: require("node:crypto"),
+  const sandbox = { PlanOutputRetention: retention, PlanRunFreshness: freshness, DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue"), crypto: require("node:crypto"),
     uniqueStrings: (values) => [...new Set(values)], samePlanSelection: (a, b) => a === b,
     remoteActionPendingStatus: () => false, resultStatus: (value) => value.status, errorMessage: (error) => error.message,
     makeOpId: () => "distributed-merge-fixture",
@@ -382,9 +385,8 @@ test("formal publication calls replacement only after rebuilding and mirroring t
   };
   await sandbox.rebuild.call(host, "C:/project", queue(plan("a", 1000), plan("b", 2000)), false);
   assert.deepEqual(errors, []);
-  assert.equal(events.at(-1), "retire:b");
+  assert.ok(!events.some(event => event.startsWith('retire:')));
   assert.ok(events.indexOf("publish") < events.indexOf("mirror"));
-  assert.ok(events.indexOf("mirror") < events.indexOf("retire:b"));
 });
 
 test("the read-only Worker proof rejects links, mounts, active attempts and content mutation", () => {

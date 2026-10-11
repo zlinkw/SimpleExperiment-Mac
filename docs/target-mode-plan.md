@@ -21,6 +21,10 @@
 - 067七个源/测试文件保持未提交，未计通过。正式测试揭示Mac旧构建注入会改写新协议re.search字符串；Windows42902a5a构建脚本已有整行常量门禁。067a只改构建脚本、实际纯函数回归和本计划3文件，build/面板vm/版本注入测试后独立同步；不改运行中的远端runtime。
 - build/面板2/vm、实际版本注入1通过，完整常量更新/正则字符串与注释不改/重复注入幂等。067宿主确认测试留至068整合后补回，不以依赖未接入的测试调整生产逻辑；原目标18/11。
 
+## 已完成批次 mac-sync-069c（结果与历史契约回归）
+- 069b提交7311a8c已同步。8文件边界：PlanRunFreshness/WrapperResultPersistence/RemoteResultInspection/PlanOutputRetention测试及夹具、PanelStateProjection、JobTmuxLogNavigation、本计划。保留Mac路径与scope，验证当前正式结果内存读取及历史只读，不执行真实同步/删除。原目标18/11。
+- 逐文件新鲜度10/Wrapper26/远端检查13/历史保留20/面板投影5/日志跳转10通过。日志夹具初次缺Mac严格归属函数而失败，补入实际渲染函数与服务器明确前缀后复验；不放宽缺前缀拒绝。原目标18已验证11剩余，无真实文件清理/传输。
+
 ## 已完成批次 mac-sync-069b（模式与启动前拒绝契约回归）
 - 069a提交bc35d2e已同步。8文件边界：distributedPlanExecutionMode测试/夹具、调度模式、空闲GPU派发、preflightDispatchRejection测试/夹具、planRunModeWorkflow夹具、本计划。Mac夹具保留相对schedulerPath，验证train/test/train_test与精确未启动拒绝回执，不启动GPU任务。
 - 逐文件模式9/调度4/派发生命周期19/拒绝6/运行模式5通过。旧测试缺formal能力、零版本哨兵及公共身份依赖而断言失败，按当前正式任务契约补齐夹具；CUDA/项目失败不自动增attempt重跑，旧队列原证据只读保留。临时Python脚本保留，不执行清理；无超时/远端任务操作。原目标18已验证11剩余。

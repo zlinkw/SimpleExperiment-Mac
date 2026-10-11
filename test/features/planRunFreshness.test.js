@@ -118,7 +118,7 @@ test("recovery projection strips shared summary paths before applying the author
 });
 
 test("metric recovery recognizes exclusive queued retry namespaces without requiring the directory to equal runId", () => {
-  for (const token of ['distributed-attempt-1791468346173-xuw2sy', 'auto-retry-1791468346173-xuw2sy']) {
+  for (const token of ['distributed-attempt-1791468346173-xuw2sy', 'auto-retry-1791468346173-xuw2sy', 'attempt-1791624729570-fw3s7l']) {
     const plan=run('run-current', '2026-10-09T00:00:00Z');
     Object.assign(plan.jobs[2], { attempt:43, artifacts:{}, outputDir:'custom_results/method/seed44/attempts/' + token });
     const queue={plans:[plan]}, selected=freshness.selectLatestCompletePlanRunIdentity(queue,plan.planFile,'same');
@@ -132,6 +132,7 @@ test("metric recovery recognizes exclusive queued retry namespaces without requi
 });
 
 test("unhashed discovery rejects legacy output reuse, collisions and historical attempts", () => {
+  for (const token of ['auto-retry-1791468346173-xuw2sy', 'attempt-1791624729570-fw3s7l']) {
   for (const mutate of [
     (queue,plan)=>{ plan.jobs[2].outputDir='custom_results/legacy'; },
     (queue,plan)=>{ plan.jobs[2].outputDir='custom_results/attempts/shared'; },
@@ -142,10 +143,11 @@ test("unhashed discovery rejects legacy output reuse, collisions and historical 
     (queue,plan)=>{ plan.jobs[2].recoveryConflict=true; },
   ]) {
     const plan=run('run-current', '2026-10-09T00:00:00Z');
-    Object.assign(plan.jobs[2],{attempt:43,artifacts:{},outputDir:'custom_results/seed44/attempts/auto-retry-1791468346173-xuw2sy'});
+    Object.assign(plan.jobs[2],{attempt:43,artifacts:{},outputDir:'custom_results/seed44/attempts/' + token});
     const queue={plans:[plan]}, selected=freshness.selectLatestCompletePlanRunIdentity(queue,plan.planFile,'same');
     mutate(queue,plan);
     const current=freshness.selectLatestCompletePlanRunIdentity(queue,plan.planFile,'same') || selected;
     assert.equal(freshness.hasExclusiveAttemptOutput(queue,current,current.jobs[2]),false);
+  }
   }
 });

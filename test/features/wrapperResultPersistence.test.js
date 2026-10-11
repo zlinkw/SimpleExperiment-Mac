@@ -23,31 +23,42 @@ const publication = require('../../dist/results/ProjectResultPublication');
 const sha = data => crypto.createHash('sha256').update(data).digest('hex');
 const planFile = 'experiments/plans/comparison/anything.yaml';
 
-function fixture({ sameNamePlans = false, wrapperOnly = false, incomplete = false, retry = false, retryWorker = 'owner',
+function fixture({ sameNamePlans = false, wrapperOnly = false, trainSummary = false, incomplete = false, retry = false, retryWorker = 'owner', formalJob = false,
   retryToken = 'distributed-attempt-1791468346173-xuw2sy' } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-wrapper-results-'));
   const files = new Map(), calls = [];
-  const makeRun = (id, value, done = 3) => ({ id, planFile, revision: 'same-revision', enqueuedAt: id === 'A' ? '2026-10-01T00:00:00Z' : '2026-10-02T00:00:00Z',
+  const makeRun = (id, value, done = 3) => ({ id, planFile, revision: 'same-revision', ...(formalJob && id === 'B' ? {resultPathPolicy:'declared',codeFingerprint:'fixture-code'} : {}), enqueuedAt: id === 'A' ? '2026-10-01T00:00:00Z' : '2026-10-02T00:00:00Z',
     jobs: [42, 43, 44].map((seed, index) => {
       const retried = retry && id === 'B' && seed === 44;
-      const outputDir = `work_dirs/arbitrary/${seed}/attempts/${retried ? retryToken : id}`;
+      const formal = formalJob && id === 'B';
+      const outputDir = formal ? `work_dirs/formal/seed${seed}` : `work_dirs/arbitrary/${seed}/attempts/${retried ? retryToken : id}`;
       const checkpoint = outputDir + '/best_model.pth';
       const job = { index, case: 'case-one', seed, attempt: retried ? 43 : 1, workerId: retried ? retryWorker : 'owner', commandId: id + '-' + seed,
-        outputDir, status: index < done ? 'completed' : 'running' };
-      const endpoint = wrapperOnly ? outputDir + '/scoring.csv' : outputDir + '/test_results/formal_result_rows.csv';
+        outputDir, status: index < done ? 'completed' : 'running', ...(formal ? {attempt:0,resultPathPolicy:'declared',globalJobId:`B:${index}`,
+          collectionResultCsv:`tmp/result/formal/seed${seed}/metrics.csv`} : {}) };
+      const endpoint = wrapperOnly ? outputDir + '/scoring.csv' : outputDir + (trainSummary ? '/metrics_summary.csv' : '/test_results/formal_result_rows.csv');
       const endpointText = `case,seed,method,dataset,metric,value,checkpoint_path,job_dir,run_id\ncase-one,${seed},unknown_method,arbitrary_set,AUC,${value},${checkpoint},${outputDir},${id}\n`;
       files.set(endpoint, Buffer.from(endpointText));
-      if (!wrapperOnly) files.set(outputDir + '/test_results/four_state_metrics.csv', Buffer.from('state,metric,value,p0_value,delta_p100_minus_p0,sample_count,checkpoint_path,job_dir,seed,method,dataset,undefined_reason,p0_undefined_reason,extra_column\n'
+      if (formal) files.set(job.collectionResultCsv, Buffer.from(endpointText));
+      if (!wrapperOnly && !trainSummary) files.set(outputDir + '/test_results/four_state_metrics.csv', Buffer.from('state,metric,value,p0_value,delta_p100_minus_p0,sample_count,checkpoint_path,job_dir,seed,method,dataset,undefined_reason,p0_undefined_reason,extra_column\n'
         + ['both', 'image_missing', 'text_missing', 'both_missing'].map(state => `${state},AUC,${value},0.7,0.2,210,${checkpoint},${outputDir},${seed},unknown_method,arbitrary_set,,,保留原文`).join('\n') + '\n'));
       files.set(outputDir + '/custom.csv', Buffer.from('case,state,label,score,unknown_field\npatient-case,custom-state,lesion,NaN,不能计算\n'));
       files.set(outputDir + '/custom.json', Buffer.from(JSON.stringify({ arbitrary: { list: [1, null, '完整保留'] } })));
       files.set(outputDir + '/config_snapshot.yaml', Buffer.from('model: untouched\n'));
       files.set(outputDir + '/mask.npz', Buffer.from([0, 255, 2, 4, 9]));
       files.set(outputDir + '/artifact_manifest.json', Buffer.from(JSON.stringify({ output_dir: outputDir, checkpoint_path: checkpoint,
+        ...(formal ? {result_csv:job.collectionResultCsv} : {}),
         metrics_summary: endpoint, outputs: ['custom.csv', 'custom.json', 'config_snapshot.yaml', 'mask.npz',
-          ...(!wrapperOnly ? ['test_results/four_state_metrics.csv'] : [])] })));
+          ...(!wrapperOnly && !trainSummary ? ['test_results/four_state_metrics.csv'] : [])] })));
       // Discovery must work with just a standard manifest, without metric hashes recorded in the queue.
       job.artifacts = {};
+      if (formal) {
+        const hashes = Object.fromEntries([...files].filter(([file])=>file.startsWith(outputDir+'/') || file===job.collectionResultCsv).map(([file,bytes])=>[file,sha(bytes)]));
+        files.set(outputDir+'/formal_job_owner.json', Buffer.from(JSON.stringify({schemaVersion:1,state:'completed',workflowId:'B',globalJobId:job.globalJobId,
+          commandId:job.commandId,index,case:job.case,seed,outputDir,collectionResultCsv:job.collectionResultCsv,
+          planRevision:'same-revision',codeFingerprint:'fixture-code',sha256:hashes})));
+        job.artifacts = Object.fromEntries([...files].filter(([file])=>file.startsWith(outputDir+'/') || file===job.collectionResultCsv).map(([file,bytes])=>[file,sha(bytes)]));
+      }
       return job;
     }) });
   const runs = [makeRun('A', .81), makeRun('B', .92, incomplete ? 2 : 3)];
@@ -65,13 +76,15 @@ function fixture({ sameNamePlans = false, wrapperOnly = false, incomplete = fals
     loadPlanSyncLedger: async () => ({ schemaVersion: 2, entries: {} }), loadDistributedQueue: async () => ({ plans: runs }),
     resolveSelectedPlanFile: () => planFile, enabledWorkerConfigs: () => [...new Set(runs.flatMap(run => run.jobs.map(job => job.workerId)))].map(id => ({ id })),
     mappedDownloadServerForSource: id => ({ id, host: 'current-config.example', remotePath: '/verified/project' }),
-    simpleSftpCapability: async () => ({ methodOptions: { 'sync.downloadMappedPaths': { memoryOnly: true } } }),
+    simpleSftpCapability: async () => ({ methodOptions: { 'sync.downloadMappedPaths': { memoryOnly: true, memoryWrapperResults: true } } }),
     postState() {}, invalidateResultCatalogCache() {},
     simpleSftpApiCall: async (method, params) => {
       calls.push({ method, params });
       if (method === 'sync.projectInventory') return { ok: true, files: Object.fromEntries(params.scopePaths.filter(file => files.has(file))
         .map(file => [file, { size: files.get(file).length, sha256: sha(files.get(file)) }])) };
       assert.equal(method, 'sync.downloadMappedPaths');
+      assert.equal(params.memoryOnly, true, 'result rebuild must never download originals to disk');
+      assert.equal(params.wrapperResults, true);
       if (!params.memoryOnly) {
         for (const entry of params.entries) {
           const target = path.join(root, entry.localRelativePath); fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -88,7 +101,7 @@ function fixture({ sameNamePlans = false, wrapperOnly = false, incomplete = fals
   return { root, host, files, calls, runs, sync, registry, tuningFile };
 }
 
-test('same-named Plans sync and publish separate runs, original files and result rows without duplicate targets', async () => {
+test('same-named Plans publish separate summaries without persisting original files', async () => {
   const f = fixture({ sameNamePlans: true });
   const selected = await f.host.rebuildProjectResultTablesFromUi({ planFiles: [planFile] });
   assert.equal(selected.included.length, 1);
@@ -105,22 +118,39 @@ test('same-named Plans sync and publish separate runs, original files and result
   const paths = new Set(normal.wrapperEvidence.jobs.flatMap(job => job.sources.map(source => source.localRelativePath)));
   for (const job of tuning.wrapperEvidence.jobs) for (const source of job.sources) {
     assert.equal(paths.has(source.localRelativePath), false);
-    assert.equal(sha(fs.readFileSync(path.join(f.root, source.localRelativePath))), source.sha256);
+    assert.equal(fs.existsSync(path.join(f.root, source.localRelativePath)), false);
   }
   const final = tables.readCsv(fs.readFileSync(path.join(f.root, 'experiments/results/arbitrary_set/final/final.csv'), 'utf8'));
   assert.equal(final.rows.length, 2);
   assert.deepEqual(new Set(final.rows.map(row => row[final.header.indexOf('plan_file')])), new Set([planFile, f.tuningFile]));
   f.calls.length = 0;
   await f.sync();
-  assert.equal(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').length, 0);
+  assert.ok(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').length > 0, 'each sync reads originals into memory');
+});
+
+test('formal declared CSV survives Host discovery, four-state validation and local rebuild without borrowing historical attempts', async () => {
+  const f=fixture({formalJob:true}); const oldBytes=new Map([...f.files].filter(([file])=>file.includes('/attempts/')));
+  const report=await f.sync(); assert.deepEqual(report.skipped,[]); assert.deepEqual(report.missing,[]);
+  const current=f.registry().plans[planFile]; assert.equal(current.wrapperEvidence.runId,'B');
+  assert.ok(current.records.every(row=>row.runId==='B' && row.metrics.AUC===.92));
+  for(const proof of current.wrapperEvidence.jobs) {
+    assert.equal(proof.job.resultPathPolicy,'declared'); assert.ok(!proof.job.outputDir.includes('/attempts/'));
+    assert.ok(proof.sources.some(source=>source.remotePath===proof.job.collectionResultCsv));
+    assert.ok(proof.sources.some(source=>source.remotePath.endsWith('/formal_job_owner.json')));
+  }
+  for(const [file,bytes] of oldBytes) assert.deepEqual(f.files.get(file),bytes);
+  const local=await f.host.summaryFromLocalMetricFiles(f.root,planFile,f.host.resultsSummary,{authoritativeLocal:true});
+  assert.equal(local.wrapperEvidence.runId,'B');
 });
 
 for (const [name, retryWorker, retryToken] of [
   ['manual retry', 'owner', 'distributed-attempt-1791468346173-xuw2sy'],
   ['cross Worker reassignment', 'new-owner', 'distributed-attempt-1791468346173-xuw2sy'],
   ['automatic retry', 'owner', 'auto-retry-1791468346173-xuw2sy'],
+  ['recalled failure retry', 'new-owner', 'attempt-1791624729570-fw3s7l'],
 ]) test(name + ' publishes the completed attempt under the original Plan run and refreshes locally', async () => {
-  const f = fixture({ retry: true, retryWorker, retryToken }); const report = await f.sync();
+  const trainSummary = name === 'recalled failure retry';
+  const f = fixture({ retry: true, retryWorker, retryToken, trainSummary }); const report = await f.sync();
   assert.deepEqual(report.skipped, []); assert.deepEqual(report.missing, []);
   const evidence = f.registry().plans[planFile].wrapperEvidence;
   assert.equal(evidence.runId, 'B'); assert.equal(evidence.jobs.length, 3);
@@ -131,7 +161,9 @@ for (const [name, retryWorker, retryToken] of [
   assert.ok(f.calls.some(call => call.method === 'sync.downloadMappedPaths' && call.params.server.id === retryWorker
     && call.params.entries.some(file => file.remotePath.startsWith(retried.job.outputDir + '/'))));
   assert.ok(f.registry().plans[planFile].records.every(row => row.runId === 'B'));
-  assert.ok(retried.sources.some(file => file.kind === 'test_results/four_state_metrics.csv'));
+  assert.ok(retried.sources.some(file => file.kind === (trainSummary ? 'metrics_summary.csv' : 'test_results/four_state_metrics.csv')));
+  if (trainSummary) assert.ok(f.calls.filter(call => call.method === 'sync.downloadMappedPaths')
+    .every(call => call.params.entries.every(file => !file.remotePath.includes('/test_results/'))), 'train-only wrapper needs no test outputs');
   const local = await f.host.summaryFromLocalMetricFiles(f.root, planFile, f.host.resultsSummary, { authoritativeLocal: true });
   assert.equal(local.wrapperEvidence.runId, 'B'); assert.deepEqual(local.wrapperEvidence.jobs, evidence.jobs);
   f.calls.length = 0;
@@ -140,31 +172,33 @@ for (const [name, retryWorker, retryToken] of [
   await f.host.refreshLocalResultsFromUi();
   assert.equal(refreshed, true); assert.equal(f.calls.length, 0, 'local refresh does not download or select an older run');
   await f.sync();
-  assert.equal(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').length, 0);
+  assert.ok(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').length > 0);
 });
 
-test('memoryOnly persistence includes four-state and arbitrary wrapper outputs with exact bytes and provenance', async () => {
+test('memoryOnly aggregation verifies four-state and arbitrary outputs but persists only summaries and hash evidence', async () => {
   const f = fixture(); const report = await f.sync(); assert.deepEqual(report.skipped, []);
   const evidence = f.registry().plans[planFile].wrapperEvidence;
   assert.equal(evidence.runId, 'B'); assert.equal(evidence.jobs.length, 3);
   for (const job of evidence.jobs) {
     assert.equal(job.checkpointPath, job.job.outputDir + '/best_model.pth');
     for (const source of job.sources) {
-      const bytes = fs.readFileSync(path.join(f.root, source.localRelativePath));
-      assert.equal(sha(bytes), source.sha256); assert.deepEqual(bytes, f.files.get(source.remotePath));
-      const sidecar = JSON.parse(fs.readFileSync(path.join(f.root, source.localRelativePath + '.provenance.json'), 'utf8'));
-      assert.equal(sidecar.job.runId, 'B'); assert.equal(sidecar.job.attempt, 1); assert.equal(sidecar.job.workerId, 'owner');
+      assert.equal(sha(f.files.get(source.remotePath)), source.sha256);
+      assert.equal(fs.existsSync(path.join(f.root, source.localRelativePath)), false);
+      assert.equal(fs.existsSync(path.join(f.root, source.localRelativePath + '.provenance.json')), false);
     }
   }
   const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)]);
-  const four = walk(path.join(f.root, 'experiments/results/arbitrary_set/methods')).find(file => /four_state.*\.csv$/.test(file));
-  const rows = tables.readCsv(fs.readFileSync(four, 'utf8'));
-  assert.equal(rows.rows.length, 12); assert.ok(rows.header.includes('p0_value')); assert.ok(rows.header.includes('extra_column'));
-  assert.ok(rows.rows.every(row => row[rows.header.indexOf('simple_run_id')] === 'B'));
-  assert.ok(tables.resultCatalog(f.root, 'experiments/results').datasets.flatMap(dataset => dataset.plans).flatMap(plan => plan.artifacts)
-    .some(artifact => artifact.kind === 'wrapper' && /four_state/.test(artifact.path)));
-  const custom = walk(path.join(f.root, 'experiments/results/_unassigned/methods')).find(file => /custom\.csv.*\.csv$/.test(file));
-  assert.match(fs.readFileSync(custom, 'utf8'), /NaN/); assert.match(fs.readFileSync(custom, 'utf8'), /不能计算/);
+  assert.equal(evidence.storage, 'summary-only');
+  const generated = walk(path.join(f.root, 'experiments/results'));
+  assert.ok(!generated.some(file => /four_state.*\.csv$|\.provenance\.json$|custom\.csv/.test(file)));
+  const summary = JSON.parse(fs.readFileSync(path.join(f.root, evidence.views[0]), 'utf8'));
+  assert.equal(summary.runId, 'B'); assert.equal(summary.storage, 'summary-only');
+  assert.equal(summary.kinds.find(row => /four_state/.test(row.kind)).rows, 12);
+  assert.ok(summary.kinds.find(row => /four_state/.test(row.kind)).columns.includes('extra_column'));
+  assert.doesNotMatch(JSON.stringify(summary), /不能计算/);
+  assert.ok(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').every(call => call.params.memoryOnly));
+  assert.equal(fs.existsSync(path.join(f.root, 'tmp')), false);
+  assert.equal(fs.existsSync(path.join(f.root, 'simple_cluster/downloads')), false);
 });
 
 test('generic wrapper requires no four-state schema or project-specific CSV name', async () => {
@@ -175,8 +209,8 @@ test('generic wrapper requires no four-state schema or project-specific CSV name
   assert.ok(f.registry().plans[planFile].wrapperEvidence.jobs.every(job => job.sources.some(source => source.kind === 'mask.npz')));
   const local = await f.host.summaryFromLocalMetricFiles(f.root, planFile, f.host.resultsSummary, { authoritativeLocal: true });
   assert.equal(local.wrapperEvidence.runId, 'B');
-  const binary = local._wrapperFiles.find(file => file.relativePath.endsWith('.npz'));
-  assert.deepEqual(binary.contents, Buffer.from([0, 255, 2, 4, 9]));
+  assert.deepEqual(local._wrapperFiles, []);
+  assert.ok(local.wrapperEvidence.jobs.every(job => job.sources.every(source => !fs.existsSync(path.join(f.root, source.localRelativePath)))));
 });
 
 test('a wrapper with no endpoint CSV publishes structured outputs without inventing statistics', async () => {
@@ -191,7 +225,8 @@ test('a wrapper with no endpoint CSV publishes structured outputs without invent
   const plan = f.registry().plans[planFile];
   assert.equal(plan.wrapperEvidence.runId, 'B'); assert.deepEqual(plan.records, []);
   assert.equal(plan.wrapperEvidence.jobs.length, 3);
-  assert.ok(plan.wrapperEvidence.views.some(file => /custom\.csv/.test(file)));
+  const summary = JSON.parse(fs.readFileSync(path.join(f.root, plan.wrapperEvidence.views[0]), 'utf8'));
+  assert.ok(summary.kinds.some(row => /custom\.csv/.test(row.kind)));
   assert.equal(fs.existsSync(path.join(f.root, 'experiments/results/arbitrary_set/final/final.csv')), false);
 });
 
@@ -278,25 +313,56 @@ test('repeated collection is byte-idempotent and never overwrites another attemp
     .map(([file, bytes]) => [file, sha(bytes)]));
   await f.sync();
   assert.deepEqual(f.registry().plans[planFile].wrapperEvidence.jobs.flatMap(job => job.sources), previousSources);
-  for (const source of previousSources) assert.equal(sha(fs.readFileSync(path.join(f.root, source.localRelativePath))), source.sha256);
+  for (const source of previousSources) assert.equal(fs.existsSync(path.join(f.root, source.localRelativePath)), false);
 });
 
-test('unchanged wrapper results are verified locally and send no repeated download request', async () => {
+test('unchanged results are reread only in memory without retaining raw cache', async () => {
   const f = fixture(); await f.sync();
   f.calls.length = 0;
   const report = await f.sync();
   const transferred = f.calls.filter(call => call.method === 'sync.downloadMappedPaths').flatMap(call => call.params.entries);
-  assert.equal(transferred.length, 0, 'Repeated sync must not transfer verified existing originals or manifests');
-  assert.equal(report.downloaded, false);
-  assert.equal(report.downloads[0].networkFiles, 0);
-  assert.equal(report.downloads[0].reusedFiles, 21);
+  assert.equal(transferred.length, 21);
+  assert.equal(report.downloaded, true);
+  assert.ok(report.downloads[0].networkFiles > 0);
+  assert.equal(report.downloads[0].reusedFiles, 0);
+  assert.ok(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').every(call => call.params.memoryOnly === true));
+});
+
+test('old SFTP cannot fall back to disk and leaves an existing summary unchanged', async () => {
+  const f = fixture(); await f.sync();
+  const before = fs.readFileSync(path.join(f.root, 'simple_cluster/results/project_table_registry.json'));
+  f.calls.length = 0;
+  f.host.simpleSftpCapability = async () => ({ methodOptions: { 'sync.downloadMappedPaths': { memoryOnly: true } } });
+  const report = await f.sync();
+  assert.ok(report.skipped.some(error => /全格式内存接收/.test(error)));
+  assert.equal(f.calls.filter(call => call.method === 'sync.downloadMappedPaths').length, 0);
+  assert.deepEqual(fs.readFileSync(path.join(f.root, 'simple_cluster/results/project_table_registry.json')), before);
+});
+
+test('opening a malformed remote result uses an unsaved memory document and writes no local copy', async () => {
+  const f = fixture(); await f.sync();
+  const table = f.host.resultsSummary.workerResultTables[0], remotePath = table.rawResultCsvPath;
+  const broken = Buffer.from('metric,value\n"broken'); f.files.set(remotePath, broken);
+  f.host.filterResultsSummaryForPlan = summary => summary;
+  f.host.client.downloadWorkerFile = () => { throw new Error('direct file download forbidden'); };
+  const previousOpen = vscode.workspace.openTextDocument, previousShow = vscode.window.showTextDocument;
+  const previousWarning = vscode.window.showWarningMessage;
+  let opened;
+  vscode.workspace.openTextDocument = async options => { assert.equal(typeof options.content, 'string'); opened = options; return options; };
+  vscode.window.showTextDocument = async () => {};
+  vscode.window.showWarningMessage = async (_message, _options, choice) => choice;
+  try { await f.host.openResultArtifactFromUi({ planFile, remotePath, workerId: table.workerId }); }
+  finally { vscode.workspace.openTextDocument = previousOpen; vscode.window.showTextDocument = previousShow; vscode.window.showWarningMessage = previousWarning; }
+  assert.equal(opened.content, broken.toString());
+  assert.equal(fs.existsSync(path.join(f.root, 'simple_cluster/downloads')), false);
+  assert.ok(f.registry().plans[planFile].wrapperEvidence.jobs.every(job => job.sources.every(source => !fs.existsSync(path.join(f.root, source.localRelativePath)))));
 });
 
 test('endpoint and wrapper tables roll back together on transactional publication failure', async () => {
   const f = fixture(); const b = f.runs.pop(); await f.sync();
   const before = fs.readFileSync(path.join(f.root, 'simple_cluster/results/project_table_registry.json'));
   const previous = fs.readFileSync(path.join(f.root, 'experiments/results/arbitrary_set/final/final.csv'));
-  const wrapperPath = f.registry().plans[planFile].wrapperEvidence.views.find(file => /four_state/.test(file));
+  const wrapperPath = f.registry().plans[planFile].wrapperEvidence.views[0];
   const previousWrapper = fs.readFileSync(path.join(f.root, wrapperPath));
   const oldVisible = { runId: 'A', marker: 'published' }; f.host.resultsSummary = oldVisible;
   f.runs.push(b);
@@ -317,13 +383,15 @@ test('a first incomplete run has only an explicit preview and no formal endpoint
   assert.equal(fs.existsSync(path.join(f.root, 'experiments/results/arbitrary_set/final/final.csv')), false);
 });
 
-test('the same attempt cannot overwrite immutable historical raw bytes', async () => {
+test('changed source hash cannot replace previously verified summary even without local originals', async () => {
   const f = fixture(); await f.sync();
   const evidence = f.registry().plans[planFile].wrapperEvidence;
   const source = evidence.jobs[0].sources.find(source => source.remotePath.endsWith('/custom.csv'));
   f.files.set(source.remotePath, Buffer.from(f.files.get(source.remotePath).toString().replace('NaN', '0.9')));
-  await assert.rejects(f.sync(), /历史原始指标已变化/);
-  assert.equal(sha(fs.readFileSync(path.join(f.root, source.localRelativePath))), source.sha256);
+  const report = await f.sync();
+  assert.ok(report.skipped.some(error => /历史原始指标已变化/.test(error)));
+  assert.equal(f.registry().plans[planFile].wrapperEvidence.jobs[0].sources.find(row => row.remotePath === source.remotePath).sha256, source.sha256);
+  assert.equal(fs.existsSync(path.join(f.root, source.localRelativePath)), false);
 });
 
 test('a legacy endpoint-only refresh cannot replace a complete wrapper bundle', async () => {

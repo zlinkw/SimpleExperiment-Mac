@@ -4,12 +4,15 @@ const path = require("node:path");
 const test = require("node:test");
 const vm = require("node:vm");
 const ts = require("typescript");
+const { createRequire } = require("node:module");
+require("../_helpers/registerTsRequire");
 
 function loadFeature(name) {
-  const source = fs.readFileSync(path.join(__dirname, "../../src/features/" + name + ".ts"), "utf8");
+  const file = path.join(__dirname, "../../src/features/" + name + ".ts");
+  const source = fs.readFileSync(file, "utf8");
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const loaded = { exports: {} };
-  vm.runInNewContext(code, { exports: loaded.exports, module: loaded, Buffer, Object, Array, Set, Map, Number, String, Math });
+  vm.runInNewContext(code, { exports: loaded.exports, module: loaded, require: createRequire(file), Buffer, Object, Array, Set, Map, Number, String, Math });
   return loaded.exports;
 }
 
@@ -158,7 +161,7 @@ test("Plan status summaries preserve selector rules while remaining scalar and p
   assert.equal(byFile.get("experiments/plans/hidden-history.yaml").status, "not-started");
   assert.equal(byFile.get("experiments/plans/cutoff-history.yaml").status, "not-started");
 
-  const allowedKeys = ["activeCount", "completedCount", "failedCount", "planFile", "queuedCount", "revision", "status", "taskCount", "totalCount"];
+  const allowedKeys = ["activeCount", "completedCount", "failedCount", "planFile", "queuedCount", "revision", "status", "taskCount", "totalCount", "unavailableCount"];
   for (const summary of summaries) {
     assert.deepEqual(Object.keys(summary).sort(), allowedKeys);
     assert.equal("jobs" in summary, false);
