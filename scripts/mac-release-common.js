@@ -26,7 +26,7 @@ function assertSource(root, repo) {
   if (![ `https://github.com/zlinkw/${repo}.git`, `https://github.com/zlinkw/${repo}`, `git@github.com:zlinkw/${repo}.git` ].includes(remote)) throw new Error("Unexpected release source origin");
   if (run("git", ["status", "--porcelain"], root)) throw new Error("Release source contains uncommitted or unreviewed files");
   if (run("git", ["ls-files", ".github/workflows/*"], root)) throw new Error("Mac release source must not contain Actions workflows");
-  run("git", ["fetch", "origin"], root);
+  run("git", ["fetch", "origin", "master"], root);
   const commit = run("git", ["rev-parse", "HEAD"], root);
   if (commit !== run("git", ["rev-parse", "origin/master"], root)) throw new Error("Source HEAD differs from origin/master; stop without merge or rebase");
   return commit;

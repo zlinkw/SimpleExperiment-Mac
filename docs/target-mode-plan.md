@@ -15,7 +15,12 @@
 - 所列不依赖真机的本地修复、协作核查和发布已交付；用户暂停授权的前提已满足，收尾提交同步后将目标设为paused，未经用户恢复不继续批次。
 - M5启动/更新重载/补装/Termius/认证传输/中文路径断连/三拓扑仍待验收；收到反馈后再考虑完善，模拟不替代真机。
 
-## 当前批次 mac-native-050（passed，部分真机证据归档）
+## 当前批次 mac-release-051（metadata passed，发布pending）
+- 起始Expc48747160215cb0c9866abf4dcf39394595e875c/SF10670081f62c3dd1f544900e2d5c47e75b3dfe1d同步；完整目标保持paused，只完成本次新授权请求。
+- 8文件：两仓package/lock、Exp runtime版本/prepare/common/计划；递增.310/.98，prepare纳入用户前缀/UI/关闭/隔离GPU调度/停止/单文件上传恢复目标，发布说明区分.309/.97部分真机与新版待复验，强调远端Agent必须用户空闲时主动更新。发布源仅fetch已核定origin/master。
+- metadata两仓build、227/26闭包、面板2/vm、runtimeManifest1/发布脚本4、UTF8/版本/差异通过；runtimeManifest首次命令路径误写features，按rg所得实际test/runtimeManifest.test.js通过。SF元数据60fe32015a07e29f1235d17da815af936707fa79已普通同步。Exp提交后源同步再prepare真实darwin-arm64两VSIX及清单，实际包消费者、源码快照与匿名索引/附件验证，再发布索引；发布尚未完成。无开发机安装、Actions或服务器通信，原方案剩余12/29。
+
+## 前批 mac-native-050（passed，部分真机证据归档）
 - .309/.97用户报告按证据归档至mac-native-acceptance-2026-10-11.md，不发布个人目录/服务器地址/用户名，不假称读取原始Mac截图回执。4文档：报告摘要、事实、固定目标状态及计划。
 - 原02环境、06无服务器启动及四入口、15失败/恢复检查取得完整条目所需补证；17已验证/12剩余。认证、Termius attach、真实在线安装/补装、三拓扑及独立Agent版本按钮最终回执仍待验；旧历史15/29仅历史记录。
 - mac-native-049 SFTP8源测试文件已验证提交10670081f62c3dd1f544900e2d5c47e75b3dfe1d，TLS多次失败后普通fetch master/push/fetch确认HEAD=origin/master；未修改origin或关闭TLS校验。取消回调/双端只读认证前置、旧upload.files退出证明与已确认新请求安全恢复；新原生消费者5/auth9/relay9/旧退出7/recovery25/settlement3/API进度4、build26闭包及diff通过。仅本地替身，现有远端任务保持不动。
