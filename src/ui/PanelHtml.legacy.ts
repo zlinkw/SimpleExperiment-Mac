@@ -1952,9 +1952,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
     function classifyTmuxWindow(name) {
       const n = String(name || "").toLowerCase();
-      if (tmuxGpuIdFromSession(n)) return "gpu";
-      if (n.indexOf("zlk-sch-") === 0) return "scheduler";
-      if (n.indexOf("zlk-worker") === 0) return "worker";
+      const prefix = String(tmuxListCache.tmuxSessionPrefix || "");
+      if (tmuxCurrentGpuIdFromSession(n)) return "gpu";
+      if (prefix && n.indexOf(prefix + "-sch-") === 0) return "scheduler";
+      if (prefix && n.indexOf(prefix + "-worker-") === 0) return "worker";
       if (n.indexOf("_tb") !== -1 || n.indexOf("tensorboard") !== -1) return "other";
       return "other";
     }
@@ -1965,6 +1966,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (at < 0) return "";
       const value = raw.slice(at + marker.length).trim();
       return value && String(Number(value)) === value ? value : "";
+    }
+    function tmuxCurrentGpuIdFromSession(name) {
+      const prefix = String(tmuxListCache.tmuxSessionPrefix || "");
+      const gpuId = tmuxGpuIdFromSession(name);
+      return gpuId && prefix && String(name) === prefix + "-gpu-" + gpuId ? gpuId : "";
     }
     function tmuxTaskStatusLabel(status) {
       const value = String(status || "").toLowerCase();
@@ -1988,6 +1994,17 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const paneIds = (win.panes || []).map(function(pane){ return String(pane.id || ""); }).filter(Boolean);
       return '<button type="button" class="' + escAttr(className) + '" data-tmux-close="' + escAttr(target) + '" data-tmux-close-worker="' + escAttr(worker) + '" data-tmux-close-id="' + escAttr(win.windowId || "") + '" data-tmux-close-name="' + escAttr(win.name || "") + '" data-tmux-close-panes="' + escAttr(paneIds.join(",")) + '" aria-label="关闭 ' + escAttr(target) + '" title="关闭服务器上的实际窗口 ' + escAttr(target) + '（需确认）">×</button>';
     }
+    function tmuxGpuSessionCloseButton(card) {
+      if (card.synthetic || !tmuxListCache.tmuxSessionPrefix || !tmuxCurrentGpuIdFromSession(card.sessName)) return "";
+      const identities = card.windows.map(function(win){ return { target: String(win.target || card.sessName + ":" + win.index),
+        session: card.sessName, windowId: String(win.windowId || ""), windowName: String(win.name || ""),
+        paneIds: (win.panes || []).map(function(pane){ return String(pane.id || ""); }).filter(Boolean).sort(),
+        taskCommandId: String((win.task || {}).commandId || ""), taskStatus: String((win.task || {}).status || ""),
+        paneCommands: (win.panes || []).map(function(pane){ return { id: String(pane.id || ""), command: String(pane.command || "") }; }).sort(function(a,b){ return a.id.localeCompare(b.id); }) }; });
+      const valid = identities.length && identities.every(function(row){ return row.windowId.charAt(0) === "@"; });
+      const title = valid ? "关闭 " + card.sessName + " 的全部窗口和其中进程（先核对精确目标并确认）" : "窗口身份尚未核实，请刷新列表";
+      return '<button type="button" class="tmuxClose" data-tmux-close-gpu-session="' + escAttr(card.sessName) + '" data-tmux-close-worker="' + escAttr(tmuxListCache.workerId || tmuxSelectedWorkerId || "") + '" data-tmux-close-gpu-identities="' + escAttr(JSON.stringify(identities)) + '"' + (valid ? '' : ' disabled') + ' title="' + escAttr(title) + '" aria-label="' + escAttr(title) + '">×</button>';
+    }
     function getTmuxWindowCandidates(sessions) {
       const out = [];
       const seen = {};
@@ -1998,7 +2015,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const sessName = String(sess.name || "").trim();
         if (!sessName) continue;
         const wins = Array.isArray(sess.windows) ? sess.windows : [];
-        const gpuId = tmuxGpuIdFromSession(sessName);
+        const gpuId = tmuxCurrentGpuIdFromSession(sessName);
         const sessionCategory = gpuId ? "gpu" : classifyTmuxWindow(sessName);
         if (gpuId) {
           seenGpuIds[gpuId] = 1;
@@ -2023,7 +2040,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             const isActive = !!w.active || panes.some(function(p){ return !!p.active; });
             const target = sessName + ":" + wIdx;
             const shortLabel = wName ? (sessName + ":" + wName) : target;
-            const category = classifyTmuxWindow(wName || sessName);
+            const category = sessionCategory;
             if (!seen[target]) { seen[target] = 1; out.push({ target: target, label: shortLabel, sessName: sessName, windowIndex: wIdx, windowName: wName, panes: paneCount, active: isActive, category: category, synthetic: false, window: w }); }
           }
         }
@@ -2058,10 +2075,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const gpuCandidates = candidates.filter(function(c){ return c.category === "gpu"; });
       const activeFilter = normalizeTmuxWindowFilter(tmuxWindowFilter);
       let html = '<div class="tmuxGpuCards">';
-      let otherHtml = "";
-      let otherCount = 0;
       const allActive = activeFilter === "all";
-      const otherExpanded = !!el("tmuxOtherSessions")?.open || candidates.some(function(c){ return c.category !== "gpu" && c.target === activeFilter; });
       html += '<button type="button" class="tmuxWindowCard other' + (allActive ? ' is-active' : '') + '" data-tmux-filter="all" aria-pressed="' + (allActive ? "true" : "false") + '" title="显示 GPU 任务概览；普通会话可在下方展开"><span>GPU 总览</span><b>' + String(gpuCandidates.length) + '</b></button>';
       for (let i = 0; i < candidates.length; i++) {
         const c = candidates[i];
@@ -2071,12 +2085,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const title = c.synthetic ? (c.label + "（当前空闲，尚未创建 tmux 会话）") : (c.category === "gpu" ? (c.label + "；运行中 " + c.runningCount + "；失败保留 " + c.failedCount) : (c.target + "  panes:" + c.panes + (c.active ? " *" : "")));
         const closeHtml = tmuxWindowCloseButton(c.window, c.sessName, "tmuxClose");
         const summary = c.category === "gpu" ? (c.synthetic ? "空闲" : ("运行 " + c.runningCount + " · 失败 " + c.failedCount + " · 标签 " + c.windows.filter(function(win){ return !!win.task; }).length)) : c.target;
-        const card = '<div class="tmuxWindowWrap"><button type="button" class="tmuxWindowCard ' + escAttr(klass) + miss + (isActive ? ' is-active' : '') + '" data-tmux-filter="' + escAttr(c.target) + '" aria-pressed="' + (isActive ? "true" : "false") + '" title="' + escAttr(title) + '"><span>' + esc(c.label) + '</span><b>' + esc(summary) + '</b></button>' + ((c.category === "gpu" || c.synthetic) ? "" : closeHtml) + '</div>';
+        const card = '<div class="tmuxWindowWrap"><button type="button" class="tmuxWindowCard ' + escAttr(klass) + miss + (isActive ? ' is-active' : '') + '" data-tmux-filter="' + escAttr(c.target) + '" aria-pressed="' + (isActive ? "true" : "false") + '" title="' + escAttr(title) + '"><span>' + esc(c.label) + '</span><b>' + esc(summary) + '</b></button>' + (c.category === "gpu" ? tmuxGpuSessionCloseButton(c) : c.synthetic ? "" : closeHtml) + '</div>';
         if (c.category === "gpu") html += card;
-        else { otherHtml += card; otherCount++; }
       }
       html += '</div>';
-      if (otherHtml) html += '<details id="tmuxOtherSessions" class="tmuxOtherSessions"' + (otherExpanded ? ' open' : '') + '><summary>其他会话 · ' + otherCount + ' 个窗口</summary><div class="tmuxOtherSessionGrid">' + otherHtml + '</div></details>';
       bar.innerHTML = html || '<span class="muted" style="font-size:11px;">暂无窗口</span>';
     }
     function renderTmuxOverview(sessions) {
@@ -2137,7 +2149,6 @@ export function renderPanelHtml(platform: string = process.platform): string {
           let sessionGrid = '<div class="tmuxOverviewItem"><span class="pill">' + esc(badge) + '</span><b>' + esc(sess.name || "") + '</b><span class="muted">服务器窗口 ' + String(sess.windowCount || (sess.windows ? sess.windows.length : 0)) + '</span>';
           const wins = sess.windows || [];
           let extraWindows = "";
-          let extraCount = 0;
           for (let wi = 0; wi < wins.length; wi++) {
             const w = wins[wi] || {};
             const wLabel = (w.index || "") + ":" + (w.name || "") + (w.active ? " *" : "");
@@ -2152,18 +2163,15 @@ export function renderPanelHtml(platform: string = process.platform): string {
               }
             }
             windowHtml += tmuxWindowCloseButton(w, sess.name || "", "tmuxTaskTabClose") + '</span>';
-            if (badge === "gpu" && !w.task) { extraWindows += windowHtml; extraCount++; }
+            if (badge === "gpu" && !w.task) extraWindows += windowHtml;
             else sessionGrid += windowHtml;
           }
-          if (extraCount) {
-            const extraId = "tmuxExtraWindows-" + si;
-            sessionGrid += '<details id="' + extraId + '" class="tmuxOtherSessions"' + (el(extraId)?.open ? ' open' : '') + '><summary>其他服务器窗口 · ' + extraCount + '</summary><div class="tmuxOverviewGrid">' + extraWindows + '</div></details>';
-          }
+          if (extraWindows) otherGrid += '<div class="tmuxOverviewItem"><b>' + esc(sess.name) + '</b><span class="muted">未绑定任务的服务器窗口</span>' + extraWindows + '</div>';
           sessionGrid += '</div>';
-          if (badge === "gpu") grid += sessionGrid;
+          if (badge === "gpu") { if (wins.some(function(win){ return !!win.task; })) grid += sessionGrid; }
           else otherGrid += sessionGrid;
         }
-        if (otherGrid) grid += '<details id="tmuxOtherOverview" class="tmuxOtherSessions"' + (el("tmuxOtherOverview")?.open ? ' open' : '') + '><summary>其他会话 · ' + otherSessionCount + ' 个</summary><div class="tmuxOverviewGrid">' + otherGrid + '</div></details>';
+        if (otherGrid) grid += '<details id="tmuxOtherOverview" class="tmuxOtherSessions"' + (el("tmuxOtherOverview")?.open ? ' open' : '') + '><summary>其他会话及未绑定窗口 · ' + otherSessionCount + ' 个其他会话</summary><div class="tmuxOverviewGrid">' + otherGrid + '</div></details>';
       } else {
         let found = null;
         let foundSess = null;
@@ -3252,7 +3260,25 @@ export function renderPanelHtml(platform: string = process.platform): string {
         });
         return;
       }
-      if (event.target.closest("[data-tmux-worker], [data-tmux-filter], [data-tmux-task-target], [data-tmux-pane], [data-tmux-close], [data-tmux-clear-task-tabs]")) cancelJobTmuxLogJump();
+      if (event.target.closest("[data-tmux-worker], [data-tmux-filter], [data-tmux-task-target], [data-tmux-pane], [data-tmux-close], [data-tmux-clear-task-tabs], [data-tmux-close-gpu-session]")) cancelJobTmuxLogJump();
+      const gpuSessionClose = event.target.closest("[data-tmux-close-gpu-session]");
+      if (gpuSessionClose) {
+        event.preventDefault(); event.stopPropagation();
+        if (gpuSessionClose.disabled) return;
+        const session = String(gpuSessionClose.getAttribute("data-tmux-close-gpu-session") || "");
+        const workerId = String(gpuSessionClose.getAttribute("data-tmux-close-worker") || "");
+        if (workerId !== String(tmuxSelectedWorkerId || "") || !tmuxListCache.tmuxSessionPrefix || !tmuxCurrentGpuIdFromSession(session)) {
+          showToast("GPU 窗口的 Worker 或配置前缀已变化，请刷新后重试。", "warning"); return;
+        }
+        try {
+          const identities = JSON.parse(gpuSessionClose.getAttribute("data-tmux-close-gpu-identities") || "[]");
+          const clientActionId = createClientActionId("killTmuxWindow", session),pendingKey = "killTmuxWindow|gpuSession=" + session;
+          if (Object.values(pendingActionsById).some(function(row){ return row.pendingKey === pendingKey && row.status === "running"; })) return;
+          pendingActionsById[clientActionId] = { command: "killTmuxWindow", pendingKey: pendingKey, clientActionId: clientActionId, startedAt: Date.now(), label: "关闭 GPU 窗口 " + session, status: "running" };
+          vscode.postMessage({ command: "killTmuxWindow", gpuSession: session, workerId: workerId, identities: identities, clientActionId: clientActionId });
+        } catch (error) { showToast("GPU 窗口关闭请求未发出：" + String(error && error.message || error), "warning"); }
+        return;
+      }
       const tmuxClearTaskTabs = event.target.closest("[data-tmux-clear-task-tabs]");
       if (tmuxClearTaskTabs) {
         event.preventDefault();
@@ -4223,7 +4249,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           if (item.requestId !== undefined && Number(item.requestId) !== tmuxListRequestId) continue;
           const listedWorkers = Array.isArray(item.workers) ? item.workers : [];
           if (listedWorkers.length) tmuxConfiguredWorkers = listedWorkers;
-          if (item.workerId) tmuxListsByWorker[item.workerId] = { sessions: item.sessions || [], gpuIds: item.gpuIds || [], workerId: item.workerId, fetchedAt: item.fetchedAt || new Date().toLocaleTimeString(), ok: item.ok !== false, error: item.error || "" };
+          if (item.workerId) tmuxListsByWorker[item.workerId] = { sessions: item.sessions || [], gpuIds: item.gpuIds || [], tmuxSessionPrefix: item.tmuxSessionPrefix || "", workerId: item.workerId, fetchedAt: item.fetchedAt || new Date().toLocaleTimeString(), ok: item.ok !== false, error: item.error || "" };
           finishTmuxListRequest(item);
           handleJobTmuxLogList(item);
           if (!tmuxSelectedWorkerId || (listedWorkers.length && !listedWorkers.some(function(worker){ return worker.id === tmuxSelectedWorkerId; }))) tmuxSelectedWorkerId = item.workerId || tmuxSelectedWorkerId;

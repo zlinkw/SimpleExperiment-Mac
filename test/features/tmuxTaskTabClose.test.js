@@ -45,6 +45,7 @@ test("GPU task tab close uses the requested Worker and exact session:index", asy
   const sandbox = {
     crypto: require('node:crypto'),
     TmuxWindowIdentity: require('../../dist/features/TmuxWindowIdentity'),
+    AgentTmuxPolicy_1: require('../../dist/tunnel/AgentTmuxPolicy'),
     calls,
     warnings,
     progressMessages,
@@ -77,6 +78,7 @@ test("GPU task tab close uses the requested Worker and exact session:index", asy
   vm.createContext(sandbox);
   vm.runInContext(`${source}\nthis.kill = killTmuxWindowFromUi;`, sandbox);
   sandbox.vscode = {
+    workspace: { getConfiguration: () => ({ get: () => 'zlk' }) },
     window: {
       showWarningMessage: async (text) => { warnings.push(text); return "关闭窗口"; },
       withProgress: async (_options, work) => work({ report(update) { progressMessages.push(update.message || ""); } }),
@@ -96,6 +98,7 @@ test("GPU task tab close uses the requested Worker and exact session:index", asy
   assert.equal(posted.length, 3);
   assert.equal(posted.at(-1).type, "tmuxList");
   assert.equal(posted.at(-1).workerId, "worker-a");
+  assert.equal(posted.at(-1).tmuxSessionPrefix, "zlk");
   assert.equal(posted.at(-1).sessions[0].windows.some((win) => win.target === "zlk-gpu-0:2"), false);
   assert.equal(posted.at(-1).sessions[0].windows.some((win) => win.target === "zlk-gpu-0:3"), true);
   assert.equal(progressMessages.at(-1), "完成");

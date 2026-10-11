@@ -27,6 +27,7 @@ function methodSource(name, nextName) {
 }
 
 function install(sandbox) {
+  sandbox.AgentTmuxPolicy_1 = require('../../dist/tunnel/AgentTmuxPolicy');
   const source = [
     "const errorMessage = (error) => String(error && error.message || error);",
     "class UiCommandCancelled extends Error {}",
@@ -45,6 +46,7 @@ function install(sandbox) {
   ].join("\n");
   vm.runInContext(`${source}\nthis.clearTabs = clearTmuxTaskTabsFromUi;`, sandbox);
   sandbox.vscode = {
+    workspace: { getConfiguration: () => ({ get: () => 'zlk' }) },
     window: {
       showWarningMessage: async (text, _options, action) => {
         sandbox.warnings.push(text);

@@ -12,14 +12,14 @@ function harness() {
   };
   const elements = {};
   const sessions = [0, 1].map(gpu => ({ name: "zlk-gpu-" + gpu, windows: [
-    { index: "0", name: "bash", panes: [] },
-    { index: "1", name: "run-" + gpu, task: { case: "case-" + gpu, seed: 42, status: gpu ? "running" : "failed" }, panes: [] },
+    { index: "0", name: "bash", windowId: "@" + (gpu * 2), panes: [{ id: "%" + (gpu * 2), command: "bash" }] },
+    { index: "1", name: "run-" + gpu, windowId: "@" + (gpu * 2 + 1), task: { commandId: "job-" + gpu, case: "case-" + gpu, seed: 42, status: gpu ? "running" : "failed" }, panes: [{ id: "%" + (gpu * 2 + 1), command: "python" }] },
   ] }));
   sessions.push({ name: "m1mechanism", windows: Array.from({ length: 17 }, (_, i) => ({ index: String(i), name: "mechanism-" + i, panes: [{ target: "m1mechanism:" + i + ".0", command: "bash" }] })) });
   sessions.push({ name: "zlk-worker-agent", windows: [{ index: "0", name: "agent", panes: [] }] });
   const requests = [];
   const context = vm.createContext({
-    tmuxListCache: { workerId: "NWPU5", sessions, gpuIds: ["0", "1"], fetchedAt: "t0" },
+    tmuxListCache: { workerId: "NWPU5", tmuxSessionPrefix: "zlk", sessions, gpuIds: ["0", "1"], fetchedAt: "t0" },
     tmuxWindowFilter: "all", tmuxSelectedTaskTarget: "", tmuxSelectedPaneTarget: "", tmuxSelectedWorkerId: "NWPU5", tmuxClearTaskTabsBusy: false,
     tmuxLastCaptureTarget: "old", tmuxCaptureBusy: new Set(), document: { hidden: false },
     vscode: { postMessage: message => requests.push(message) },
@@ -48,14 +48,16 @@ test("GPU overview never downloads pane history and releases previously selected
     f.context.tmuxListCache = inventory;
     f.context.tmuxSelectedWorkerId = inventory.workerId;
     f.render();
-    for (const session of inventory.sessions.filter(row => row.name.includes("-gpu-"))) {
+    const folded = f.elements.tmuxOverview.innerHTML.indexOf('<details id="tmuxOtherOverview"');
+    assert.ok(folded >= 0);
+    const primary = f.elements.tmuxOverview.innerHTML.slice(0, folded);
+    for (const session of inventory.sessions.filter(row => row.name.startsWith(inventory.tmuxSessionPrefix + "-gpu-"))) {
       const header = f.elements.tmuxOverview.innerHTML.indexOf("<b>" + session.name + "</b>");
-      const folded = f.elements.tmuxOverview.innerHTML.indexOf('<details id="tmuxExtraWindows-', header);
-      assert.ok(header >= 0 && folded > header);
-      const primary = f.elements.tmuxOverview.innerHTML.slice(header, folded);
+      assert.ok(header >= 0);
       for (const window of session.windows) {
-        const present = primary.includes('data-tmux-filter="' + window.target + '"');
-        assert.equal(present, Boolean(window.task), window.target);
+        const target = session.name + ":" + window.index;
+        const present = primary.includes('data-tmux-filter="' + target + '"');
+        assert.equal(present, Boolean(window.task), target);
       }
     }
     await f.context.refreshTmuxCapture();
@@ -105,12 +107,12 @@ test("old unbound GPU windows stay collapsed while the current task is shown", (
   f.context.tmuxListCache.sessions[0].windows.push({ index: "7", name: "run-old", panes: [{ target: "zlk-gpu-0:7.0", command: "bash" }] });
   f.render();
   const html = f.elements.tmuxOverview.innerHTML;
-  const folded = html.indexOf('<details id="tmuxExtraWindows-0"');
+  const folded = html.indexOf('<details id="tmuxOtherOverview"');
   assert.ok(folded > 0);
   assert.doesNotMatch(html.slice(0, folded), /run-old|0:bash/);
   assert.match(html.slice(0, folded), /1:run-0/);
   assert.doesNotMatch(html.slice(folded, html.indexOf(">", folded) + 1), /\bopen\b/);
-  assert.match(html.slice(folded), /其他服务器窗口 · 2/);
+  assert.match(html.slice(folded), /未绑定任务的服务器窗口/);
   assert.match(html.slice(folded), /data-tmux-filter="zlk-gpu-0:7"/);
 });
 
@@ -118,18 +120,16 @@ test("unrelated tmux windows are folded outside the GPU cards and overview", () 
   const { elements, render } = harness();
   render();
   const bar = elements.tmuxFilterBar.innerHTML;
-  const folded = bar.indexOf('<details id="tmuxOtherSessions"');
-  assert.ok(folded > 0, "ordinary sessions need a collapsed disclosure");
-  assert.equal((bar.slice(0, folded).match(/data-tmux-filter=/g) || []).length, 3);
-  assert.doesNotMatch(bar.slice(0, folded), /m1mechanism|zlk-worker-agent/);
-  assert.match(bar.slice(folded), /其他会话.*18/);
-  assert.doesNotMatch(bar.slice(folded, bar.indexOf(">", folded) + 1), /\bopen\b/);
-  assert.match(bar.slice(folded), /data-tmux-filter="m1mechanism:16"/);
-  assert.match(bar.slice(folded), /data-tmux-close="m1mechanism:16"/);
+  assert.doesNotMatch(bar, /<details|m1mechanism|zlk-worker-agent/);
+  assert.equal((bar.match(/data-tmux-filter=/g) || []).length, 3);
   const overview = elements.tmuxOverview.innerHTML;
   const overviewFolded = overview.indexOf('<details id="tmuxOtherOverview"');
   assert.ok(overviewFolded > 0);
   assert.doesNotMatch(overview.slice(0, overviewFolded), /m1mechanism|zlk-worker-agent/);
+  assert.equal((overview.match(/<details/g) || []).length, 1);
+  assert.doesNotMatch(overview.slice(overviewFolded, overview.indexOf(">", overviewFolded) + 1), /\bopen\b/);
+  assert.match(overview.slice(overviewFolded), /data-tmux-filter="m1mechanism:16"/);
+  assert.match(overview.slice(overviewFolded), /data-tmux-close="m1mechanism:16"/);
   assert.match(elements.tmuxListMeta.textContent, /GPU 2.*任务标签 2.*其他会话 2/);
 });
 
@@ -137,19 +137,18 @@ test("selecting an ordinary window reveals its exact target and pane", () => {
   const { context, elements, render } = harness();
   context.tmuxWindowFilter = "m1mechanism:12";
   render();
-  assert.match(elements.tmuxFilterBar.innerHTML, /<details id="tmuxOtherSessions"[^>]*\bopen\b/);
-  assert.match(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="m1mechanism:12" aria-pressed="true"/);
+  assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /<details/);
+  assert.equal(elements.tmuxWindowSelect.value, "m1mechanism:12");
   assert.match(elements.tmuxOverview.innerHTML, /data-tmux-pane="m1mechanism:12\.0"/);
 });
 
 test("expanded disclosures survive polling and GPU order stays physical", () => {
   const { context, elements, render } = harness();
   render();
-  elements.tmuxOtherSessions.open = true;
   elements.tmuxOtherOverview.open = true;
   context.tmuxListCache.sessions[1].windows[1].active = true;
   render();
-  assert.match(elements.tmuxFilterBar.innerHTML, /<details id="tmuxOtherSessions"[^>]*\bopen\b/);
+  assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /<details/);
   assert.match(elements.tmuxOverview.innerHTML, /<details id="tmuxOtherOverview"[^>]*\bopen\b/);
   assert.ok(elements.tmuxFilterBar.innerHTML.indexOf('data-tmux-filter="zlk-gpu-0"') < elements.tmuxFilterBar.innerHTML.indexOf('data-tmux-filter="zlk-gpu-1"'));
 });
@@ -171,7 +170,8 @@ test("a Worker with only ordinary sessions still offers their windows without in
   context.tmuxListCache.gpuIds = [];
   render();
   assert.match(elements.tmuxFilterBar.innerHTML, /GPU 总览<\/span><b>0/);
-  assert.match(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="m1mechanism:0"/);
+  assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="m1mechanism:0"/);
+  assert.match(elements.tmuxOverview.innerHTML, /data-tmux-filter="m1mechanism:0"/);
   assert.match(elements.tmuxOverview.innerHTML, /<details id="tmuxOtherOverview"[^>]*><summary>/);
   assert.match(elements.tmuxListMeta.textContent, /GPU 0.*任务标签 0.*其他会话 2/);
 });
@@ -183,4 +183,76 @@ test("empty inventory keeps idle GPU slots and does not leave an empty ordinary-
   assert.match(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="gpu-slot:0"/);
   assert.match(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="gpu-slot:1"/);
   assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /<details/);
+});
+
+test("configured namespace counts physical GPUs once and each raw window appears in exactly one section", () => {
+  const { context, elements, render } = harness();
+  context.tmuxListCache.gpuIds = ["0", "1", "2", "3"];
+  for (let gpu = 0; gpu < 4; gpu++) context.tmuxListCache.sessions.push({ name: "lwb-gpu-" + gpu,
+    windows: [{ index: "1", name: "foreign-job-" + gpu, panes: [] }] });
+  context.tmuxListCache.sessions.at(-1).windows.push({ index: "2", name: "zlk-gpu-2", panes: [] });
+  context.tmuxListCache.sessions.push({ name: "zlk-gpu-3", windows: [{ index: "0", name: "bash", windowId: "@8", panes: [] }] });
+  render();
+  const bar = elements.tmuxFilterBar.innerHTML, overview = elements.tmuxOverview.innerHTML;
+  assert.match(bar, /GPU 总览<\/span><b>4/);
+  assert.doesNotMatch(bar, /lwb-gpu-|<details/);
+  assert.match(bar, /data-tmux-filter="gpu-slot:2"/);
+  assert.equal((bar.match(/data-tmux-close-gpu-session=/g) || []).length, 3);
+  const fold = overview.indexOf('<details id="tmuxOtherOverview"');
+  assert.equal((overview.match(/<details/g) || []).length, 1);
+  assert.doesNotMatch(overview.slice(0, fold), /lwb-gpu-|zlk-gpu-3|0:bash/);
+  for (const session of context.tmuxListCache.sessions) for (const win of session.windows) {
+    const marker = 'data-tmux-filter="' + session.name + ':' + win.index + '"';
+    assert.equal(overview.split(marker).length - 1, 1, marker);
+  }
+  context.tmuxListCache.tmuxSessionPrefix = "lwb";
+  render();
+  assert.match(elements.tmuxFilterBar.innerHTML, /GPU 总览<\/span><b>4/);
+  assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="zlk-gpu-/);
+  assert.match(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="lwb-gpu-3"/);
+});
+
+test("GPU card close submits a frozen stable batch without changing filters or bypassing host confirmation", () => {
+  const f = harness(); f.render();
+  const html = renderPanelHtml();
+  const start = html.indexOf('const gpuSessionClose = event.target.closest("[data-tmux-close-gpu-session]");');
+  const end = html.indexOf('const tmuxClearTaskTabs =', start);
+  assert.ok(start >= 0 && end > start);
+  f.context.pendingActionsById = {};
+  f.context.createClientActionId = () => "batch-action";
+  f.context.showToast = () => {};
+  vm.runInContext('function closeCard(event) { ' + html.slice(start, end) + ' }', f.context);
+  const tag = f.elements.tmuxFilterBar.innerHTML.match(/<button[^>]+data-tmux-close-gpu-session="zlk-gpu-0"[^>]*>/)?.[0];
+  assert.ok(tag);
+  const attrs = Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, key, value]) => [key, value
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')]));
+  const button = { disabled: false, getAttribute: key => attrs[key] };
+  const event = { prevented: false, stopped: false, target: { closest: () => button },
+    preventDefault() { this.prevented = true; }, stopPropagation() { this.stopped = true; } };
+  f.context.closeCard(event);
+  assert.equal(event.prevented, true); assert.equal(event.stopped, true);
+  assert.equal(f.requests.length, 1);
+  const request = f.requests[0];
+  assert.equal(request.command, "killTmuxWindow"); assert.equal(request.gpuSession, "zlk-gpu-0");
+  assert.equal(request.workerId, "NWPU5"); assert.equal(request.confirm, undefined);
+  assert.deepEqual(Array.from(request.identities, row => row.windowId), ["@0", "@1"]);
+  assert.deepEqual(Array.from(request.identities[1].paneIds), ["%1"]);
+  assert.equal(request.identities[1].taskCommandId, "job-0");
+  assert.equal(f.context.tmuxWindowFilter, "all");
+  f.context.closeCard(event);
+  assert.equal(f.requests.length, 1, "double click must not duplicate the pending batch");
+  for (const change of [() => { button.disabled = true; }, () => { button.disabled = false; attrs['data-tmux-close-worker'] = 'another-worker'; },
+    () => { attrs['data-tmux-close-worker'] = 'NWPU5'; f.context.tmuxListCache.tmuxSessionPrefix = 'other-user'; }]) {
+    f.context.pendingActionsById = {}; change(); f.context.closeCard(event);
+    assert.equal(f.requests.length, 1);
+  }
+});
+
+test("missing configured namespace never assigns another user's GPU session", () => {
+  const f = harness();
+  f.context.tmuxListCache.tmuxSessionPrefix = "";
+  f.render();
+  assert.doesNotMatch(f.elements.tmuxFilterBar.innerHTML, /data-tmux-filter="zlk-gpu-|data-tmux-close-gpu-session=/);
+  assert.match(f.elements.tmuxFilterBar.innerHTML, /data-tmux-filter="gpu-slot:0"/);
+  assert.match(f.elements.tmuxOverview.innerHTML, /data-tmux-filter="zlk-gpu-0:1"/);
 });
