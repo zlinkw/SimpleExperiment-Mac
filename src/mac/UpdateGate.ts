@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import { LegacyHostOperationLeaseManager, defaultHostOperationLeasePath } from "../core/HostOperationLease";
 
 let held: any;
@@ -12,7 +13,7 @@ export function assertBusinessAllowed(): void {
 }
 export async function beginUpdateGate(storagePath: string): Promise<void> {
   if (held) return;
-  const manager = new LegacyHostOperationLeaseManager({ windowId: `mac-preview-update:${randomUUID()}` });
+  const manager = new LegacyHostOperationLeaseManager({ windowId: `${hostname()}:${process.pid}:mac-preview-update:${randomUUID()}` });
   held = await manager.acquire({ pluginId: "simple-local.simple-experiment-mac", workspaceUri: "untitled://mac-preview-update", hostProjectPath: storagePath, actionType: "mac-preview-update", actionLabel: "Mac 配套更新" });
 }
 export async function endUpdateGate(): Promise<void> { const lease = held; held = undefined; await lease?.release(); }

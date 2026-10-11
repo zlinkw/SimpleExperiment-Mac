@@ -183,7 +183,7 @@ export class LegacyHostOperationLeaseManager {
                     return this.createHandle(inspection.record, fallbackSession);
                 }
             }
-            if (inspection.expiresAtMs > this.now() && !ownerProcessDefinitelyGone(inspection.record))
+            if (inspection.expiresAtMs > this.now() && !ownerProcessDefinitelyGone(inspection.record, this.now()))
                 throw new HostOperationLeaseConflictError(inspection.record || malformedLeaseRecord(this.leasePath, inspection.expiresAtMs));
 
             // This is a single, reusable recovery slot. A random filename here
@@ -446,9 +446,19 @@ function parseTimestamp(value: string): number {
     return Date.parse(value);
 }
 
-function ownerProcessDefinitelyGone(record: HostOperationLeaseRecord | undefined): boolean {
-    if (!record || record.processId <= 0 || !record.windowId.startsWith(`${os.hostname()}:${record.processId}:`))
+function ownerProcessDefinitelyGone(record: HostOperationLeaseRecord | undefined, now = Date.now()): boolean {
+    if (!record || !Number.isSafeInteger(record.processId) || record.processId <= 0 || record.processId > 2147483647)
         return false;
+    const canonicalOwner = record.windowId.startsWith(`${os.hostname()}:${record.processId}:`);
+    // Early Mac updaters used a private UUID rather than the shared host/PID
+    // identity. Only this precise expired local-update signature is compatible.
+    const legacyMacUpdater = process.platform === "darwin"
+        && record.pluginId === "simple-local.simple-experiment-mac"
+        && record.actionType === "mac-preview-update"
+        && record.workspaceUri === "untitled://mac-preview-update"
+        && /^mac-preview-update:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(record.windowId)
+        && parseTimestamp(record.expiresAt) <= now;
+    if (!canonicalOwner && !legacyMacUpdater) return false;
     try {
         process.kill(record.processId, 0);
         return false;
@@ -472,7 +482,7 @@ async function clearExpiredLeaseRecoverySlot(file: string, now: number, ttlMs: n
     const text = await fs.readFile(file, "utf8");
     const record = parseHostOperationLeaseRecord(text);
     const expiresAt = record ? parseTimestamp(record.expiresAt) : before.mtimeMs + ttlMs;
-    if (!record || !Number.isFinite(expiresAt) || expiresAt > now || !ownerProcessDefinitelyGone(record))
+    if (!record || !Number.isFinite(expiresAt) || expiresAt > now || !ownerProcessDefinitelyGone(record, now))
         return false;
     const current = await fs.lstat(file).catch((error) => hasErrorCode(error, "ENOENT") ? undefined : Promise.reject(error));
     if (!current) return true;
