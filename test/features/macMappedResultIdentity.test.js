@@ -206,23 +206,21 @@ test('compiled physical source changes, missing descriptors and wrong hashes ret
   }
 });
 
-test('actual compiled wrapper disk fallback verifies its physical original and rejects an insensitive alias before API transfer', async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'simple-mac-wrapper-disk-')), api = backend(), subject = new api.Provider(), client = {};
-  const localRelative = 'Results/指标 A.yaml', remotePath = 'Remote/指标 A.yaml', bytes = Buffer.from('result: 1\n');
-  const record = { ...entry(remotePath, localRelative), bytes: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
-  subject.client = client; subject.projectContextIsCurrent = () => true; subject.mappedDownloadServerForSource = () => ({});
-  subject.simpleSftpCapability = async () => ({ methodOptions: { 'sync.downloadMappedPaths': { memoryOnly: true } } });
-  let downloads = 0;
-  subject.simpleSftpApiCall = async (method, params) => {
-    assert.equal(method, 'sync.downloadMappedPaths'); assert.equal(params.memoryOnly, false); downloads++;
-    fs.mkdirSync(path.join(workspace, 'Results'), { recursive: true }); fs.writeFileSync(path.join(workspace, localRelative), bytes);
-    return { fileCount: 1 };
+test('wrapper memory RPC preserves exact source spelling and refuses disk fallback on old SFTP', async () => {
+  const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'simple-mac-wrapper-memory-')),api=backend(),subject=new api.Provider(),client={};
+  const localRelative='Results/指标 A.yaml',remotePath='Remote/指标 A.yaml',bytes=Buffer.from('result: 1\n');
+  const record={...entry(remotePath,localRelative),bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')};
+  subject.client=client;subject.projectContextIsCurrent=()=>true;subject.mappedDownloadServerForSource=()=>({});
+  subject.simpleSftpCapability=async()=>({methodOptions:{'sync.downloadMappedPaths':{memoryOnly:true}}});
+  let downloads=0;subject.simpleSftpApiCall=async(method,params)=>{
+    downloads++;assert.equal(method,'sync.downloadMappedPaths');assert.equal(params.memoryOnly,true);assert.equal(params.wrapperResults,true);
+    return {ok:true,memoryOnly:true,entries:[{remotePath,bytes:bytes.length,sha256:record.sha256,dataBase64:bytes.toString('base64')}]};
   };
-  const report = await subject.downloadMetricMemoryBatch({ root: workspace }, client, batch([record]), 'mock', { isCancellationRequested: false }, { report() {} });
-  assert.equal(report.metricFiles[0].text, bytes.toString()); assert.equal(report.metricFiles[0].remotePath, remotePath); assert.equal(downloads, 1);
-  const bad = { ...record, localRelative: 'results/指标 A.yaml' };
-  await assert.rejects(() => subject.downloadMetricMemoryBatch({ root: workspace }, client, batch([bad]), 'mock', { isCancellationRequested: false }, { report() {} }), /拼写/);
-  assert.equal(downloads, 1);
+  const run=()=>subject.downloadMetricMemoryBatch({root:workspace},client,batch([record]),'mock',{isCancellationRequested:false},{report(){}});
+  await assert.rejects(run,/全格式内存接收/);assert.equal(downloads,0);assert.deepEqual(fs.readdirSync(workspace),[]);
+  subject.simpleSftpCapability=async()=>({methodOptions:{'sync.downloadMappedPaths':{memoryOnly:true,memoryWrapperResults:true}}});
+  const report=await run();assert.equal(report.metricFiles[0].text,bytes.toString());assert.equal(report.metricFiles[0].remotePath,remotePath);
+  assert.equal(downloads,1);assert.deepEqual(fs.readdirSync(workspace),[]);
 });
 
 test('checked local streaming copy completes partial writes and rejects zero progress without replacing the final file', async () => {

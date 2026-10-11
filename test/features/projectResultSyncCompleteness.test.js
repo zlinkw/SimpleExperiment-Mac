@@ -139,7 +139,7 @@ function providerFor(workspace) {
       }
       return { ok: true, fileCount: params.entries.length, completedFiles: params.entries.length };
     },
-    simpleSftpCapability: async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true } } }),
+    simpleSftpCapability: async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true, memoryWrapperResults: true } } }),
     sftpServerOptions: (item) => ({ id: item.id, host: item.host, user: item.user, port: item.port, remotePath: item.remotePath, transferHost: item.host, resolvedHost: item.host }),
     postState() {
       calls.push(["postState", this.resultSyncReport, this.resultsSummary && this.resultsSummary.planFile]);

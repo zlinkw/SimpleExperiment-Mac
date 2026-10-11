@@ -7,7 +7,7 @@ const retention = require("../../dist/features/PlanOutputRetention.js");
 const source = fs.readFileSync(require.resolve("../../dist/extension/legacy.js"), "utf8");
 const root = "C:/project";
 const hash = "a".repeat(64);
-const fragments = ["config.yaml", "test_results/formal_result_rows.csv", "test_results/four_state_metrics.csv"];
+const fragments = ["config.yaml", "test_results/formal_result_rows.csv", "test_results/four_state_metrics.csv", "formal_job_owner.json"];
 const required = [...fragments, "best_model.pth"];
 
 function methods(start, end) {
@@ -17,12 +17,12 @@ function methods(start, end) {
 }
 
 function fixture({ emptyOriginal = false, cold = false, allMissing = false, retry = false, respectDepth = false, inventoryStdin = false } = {}) {
-  const outputDir = "work_dirs/ebmc/job/attempts/run-b";
+  const outputDir = "work_dirs/ebmc/job/formal/run-b";
   const files = Object.fromEntries([...required, "stdout.log"].map(name => [`${outputDir}/${name}`, { sha256: hash }]));
   let state = { schemaVersion: 1, plans: ["run-a", "run-b"].map((id, index) => ({
-    id, planFile: "experiments/plans/ebmc.yaml", revision: "r", codeFingerprint: "fp", fullPlanJobCount: 1,
+    id, resultPathPolicy: "declared", planFile: "experiments/plans/ebmc.yaml", revision: "r", codeFingerprint: "fp", fullPlanJobCount: 1,
     enqueuedAt: new Date(1700000000000 + index).toISOString(), jobs: [{
-      index: 0, case: "bus", seed: 42, attempt: 1, status: "completed", commandId: id, workerId: "w1",
+      index: 0, case: "bus", seed: 42, attempt: 0, status: "completed", commandId: id, workerId: "w1",
       outputDir: outputDir.replace("run-b", id), artifacts: Object.fromEntries(Object.keys(files).map(file => [file.replace("run-b", id), hash])),
       mirroredWorkerIds: ["w1", "w2", "w3"], fragmentWorkerIds: ["w1", "w2", "w3"],
       ...(retry ? { artifactRetryAfter: new Date(Date.now() + 30000).toISOString() } : {}),
@@ -113,7 +113,7 @@ test("108 completed jobs batch verification by Worker and recheck copied destina
     plan.id = `run-${index}`;
     plan.planFile = `experiments/plans/model-${index}.yaml`;
     const job = plan.jobs[0];
-    job.outputDir = `work_dirs/model-${index}/job/attempts/${plan.id}`;
+    job.outputDir = `work_dirs/model-${index}/job/formal/${plan.id}`;
     job.commandId = `command-${index}`;
     job.artifacts = Object.fromEntries(required.map(name => [`${job.outputDir}/${name}`, hash]));
     for (const id of ["w1", "w3"]) for (const file of Object.keys(job.artifacts)) f.inventory[id][file] = { sha256: hash };
@@ -122,13 +122,13 @@ test("108 completed jobs batch verification by Worker and recheck copied destina
   await f.host.syncDistributedJobArtifacts(root, await f.host.loadDistributedQueue(), "fragments", true);
   assert.deepEqual(f.errors, []);
   assert.equal(f.transfers.length, 1);
-  assert.equal(f.transfers[0].paths.length, 324);
-  assert.ok(f.inventoryCalls.length < 40, `must avoid 324 sequential SSH queries: ${f.inventoryCalls.length}`);
+  assert.equal(f.transfers[0].paths.length, 432);
+  assert.ok(f.inventoryCalls.length < 40, `must avoid 432 sequential SSH queries: ${f.inventoryCalls.length}`);
   assert.ok(f.inventoryCalls.every(call => call.recursive === true && call.scopePaths.length <= 128
     && Buffer.byteLength(JSON.stringify(call.scopePaths), "utf8") <= 10240));
   assert.ok(f.inventoryCalls.filter(call => call.workerId === "w2").length > f.inventoryCalls.filter(call => call.workerId === "w1").length,
     "destination must be queried again after transfer");
-  t.diagnostic(`108 jobs / 324 fragment files: ${f.inventoryCalls.length} bounded inventory calls, including post-transfer verification`);
+  t.diagnostic(`108 jobs / 432 fragment files: ${f.inventoryCalls.length} bounded inventory calls, including post-transfer verification`);
 });
 
 test("source verification errors retain the cause rather than reporting every replica as missing", async () => {
@@ -140,7 +140,7 @@ test("source verification errors retain the cause rather than reporting every re
 
 test("verification batches are bounded by UTF-8 bytes and deduplicate exact paths", async () => {
   const f = fixture();
-  const paths = Array.from({ length: 180 }, (_, index) => `work_dirs/${"数据".repeat(70)}/${index}/attempts/run-b/result.csv`);
+  const paths = Array.from({ length: 180 }, (_, index) => `work_dirs/${"数据".repeat(70)}/${index}/formal/run-b/result.csv`);
   for (const file of paths) f.inventory.w1[file] = { sha256: hash };
   const hashes = await f.host.distributedOutputHashes({ id: "w1" }, [...paths, ...paths]);
   assert.equal(Object.keys(hashes).length, paths.length);
@@ -153,7 +153,7 @@ test("verification batches are bounded by UTF-8 bytes and deduplicate exact path
 
 test("negotiated stdin inventory checks 5400 paths in two batches without command-line expansion", async (t) => {
   const f = fixture({ inventoryStdin: true, respectDepth: true });
-  const paths = Array.from({ length: 5400 }, (_, index) => `work_dirs/method-${index % 17}/job-${index % 6}/attempts/distributed-plan-current/logs/file-${index}.csv`);
+  const paths = Array.from({ length: 5400 }, (_, index) => `work_dirs/method-${index % 17}/job-${index % 6}/formal/distributed-plan-current/logs/file-${index}.csv`);
   for (const file of paths) f.inventory.w1[file] = { sha256: hash };
   const answer = await f.host.distributedOutputHashes({ id: "w1" }, paths);
   assert.equal(Object.keys(answer).length, 5400);
@@ -190,7 +190,7 @@ test("one cold manual click repairs deleted mirrors and result fragments before 
   assert.ok(f.events.includes("probe"));
   assert.deepEqual(f.errors, []);
   assert.ok(f.transfers.length > 0);
-  assert.ok(f.transfers.every(row => row.paths.every(file => file.includes("/attempts/run-b/"))));
+  assert.ok(f.transfers.every(row => row.paths.every(file => file.includes("/formal/run-b/"))));
   assert.equal(f.state.plans[1].jobs[0].artifactRetryAfter, undefined);
   const count = f.transfers.length;
   await f.host.postprocessDistributedResultsForManual(root, "full");
@@ -338,7 +338,7 @@ test("missing bulk inventories share bounded Worker scope queries instead of per
     plan.id = `complete-${index}`;
     plan.planFile = `experiments/plans/complete-${index}.yaml`;
     const job = plan.jobs[0];
-    job.outputDir = `work_dirs/complete-${index}/job/attempts/${plan.id}`;
+    job.outputDir = `work_dirs/complete-${index}/job/formal/${plan.id}`;
     job.artifacts = Object.fromEntries(fragments.map(name => [`${job.outputDir}/${name}`, hash]));
     for (const worker of ["w1", "w3"]) for (const name of [...required, "stdout.log"]) {
       f.inventory[worker][`${job.outputDir}/${name}`] = { sha256: hash };
@@ -355,11 +355,11 @@ test("missing bulk inventories share bounded Worker scope queries instead of per
   await f.host.syncDistributedJobArtifacts(root, await f.host.loadDistributedQueue(), "bulk", true);
   assert.deepEqual(f.errors, []);
   assert.equal(f.transfers.length, 1);
-  assert.equal(f.transfers[0].paths.length, 100);
+  assert.equal(f.transfers[0].paths.length, 20 * (required.length + 1)); // Includes formal owner evidence and stdout.
   assert.ok(f.inventoryCalls.length <= 4, `${f.inventoryCalls.length} inventory calls for 20 jobs`);
   assert.ok(f.inventoryCalls.every(call => call.scopePaths?.length && call.relativePath === "."));
   assert.ok(f.state.plans.every(plan => plan.jobs[0].artifacts[`${plan.jobs[0].outputDir}/best_model.pth`] === hash));
-  t.diagnostic(`20 complete jobs / 100 bulk files: ${f.inventoryCalls.length} scoped inventory calls including fresh destination verification`);
+  t.diagnostic(`20 complete jobs / ${20 * (required.length + 1)} bulk files: ${f.inventoryCalls.length} scoped inventory calls including fresh destination verification`);
 });
 
 test("in-flight inventory byte and file progress reaches the outer notification", async () => {
@@ -425,7 +425,7 @@ test("stream notification shows committed totals and hides legacy zero stage cou
 
 test("a directory inventory cannot inject sibling attempts or unrelated project files", async () => {
   const f = fixture({ inventoryStdin: true });
-  const scope = "work_dirs/model/job/attempts/latest";
+  const scope = "work_dirs/model/job/formal/latest";
   f.host.verifiedSftpProjectInventory = async () => ({ files: {
     [`${scope}/stdout.log`]: { sha256: hash },
     [`${scope}-old/stdout.log`]: { sha256: hash },

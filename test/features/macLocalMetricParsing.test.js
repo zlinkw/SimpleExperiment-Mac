@@ -124,7 +124,9 @@ test('actual compiled wrapper local/memory branches keep binary bytes, original 
       {remotePath:file,bytes:bytes.length,sha256:sha(bytes),text:file===binary?bytes.toString('base64'):bytes.toString(),...(file===binary?{encoding:'base64'}:{})});}
     const result=await f.parse(s,plan,{authoritativeLocal:true,completedRunId:'R',...(mode==='memory'?{memoryMetricFiles:memory}:{})});
     assert.equal(result.wrapperEvidence.runId,'R');assert.deepEqual(plain(result.wrapperEvidence.jobs[0].sources).map(row=>row.remotePath).sort(),[...values.keys()].sort());
-    const output=result._wrapperFiles.find(file=>file.immutable&&Buffer.isBuffer(file.contents));assert.deepEqual(output.contents,values.get(binary));
+    assert.ok(result._wrapperFiles.every(file=>!file.immutable), 'summary publication must not contain originals');
+    assert.equal(result.wrapperEvidence.jobs[0].sources.find(row=>row.remotePath===binary).sha256,sha(values.get(binary)));
+    for(const [file,bytes]of values)assert.deepEqual(f.state.nodes.get(f.workspace+'/'+f.local(file,plan,s)).bytes,bytes,'checked originals remain intact');
     assert.equal(f.state.opens,mode==='memory'?0:3,'the primary endpoint must be reused from its checked snapshot');
     assert.equal(f.state.opens,f.state.closes);assert.equal(f.state.unboundReads,0);
     table.metricHashes[json]='0'.repeat(64);await assert.rejects(()=>f.parse(s,plan,{authoritativeLocal:true,completedRunId:'R',...(mode==='memory'?{memoryMetricFiles:memory}:{})}),/SHA256/);

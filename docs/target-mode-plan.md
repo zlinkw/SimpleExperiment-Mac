@@ -33,6 +33,10 @@
 - 069d提交53e1741已同步。6文件边界：PlanStopClear/MacWorkflowBinding/MacPlanFiles测试、MacAgentPlanIdentity/MacPlanLaunchPaths夹具、本计划。发布旧门禁暴露formal能力/零版本及新增依赖缺失；按正式契约更新仍保留大小写/中文/空格/%20/物理叶子拒绝。其他结果及队列旧回归纳入后续批次；不得跳过失败门禁。原目标18/11。
 - 逐文件StopClear33/工作区绑定10/Plan文件9/Agent身份5/启动路径8通过。新正式预检在专属完整夹具已覆盖，本批物理路径夹具只替换文件系统/预检叶子，不改变路径校验；不同Plan使用独立目录，旧attempt仅只读拒绝。原目标18已验证11剩余。
 
+## 已完成批次 mac-sync-070b（发布结果门禁回归）
+- 070a提交997e7f7已同步。7文件边界：MacMappedResultIdentity/MacLocalMetricParsing/PendingResultMetricSync/MetricsDownloadEndToEnd/ManualDistributedResultSync/ProjectResultSyncCompleteness测试、本计划。旧disk fallback取消，补memoryWrapperResults能力证据，正式镜像使用owner证明；不放宽历史路径或下载校验。原目标18/11。
+- 逐文件Mac映射11/本机解析8/待收集39/端到端6/手动镜像25/完整性18通过。既有原始文件保留、二进制SHA/原名/本地物理别名拒绝与scope继续通过；新增owner清单使108任务为432片段/20任务为120完整文件。所有服务器/传输均替身。原目标18已验证11剩余。
+
 ## 已完成批次 mac-sync-069b（模式与启动前拒绝契约回归）
 - 069a提交bc35d2e已同步。8文件边界：distributedPlanExecutionMode测试/夹具、调度模式、空闲GPU派发、preflightDispatchRejection测试/夹具、planRunModeWorkflow夹具、本计划。Mac夹具保留相对schedulerPath，验证train/test/train_test与精确未启动拒绝回执，不启动GPU任务。
 - 逐文件模式9/调度4/派发生命周期19/拒绝6/运行模式5通过。旧测试缺formal能力、零版本哨兵及公共身份依赖而断言失败，按当前正式任务契约补齐夹具；CUDA/项目失败不自动增attempt重跑，旧队列原证据只读保留。临时Python脚本保留，不执行清理；无超时/远端任务操作。原目标18已验证11剩余。

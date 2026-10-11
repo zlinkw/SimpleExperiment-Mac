@@ -12,6 +12,7 @@ const panel = fs.readFileSync(path.join(root, "src", "ui", "PanelHtml.legacy.ts"
 const vscodeStub = {
   commands: { executeCommand: async () => ({ ok: true }) },
   workspace: {
+    openTextDocument: async options => ({ ...options, uri: { scheme: "untitled" } }),
     getConfiguration: (_section, scope) => ({ get: (key, fallback) => key === "projectAdapterRules" && scope?.fsPath && adapterRulesByRoot.get(scope.fsPath) || fallback }),
     workspaceFolders: [{ uri: { fsPath: "", scheme: "file", path: "" } }],
   },
@@ -20,6 +21,7 @@ const vscodeStub = {
     onDidChange: () => ({ dispose() {} }),
   },
   window: {
+    showTextDocument: async document => ({ document }),
     errors: [],
     showErrorMessage: async (message) => { vscodeStub.window.errors.push(message); },
     showSaveDialog: async () => undefined,
@@ -56,7 +58,7 @@ test(command + " pulls six latest-run jobs from their owners, recorded hashes=" 
   ] });
   provider.postprocessDistributedResultsForManual = async () => { throw new Error("must not rebuild or mirror remotely"); };
   provider.client.getResultsSummary = async () => { throw new Error("latest jobs must not depend on shared summaries"); };
-  provider.simpleSftpCapability = async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true } } });
+  provider.simpleSftpCapability = async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true, memoryWrapperResults: true } } });
   provider.simpleSftpApiCall = async (method, params) => {
     provider.calls.push([method, params]);
     const owner = params.source?.id || params.server?.id;
@@ -90,7 +92,7 @@ test(command + " pulls six latest-run jobs from their owners, recorded hashes=" 
   assert.equal(provider.calls.filter(([name]) => name === "sync.downloadMappedPaths").length, 2);
   assert.equal(provider.calls.some(([name]) => name === "merge"), false);
   const walk = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(item => item.isDirectory() ? walk(path.join(dir, item.name)) : [path.relative(workspace, path.join(dir, item.name))]);
-  assert.equal(walk(workspace).filter(file => /four_state_metrics.*\.csv$/.test(file)).length, 8); // Six originals and two schema-preserving merged views.
+  assert.equal(walk(workspace).filter(file => /four_state_metrics.*\.csv$/.test(file)).length, 0); // Generic summaries only; original bytes remain in memory.
   assert.equal(registry.plans[planFile].wrapperEvidence.runId, "run-b");
 });
 }
@@ -262,7 +264,7 @@ function providerFor(workspace, options = {}) {
       }
       return { ok: true, fileCount: written.length, completedFiles: written.length, sshCount: 1, streamCount: 1 };
     },
-    simpleSftpCapability: async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true } } }),
+    simpleSftpCapability: async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true, memoryWrapperResults: true } } }),
     sftpServerOptions: (target) => ({
       id: target.id, host: target.host, user: target.user, port: target.port, remotePath: target.remotePath,
       transferHost: target.host, resolvedHost: target.host,
@@ -858,7 +860,7 @@ test("Hub debug, inspection, archive evidence, and metrics use the Hub SFTP targ
     provider.planVersionForFile = () => ({ revision: "r1", updatedAt: "" });
     provider.debugBundlePath = "simple_cluster/debug/bundle.json";
     provider.openWorkspaceFileForProjectContext = async (relative) => { provider.calls.push(["open", relative]); return true; };
-    vscodeStub.window.showWarningMessage = async () => "下载并打开";
+    vscodeStub.window.showWarningMessage = async () => "临时读取并查看";
     vscodeStub.window.showSaveDialog = async () => ({ fsPath: path.join(workspace, "saved-debug.json") });
     const { __handleResultUiCommandForTest } = require("../../dist/extension/legacy.js");
     await __handleResultUiCommandForTest(provider, { command: "downloadRemoteResult", planFile: "experiments/plans/a.yaml", remotePath: "simple_cluster/results/w1/raw.csv" });

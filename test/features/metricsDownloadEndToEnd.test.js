@@ -70,7 +70,7 @@ function providerFor(workspace, csvText, oldRegistry) {
     resolveSelectedPlanFile: () => "", enabledWorkerConfigs: () => [{ id: "worker-a" }], postState() {},
     sftpServerOptions: (target) => ({ id: target.id, host: target.host, user: target.user, port: target.port, remotePath: target.remotePath }),
     loadProjectTableRegistry: async () => oldRegistry || tablesModule.exports.emptyTableRegistry(),
-    simpleSftpCapability: async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true } } }),
+    simpleSftpCapability: async () => ({ methodOptions: { "sync.downloadMappedPaths": { memoryOnly: true, memoryWrapperResults: true } } }),
     simpleSftpApiCall: async (method, params) => {
       calls.push([method, params]);
       if (method === "sync.projectInventory") return { files: { [remoteCsv]: { size: Buffer.byteLength(csvText), sha256: crypto.createHash("sha256").update(csvText).digest("hex") } } };
@@ -284,7 +284,7 @@ test("late local lock ACK is fenced before the captured Worker client can send",
     provider.workerActionTargets = () => [{ id: "worker-a", condaEnv: "env-a" }];
     provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
     const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
-    host.distributedQueueGeneration = 7;
+    host.distributedQueueGeneration = 7;host.lastWorkerProbes={"worker-a":{capabilities:{endpoints:{declaredJobPaths:true}}}};
     host.withRemoteActionResource = async (workerId, resource, request, callback) => {
       locks += 1;
       assert.equal(workerId, "worker-a");
@@ -296,8 +296,8 @@ test("late local lock ACK is fenced before the captured Worker client can send",
     };
     const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
     await assert.rejects(() => host.sendDistributedJob(
-      { id: "plan-a", projectId: "project-a", executionMode: "test", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
-      { index: 0, attempt: 1, case: "alpha", seed: 42, outputDir: "runs/a" }, "worker-a", undefined, "command-a",
+      { id: "plan-a", projectId: "project-a", executionMode: "test", resultPathPolicy: "declared", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
+      { index: 0, attempt: 0, case: "alpha", seed: 42, outputDir: "runs/a", globalJobId: "plan-a:0" }, "worker-a", undefined, "command-a",
     ), /提交已取消或项目已切换/);
     assert.equal(locks, 1, "the fixture must pass Plan preflight and reach the actual local lock callback");
     assert.equal(sends, 0, "generation changed while awaiting the local resource lock must block the remote write");
