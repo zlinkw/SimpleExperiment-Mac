@@ -465,8 +465,8 @@ export class LocalApiServer {
       }
       const code = Number(error instanceof LocalApiError ? error.apiCode : (error as { apiCode?: unknown })?.apiCode) || -32000;
       const message = error instanceof Error ? error.message : String(error);
-      const originalData = error instanceof LocalApiError && error.apiData !== undefined
-        ? error.apiData
+      const originalData = (error as any)?.apiData !== undefined
+        ? (error as any).apiData
         : undefined;
       const data = originalData && typeof originalData === "object" && !Array.isArray(originalData)
         ? { ...(originalData as Record<string, unknown>), method: payload.method, operationOutcome: operationOutcomeFor(error) }
@@ -650,7 +650,21 @@ export class LocalApiServer {
       version: this.version,
       transport: ["http", "cli"],
       rpc: "json-rpc-2.0",
+      execution: { resultPathPolicy: "declared", formalJobPathProtocol: 1, historicalAttempts: "readOnly", draftPromotion: "retired" },
+      retiredMethods: { "drafts.promote": "DRAFT_PROMOTION_RETIRED" },
       methods: Object.keys(this.methods).sort(),
+      methodOptions: Object.keys(this.methods).includes("plans.cleanup.preview") ? {
+        "plans.cleanup.preview": { readOnly: true, zeroWrites: true, modes: ["move", "delete"], default: "move", historicalNodes: true },
+        "plans.cleanup.list": { readOnly: true },
+        "plans.cleanup.status": { readOnly: true, durableOperationId: true },
+        "plans.cleanup.continue": { previewOnly: true, newExactConfirmation: true, deleteConfirmationCount: 2, archivedMetadata: true },
+        "plans.cleanup.recheck": { remoteReadOnly: true, automaticExecution: false, durablePendingSignals: true },
+        "plans.cleanup.confirm": { previewDigest: true, exactTargets: true, deleteConfirmationCount: 2, rememberedConfirmations: false },
+        "plans.cleanup.execute": { durableOperationId: true, allNodesPreflight: true, idempotentResume: true },
+        "plans.cleanup.resume": { durableOperationId: true, allNodesPreflight: true, idempotentResume: true },
+        "plans.cleanup.cancel": { targetBoundary: true, cancelJobs: false },
+        "plans.cleanup.restore": { previewOnly: true, noOverwrite: true },
+      } : {},
       confirmation: { required: true, categories: ["confirm", "pathConfirmed"] },
     };
   }
@@ -659,6 +673,7 @@ export class LocalApiServer {
     const methods = Object.keys(this.methods).sort();
     return {
       openapi: "3.0.0",
+      "x-simple-method-options": this.capabilities().methodOptions,
       info: { title: `${this.name} Local API`, version: this.version },
       servers: [{ url: `http://127.0.0.1:${this.port}` }],
       security: [{ bearerAuth: [] }],

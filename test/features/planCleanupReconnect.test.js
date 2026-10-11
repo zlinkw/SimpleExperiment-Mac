@@ -96,6 +96,33 @@ test('lost move receipts are observed without settlement; confirmed continuation
   const approved=await f.confirm(restore);assert.equal((await f.service.execute(approved.id)).state,'completed');assert.equal(f.mutations,4);
 });
 
+test('each connection edge checks persisted signals; heartbeats and an unanswered notification never trigger cleanup or block later checks',async()=>{
+  const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};let checks=0,notices=0;
+  const vscode={workspace:{workspaceFolders:[{uri:{fsPath:'C:/fixture'}}]},window:{showWarningMessage:()=>{notices++;return new Promise(()=>{});}}};
+  vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>name==='vscode'?vscode:name==='./PlanCleanupPanel'?{}:from(name)});
+  const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}}},'C:/fixture');
+  host.service.recheckNode=async()=>{checks++;return [{operationId:'a'.repeat(48)}]};
+  const online={id:'worker',streamStatus:'polling',reconnectCount:0};
+  await host.observeConnections([online]);await host.observeConnections([online]);assert.equal(checks,1);assert.equal(notices,1);
+  await host.observeConnections([{...online,streamStatus:'disconnected'}]);await host.observeConnections([online]);assert.equal(checks,2);assert.equal(notices,1);
+  await host.observeConnections([{...online,reconnectCount:1}]);assert.equal(checks,3);
+  host.executing=true;await host.observeConnections([{...online,reconnectCount:2}]);assert.equal(checks,3);
+  host.executing=false;await host.observeConnections([{...online,reconnectCount:2}]);assert.equal(checks,4);
+});
+
+test('reconnect review opens the existing operation and waits for explicit continuation and confirmation clicks',async()=>{
+  let panel;const posted=[],listeners=[],fields=new Map(),element=id=>{if(!fields.has(id))fields.set(id,{value:id==='action'?'move':'',checked:false,disabled:false,textContent:'',innerHTML:''});return fields.get(id)};
+  const exports={},vscode={ViewColumn:{Active:1},window:{createWebviewPanel:()=>panel={webview:{html:'',onDidReceiveMessage:()=>({dispose(){}})},onDidDispose(){}}}};
+  const panelPath=require.resolve('../../dist/extension/PlanCleanupPanel'),panelRequire=require('node:module').createRequire(panelPath);
+  vm.runInNewContext(await fs.readFile(panelPath,'utf8'),{exports,require:name=>name==='vscode'?vscode:panelRequire(name)});
+  const id='a'.repeat(48);await exports.openPlanCleanupPanel({service:{}},'experiments/plans/gone.yaml',id);
+  const script=panel.webview.html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];new vm.Script(script);
+  vm.runInNewContext(script,{acquireVsCodeApi:()=>({postMessage:m=>posted.push(m)}),document:{getElementById:element},setInterval:()=>0,window:{addEventListener:(_e,l)=>listeners.push(l)}});
+  listeners[0]({data:{type:'history',rows:[]}});assert.equal(posted.at(-1).type,'status');assert.equal(posted.at(-1).operationId,id);assert.ok(!posted.some(m=>m.type==='preview'||m.type==='execute'));
+  listeners[0]({data:{type:'operation',operation:{id,state:'partial',pendingNodes:['worker'],targets:{},preview:{action:'move',blockers:[],rows:[]}}}});
+  assert.equal(element('continue').disabled,false);element('continue').onclick();assert.equal(posted.at(-1).type,'continue');assert.ok(!posted.some(m=>m.type==='confirm'||m.type==='execute'));
+});
+
 test('removed PLAN metadata retains the real hash, run identities and remote copies; new shared config references remain protected',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'plan-cleanup-removed-metadata-')),file='experiments/plans/p.yaml',config='configs/p.yaml';
   await fs.mkdir(path.join(root,'experiments/plans'),{recursive:true});await fs.mkdir(path.join(root,'configs'),{recursive:true});
@@ -111,4 +138,16 @@ test('removed PLAN metadata retains the real hash, run identities and remote cop
   assert.equal(after.planHash,before.planHash);assert.equal(after.planKey,before.planKey);assert.deepEqual(after.runIds,['run']);
   assert.equal(after.candidates.find(row=>row.nodeId==='worker'&&row.relativePath===file).expectedSha256,before.planHash);
   assert.match(after.candidates.find(row=>row.nodeId==='worker'&&row.relativePath===config).protectedReason,/共享/);
+});
+
+test('restoring an interrupted continuation clears only its own ancestor lifecycle markers',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'plan-cleanup-restore-chain-')),modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};
+  vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>name==='vscode'?{workspace:{workspaceFolders:[{uri:{fsPath:root}}]}}:name==='./PlanCleanupPanel'?{}:from(name)});
+  const parent='a'.repeat(48),child='b'.repeat(48),restore='c'.repeat(48),queue={plans:[{id:'run',cleanup:{operationId:parent}},{id:'other',cleanup:{operationId:'unrelated'}}]},ledger={entries:{ours:{runId:'run',cleanupOperationId:parent},other:{runId:'other',cleanupOperationId:'unrelated'}}};
+  const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:root}},loadDistributedQueue:async()=>queue,saveDistributedQueue:async()=>{},
+    updatePlanSyncLedger:async(_root,update)=>update(ledger),postState(){}},root);
+  host.service.history=async()=>[{id:child},{id:parent}];
+  await host.updateIndexes({id:restore,preview:{originalOperationId:child,scope:{runIds:['run']}}},true);
+  assert.equal(queue.plans[0].cleanup,undefined);assert.equal(ledger.entries.ours.cleanupOperationId,undefined);
+  assert.equal(queue.plans[1].cleanup.operationId,'unrelated');assert.equal(ledger.entries.other.cleanupOperationId,'unrelated');
 });

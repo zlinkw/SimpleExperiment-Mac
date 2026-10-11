@@ -239,6 +239,23 @@ test('lost PLAN move receipt settles before source discovery; resumed preflight 
   const done=await new PlanCleanup(f.ports).execute(op.id);assert.equal(done.state,'completed');assert.equal(f.mutations,2);
 });
 
+test('partial restore discovery skips metadata files already restored and rechecks the remaining originals',async()=>{
+  const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),{createRequire}=require('node:module'),from=createRequire(modulePath),exports={};
+  vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>['vscode','./PlanCleanupPanel'].includes(name)?{}:from(name)});
+  const node={id:'local',kind:'local',root:'C:/fixture'},rows=[{id:'p',node,category:'PLAN 文件',relativePath:'clean_dir/experiments/plans/p.yaml',destination:'experiments/plans/p.yaml'},{id:'c',node,category:'专用配置',relativePath:'clean_dir/configs/p.yaml',destination:'configs/p.yaml'}];
+  const preview={scope:{planFile:'experiments/plans/p.yaml',planKey:'key'},rows};
+  await exports.PlanCleanupHost.prototype.restoreGate.call({collect:async(_file,_allowMissing,archivedFiles)=>{
+    assert.deepEqual(clone(archivedFiles),{'configs/p.yaml':'clean_dir/configs/p.yaml'});return {blockers:[],nodes:[node],references:{},candidates:[]};
+  }},preview,{targets:{p:{state:'completed'},c:{state:'pending'}}});
+});
+test('Host refuses a backend without the required Git ancestor safety capability before approvals',async()=>{
+  const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};
+  vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>['vscode','./PlanCleanupPanel'].includes(name)?{}:from(name)});
+  let safe=false;const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}},simpleSftpApiCall:async()=>({safety:{gitRepositoryAncestors:safe,readOnlyReceiptCheck:safe}})},'C:/fixture');
+  await assert.rejects(host.service.ports.sftp('files.cleanup.preview',{}),error=>error.apiData.code==='SFTP_SAFE_CLEANUP_UPGRADE_REQUIRED');
+  safe=true;assert.equal((await host.service.ports.sftp('files.cleanup.preview',{})).safety.gitRepositoryAncestors,true);
+});
+
 test('recorded stable identity joins renamed PLAN; unknown historical and dynamic config references stay protected',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'simple-plan-rename-evidence-'));
   const file='experiments/plans/new/p.yaml';await fs.mkdir(path.join(root,'experiments/plans/new'),{recursive:true});await fs.mkdir(path.join(root,'configs'),{recursive:true});
@@ -264,8 +281,33 @@ test('another PLAN checkpoint reference protects the registered attempt; absolut
   const published=await collectPlanCleanupEvidence({...input,registry:{jobDir:'/project/'+outputDir}});assert.ok(published.candidates.find(row=>row.relativePath===outputDir).dependencies.some(ref=>ref.includes('正式/历史')));
 });
 
+test('local API publishes the cleanup method contract and both deletion confirmations without starting a listener',()=>{
+  const {LocalApiServer}=require('../../dist/api/LocalApiServer');
+  const names=['preview','list','confirm','execute','status','resume','cancel','restore','continue','recheck'].map(name=>'plans.cleanup.'+name);
+  const server=new LocalApiServer({name:'fixture',version:'test',preferredPort:0,discoveryPath:path.join(os.tmpdir(),'unused-cleanup-discovery.json'),methods:Object.fromEntries(names.map(name=>[name,async()=>({})]))});
+  const caps=server.capabilities();assert.ok(names.every(name=>caps.methods.includes(name)));assert.equal(caps.methodOptions['plans.cleanup.confirm'].deleteConfirmationCount,2);
+  assert.equal(caps.methodOptions['plans.cleanup.preview'].zeroWrites,true);assert.equal(server.openapi()['x-simple-method-options']['plans.cleanup.restore'].noOverwrite,true);
+  assert.equal(caps.methodOptions['plans.cleanup.recheck'].automaticExecution,false);assert.equal(caps.methodOptions['plans.cleanup.continue'].newExactConfirmation,true);
+});
+
 test('exact legacy task references include unselected historical workers but cannot authorize unknown lineage',async()=>{
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'simple-plan-legacy-task-')),file='experiments/plans/p.yaml';await fs.mkdir(path.join(root,'experiments/plans'),{recursive:true});await fs.writeFile(path.join(root,file),'mode: train\n','utf8');
   const scope=await collectPlanCleanupEvidence({root,planFile:file,queue:{schemaVersion:1,plans:[]},ledger:{schemaVersion:2,entries:{}},nodes:[{id:'local',kind:'local',root},{id:'old-worker',kind:'remote',root:'/project'}],snapshots:[{workerId:'old-worker',generatedAt:new Date().toISOString(),tasks:[{planFile:file,projectId:canonicalProjectId(root),workflowId:'manual-run',commandId:'old-command',status:'failed',outputDir:'work_dirs/p/attempts/old'}]}]});
   assert.ok(scope.nodes.some(node=>node.id==='old-worker'));assert.match(scope.candidates.find(row=>row.category==='旧任务登记产物').protectedReason,/仅报告/);
+});
+test('cleanup review script parses; opening reads only, and permanent delete needs two distinct UI clicks',async()=>{
+  let panel;const fields=new Map(),posted=[],listeners=[];
+  const element=id=>{if(!fields.has(id))fields.set(id,{value:id==='action'?'delete':'',checked:false,disabled:false,textContent:'',innerHTML:''});return fields.get(id)};
+  const vscode={ViewColumn:{Active:1},window:{createWebviewPanel:()=>panel={
+    webview:{html:'',onDidReceiveMessage:()=>({dispose(){}})},onDidDispose(){}}}};
+  const exports={},panelPath=require.resolve('../../dist/extension/PlanCleanupPanel'),panelRequire=require('node:module').createRequire(panelPath);vm.runInNewContext(await fs.readFile(panelPath,'utf8'),{exports,require:name=>name==='vscode'?vscode:panelRequire(name)});
+  await exports.openPlanCleanupPanel({service:{}},'experiments/plans/p.yaml');
+  const script=panel.webview.html.match(/<script nonce="[^"]+">([\s\S]*?)<\/script>/)[1];new vm.Script(script);
+  vm.runInNewContext(script,{acquireVsCodeApi:()=>({postMessage:message=>posted.push(clone(message))}),document:{getElementById:element},setInterval:()=>0,window:{addEventListener:(_event,listener)=>listeners.push(listener)}});
+  assert.deepEqual(posted.map(row=>row.type),['history']);listeners[0]({data:{type:'history',rows:[]}});assert.equal(posted.at(-1).type,'preview');
+  const preview={action:'delete',blockers:[],rows:[{node:{id:'local',root:'C:/fixture'},disposition:'delete',absolutePath:'C:/fixture/p.yaml',type:'file',evidence:['exact'],dependencies:[]}]};
+  listeners[0]({data:{type:'preview',preview}});element('confirm').onclick();assert.equal(posted.at(-1).phase,1);
+  listeners[0]({data:{type:'confirmed',operation:{id:'op',preview:{...preview,confirmations:1}}}});assert.equal(element('execute').disabled,true);assert.equal(posted.filter(row=>row.phase===2).length,0);
+  element('confirm').onclick();assert.equal(posted.at(-1).phase,2);assert.equal(posted.filter(row=>row.type==='execute').length,0);
+  element('partial').onchange();assert.equal(element('resume').disabled,true);assert.equal(element('restore').disabled,true);assert.equal(element('cancel').disabled,true);
 });
