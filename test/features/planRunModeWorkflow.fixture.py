@@ -28,7 +28,7 @@ elif kind == "scheduler":
         commands = []
         verified = []
         plan = {"mode": mode, "runner": {"train_command": "train", "test_command": "test"}}
-        job = SimpleNamespace(index=0, case="baseline", seed=0, output_dir="virtual-output", result_csv="virtual.csv", train_command="train", test_command="test", working_directory=".", collect_metrics=False, inputs=(), outputs=())
+        job = SimpleNamespace(index=0, case="baseline", seed=0, output_dir="virtual-output", result_csv="virtual.csv", train_command="train", test_command="test", working_directory=".", collect_metrics=False, inputs=(), outputs=(), config={}, template_values={"plan_revision": "fixture-revision"})
         args = SimpleNamespace(mode="", plan="virtual.yaml", default_result_csv_dir="experiments/results", workers_json="", worker_status_ttl_seconds=60, availability_path="", resume=False, gpu_ids="", worker_id="local")
         with contextlib.ExitStack() as scope:
             replacements = {
@@ -36,10 +36,13 @@ elif kind == "scheduler":
                 "build_jobs": lambda *a: (plan, [job]),
                 "jobs_for_args": lambda *a: [job],
                 "output_interface_report": lambda *a: {"ok": True, "missing": []},
+                "result_path_preflight": lambda *a, **kw: {"ok": True, "missing": [], "rows": []},
                 "detect_existing_outputs": lambda *a: [],
                 "read_availability_cache": lambda *a: None,
                 "refresh_missing_worker_availability": lambda *a: None,
                 "write_job_config": lambda *a: "virtual-config.yaml",
+                "formal_source_fingerprint": lambda *a: "fixture-code",
+                "formal_job_writer": lambda *a: contextlib.nullcontext({}),
                 "render_command": lambda command, *a: [command],
                 "wrap_command": lambda command, *a: command,
                 "original_log_offsets": lambda *a: {},
@@ -49,6 +52,10 @@ elif kind == "scheduler":
             for key, replacement in replacements.items():
                 scope.enter_context(patch.object(scheduler, key, replacement))
             scope.enter_context(patch.dict(scheduler.os.environ, {}, clear=True))
+            scope.enter_context(patch.object(pathlib.Path, "read_text", lambda *a, **kw: "{}"))
+            scope.enter_context(patch.object(pathlib.Path, "write_text", lambda *a, **kw: 0))
+            scope.enter_context(patch.object(pathlib.Path, "rglob", lambda *a: []))
+            scope.enter_context(patch.object(pathlib.Path, "is_file", lambda *a: False))
             validation = io.StringIO()
             with contextlib.redirect_stdout(validation):
                 scheduler.validate_plan_mode(args)

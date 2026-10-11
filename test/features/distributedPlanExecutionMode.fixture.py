@@ -36,8 +36,9 @@ for mode in ("train", "test", "train_test"):
         resolved.append(mode)
         launched, saved = [], []
         command = dict(action="start-worker-task", commandId="launch", operationId="launch", planFile="plan.yaml", projectId="project",
-                       planRevision=legacy["planRevision"], codeFingerprint="code", experimentIndex=0, attempt=1,
-                       case="case", seed=42, outputDir="work/job/attempts/run", schedulerPath="runtime/scheduler.py", mode=mode, executionMode=mode,
+                       planRevision=legacy["planRevision"], codeFingerprint="code", experimentIndex=0, attempt=0,
+                       resultPathPolicy="declared",globalJobId="run:0",workflowId="run",
+                       case="case", seed=42, outputDir="work/job", schedulerPath="runtime/scheduler.py", mode=mode, executionMode=mode,
                        condaEnv="env", options={"distributedResults": True})
         ledger = {"jobs": []}
         durable_command = {**command, "workerId": "worker", "workflowId": "run", "runKey": "launch",
@@ -46,7 +47,8 @@ for mode in ("train", "test", "train_test"):
              patch.object(agent, "write_durable_plan_queue", lambda *args: None), \
              patch.object(agent, "recalled_worker_command", lambda *args: None), \
              patch.object(agent, "signal_durable_plan_queue_processor", lambda *args: None), \
-             patch.object(agent, "append_event", lambda *args: None):
+             patch.object(agent, "append_event", lambda *args: None), \
+             patch.object(agent, "verified_formal_job_command", lambda *a: {"identity":{"workflowId":"run","commandId":"launch"}}):
             assert agent.accept_durable_plan_job("virtual", durable_command, "worker")["durableAccepted"]
             assert ledger["jobs"][0]["mode"] == mode and ledger["jobs"][0]["executionMode"] == mode
             assert agent.accept_durable_plan_job("virtual", durable_command, "worker")["durableAccepted"]
@@ -57,6 +59,7 @@ for mode in ("train", "test", "train_test"):
             else: raise AssertionError("existing durable command changed mode")
         with contextlib.ExitStack() as scope:
             replacements = {
+                "verified_formal_job_command": lambda *a: {"identity":{"workflowId":"run","commandId":"launch"}},
                 "agent_install_dir": lambda _: "virtual", "require_scheduler_dependencies": lambda *args: None,
                 "simple_runtime_python": lambda _: "virtual-python",
                 "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
@@ -80,6 +83,7 @@ for mode in ("train", "test", "train_test"):
         with contextlib.ExitStack() as scope:
             replacements = {
                 "reconcile_worker_task_exit_codes": lambda *args: None,
+                "verified_formal_job_command": lambda *a: {"identity":{"workflowId":"run","commandId":"launch"}},
                 "sync_durable_plan_task_rows": lambda _: data,
                 "read_durable_plan_queue": lambda _: data,
                 "write_durable_plan_queue": lambda *args: None,
@@ -95,7 +99,7 @@ for mode in ("train", "test", "train_test"):
             assert len(dispatched) == 1 and dispatched[0]["mode"] == mode and dispatched[0]["options"]["mode"] == mode
             assert active["mode"] == "train_test" and active["status"] == "running"
 
-output = "work/job/attempts/run"
+output = "work/job"
 row = dict(projectId="project", workflowId="run", planFile="plans/train.yaml", planRevision="revision", codeFingerprint="code",
            experimentIndex=0, case="candidate", seed=42, attempt=1, outputDir=output, runKey="command", commandId="command",
            workerId="worker", status="failed", mode="train_test", stage="train_test", finishedAt="done", exitCode=1,

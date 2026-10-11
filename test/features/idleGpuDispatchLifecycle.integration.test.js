@@ -13,6 +13,8 @@ require.extensions['.ts'] = (loaded, filename) => loaded._compile(ts.transpileMo
 }).outputText,filename);
 const DistributedPlanQueue = require('../../src/features/DistributedPlanQueue.ts');
 const DistributedSchedulingPolicy = require('../../src/features/DistributedSchedulingPolicy.ts');
+const GpuJobOwnership = require('../../src/features/GpuJobOwnership.ts');
+const PlanExecutionMode = require('../../src/features/PlanExecutionMode.ts');
 require.extensions['.ts'] = original;
 const source = fs.readFileSync(path.join(root,'src/extension/legacy.ts'),'utf8');
 const proofHelperSource = source.match(/^function durableCodeProofRequestFields\([\s\S]*?^\}/m)?.[0];
@@ -23,7 +25,7 @@ function provider(names, extra={}) {
   const cls=ast.statements.find(node=>ts.isClassDeclaration(node)&&node.name?.text==='RealtimeTunnelPanelProvider');
   const code='class Provider {'+cls.members.filter(node=>names.includes(node.name?.getText(ast))).map(node=>node.getText(ast)).join('\n')+'}; Provider;';
   return vm.runInNewContext(ts.transpileModule(code,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
-    {DistributedPlanQueue,DistributedSchedulingPolicy,durableCodeProofRequestFields,workspaceRoot:()=>root,setInterval,clearInterval,
+    {DistributedPlanQueue,DistributedSchedulingPolicy,GpuJobOwnership,PlanExecutionMode,durableCodeProofRequestFields,workspaceRoot:()=>root,setInterval,clearInterval,
       mapLimited:async(rows,_limit,callback)=>Promise.all(rows.map(callback)),errorMessage:error=>error.message,...extra});
 }
 test('G1 actual host tick only dispatches idle NWPU3, persists identity before RPC, and explicitly hosts opt-in queue',async()=>{
@@ -32,14 +34,14 @@ test('G1 actual host tick only dispatches idle NWPU3, persists identity before R
   p.distributedNextPostprocessAt=Infinity;p.distributedLaunchInFlight=new Set();
   p.isRealtimeMode=()=>true;p.projectTopologyAssessment=()=>({mode:'worker_pool'});
   p.workerCodeSyncTargets=()=>[];p.workerActionTargets=()=>[{id:'nwpu3'},{id:'nwpu5'}];
-  p.lastWorkerProbes={nwpu3:{status:'ok'},nwpu5:{status:'ok'}};
+  p.lastWorkerProbes={nwpu3:{status:'ok',capabilities:{endpoints:{declaredJobPaths:true}}},nwpu5:{status:'ok',capabilities:{endpoints:{declaredJobPaths:true}}}};
   p.lastCodeSyncState={workerVersions:{nwpu3:{fingerprint:'f'},nwpu5:{fingerprint:'f'}}};
   p.enabledWorkerConfigs=()=>[{id:'nwpu3',workerUser:'alice'},{id:'nwpu5',workerUser:'alice'}];
   p.schedulerSettings=()=>({gpuIdleUtilThreshold:5,gpuIdleMemThresholdMb:200});p.gpuOwnerConfig=()=>({currentUser:'alice'});
   p.recordActionError=()=>{};p.postState=()=>{};p.scheduleDistributedPostprocess=()=>{};p.queuePlanArtifactSyncStatusCheck=()=>{};
   let manifestBuilds=0;p.buildDistributedJobCodeManifest=async()=>{manifestBuilds++;return {};};
   p.readWorkerTaskSnapshot=async workerId=>({workerId,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
-    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},tasks:[]});
+    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},tasks:[]});
   let releaseSnapshots;const snapshotGate=new Promise(resolve=>{releaseSnapshots=resolve;});let gpuReadStarted=false;
   p.readWorkerTaskSnapshotBatch=async workerIds=>{await snapshotGate;return Promise.all(workerIds.map(p.readWorkerTaskSnapshot));};
   p.client={getGpu:async()=>{gpuReadStarted=true;return {nwpu3:[{index:'0',utilizationPercent:0,memoryUsedMb:7,processes:[]}],
@@ -50,7 +52,7 @@ test('G1 actual host tick only dispatches idle NWPU3, persists identity before R
   p.sendDistributedJob=async(plan,job,workerId,gpuId,commandId)=>{
     assert.equal(stored.plans[0].jobs.find(row=>row.index===job.index).commandId,commandId,'identity must precede remote write');
     calls.push({workerId,gpuId,commandId});
-    return {projectId:plan.projectId,workflowId:plan.id,planRevision:plan.revision,codeFingerprint:plan.codeFingerprint,
+    return {projectId:plan.projectId,workflowId:plan.id,planRevision:plan.revision,codeFingerprint:plan.codeFingerprint,resultPathPolicy:plan.resultPathPolicy,globalJobId:job.globalJobId,collectionResultCsv:job.collectionResultCsv,
       planJobCount:plan.planJobCount,planFile:plan.planFile,experimentIndex:job.index,case:job.case,seed:job.seed,attempt:job.attempt,
       outputDir:job.outputDir,runKey:commandId,commandId,workerId,gpuId:gpuId??'',status:gpuId===undefined?'queued':'running',durableAccepted:true};
   };
@@ -86,12 +88,13 @@ test('G1 actual host tick only dispatches idle NWPU3, persists identity before R
     for (let attempt = 0; attempt < 10 && stored.plans[0].jobs[1].status !== 'queued'; attempt++) await new Promise(setImmediate);
     assert.equal(stored.plans[0].jobs[1].status, 'queued', 'a fast receipt must be persisted while another Worker is still responding');
     assert.equal(stored.plans[0].jobs[0].status, 'dispatching', 'the delayed request remains owned and cannot be falsely acknowledged');
-    assert.ok(p.distributedLaunchInFlight.has('p\u00000\u00001'),'safe retry must still see the delayed launch as in flight');
+    assert.ok(p.distributedLaunchInFlight.has('p\u00000\u00000'),'safe retry must still see the delayed launch as in flight');
     assert.ok(p.localOperations.submit.timings.clickToFirstAcceptedJobMs>=100,'first acceptance is timed before the slow receipt returns');
     assert.equal(timingEvents.includes('dispatchMs'),false,'batch completion has not yet happened');
   } finally { releaseFirst(); }
   await dispatching;
-  assert.equal(calls.length,2);assert.deepEqual(calls.map(row=>row.workerId).sort(),['nwpu3','nwpu5']);
+  assert.equal(calls.length,2);assert.deepEqual(calls.map(row=>row.workerId).sort(),['nwpu3','nwpu3'],
+    'a shared login cannot add the foreign occupied NWPU5 GPU to our hosted share');
   assert.equal(manifestBuilds,2,'the second Plan tick also builds only one shared manifest');
   assert.ok(calls.every(row=>row.gpuId===undefined));assert.ok(stored.plans[0].jobs.every(row=>row.status==='queued'));
   assert.equal(timingEvents.filter(key=>key==='clickToFirstAcceptedJobMs').length,1);
@@ -105,13 +108,13 @@ function durableTickFixture() {
   p.distributedQueueGeneration=0;p.distributedPlanStopEpoch=0;p.distributedNextFailureDetailAt=Infinity;
   p.distributedNextPostprocessAt=Infinity;p.distributedLaunchInFlight=new Set();
   p.isRealtimeMode=()=>true;p.projectTopologyAssessment=()=>({mode:'worker_pool'});p.workerCodeSyncTargets=()=>[];
-  p.workerActionTargets=()=>[{id:'a'},{id:'b'}];p.lastWorkerProbes={a:{status:'ok'},b:{status:'ok'}};
+  p.workerActionTargets=()=>[{id:'a'},{id:'b'}];p.lastWorkerProbes={a:{status:'ok',capabilities:{endpoints:{declaredJobPaths:true}}},b:{status:'ok',capabilities:{endpoints:{declaredJobPaths:true}}}};
   p.lastCodeSyncState={workerVersions:{a:{fingerprint:'f'},b:{fingerprint:'f'}}};
   p.enabledWorkerConfigs=()=>[{id:'a'},{id:'b'}];p.schedulerSettings=()=>({});p.gpuOwnerConfig=()=>({});
   p.recordActionError=()=>{};p.postState=()=>{};p.scheduleDistributedPostprocess=()=>{};p.queuePlanArtifactSyncStatusCheck=()=>{};
   p.buildDistributedJobCodeManifest=async()=>({});
   p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
-    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},tasks:[]}));
+    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},tasks:[]}));
   p.client={getGpu:async()=>({a:[{index:'0',utilizationPercent:0,memoryUsedMb:7,processes:[]}],
     b:[{index:'0',utilizationPercent:0,memoryUsedMb:7,processes:[]}]})};
   let stored=DistributedPlanQueue.enqueuePlan(DistributedPlanQueue.emptyDistributedQueue(),{
@@ -120,7 +123,7 @@ function durableTickFixture() {
   p.loadDistributedQueue=async()=>JSON.parse(JSON.stringify(stored));
   p.saveDistributedQueue=async(_root,value)=>{stored=JSON.parse(JSON.stringify(value));};
   const receipt=(plan,job,workerId,_gpuId,commandId)=>({projectId:plan.projectId,workflowId:plan.id,planRevision:plan.revision,
-    codeFingerprint:plan.codeFingerprint,planJobCount:plan.planJobCount,planFile:plan.planFile,experimentIndex:job.index,case:job.case,
+    codeFingerprint:plan.codeFingerprint,resultPathPolicy:plan.resultPathPolicy,globalJobId:job.globalJobId,collectionResultCsv:job.collectionResultCsv,planJobCount:plan.planJobCount,planFile:plan.planFile,experimentIndex:job.index,case:job.case,
     seed:job.seed,attempt:job.attempt,outputDir:job.outputDir,runKey:commandId,commandId,workerId,gpuId:'',status:'queued',durableAccepted:true});
   return {p,receipt,stored:()=>stored};
 }
@@ -130,10 +133,10 @@ function queuedMigrationFixture() {
   const plan = stored().plans[0]; plan.schedulingMode = 'local_idle';
   plan.jobs.forEach((job, index) => Object.assign(job, { status: index ? 'queued' : 'completed', workerId: 'a',
     gpuId: index ? '0' : '1', commandId: `original-${index}`, runKey: `original-${index}`,
-    outputDir: `work/job${index}/attempts/original-run`, ...(index ? {} : { finishedAt: new Date().toISOString() }) }));
+    outputDir: `work/job${index}`, ...(index ? {} : { finishedAt: new Date().toISOString() }) }));
   plan.jobs[1].automaticRetry = {failureCount:1,failedAttempt:0,lastError:'CUDA failure'};
   p.readWorkerTaskSnapshotBatch = async ids => ids.map(workerId => ({workerId, generatedAt:new Date().toISOString(),
-    fetchedAt:new Date().toISOString(),capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},
+    fetchedAt:new Date().toISOString(),capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},
     tasks:stored().plans.flatMap(plan => plan.jobs.filter(job => job.workerId === workerId).map(job => ({
       ...receipt(plan,job,workerId,job.gpuId,job.commandId),gpuId:job.gpuId,enqueuedAt:plan.enqueuedAt,
       status:job.status,finishedAt:job.finishedAt}))) }));
@@ -155,7 +158,7 @@ test('local queued job on its own idle GPU is not cancelled and redispatched eve
   for(let tick=0;tick<5;tick++)await p.tickDistributedQueueCore();
   assert.equal(cancelled.length,0,'a second idle Worker must not interrupt an admitted task on an idle owner GPU');
   assert.equal(sent.length,0);
-  assert.equal(stored().plans[0].jobs[1].attempt,1);
+  assert.equal(stored().plans[0].jobs[1].attempt,0);
   assert.equal(stored().plans[0].jobs[1].commandId,before);
 });
 
@@ -169,7 +172,7 @@ test('a verified busy owner GPU migrates once to the selected destination instea
   for(let tick=0;tick<4;tick++)await p.tickDistributedQueueCore();
   assert.equal(cancelled.length,1);assert.equal(sent.length,1);
   assert.equal(stored().plans[0].jobs[1].workerId,'b');
-  assert.equal(stored().plans[0].jobs[1].attempt,2);
+  assert.equal(stored().plans[0].jobs[1].attempt,0);
   assert.equal(stored().plans[0].jobs[1].automaticRetry.failureCount,1);
 });
 
@@ -188,7 +191,7 @@ test('a release racing a Worker start retains the original command without dispa
   p.client.postWorkerAction=async(_id,_action,request)=>({...request,commandId:request.targetCommandId,status:'running',durableReleased:false});
   await p.tickDistributedQueueCore();
   const job=stored().plans[0].jobs[1];
-  assert.equal(job.status,'running');assert.equal(job.commandId,'original-1');assert.equal(job.attempt,1);
+  assert.equal(job.status,'running');assert.equal(job.commandId,'original-1');assert.equal(job.attempt,0);
   assert.equal(job.reassignmentWorkerId,undefined);assert.equal(sent.length,0);
 });
 
@@ -197,7 +200,7 @@ test('unconfirmed command reconciliation keeps unknown stable and backs off repe
   const plan=stored().plans[0];plan.schedulingMode='local_idle';
   Object.assign(plan.jobs[0],{status:'completed',workerId:'a',gpuId:'1',commandId:'completed-command'});
   Object.assign(plan.jobs[1],{status:'unknown',workerId:'a',gpuId:'0',commandId:'unconfirmed-command',
-    outputDir:'work/job1/attempts/original-run'});
+    outputDir:'work/job1'});
   let calls=0;const statuses=[];
   const save=p.saveDistributedQueue;p.saveDistributedQueue=async (...args)=>{statuses.push(args[1].plans[0].jobs[1].status);await save(...args);};
   p.sendDistributedJob=async()=>{calls++;throw new Error('receipt not yet available');};
@@ -205,7 +208,7 @@ test('unconfirmed command reconciliation keeps unknown stable and backs off repe
   assert.equal(calls,1,'same command recovery must not hammer the Worker every tick');
   assert.equal(statuses.includes('dispatching'),false,'unverified ownership stays unknown while reconciliation is attempted');
   assert.equal(stored().plans[0].jobs[1].commandId,'unconfirmed-command');
-  assert.equal(stored().plans[0].jobs[1].attempt,1);
+  assert.equal(stored().plans[0].jobs[1].attempt,0);
 });
 
 test('task snapshot grace uses only a recently verified cache while a slow fresh request continues',async()=>{
@@ -229,102 +232,70 @@ test('task snapshot grace uses only a recently verified cache while a slow fresh
   } finally {release(cache);}
 });
 
-test('actual Host tick adopts an existing partial failure, persists backoff and dispatches only the due failed job', async () => {
-  const {p, receipt, stored} = durableTickFixture();
-  const queue = stored(), plan = queue.plans[0];
-  delete plan.automaticRetry;
-  plan.jobs.forEach((job, index) => Object.assign(job, { status: index === 0 ? 'completed' : 'failed', workerId: 'a',
-    commandId: `old-command-${index}`, runKey: `old-command-${index}`,
-    outputDir: `work/job${index}/attempts/old-attempt`, finishedAt: new Date().toISOString(),
-    ...(index === 1 ? { error: 'RuntimeError: CUDA error: CUBLAS_STATUS_NOT_INITIALIZED' } : {}) }));
-  p.resolveSelectedPlanFile = () => 'p.yaml';
-  const tasks = plan.jobs.map(job => ({...receipt(plan, job, 'a', undefined, job.commandId),
-    enqueuedAt: plan.enqueuedAt, status: job.status, finishedAt: job.finishedAt, error: job.error}));
-  p.readWorkerTaskSnapshotBatch = async ids => ids.map(workerId => ({workerId, generatedAt: new Date().toISOString(),
-    fetchedAt: new Date().toISOString(), capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},
-    tasks: workerId === 'a' ? tasks : []}));
-  const sent=[];
-  p.sendDistributedJob=async(...args)=>{sent.push(args[1].index);return receipt(...args);};
-  p.localPlanMetadata = { plans: [], archivedPlans: [{ originalFile: 'p.yaml', planFile: '_archived/p.yaml' }] };
-  await p.tickDistributedQueueCore();
-  assert.equal(stored().plans[0].jobs[1].automaticRetry, undefined, 'archived original Plan is not revived');
-  p.localPlanMetadata.plans = [{ planFile: 'p.yaml' }];
-  await p.tickDistributedQueueCore();
-  assert.equal(stored().plans[0].jobs[1].status, 'failed');
-  assert.equal(stored().plans[0].jobs[1].automaticRetry.failureCount, 1);
-  assert.equal(sent.length, 0, 'no launch during backoff');
-  stored().plans[0].jobs[1].automaticRetry.retryAt = new Date(Date.now() - 1).toISOString();
-  await p.tickDistributedQueueCore();
-  assert.deepEqual(sent, [1]);
-  assert.equal(stored().plans[0].jobs[0].status, 'completed');
-  assert.equal(stored().plans[0].jobs[1].status, 'queued');
-  assert.equal(stored().plans[0].jobs[1].attempt, 2);
-  assert.equal(stored().plans[0].jobs[1].history[0].error, 'RuntimeError: CUDA error: CUBLAS_STATUS_NOT_INITIALIZED');
-  assert.equal(stored().plans[0].jobs[1].automaticRetry.failureCount, 1);
-  assert.notEqual(stored().plans[0].jobs[1].commandId, 'old-command-1');
+test('formal partial failure retains completed jobs and requires reviewed retry instead of minting attempts', async () => {
+  const {p,receipt,stored}=durableTickFixture();const plan=stored().plans[0];
+  plan.jobs.forEach((job,index)=>Object.assign(job,{status:index?'failed':'completed',workerId:'a',
+    commandId:'old-'+index,runKey:'old-'+index,finishedAt:new Date().toISOString(),
+    ...(index?{error:'RuntimeError: CUDA error: CUBLAS_STATUS_NOT_INITIALIZED'}:{})}));
+  const paths=plan.jobs.map(job=>job.outputDir);
+  const tasks=plan.jobs.map(job=>({...receipt(plan,job,'a',undefined,job.commandId),enqueuedAt:plan.enqueuedAt,
+    status:job.status,finishedAt:job.finishedAt,error:job.error}));
+  p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),
+    fetchedAt:new Date().toISOString(),capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},
+    tasks:workerId==='a'?tasks:[]}));
+  let sent=0;p.sendDistributedJob=async()=>{sent++;throw Error('unexpected execution');};
+  for(let i=0;i<4;i++)await p.tickDistributedQueueCore();
+  assert.equal(sent,0);assert.equal(stored().plans[0].jobs[0].status,'completed');
+  const failed=stored().plans[0].jobs[1];assert.equal(failed.status,'failed');assert.equal(failed.attempt,0);
+  assert.match(failed.automaticRetry.blockedReason,/FORMAL_JOB_CONFLICT/);
+  assert.equal(failed.automaticRetry.retryAt,undefined);assert.equal(failed.commandId,'old-1');
+  assert.deepEqual(stored().plans[0].jobs.map(job=>job.outputDir),paths);
 });
 
-test('actual Host resource retry waits for matching Worker code and fresh idle GPU admission without counting waits as failures', async () => {
-  const {p, receipt, stored} = durableTickFixture();
-  const plan = stored().plans[0];
-  plan.schedulingMode = 'local_idle';
-  plan.jobs.forEach((job,index) => Object.assign(job, {status:index ? 'failed':'completed', workerId:'a',gpuId:String(index),
-    commandId:`old-${index}`,runKey:`old-${index}`,outputDir:`work/job${index}/attempts/old-attempt`,finishedAt:new Date().toISOString(),
-    ...(index ? {error:'torch.OutOfMemoryError: CUDA out of memory'} : {})}));
-  const tasks = plan.jobs.map(job => ({...receipt(plan,job,'a',undefined,job.commandId),gpuId:job.gpuId,
+test('formal resource failure cannot auto rerun when code or GPU availability changes', async () => {
+  const {p,receipt,stored}=durableTickFixture();const plan=stored().plans[0];plan.schedulingMode='local_idle';
+  plan.jobs.forEach((job,index)=>Object.assign(job,{status:index?'failed':'completed',workerId:'a',gpuId:String(index),
+    commandId:'old-'+index,runKey:'old-'+index,finishedAt:new Date().toISOString(),
+    ...(index?{error:'torch.OutOfMemoryError: CUDA out of memory'}:{})}));
+  const tasks=plan.jobs.map(job=>({...receipt(plan,job,'a',job.gpuId,job.commandId),gpuId:job.gpuId,
     enqueuedAt:plan.enqueuedAt,status:job.status,finishedAt:job.finishedAt,error:job.error}));
-  p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
-    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},tasks:workerId==='a'?tasks:[]}));
-  const sent=[];p.sendDistributedJob=async(...args)=>{sent.push(args[1].index);return {...receipt(...args),gpuId:args[3]};};
-  await p.tickDistributedQueueCore();
-  assert.equal(stored().plans[0].jobs[1].automaticRetry.failureClass,'resource');
-  stored().plans[0].jobs[1].automaticRetry.retryAt=new Date(Date.now()-1).toISOString();
-  p.lastCodeSyncState.workerVersions={a:{fingerprint:'different-code'},b:{fingerprint:'different-code'}};
-  await p.tickDistributedQueueCore();
-  assert.equal(stored().plans[0].jobs[1].status,'pending');assert.equal(sent.length,0);
-  p.lastCodeSyncState.workerVersions={a:{fingerprint:'f'},b:{fingerprint:'f'}};
-  p.client.getGpu=async()=>({a:[{index:'0',utilizationPercent:99,memoryUsedMb:23000,processes:[]}],
-    b:[{index:'0',utilizationPercent:99,memoryUsedMb:23000,processes:[]}]});
-  await p.tickDistributedQueueCore();assert.equal(sent.length,0);
-  await p.tickDistributedQueueCore();assert.equal(sent.length,0);
-  assert.equal(stored().plans[0].jobs[1].automaticRetry.failureCount,1);
-  assert.equal(stored().plans[0].jobs[1].attempt,2);
-  p.client.getGpu=async()=>({a:[{index:'0',utilizationPercent:0,memoryUsedMb:7,processes:[]}],
-    b:[{index:'0',utilizationPercent:0,memoryUsedMb:7,processes:[]}]});
-  await p.tickDistributedQueueCore();assert.deepEqual(sent,[1]);
+  p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),
+    fetchedAt:new Date().toISOString(),capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},
+    tasks:workerId==='a'?tasks:[]}));
+  let sends=0;p.sendDistributedJob=async()=>{sends++;throw Error('unexpected execution');};
+  for(const fingerprint of ['different-code','f']){
+    p.lastCodeSyncState.workerVersions={a:{fingerprint},b:{fingerprint}};
+    await p.tickDistributedQueueCore();
+  }
+  assert.equal(sends,0);const failed=stored().plans[0].jobs[1];assert.equal(failed.status,'failed');
+  assert.match(failed.automaticRetry.blockedReason,/FORMAL_JOB_CONFLICT/);assert.equal(failed.automaticRetry.retryAt,undefined);
+  assert.equal(failed.attempt,0);assert.equal(failed.commandId,'old-1');
 });
 
-test('actual Host tick never dispatches retries after startup majority fails with a project AttributeError', async () => {
-  const {p,receipt,stored}=durableTickFixture();
-  const plan=stored().plans[0];
-  plan.jobs.forEach((job,index)=>Object.assign(job,{status:'running',workerId:'a',commandId:`startup-${index}`,runKey:`startup-${index}`}));
+test('startup majority failure is visible and never starts a new formal job automatically', async () => {
+  const {p,receipt,stored}=durableTickFixture();const plan=stored().plans[0];
+  plan.jobs.forEach((job,index)=>Object.assign(job,{status:'running',workerId:'a',commandId:'startup-'+index,runKey:'startup-'+index}));
   const tasks=plan.jobs.map(job=>({...receipt(plan,job,'a',undefined,job.commandId),enqueuedAt:plan.enqueuedAt,status:'running'}));
-  p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
-    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},tasks:workerId==='a'?tasks:[]}));
-  const sent=[];p.sendDistributedJob=async(...args)=>{sent.push(args[1].index);return receipt(...args);};
-  await p.tickDistributedQueueCore();
+  p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),
+    fetchedAt:new Date().toISOString(),capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},
+    tasks:workerId==='a'?tasks:[]}));
+  let sends=0;p.sendDistributedJob=async()=>{sends++;};await p.tickDistributedQueueCore();
   assert.equal(stored().plans[0].automaticRetry.healthyReason,'majority_running');
-  tasks.forEach(task=>Object.assign(task,{status:'failed',finishedAt:new Date().toISOString(),error:'AttributeError: encoder has no attribute encode_token_features'}));
-  for(let tick=0;tick<4;tick++)await p.tickDistributedQueueCore();
-  assert.equal(sent.length,0);
-  for(const job of stored().plans[0].jobs){assert.equal(job.status,'failed');assert.equal(job.attempt,1);
-    assert.equal(job.automaticRetry.failureClass,'deterministic');assert.equal(job.automaticRetry.retryAt,undefined);assert.ok(job.automaticRetry.blockedReason);}
+  tasks.forEach(task=>Object.assign(task,{status:'failed',finishedAt:new Date().toISOString(),error:'AttributeError: missing method'}));
+  for(let i=0;i<4;i++)await p.tickDistributedQueueCore();assert.equal(sends,0);
+  for(const job of stored().plans[0].jobs){assert.equal(job.status,'failed');assert.equal(job.attempt,0);
+    assert.match(job.automaticRetry.blockedReason,/FORMAL_JOB_CONFLICT/);assert.equal(job.automaticRetry.retryAt,undefined);}
 });
 
-test('actual Host blocks an unsafe unsubmitted retry retained by the previous plugin version', async () => {
-  const {p,receipt,stored}=durableTickFixture(); const plan=stored().plans[0];
-  Object.assign(plan.jobs[0],{status:'completed',workerId:'a',commandId:'success',runKey:'success',finishedAt:new Date().toISOString()});
-  Object.assign(plan.jobs[1],{status:'pending',attempt:2,outputDir:'work/job1/attempts/auto-retry-old',
+test('historical unsubmitted retry from an older plugin remains read-only with its original evidence', async () => {
+  const {p,stored}=durableTickFixture();const plan=stored().plans[0];delete plan.resultPathPolicy;
+  Object.assign(plan.jobs[0],{status:'completed',workerId:'a',commandId:'success',runKey:'success'});
+  Object.assign(plan.jobs[1],{status:'pending',attempt:2,outputDir:'work/job1/attempts/auto-retry-old',resultPathPolicy:undefined,
     automaticRetry:{failureCount:1,failedAttempt:1,lastError:'AttributeError: missing method'},
     history:[{status:'failed',attempt:1,outputDir:'work/job1/attempts/old',workerId:'a',commandId:'old-failure',error:'AttributeError: missing method'}]});
-  const tasks=[{...receipt(plan,plan.jobs[0],'a',undefined,'success'),enqueuedAt:plan.enqueuedAt,status:'completed',finishedAt:plan.jobs[0].finishedAt}];
-  p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
-    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},tasks:workerId==='a'?tasks:[]}));
-  const sent=[];p.sendDistributedJob=async(...args)=>{sent.push(args[1].index);return receipt(...args);};
-  for(let tick=0;tick<3;tick++)await p.tickDistributedQueueCore();
-  assert.equal(sent.length,0);assert.equal(stored().plans[0].jobs[1].status,'failed');
-  assert.equal(stored().plans[0].jobs[1].attempt,2);assert.equal(stored().plans[0].jobs[1].history.length,1);
-  assert.match(stored().plans[0].jobs[1].automaticRetry.blockedReason,/尚未派发/);
+  const before=JSON.stringify(plan.jobs[1]);let sent=0;p.sendDistributedJob=async()=>{sent++;};
+  for(let i=0;i<3;i++)await p.tickDistributedQueueCore();assert.equal(sent,0);
+  assert.equal(JSON.stringify(stored().plans[0].jobs[1]),before);
 });
 
 test('actual Host tick dispatches two code versions to independent verified Workers in one tick',async()=>{
@@ -347,7 +318,7 @@ test('code upload holds only new allocation while the actual Host tick still rec
   Object.assign(job,{status:'running',workerId:'a',commandId:DistributedPlanQueue.durableCommandId(plan,job,'a')});
   const terminal={...receipt(plan,job,'a',undefined,job.commandId),enqueuedAt:plan.enqueuedAt,status:'completed',finishedAt:new Date().toISOString()};
   p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
-    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,schemaVersion:1},tasks:workerId==='a'?[terminal]:[]}));
+    capabilities:{durablePlanQueue:true,idleGpuAdmission:true,declaredJobPaths:true,schemaVersion:1},tasks:workerId==='a'?[terminal]:[]}));
   p.codeSyncInFlight=1;let sends=0;p.sendDistributedJob=async()=>{sends++;};
   await p.tickDistributedQueueCore();
   assert.equal(stored().plans[0].jobs[0].status,'completed');
@@ -395,8 +366,9 @@ test('G1 actual RPC envelope distinguishes local GPU admission from durable host
   p.schedulerSettings=()=>({gpuIdleUtilThreshold:5,gpuIdleMemThresholdMb:200,workerActionMinIntervalMs:500});
   p.withRemoteActionResource=async(_worker,_action,_request,callback)=>callback();let sent;
   p.client={postWorkerAction:async(_worker,_action,request)=>{sent=request;return {status:'queued'};}};
-  const plan={id:'p',projectId:'project',planFile:'p.yaml',revision:'r',codeFingerprint:'f',enqueuedAt:'date',planJobCount:1,schedulingMode:'server_prequeue'};
-  const job={index:0,case:'bus',seed:42,attempt:1,outputDir:'runs/0'};
+  const plan={id:'p',projectId:'project',planFile:'p.yaml',revision:'r',codeFingerprint:'f',enqueuedAt:'date',planJobCount:1,schedulingMode:'server_prequeue',executionMode:'train',resultPathPolicy:'declared'};
+  const job={index:0,case:'bus',seed:42,attempt:0,outputDir:'runs/0',globalJobId:'p:0'};
+  p.lastWorkerProbes={w:{capabilities:{endpoints:{declaredJobPaths:true}}}};
   await p.sendDistributedJob(plan,job,'w',undefined,'same-command');
   assert.equal(sent.schedulingMode,'server_prequeue');assert.equal(sent.requireIdleGpu,false);assert.equal(Object.hasOwn(sent,'gpuId'),false);
   assert.equal(sent.options.maxConcurrentGpus,1);assert.equal(sent.options.gpuIdleUtilThreshold,0);assert.equal(sent.opId,'same-command');
@@ -407,16 +379,15 @@ const agentSource=fs.readFileSync(path.join(root,'src/clusterAgentRuntime.legacy
 function definition(name){const start=agentSource.indexOf(`\ndef ${name}(`)+1;assert.ok(start>0,name);
   const end=agentSource.indexOf('\ndef ',start+1);return agentSource.slice(start,end<0?undefined:end);}
 function python(script){const file=path.join(os.tmpdir(),`simpleex-lifecycle-${process.pid}-${Date.now()}.py`);fs.writeFileSync(file,script,'utf8');
-  try {const run=spawnSync(process.env.PYTHON||'python',['-X','utf8',file],{encoding:'utf8',timeout:10000,windowsHide:true});
-    assert.equal(run.status,0,run.stderr||run.error?.message);return JSON.parse(run.stdout.trim());}
-  finally {fs.unlinkSync(file);}}
+  {const run=spawnSync(process.env.PYTHON||'python',['-X','utf8',file],{encoding:'utf8',timeout:10000,windowsHide:true});
+    assert.equal(run.status,0,run.stderr||run.error?.message);return JSON.parse(run.stdout.trim());}}
 test('G2 real Agent idle admission guard rejects a competing process and untrusted telemetry',()=>{
   const result=python(`import json, math\nGPU_IDLE_UTIL_THRESHOLD=5\nGPU_IDLE_MEM_THRESHOLD_MB=200\nDISTRIBUTED_GPU_RESERVATIONS={}\ndef read_json(*args): return {}\ndef path_for(*args): return ''\ndef read_durable_plan_queue(*args): return {'jobs':[]}\ndef gpu_row_id(row): return str(row['gpuId'])\ndef gpu_row_busy(*args,**kwargs): return False\n${definition('_durable_gpu_busy_reason')}\nrow={'gpuId':'0','utilizationPercent':0,'memoryUsedMb':7,'processes':[{'pid':7}]}\nprint(json.dumps([_durable_gpu_busy_reason('', '0', 'c', [row]),_durable_gpu_busy_reason('', '0', 'c', [{'gpuId':'0'}])]))\n`);
   assert.deepEqual(result,['gpu_busy','gpu_busy'],'G2 admission must reject occupied or unknown GPU');
 });
 test('G3 actual task API syncs exit evidence into durable ledger immediately, with mode and terminal metadata',()=>{
   const fields=agentSource.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m)[0];
-  const result=python(`import json, threading\nSCHEMA_VERSION=1\nWORKER_TASK_SNAPSHOT_LOCK=threading.RLock()\n${fields}\ndef now_iso(): return '2026-09-29T00:00:00Z'\n${['durable_plan_value','durable_plan_identity','durable_plan_same_identity','durable_plan_task_status','sync_durable_plan_task_rows','durable_plan_public_task','api_worker_tasks'].map(definition).join('\n')}\nROW={key:'x' for key in DURABLE_PLAN_IDENTITY_FIELDS}\nROW.update({'status':'running','planJobCount':1,'enqueuedAt':now_iso(),'schedulingMode':'server_prequeue','gpuId':''})\nTASK=dict(ROW)\nLEDGER={'jobs':[ROW]}\ndef path_for(*args): return ''\ndef read_json(*args): return {'tasks':[TASK]}\ndef read_durable_plan_queue(*args): return LEDGER\ndef write_durable_plan_queue(root,data): pass\ndef read_runtime_json_cached(*args): return None\ndef reconcile_worker_task_exit_codes(root): TASK.update({'status':'completed','exitCode':0,'finishedAt':now_iso()})\nprint(json.dumps(api_worker_tasks('')['tasks'][0]))\n`);
+  const result=python(`import json, threading\nSCHEMA_VERSION=1\nWORKER_TASK_SNAPSHOT_LOCK=threading.RLock()\n${fields}\ndef now_iso(): return '2026-09-29T00:00:00Z'\n${['durable_plan_value','durable_plan_identity','durable_plan_public_identity','durable_plan_same_identity','durable_plan_task_status','sync_durable_plan_task_rows','durable_plan_public_task','api_worker_tasks'].map(definition).join('\n')}\nROW={key:'x' for key in DURABLE_PLAN_IDENTITY_FIELDS}\nROW.update({'status':'running','planJobCount':1,'enqueuedAt':now_iso(),'schedulingMode':'server_prequeue','gpuId':''})\nTASK=dict(ROW)\nLEDGER={'jobs':[ROW]}\ndef path_for(*args): return ''\ndef read_json(*args): return {'tasks':[TASK]}\ndef read_durable_plan_queue(*args): return LEDGER\ndef write_durable_plan_queue(root,data): pass\ndef read_runtime_json_cached(*args): return None\ndef formal_job_path_capable(*args): return True\ndef reconcile_worker_task_exit_codes(root): TASK.update({'status':'completed','exitCode':0,'finishedAt':now_iso()})\nprint(json.dumps(api_worker_tasks('')['tasks'][0]))\n`);
   assert.equal(result.status,'completed','G3 exit evidence must supersede durable running during same API call');
   assert.equal(result.exitCode,0);assert.ok(result.finishedAt);assert.equal(result.schedulingMode,'server_prequeue');
 });
