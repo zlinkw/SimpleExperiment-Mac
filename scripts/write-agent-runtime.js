@@ -28,7 +28,7 @@ const unifiedVersion = (() => {
 
 function patchVersionHeader(text, unifiedVer) {
   // 统一注入：所有版本常量均指向 unifiedVersion，消除双版本歧义
-  return text.replace(/(AGENT_VERSION|RUNTIME_VERSION|PLUGIN_VERSION|SCHEDULER_VERSION)\s*=\s*"[^"]+"/g, (match, key) => {
+  return text.replace(/^(AGENT_VERSION|RUNTIME_VERSION|PLUGIN_VERSION|SCHEDULER_VERSION)[ \t]*=[ \t]*"[^"\r\n]+"[ \t]*$/gm, (match, key) => {
     return `${key} = "${unifiedVer}"`;
   });
 }
