@@ -199,10 +199,10 @@ test("actual distributed submission binds code sync, preflight, output choice an
 test("actual distributed enqueue refuses changed identity after queue load or write without dispatching or posting into another project", async () => {
   for (const phase of ["load:replace", "save:replace"]) {
     const f = fixture(); f.state.changeAt = phase;
-    Object.assign(f.provider, { schedulerSettings: () => ({}), lastCodeSyncState: { fingerprint: "code" }, loadDistributedQueue: async () => { f.step("load"); return { schemaVersion: 1, plans: [] }; },
+    Object.assign(f.provider, { workerActionTargets: () => [], schedulerSettings: () => ({}), lastCodeSyncState: { fingerprint: "code" }, loadDistributedQueue: async () => { f.step("load"); return { schemaVersion: 1, plans: [] }; },
       saveDistributedQueue: async () => f.step("save"), tickDistributedQueue: async () => f.step("dispatch"), notifyPlanOutputVersionReview: () => f.step("review") });
-    Object.assign(f.globals, { PosixPath_1: require("../../dist/mac/PosixPath"), planValidationFromResult: value => value, PlanExecutionMode: require("../../dist/features/PlanExecutionMode"),
-      operationResultPlanFile: body => body.planFile, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy"), DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue") });
+    Object.assign(f.globals, { fs: { readFile: async () => "suite: fixture\n" }, path, PosixPath_1: require("../../dist/mac/PosixPath"), planValidationFromResult: value => value, PlanExecutionMode: require("../../dist/features/PlanExecutionMode"),
+      PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence"), operationResultPlanFile: body => body.planFile, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy"), DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue") });
     const method = vm.runInNewContext("({" + source("enqueueDistributedPlan") + "})", f.globals).enqueueDistributedPlan;
     await assert.rejects(method.call(f.provider, { workspace: f.initial, planFile: "experiments/plans/A.yaml", planRevision: "r" }, { execution_mode: "train", jobs: [{ index: 0, case: "case-a", seed: 1, output_dir: "work_dirs/A" }] }), /身份已变化/);
     assert.deepEqual(f.calls, phase.startsWith("load") ? ["load"] : ["load", "save"]);

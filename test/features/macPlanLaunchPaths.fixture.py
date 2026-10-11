@@ -19,7 +19,7 @@ scenario = sys.argv[1]
 root = "/Projects/中文 "
 plan_name = "experiments/Plans/ A%20.yaml "
 output = " work_runs/中文 A /seed_7 "
-attempt = output + "/attempts/1 "
+attempt = output  # Formal execution preserves the declared leaf, with no attempt directory.
 result_dir = "experiments/结果 "
 nodes = {root: stat.S_IFDIR, root + "/experiments": stat.S_IFDIR,
          root + "/experiments/Plans": stat.S_IFDIR, root + "/" + plan_name: stat.S_IFREG,
@@ -43,6 +43,7 @@ class MemoryPath(pathlib.PurePosixPath):
     def resolve(self): return type(self)(posixpath.normpath(str(self) if self.is_absolute() else root + "/" + str(self)))
     def exists(self): return str(self.resolve()) in nodes
     def is_dir(self): return nodes.get(str(self.resolve())) == stat.S_IFDIR
+    def read_bytes(self): return b"mode: train\n"
     def is_file(self): return nodes.get(str(self.resolve())) == stat.S_IFREG
 
 fake_os = SimpleNamespace(**{key: getattr(os, key) for key in dir(os) if not key.startswith("__")})
@@ -97,13 +98,15 @@ if scenario in ("physical", "agent", "changed", "revision"):
         launched, saved = [], []
         command = dict(action="start-worker-task", commandId="launch", planFile=plan_name, plan=plan_name,
                        projectDir=root, projectId="project", planRevision="revision", codeFingerprint="code",
-                       experimentIndex=0, attempt=1, outputDir=attempt, configPath=attempt + "/job_config.yaml",
+                       experimentIndex=0, attempt=0, resultPathPolicy="declared", globalJobId="workflow:0",
+                       collectionResultCsv=result_dir + "/suite.csv", outputDir=attempt, configPath=attempt + "/job_config.yaml",
                        mode="train", executionMode="train", condaEnv="env", gpuId="0", session="session",
                        defaultResultCsvDir=result_dir, logPath="tmp/tmux_logs/中文 log ", options={"distributedResults": True})
         def probe(*args):
             if scenario == "changed": nodes[root + "/experiments/Plans"] = stat.S_IFLNK
         replacements = {
             "agent_install_dir": lambda _: root + "/runtime ", "require_scheduler_dependencies": probe,
+            "verified_formal_job_command": lambda *args: {"identity": {"globalJobId": "workflow:0"}},
             "simple_runtime_python": lambda _: "virtual-python", "verified_durable_execution_mode": lambda *args: "train",
             "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
             "tmux_available": lambda: True, "start_job_in_gpu_pane": lambda window, args, *rest: launched.append((args, rest)) or "%virtual",
@@ -150,7 +153,9 @@ else:
     elif scenario == "enqueue":
         calls, runtimes = [], []
         worker = {"id": "worker", "project_dir": root, "conda_env": "env"}
-        with patch.object(scheduler, "ensure_worker_runtime", lambda _: runtimes.append(True) or root + "/runtime/scheduler.py"), \
+        with patch.object(scheduler, "load_plan", lambda _: plan), \
+             patch.object(scheduler, "formal_source_fingerprint", lambda _: "code"), \
+             patch.object(scheduler, "ensure_worker_runtime", lambda _: runtimes.append(True) or root + "/runtime/scheduler.py"), \
              patch.object(scheduler, "enqueue_worker_command", lambda worker, item: calls.append(item)):
             scheduler.launch_experiment(worker, plan_name, 0, "0", MemoryPath("tmp/tmux_logs"), output_dir=attempt, default_result_csv_dir=result_dir)
             assert calls[0]["plan"] == plan_name and calls[0]["projectDir"] == root
@@ -182,6 +187,7 @@ else:
                                    output_dir_override=attempt, default_result_csv_dir=result_dir)
             with patch.object(scheduler, "load_plan", lambda _: plan), \
                  patch.object(scheduler, "jobs_for_args", lambda *args: jobs), \
+                 patch.object(scheduler, "formal_job_preflight_mode", lambda *args: {}), \
                  patch.object(scheduler, "run_job", lambda job, args: dispatched.append(job)), \
                  patch.dict(fake_os.environ, {"SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS": "1"}), \
                  contextlib.redirect_stdout(io.StringIO()):

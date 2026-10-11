@@ -16,12 +16,14 @@ agent = extract_runtime_functions(str(pathlib.Path(__file__).resolve().parents[2
 ])
 scenario = sys.argv[1]
 plan_path = " experiments/plans/中文 A%20.yaml "
-output_path = " experiments/runs/中文 A /attempts/1 "
+output_path = " experiments/runs/中文 A /seed42 "
 
 def job(command="command"):
+    suffix = "" if command == "command" else "/" + command
     return dict(projectId="project", workflowId="workflow", planFile=plan_path, planRevision="revision",
-                codeFingerprint="code", experimentIndex=0, case="case", seed=42, attempt=1,
-                outputDir=output_path, runKey=command, commandId=command, workerId="worker", planJobCount=1,
+                codeFingerprint="code", experimentIndex=0, case="case", seed=42, attempt=0, resultPathPolicy="declared", globalJobId="workflow:0",
+                collectionResultCsv="tmp/result/中文 A/metrics.csv" + suffix,
+                outputDir=output_path + suffix, runKey=command, commandId=command, workerId="worker", planJobCount=1,
                 executionMode="train", mode="train", action="start-worker-task", durablePlanQueue=True)
 
 queue = {"schemaVersion": 1, "jobs": []}
@@ -46,6 +48,8 @@ with contextlib.ExitStack() as scope:
         "write_worker_recall_tombstone": tombstone,
         "signal_durable_plan_queue_processor": lambda *args: None,
         "verified_durable_execution_mode": lambda *args: "train",
+        "verified_formal_job_command": lambda *args: {},
+        "safe_project_path": lambda _, value: agent.durable_plan_path(value, "fixture path"),
         "append_event": lambda _, event: events.append(copy.deepcopy(event)),
         "append_worker_task": lambda _, task: tasks.append(copy.deepcopy(task)),
         "reconcile_worker_task_exit_codes": lambda *args: None,
@@ -73,7 +77,7 @@ with contextlib.ExitStack() as scope:
         aliased = job("options-job")
         aliased.pop("planFile")
         aliased.pop("outputDir")
-        aliased.update(plan=plan_path, options={"outputDir": output_path, "planJobCount": "1"})
+        aliased.update(plan=plan_path, options={"outputDir": job("options-job")["outputDir"], "planJobCount": "1"})
         assert agent.accept_durable_plan_job("virtual", aliased, "worker")["planFile"] == plan_path
         for value in [plan_path.strip(), plan_path.lower(), plan_path.replace("%20", " "), plan_path.replace("中文", "中 文")]:
             before = copy.deepcopy(queue), len(writes)
@@ -119,8 +123,9 @@ with contextlib.ExitStack() as scope:
         # Old callers can still supply plan/case aliases, with exact path identity.
         legacy = dict(plan=plan_path, caseName="case", seed="42", attempt="1", workflowId="workflow",
                       planRevision="revision", outputDir=output_path, workerId="worker", gpuId="0")
-        assert agent._legacy_recall_identity_matches(legacy, task)
-        assert not agent._legacy_recall_identity_matches({**legacy, "plan": plan_path.strip()}, task)
+        historical = {**task, "attempt": 1, "resultPathPolicy": None}
+        assert agent._legacy_recall_identity_matches(legacy, historical)
+        assert not agent._legacy_recall_identity_matches({**legacy, "plan": plan_path.strip()}, historical)
 
     elif scenario == "cancel":
         agent.accept_durable_plan_job("virtual", job(), "worker")
@@ -143,7 +148,7 @@ with contextlib.ExitStack() as scope:
         agent.accept_durable_plan_job("virtual", job("second"), "worker")
         second = {**job("second"), "targetCommandId": "second", "commandId": "cancel-second"}
         cancelled = agent.cancel_durable_plan_job("virtual", second)
-        assert cancelled["planFile"] == plan_path and cancelled["outputDir"] == output_path
+        assert cancelled["planFile"] == plan_path and cancelled["outputDir"] == job("second")["outputDir"]
         # Typed identities cannot alias a string filename through str(value).
         row = {**job("typed"), "planFile": "123", "outputDir": "456", "status": "queued"}
         queue["jobs"] = [row]

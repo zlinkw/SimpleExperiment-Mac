@@ -150,7 +150,7 @@ test("queued-only plan clears without a worker stop and a mixed failure keeps th
   const allocated = queue.allocateAvailable(queue.enqueuePlan(queue.emptyDistributedQueue(), {
     planFile: "plans/mix.yaml", revision: "rev-mix", codeFingerprint: "new",
     jobs: [0, 1].map((index) => ({ index, case: "bus", seed: index, outputDir: `work/mix/${index}` })),
-  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true }]);
+  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const running = allocated.queue.plans[0].jobs.find((job) => job.status === "dispatching");
   running.status = "running";
   const sandbox = {
@@ -221,7 +221,7 @@ test("each execution plan row can stop and clear its own plan file", () => {
   const source = script.slice(start, end);
   let html = "";
   const sandbox = {
-    Map, Set,
+    Map, Set, asArray: value => Array.isArray(value) ? value : [],
     operationRowsForState: () => [],
     taskSectionViewModelForState: () => ({ allRows: [] }),
     taskPlanFile: (row) => row.planFile,
@@ -328,11 +328,13 @@ function loadExtensionHandler(name, nextName) {
 function installStopClearHost(sandbox) {
   const notices = [];
   const context = {
+    fs: { readFile: async () => "suite: fixture\n" }, path,
     queueApi: require("../../dist/features/DistributedPlanQueue.js"),
     planner: require("../../dist/features/PlanStopClear.js"),
     PlanStopClear_1: require("../../dist/features/PlanStopClear.js"),
     DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
     DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"),
+    PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence.js"),
     PlanExecutionMode: require("../../dist/features/PlanExecutionMode.js"),
     vscode: { window: {
       showWarningMessage: async (text, _options, action) => { notices.push(text); return sandbox.answers.shift() ?? action; },
@@ -368,6 +370,7 @@ function installStopClearHost(sandbox) {
   const provider = new context.Host();
   const sourceTick = provider.tickDistributedQueue;
   const sourceDetach = provider.detachStaleDistributedTick;
+  provider.planCleanupHosts=new Map();provider.workerActionTargets=()=>[];
   Object.assign(provider, sandbox);
   if (!provider.schedulerSettings) provider.schedulerSettings = () => ({ dispatchMode: "local_idle" });
   if (!provider.distributedSubmissionTimings) provider.distributedSubmissionTimings = new Map();
@@ -429,7 +432,7 @@ test("an unconfirmed active job stays queued and the plan card records the reaso
   const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
     planFile: "plans/live.yaml", revision: "rev-live", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 3, outputDir: "work/live/0" }],
-  }, "plan-live"), [{ workerId: "w1", idleGpuIds: ["0"], online: true }]);
+  }, "plan-live"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const running = allocated.queue.plans[0].jobs[0];
   running.status = "running";
   let saved = allocated.queue;
@@ -471,7 +474,7 @@ test("a hung worker stop returns a bounded plan failure and a late receipt canno
   const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
     planFile: "plans/hang.yaml", revision: "rev-hang", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 6, outputDir: "work/hang/0" }],
-  }, "plan-hang"), [{ workerId: "w-hang", idleGpuIds: ["0"], online: true }]);
+  }, "plan-hang"), [{ workerId: "w-hang", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const running = allocated.queue.plans[0].jobs[0];
   running.status = "running";
   let saved = allocated.queue;
@@ -862,7 +865,7 @@ test("a stale reconciliation launch does not start after the project changes", a
   const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
     planFile: "plans/retry.yaml", revision: "rev-retry", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work/retry/0" }],
-  }, "plan-retry"), [{ workerId: "w1", idleGpuIds: ["0"], online: true }]);
+  }, "plan-retry"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const queued = allocated.queue;
   queued.plans[0].jobs[0].status = "running";
   let root = "D:/project";
@@ -958,7 +961,7 @@ test("the plan card renders the persistent stop-clear reason beside the target p
   const source = script.slice(start, end);
   let html = "";
   const sandbox = {
-    Map, Set,
+    Map, Set, asArray: value => Array.isArray(value) ? value : [],
     operationRowsForState: () => [],
     taskSectionViewModelForState: () => ({ allRows: [] }),
     taskPlanFile: (row) => row.planFile,
@@ -1038,7 +1041,7 @@ test("completed stop-clear feedback does not invent a plan card and a newer run 
   const source = script.slice(start, end);
   let html = "";
   const sandbox = {
-    Map, Set,
+    Map, Set, asArray: value => Array.isArray(value) ? value : [],
     operationRowsForState: () => [],
     taskSectionViewModelForState: () => ({ allRows: [] }),
     taskPlanFile: (row) => row.planFile,
@@ -1252,12 +1255,12 @@ test("a preview failure before confirmation stays on the plan card", async () =>
   }
 });
 
-test("only stopAndClearPlan consumes a structured command result", async () => {
+test("only explicitly supported commands consume a structured command result", async () => {
   const dist = fs.readFileSync(path.join(__dirname, "../../dist/extension/legacy.js"), "utf8");
   const start = dist.indexOf("const guardedWork = work()");
   const end = dist.indexOf("const result = await guardedWork", start);
   const body = dist.slice(start, end);
-  assert.match(body, /command === "stopAndClearPlan"/);
+  assert.match(body, /\["stopAndClearPlan", "retryDistributedJob", "markJobUnavailable", "restoreJobAvailability"\]\.includes\(command\)/);
   const structured = { status: "failed", message: "未完成清除", planStopClear: { planFile: "plans/a.yaml" } };
   const run = async (command) => {
     const context = {
@@ -1292,7 +1295,7 @@ test("mixed clear drops the pending job and keeps the running job when the worke
       { index: 0, case: "bus", seed: 1, outputDir: "work/mix/0" },
       { index: 1, case: "bus", seed: 2, outputDir: "work/mix/1" },
     ],
-  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true }]);
+  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const queued = allocated.queue;
   const remote = queued.plans[0].jobs.find((job) => job.workerId);
   remote.status = "running";
@@ -1526,7 +1529,7 @@ test("stopping during a hung fingerprint cancels that submission and a new one c
     distributedCodeVersionHold: (body) => new Promise((resolve) => { hashReleases.set(body.planFile, () => resolve(null)); }),
     localDistributedCodeFingerprint: async () => "code-1",
     ensureCodeReadyForRun: async () => undefined,
-    runPlanPreflight: async () => ({ validation: { execution_mode: "train", jobs: [{ index: 0, case: "bus", seed: 1, output_dir: "work/hash" }] } }),
+    runPlanPreflight: async (body) => ({ validation: { execution_mode: "train", jobs: [{ index: 0, case: "bus", seed: 1, output_dir: "work/" + body.planFile }] } }),
     confirmDistributedPlanExistingOutputs: async () => undefined,
     assertExecutionCondaEnvReady: () => undefined,
     reportPlanStage: () => undefined,

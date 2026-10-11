@@ -79,6 +79,8 @@ function fixture() {
     normalizeDistributedProjectContract: contract.normalizeDistributedProjectContract,
     workspaceRoot: () => workspace, makeOpId: () => 'distributed-mock',
     planValidationFromResult: value => value,
+    PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence"),
+    cleanupStablePlanId: require("../../dist/features/PlanCleanupEvidence").cleanupStablePlanId,
     PlanExecutionMode: require('../../dist/features/PlanExecutionMode'),
     DistributedSchedulingPolicy: require('../../dist/features/DistributedSchedulingPolicy'),
     DistributedPlanQueue: loadCompiled('dist/features/DistributedPlanQueue.js'),
@@ -201,7 +203,7 @@ test('compiled reader rejects file replacement, content changes and workspace re
 test('actual distributed selection and enqueue preserve exact paths and reject bad outputs before writes', async () => {
   const { sandbox } = fixture(), subject = new sandbox.Subject();
   let queue = { schemaVersion: 1, plans: [] }, saves = 0;
-  Object.assign(subject, { isMacVariant: () => true, projectTopologyAssessment: () => ({ mode: 'worker_pool' }),
+  Object.assign(subject, { workerActionTargets: () => [], isMacVariant: () => true, projectTopologyAssessment: () => ({ mode: 'worker_pool' }),
     localPlanMetadata: { detectedProject: { adapterRules: { distributedResults: true } } },
     lastCodeSyncState: { fingerprint: 'fp' }, schedulerSettings: () => ({}), distributedQueueGeneration: 1,
     loadDistributedQueue: async () => queue, saveDistributedQueue: async (_root, next) => { saves++; queue = next; }, postState() {} });
@@ -216,5 +218,5 @@ test('actual distributed selection and enqueue preserve exact paths and reject b
   await subject.enqueueDistributedPlan({ planFile: file, planRevision: 'r' },
     { execution_mode: 'train', jobs: [{ index: 0, case: 'c', seed: 42, output_dir: 'work_dirs/中文 A ' }] }, true);
   assert.equal(saves, 1); assert.equal(queue.plans[0].planFile, file);
-  assert.equal(queue.plans[0].jobs[0].outputDir, 'work_dirs/中文 A /attempts/distributed-mock');
+  assert.equal(queue.plans[0].jobs[0].outputDir, 'work_dirs/中文 A ');
 });
