@@ -9,7 +9,8 @@
 - 每批至多3个相关问题/8源文档测试文件；目标逐文件串行20秒，Python隔离10秒；build/闭包/面板vm门禁。
 - 用户要求先完成不需要真机的剩余工作，完成交付后暂停目标模式；完整目标未完成，不能标complete。
 - 先完成后完善，缺真机延期；README/配置说明按里程碑集中更新，不每批重复修改。
-- 固定分母29；报告已取得M5环境、最小启动及匿名检查证据后核实原条目，缺证据整条保留剩余。完整目标维持paused；本次仅执行用户新授权的缺陷修复与发布。
+- 固定分母29；报告已取得M5环境、最小启动及匿名检查证据后核实原条目，缺证据整条保留剩余。完整目标维持paused；仅执行用户新授权的缺陷修复及功能同步发布。
+- 当前授权为2026-10-12 Windows从8934ed8b分叉后功能页/方法同步；冻结参考Exp42902a5a/SFacae730。Mac身份/更新/Termius/POSIX/租约/GPU内部标签保留；不复制Windows安装、部署、发布设置，不触碰现有任务。
 
 ## 当前授权：Windows分叉后功能同步
 - 2026-10-12用户追加：检查Windows从8934ed8b分叉之后的提交，将对应功能页和方法适配到Mac。参考冻结Exp42902a5a、SFacae730，Windows未提交pyc仅只读；Mac身份/路径/Termius/静态更新/传输退出证明/GPU内部标签保留。
@@ -20,7 +21,11 @@
 - 067七个源/测试文件保持未提交，未计通过。正式测试揭示Mac旧构建注入会改写新协议re.search字符串；Windows42902a5a构建脚本已有整行常量门禁。067a只改构建脚本、实际纯函数回归和本计划3文件，build/面板vm/版本注入测试后独立同步；不改运行中的远端runtime。
 - build/面板2/vm、实际版本注入1通过，完整常量更新/正则字符串与注释不改/重复注入幂等。067宿主确认测试留至068整合后补回，不以依赖未接入的测试调整生产逻辑；原目标18/11。
 
-## 当前批次 mac-sync-067（passed，正式队列/结果与不可用判定接口）
+## 当前批次 mac-sync-068（passed，宿主与对应功能页整合）
+- 067提交5d2c147已同步。8文件边界：legacy宿主/PanelHtml/PlansSection/ResultsSection/SmallScale/FileTransferTypes、面板长期恢复测试、本计划。三方解决7宿主冲突和1页面冲突：Mac严格路径/设置与缺前缀拒绝保留，正式输出不增attempt，结果全格式只读入内存；cleanup/召回/不可用/GPU归属/拒绝日志入口同步。不复制Windows自动安装/远端部署。
+- build/234闭包清单生成、面板2/vm、长期面板恢复8通过，diff通过。新源码无simpleExperiment原版设置读取，保留binding及Mac结果scope；正式任务/清理/GPU端到端本地回归待069，原目标18/11。
+
+## 已完成批次 mac-sync-067
 - 066提交ac9e0e2已同步。8文件边界：PlanRunFreshness/PlanArtifactSyncStatus/ExperimentRunner/ProjectAdapterTemplates/JobAvailability、正式执行测试及Python夹具、本计划。保留Mac严格路径/空选择拒绝，采用正式身份/结果内存读取和显式不可用判定。正式执行测试使用AST隔离函数及mock工作进程，10秒上限；不运行科研。
 - 067a构建修正a0c5694已同步。build/面板2/vm、正式执行基础5通过；Linux路径逻辑映射Windows临时夹具的文件系统叶子显式注入，保留durable_plan_path检查，未改生产POSIX规则。原宿主输出确认1例待068接入后补回，旧测试与失败回执保留Git/参考快照；原目标18/11。
 

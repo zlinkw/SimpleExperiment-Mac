@@ -87,6 +87,9 @@ export function isSafeRemotePath(remotePath: string): boolean {
   const parts = segments.filter((part) => part && part !== ".");
   if (!parts.length) return false;
   if (parts.length === 1) return ROOT_RESULT_FILES.has(parts[0].toLowerCase());
+  // Declared result CSVs are formal outputs; unrelated tmp/draft/cache paths stay excluded.
+  if (parts[0].toLowerCase() === "tmp") return parts[1]?.toLowerCase() === "result"
+    && parts.length > 2 && segments.every(part => part && part !== ".");
   return ALLOWED_REMOTE_PATH_ROOTS.has(parts[0].toLowerCase());
 }
 

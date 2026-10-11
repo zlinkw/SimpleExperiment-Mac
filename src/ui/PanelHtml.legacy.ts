@@ -1432,6 +1432,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           <button data-command="dryRunPlan" class="secondary" title="预演运行，不提交任务&#10;展开「用例 × 随机种子」的任务数、远端路径、Worker 与并发上限">预演</button>
           <button data-command="runPlan" title="同步代码、校验并预演；存在历史产物时选择补跑缺失任务、重跑全部或取消">校验并提交运行</button>
           <button data-command="runAllPlans" data-confirm="true" class="secondary" title="按顺序提交当前实验计划目录下的全部计划&#10;每个计划仍会走完整的校验与预演门禁">运行全部计划</button>
+          <button data-command="cleanupPlan" class="secondary" title="只读预览选中 PLAN 的本机及历史关联服务器产物，再核对精确路径">清除 PLAN 及关联产物</button>
           </div>
         </div>
         <div id="planCommandPhaseLine" class="commandPhaseLine muted" role="status" aria-live="polite"></div>
@@ -1532,6 +1533,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         </div>
       </div>
       <div class="resultMainPane">
+        <div id="resultCommandPhaseLine" class="commandPhaseLine muted" role="status" aria-live="polite"></div>
         <div id="resultSummary" data-anchor="results-summary"></div>
         <div class="resultRelatedTools" data-anchor="results-contract">
           <span class="resultRelatedToolsLabel">相关检查</span>
@@ -2277,6 +2279,22 @@ export function renderPanelHtml(platform: string = process.platform): string {
       tmuxJobLogJumpTimeout = 0;
       tmuxJobLogSelection = null;
     }
+    function showToast(message, tone) {
+      let toast = el("simpleExperimentToast");
+      if (!toast && document.body && document.createElement) {
+        toast = document.createElement("div");
+        toast.id = "simpleExperimentToast";
+        toast.setAttribute("role", "status");
+        toast.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:10000;max-width:480px;padding:10px 14px;border:1px solid var(--vscode-panel-border);border-radius:6px;background:var(--vscode-editorWidget-background);color:var(--vscode-editorWidget-foreground);box-shadow:0 3px 12px #0003;";
+        document.body.appendChild(toast);
+      }
+      if (!toast) { const meta = el("tmuxCaptureMeta"); if (meta) meta.textContent = String(message || ""); return; }
+      toast.textContent = String(message || "");
+      toast.dataset.tone = String(tone || "info");
+      toast.hidden = false;
+      clearTimeout(showToast.hideTimer);
+      showToast.hideTimer = setTimeout(() => { toast.hidden = true; }, 5000);
+    }
     function failJobTmuxLogJump(message) {
       if (!tmuxJobLogSelection) return;
       clearTimeout(tmuxJobLogJumpTimeout);
@@ -2891,7 +2909,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     const PLAN_PREFLIGHT_COMMANDS = new Set(["validatePlan", "dryRunPlan"]);
     const SELECTED_PLAN_RUN_COMMANDS = new Set(["runPlan", "reproducePlan"]);
     const SELECTED_PLAN_ACTION_COMMANDS = new Set([...PLAN_PREFLIGHT_COMMANDS, ...SELECTED_PLAN_RUN_COMMANDS]);
-    const PLAN_FILE_PAYLOAD_COMMANDS = new Set([...SELECTED_PLAN_ACTION_COMMANDS, "archivePlan", "archivePlanCopy", "savePlan"]);
+    const PLAN_FILE_PAYLOAD_COMMANDS = new Set([...SELECTED_PLAN_ACTION_COMMANDS, "cleanupPlan", "archivePlan", "archivePlanCopy", "savePlan"]);
     const RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS = new Set([...PLAN_FILE_PAYLOAD_COMMANDS, "restoreArchivedPlan"]);
     const SUBMITTED_RUN_COMMANDS = new Set([...SELECTED_PLAN_RUN_COMMANDS, "runAllPlans"]);
     const CONFIG_SAVE_COMMANDS = new Set(["saveTopologyMode", "saveHubConfig", "saveWorkerConfig", "saveSchedulerConfig", "saveProjectAdapterRules", "saveResultColumnMapping", "saveRemoteRootPolicy"]);
@@ -2950,8 +2968,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
       execution: "运行进度", results: "结果", sync: "发布同步", diagnostics: "诊断"
     });
     const COMMAND_INSPECTOR_SECTIONS = Object.freeze({
+      refreshLocalResults: "results", syncPendingPlanArtifacts: "results", rebuildProjectResultTables: "results", syncAllResultArtifacts: "results",
       prepareAgents: "sync", startAllConnections: "sync", pauseAll: "sync", resumeNetwork: "sync", saveTopologyMode: "sync", saveSchedulerConfig: "sync", startAll: "sync", testAll: "sync", snapshot: "gpu",
-      validatePlan: "plans", dryRunPlan: "plans", runPlan: "plans", runAllPlans: "plans", archivePlan: "plans", generateOutputAdapter: "plans",
+      validatePlan: "plans", dryRunPlan: "plans", runPlan: "plans", runAllPlans: "plans", cleanupPlan: "plans", archivePlan: "plans", generateOutputAdapter: "plans",
       stopExperiment: "execution", retryExperiment: "execution", reassignWorkerTask: "execution", archiveArtifacts: "execution", excludeResults: "results",       deleteArtifacts: "execution", clearOperations: "execution", parseResults: "results", refreshResults: "results", checkOutputContract: "results",
       inferConfigFromRun: "results", recoverPlanFromRun: "results", diagnoseResultAnomaly: "results", compareWithBestConfig: "results", inspectDataset: "results", planCheckpointRetention: "results",
       parseCaseLevel: "results", runLeakageCheck: "results", runSubgroupAnalysis: "results", exportCaseAnalysis: "results", runQualityGate: "results", runStatistics: "results", checkClaimEvidence: "results",
@@ -2972,7 +2991,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     });
     const ACTION_RESOURCE_ANCHORS = Object.freeze({
       saveTopologyMode: "settings-servers", saveRemoteRootPolicy: "settings-remote-root-policy", saveSchedulerConfig: "servers-scheduler", startAll: "sync-actions", startAllConnections: "sync-actions", prepareAgents: "sync-actions", testAll: "sync-actions", snapshot: "gpu-summary",
-      validatePlan: "plans-actions", dryRunPlan: "plans-actions", runPlan: "plans-actions", runAllPlans: "plans-actions", archivePlan: "plans-actions", generateOutputAdapter: "plans-detected",
+      validatePlan: "plans-actions", dryRunPlan: "plans-actions", runPlan: "plans-actions", runAllPlans: "plans-actions", cleanupPlan: "plans-actions", archivePlan: "plans-actions", generateOutputAdapter: "plans-detected",
       stopExperiment: "execution", retryExperiment: "execution", reassignWorkerTask: "execution", archiveArtifacts: "execution", excludeResults: "results-traces",       deleteArtifacts: "execution", clearOperations: "execution", parseResults: "results-summary", refreshResults: "results-summary",
       runQualityGate: "results-summary", runStatistics: "results-summary", checkClaimEvidence: "results-summary", exportPaperTable: "results-summary", checkOutputContract: "results-contract", inspectDataset: "results-dataset",
       planCheckpointRetention: "results-checkpoints", inferConfigFromRun: "results-recovery", recoverPlanFromRun: "results-recovery", diagnoseResultAnomaly: "results-anomaly", compareWithBestConfig: "results-anomaly",
@@ -3193,12 +3212,15 @@ export function renderPanelHtml(platform: string = process.platform): string {
     const explicitSavePlanCommands = new Set(["savePlan"]);
     const webviewHandledCommands = new Set([
       "retryDistributedJob",
+      "recallFailedJob",
+      "markJobUnavailable", "restoreJobAvailability",
       "stopAllPlans",
       "stopAndClearPlan", "reloadWindow", "webviewHeartbeatAck", "webviewVisibility",
       "quickSetup", "openSetupGuide", "openAdvancedCommandsSetting", "configureSessions", "configureAgentSessions", "writeAgentCommands", "saveTopologyMode", "saveHubConfig", "saveSchedulerConfig", "saveWorkerConfig", "addWorkerConfig", "deleteWorkerConfig", "reassignWorkerTask", "recallPlanToLocalQueue", "prepareAgents",
       "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure", "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections",
       "test", "testAll", "showRegistry", "restart", "pauseStream", "resumeStream", "pauseAll", "resumeNetwork", "snapshot", "manualGpuSnapshot", "loadGpuHistory", "manualSchedulerSnapshot", "manualTracesSnapshot",
       "selectLogRunKey", "script", "realCheck", "status", "offline", "openPlan", "savePlan", "archivePlan", "archivePlanCopy", "restoreArchivedPlan", "runAllPlans", "generatePlanGuide", "bootstrapProject", "generateOutputAdapter", "saveProjectAdapterRules", "saveResultColumnMapping", "saveRemoteRootPolicy", "checkPluginUpdates", "installPluginUpdates", "saveResultCsvDir", "chooseResultCsvDir", "savePptPlotConfig", "choosePptPath", "chooseNewPptPath", "plotResultsToPpt", "refreshPptAutomation", "startPptAutomation", "openPptAutomationGuide", "clearLegacyTasks", "saveUiLayout", "resetUiLayout",
+      "cleanupPlan",
       "publishGithub", "syncGithub", "overwriteGithub", "uploadProjectToHub", "uploadProjectToWorkers", "distributeCodeToWorkers", "deployLatestAgent", "configureDownloadScope", "configureCodeSyncIncludes", "configureServerSyncScope", "resetRemotePathConfirmations", "downloadDebugBundle", "downloadRemoteResult", "openResultArtifact", "syncAllResultArtifacts", "rebuildProjectResultTables", "syncPendingPlanArtifacts", "refreshLocalResults", "splitProjectResultTable", "openLocalResultTable", "editResultColumnMapping", "openAuditTail", "applyPlanDatasetMapping", "autoMatchPlanDatasets",
       "selectPlan", "selectExperiment",
       "abortScheduler", "clearOperations", "clearCache", "openScalarViewer", "openTensorBoard", "stopTensorBoard", "getTensorBoardStatus", "copyTensorBoardUrl", "openTensorBoardUrl", "showLogHistory", "openFullLog", "copyText", "openLastCheckStaticReport", "copyLastCheckStaticReport", "runCheckStatic", "verifyAgentVersion", "fetchTmuxList", "fetchTmuxCapture", "killTmuxWindow", "clearTmuxTaskTabs",
@@ -5533,7 +5555,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             runKey: gpu.runKey,
             staleFromCache: gpu.staleFromCache,
             mine: isMyGpu(gpu, server.ownerConfig || ownerConfig),
-        processes: asArray(gpu.processes).slice(0, GPU_PROCESS_SIGNATURE_LIMIT).map((proc) => compactRecordForSignature(proc, ["pid", "name", "memoryMb", "user", "command", "pluginManaged"]))
+        processes: asArray(gpu.processes).slice(0, GPU_PROCESS_SIGNATURE_LIMIT).map((proc) => compactRecordForSignature(proc, ["pid", "name", "memoryMb", "user", "command", "pluginManaged", "submittedByThisClient", "submittedJobCommandId"]))
           }))
         }))
       };
@@ -5847,6 +5869,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
       return minutes > 0 ? minutes + " 分 " + rest + " 秒" : seconds + " 秒";
     }
 
+    function commandPhaseSection(item) {
+      if (planPhaseCommand(item.command)) return "plans";
+      return item.actionSection === "results" || commandInspectorSection(item.command) === "results" ? "results" : "execution";
+    }
+
     function renderCommandPhaseLine() {
       const phaseLineText = (item) => {
         if (!item || !item.message) return { shown: "", full: "" };
@@ -5855,17 +5882,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         return { shown, full };
       };
       const pending = Object.values(pendingActionsById || {});
-      const planItem = pending.find((row) => row && planPhaseCommand(row.command) && row.message);
-      const globalItem = pending.find((row) => row && row.message);
-      const planText = phaseLineText(planItem);
-      const globalText = phaseLineText(globalItem);
-      const hosts = [
-        ["commandPhaseLine", globalText],
-        ["planCommandPhaseLine", planText]
-      ];
+      const hosts = [["commandPhaseLine", "execution"], ["planCommandPhaseLine", "plans"], ["resultCommandPhaseLine", "results"]];
       for (const pair of hosts) {
         const host = el(pair[0]);
-        const text = pair[1];
+        const text = phaseLineText(pending.find((row) => row && row.message && commandPhaseSection(row) === pair[1]));
         if (host) {
           host.textContent = text.shown;
           host.title = text.full;
@@ -5889,7 +5909,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function pendingKeyFromButtonDataset(button) {
       const payload = {};
-      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "session", "window"].forEach((key) => {
+      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "attempt", "commandId", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "session", "window"].forEach((key) => {
         if (button.dataset[key]) payload[key] = button.dataset[key];
       });
       if (button.dataset.batchSelected === "true") payload.batchSelected = "true";
@@ -5898,7 +5918,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function pendingKeyForAction(command, payload) {
       const parts = [command];
-      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "batchSelected"].forEach((key) => {
+      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "attempt", "commandId", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "batchSelected"].forEach((key) => {
         const value = payload && payload[key];
         if (value || (key === "jobIndex" && value === 0)) parts.push(key + "=" + String(value));
       });
@@ -6807,6 +6827,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         dryRunPlan: "预演计划",
         runPlan: "校验并提交运行",
         runAllPlans: "运行全部计划",
+        cleanupPlan: "清除 PLAN 及关联产物",
         archivePlan: "归档计划",
         publishGithub: "发布到git并上传worker",
         syncGithub: "同步 GitHub",
@@ -10159,6 +10180,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           totalCount: Number(summary.totalCount),
           taskCount: Number(summary.taskCount),
           failedCount: Number(summary.failedCount),
+          unavailableCount: Number(summary.unavailableCount || 0),
           activeCount: Number(summary.activeCount),
           queuedCount: Number(summary.queuedCount),
           revision: summaryRevision,
@@ -10264,7 +10286,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const failedCount = taskStatuses.filter((status) => taskFailureLikeStatus(status)).length;
       const activeCount = taskStatuses.filter((status) => ["running", "testing", "progress", "in_progress", "operation_started", "started"].includes(status)).length;
       const queuedCount = taskStatuses.filter((status) => ["accepted", "submitted", "queued", "pending"].includes(status)).length;
-      const distributedStatuses = distributedJobs.map((row) => taskStatusToken((row || {}).status));
+      const distributedUnavailable = distributedJobs.filter((row) => row.unavailable && row.status === "cancelled").length;
+      const distributedStatuses = distributedJobs.filter((row) => !(row.unavailable && row.status === "cancelled"))
+        .map((row) => taskStatusToken((row || {}).status));
       const distributedCompleted = distributedStatuses.filter((status) => ["completed", "done", "archived"].includes(status)).length;
       const distributedFailed = distributedStatuses.filter((status) => taskFailureLikeStatus(status)).length;
       const distributedActive = distributedStatuses.filter((status) => ["running", "testing", "progress", "in_progress", "operation_started", "started"].includes(status)).length;
@@ -10292,7 +10316,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       else if (allTasksCompleted) status = "completed";
       else if (countRows.length || runOperations.length) status = "partial";
       const shownCompleted = status === "completed" && !shownCompletedCount && totalCount ? totalCount : shownCompletedCount;
-      return { status, statusLabel: PLAN_SELECTOR_STATUS_LABELS[status], completedCount: shownCompleted, totalCount, taskCount: countRows.length, revision };
+      return { status, statusLabel: PLAN_SELECTOR_STATUS_LABELS[status], completedCount: shownCompleted, unavailableCount: distributedUnavailable, totalCount, taskCount: countRows.length, revision };
     }
     function planSelectorMatchesFilter(summary, filter) {
       if (filter === "all") return true;
@@ -10313,7 +10337,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
     function planSelectorOptionLabel(file, summary, pinned) {
       const count = summary.totalCount > 0 ? " · " + summary.completedCount + "/" + summary.totalCount + " 已完成" : "";
-      return "● " + summary.statusLabel + count + " · " + file + (pinned ? "（当前；不符合筛选）" : "");
+      return "● " + summary.statusLabel + count + (summary.unavailableCount ? " · 不可用 " + summary.unavailableCount : "") + " · " + file + (pinned ? "（当前；不符合筛选）" : "");
     }
     function refreshPlanFileOptions(state) {
       var sel = el("planFileInput");
@@ -10351,7 +10375,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const statusHost = el("planSelectorStatus");
       if (statusHost) {
         statusHost.className = "planSelectorStatus is-" + currentStatus.status;
-        statusHost.innerHTML = "<span>" + esc(currentStatus.statusLabel) + "</span>" + (currentStatus.totalCount > 0 ? "<span>" + esc(currentStatus.completedCount + "/" + currentStatus.totalCount + " 已完成") + "</span>" : "<span>进度待确认</span>") + (currentStatus.revision ? "<span>版本 " + esc(currentStatus.revision) + "</span>" : "");
+        statusHost.innerHTML = "<span>" + esc(currentStatus.statusLabel) + "</span>" + (currentStatus.totalCount > 0 ? "<span>" + esc(currentStatus.completedCount + "/" + currentStatus.totalCount + " 已完成") + "</span>" : "<span>进度待确认</span>") + (currentStatus.unavailableCount ? "<span>不可用 " + esc(currentStatus.unavailableCount) + "</span>" : "") + (currentStatus.revision ? "<span>版本 " + esc(currentStatus.revision) + "</span>" : "");
       }
     }
     function renderPlanSection(state) {
@@ -11156,7 +11180,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
               sc = Math.max(0, Math.min(100, Math.round((100 - mem*0.35 - util*0.25 + 20)*10)/10));
             }
             var srvScore = serverCardScores[srvId];
-            flat.push({ serverId: srvId, displayName: disp, gpu: gpu, key: key, score: sc, serverScore: srvScore, serverObj: srv });
+            flat.push({ serverId: srvId, displayName: disp, gpu: Object.assign({}, gpu, { staleFromCache: !!(gpu.staleFromCache || srv.staleFromCache) }), key: key, score: sc, serverScore: srvScore, serverObj: srv });
           });
         });
         var sorts = gpuDenseState.sorts && gpuDenseState.sorts.length ? gpuDenseState.sorts : GPU_DENSE_DEFAULT_SORTS;
@@ -11200,7 +11224,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           var bg = "transparent";
           var accent = gpuDenseServerAccent(row.serverId);
           var mine = isMyGpu(row.gpu, row.serverObj.ownerConfig || ownerConfig);
-          var rowTone = Number(row.gpu.memoryPercent) >= 90 ? "mem-danger" : mine ? "is-mine" : row.gpu.busy ? "is-occupied" : "is-free";
+          var rowTone = row.gpu.staleFromCache ? "is-stale" : Number(row.gpu.memoryPercent) >= 90 ? "mem-danger" : mine ? "is-mine" : row.gpu.busy ? "is-occupied" : "is-free";
           var colsHtml = visibleCols.map(function(col){
             var cell = "";
             if(col.key==="server"){
@@ -11222,7 +11246,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             else if(col.key==="temp") cell = '<td data-col="temp" style="background:' + bg + ';">' + esc(row.gpu.temperature==="-"? "-": row.gpu.temperature+" C") + '</td>';
             else if(col.key==="proc") cell = '<td data-col="proc" style="background:' + bg + ';">' + esc(String(row.gpu.processCount)) + (Number(row.gpu.processOmittedCount)? ' (+'+esc(String(row.gpu.processOmittedCount))+' 省略)':'' ) + '</td>';
             else if(col.key==="runKey") cell = '<td data-col="runKey" style="background:' + bg + ';">' + esc(row.gpu.runKey||"-") + '</td>';
-            else if(col.key==="status") cell = '<td data-col="status"><span class="gpuDenseStatus ' + rowTone + '">' + esc(row.gpu.busy?"占用":"空闲") + (mine?' · 我的':'') + '</span></td>';
+            else if(col.key==="status") cell = '<td data-col="status"><span class="gpuDenseStatus ' + rowTone + '" title="' + escAttr(row.serverObj.message || "") + '">' + esc(row.gpu.busy?"占用":"空闲") + (mine?' · 我的':'') + (row.gpu.staleFromCache?' · 数据陈旧':'') + (row.serverObj.message?' · 采样失败':'') + '</span></td>';
             else cell = '<td data-col="' + escAttr(col.key) + '" style="background:' + bg + ';">-</td>';
             return cell;
           }).join("");
@@ -11234,12 +11258,18 @@ export function renderPanelHtml(platform: string = process.platform): string {
              bodyHtml += '<tr class="expandRow expandChartRow" data-expand-for="' + escAttr(row.key) + '"><td colspan="' + colspan + '" style="background:' + bg + '; padding:10px;"><div class="expandChartWrap"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;"><b>最近 24 小时（线性时间）</b><span class="muted">服务器 ' + esc(row.serverId) + ' GPU ' + esc(String(row.gpu.index)) + '</span></div><div id="' + escAttr(chartId) + '" class="gpuDenseChartHost" data-server-id="' + escAttr(row.serverId) + '" data-gpu-id="' + escAttr(String(row.gpu.index)) + '"><canvas class="gpuHistoryCanvas" data-chart-kind="gpu" tabindex="0"></canvas><div class="gpuHistoryTooltip" hidden></div></div><div class="muted">GPU 利用率 (%) · 显存已用 (MB)</div></div></td></tr>';
             var procs = row.gpu.processes || [];
             var procRows = procs.length ? procs.map(function(p){
-              return '<tr><td>' + esc(p.pid||"-") + '</td><td>' + esc(p.user||"-") + '</td><td>' + esc(String(p.memoryMb||"-")) + '</td><td>' + esc(row.gpu.runKey||"-") + '</td><td class="cmd" style="white-space:pre-wrap; word-break:break-all;">' + esc(p.command||p.name||"-") + '</td></tr>';
+              return '<tr><td>' + esc(p.pid||"-") + '</td><td>' + esc(p.user||"-") + '</td><td>' + esc(String(p.memoryMb||"-")) + '</td><td>' + esc(p.submittedJobCommandId||"未匹配本机 job") + '</td><td class="cmd" style="white-space:pre-wrap; word-break:break-all;">' + esc(p.command||p.name||"-") + '</td></tr>';
             }).join("") : '<tr><td colspan="5" class="muted">暂无进程</td></tr>';
             bodyHtml += '<tr class="expandRow expandProcRow" data-expand-for="' + escAttr(row.key) + '"><td colspan="' + colspan + '" style="background:' + bg + '; padding:10px;"><div><b>进程列表</b> <span class="muted">PID | 所属用户 | 占用显存 | 关联任务 | 原始指令（换行完整显示不截断）</span></div><table class="processTable"><thead><tr><th>PID</th><th>所属用户</th><th>占用显存</th><th>关联任务</th><th>原始指令</th></tr></thead><tbody>' + procRows + '</tbody></table></div></td></tr>';
           }
         });
-        if(!flat.length){
+        servers.filter(function(srv){ return !srv.gpuRows.length; }).forEach(function(srv){
+          var srvId = String(srv.serverId || srv.workerId || "");
+          var telemetry = asArray(state.workerTelemetryStatus).find(function(item){ return cleanEndpointId(item.workerId) === cleanEndpointId(srvId); });
+          var hint = srv.message ? "GPU 采样失败：" + srv.message : telemetry && telemetry.status === "offline" ? "服务器离线，暂无 GPU 数据" : "暂未收到 GPU 数据";
+          bodyHtml += '<tr class="gpuDenseRow is-unavailable" data-server-id="' + escAttr(srvId) + '"><td>' + esc(gpuServerDisplayName(state, srv)) + '<span class="muted"> (' + esc(srvId) + ')</span></td><td colspan="' + visibleCols.length + '" class="muted">' + esc(hint) + '</td></tr>';
+        });
+        if(!flat.length && !servers.length){
           bodyHtml = '<tr><td colspan="' + (visibleCols.length+1) + '" class="muted">暂无 GPU 行</td></tr>';
         }
          setHtmlPreservingGpuCanvases(bodyEl, bodyHtml);
@@ -12185,7 +12215,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
 
     function isMyGpuProcess(process, config) {
-      return process && process.pluginManaged === true;
+      return process && process.submittedByThisClient === true;
     }
 
     function normalizeGpuOwnerConfig(value) {
@@ -12226,6 +12256,12 @@ export function renderPanelHtml(platform: string = process.platform): string {
         return gpuViewModelCacheValue;
       }
       const incoming = Object.entries(data.gpu || {}).map(([serverId, rows]) => normalizeServerGpu(serverId, rows));
+      // A configured Worker must stay visible before its first snapshot arrives.
+      // Empty rows are an unavailable reading, never an invented free GPU.
+      enabledWorkerTunnelsForState(data).forEach((worker) => {
+        const key = cleanEndpointId(worker.id);
+        if (key && !incoming.some((server) => cleanEndpointId(server.serverId || server.workerId) === key)) incoming.push(normalizeServerGpu(worker.id, []));
+      });
       const ownerConfig = normalizeGpuOwnerConfig(data.gpuOwnerConfig || {});
       const servers = sortGpuServers(data, mergeGpuServers(incoming, data));
       servers.forEach((server) => { server.ownerConfig = gpuOwnerConfigForServer(server, ownerConfig, setupSource); });
@@ -12263,7 +12299,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           lastGpuServersById[key] = next;
           merged.push(next);
         } else if (cached && cached.gpuRows && cached.gpuRows.length) {
-          merged.push(Object.assign({}, cached, { status: "stale", staleFromCache: true }));
+          merged.push(Object.assign({}, cached, { status: "stale", staleFromCache: true, message: server.message || "" }));
         } else {
           lastGpuServersById[key] = Object.assign({}, server, { uiReceivedAt: now, uiReceivedMs: nowMs, staleFromCache: false });
           merged.push(lastGpuServersById[key]);
@@ -14290,14 +14326,28 @@ export function renderPanelHtml(platform: string = process.platform): string {
       return "处理中";
     }
 
+    function executionOperationWorkflowId(row) {
+      return String(row.workflowId || row.payload?.workflowId || row.latestEvent?.payload?.workflowId || "");
+    }
+
     function executionNewerSubmission(group) {
       const enqueuedAt = Date.parse(group.distributedEnqueuedAt || "") || 0;
-      const live = (group.operations || []).filter((row) => operationIsActive(row.status));
-      const newer = live.filter((row) => {
-        const started = Date.parse(row.startedAt || row.updatedAt || "");
-        return !Number.isFinite(started) || started > enqueuedAt;
+      const submissionStamp = (row) => row.enqueuedAt || row.createdAt || row.startedAt || "";
+      const live = (group.operations || []).filter((row) => {
+        if (!operationIsActive(row.status)) return false;
+        const action = String(row.type || row.action || "").toLowerCase();
+        // Result collection, failed-attempt quarantine and other background work do not create jobs.
+        if (row.localSubmissionProgress !== true && !["validate-plan", "dry-run-plan", "run-plan", "reproduce-plan", "workflow-run"].includes(action)) return false;
+        const workflowId = executionOperationWorkflowId(row);
+        // A restored operation can start after Agent restart while its durable jobs already exist.
+        return !workflowId || workflowId !== String(group.distributedPlanId || "");
       });
-      return newer.sort((a, b) => String(b.startedAt || b.updatedAt || "").localeCompare(String(a.startedAt || a.updatedAt || "")))[0] || null;
+      const newer = live.filter((row) => {
+        const started = Date.parse(submissionStamp(row));
+        // Progress timestamps are mutable and cannot identify a newer submission generation.
+        return Number.isFinite(started) ? started > enqueuedAt : !group.distributedPlanId;
+      });
+      return newer.sort((a, b) => String(submissionStamp(b)).localeCompare(String(submissionStamp(a))))[0] || null;
     }
 
     function executionDeferredView(status) {
@@ -14361,6 +14411,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         group.localDispatchOverride = plan.localDispatchOverride === true;
         group.distributedPlanId = String(plan.id || "");
         group.remoteAcceptedJobCount = Number(plan.remoteAcceptedJobCount || 0);
+        group.failedAttemptRecoveries = asArray(plan.failedAttemptRecoveries);
         jobs.forEach((job) => group.distributedJobs.push({ ...job, enqueuedAt: plan.enqueuedAt, planId: plan.id }));
       });
       (Array.isArray(state && state.deferredPlans) ? state.deferredPlans : []).forEach((plan) => {
@@ -14419,9 +14470,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const label = group.planFile ? planBaseName(group.planFile) : "未关联 Plan 的操作";
         const totalJobs = Math.max(currentJobs.length, !submission && !deferredCurrent ? recovery.expectedJobCount : 0) || (!submission && !deferredCurrent ? group.tasks.length : 0);
         const failedJobs = currentJobs.filter((job) => String(job.status || "") === "failed").length;
-        const cancelledJobs = currentJobs.filter((job) => String(job.status || "") === "cancelled").length;
+        const unavailableJobs = currentJobs.filter((job) => job.unavailable && job.status === "cancelled").length;
+        const cancelledJobs = currentJobs.filter((job) => String(job.status || "") === "cancelled" && !job.unavailable).length;
         const successRate = totalJobs ? Math.round(completed * 100 / totalJobs) : 0;
-        const statusText = submission ? executionSubmissionLabel(submission) : deferredView ? deferredView.statusText : unknown || recovery.unresolved ? "待核实" : tone === "blocked" ? "阻塞" : tone === "queued" ? "排队" : running ? "运行中" : dispatching ? "派发中" : tone === "failed" ? "失败" : cancelledJobs === totalJobs && totalJobs ? "已中止" : cancelledJobs ? "已结束" : currentJobs.length ? "已完成" : "已结束";
+        const statusText = submission ? executionSubmissionLabel(submission) : deferredView ? deferredView.statusText : unknown || recovery.unresolved ? "待核实" : tone === "blocked" ? "阻塞" : tone === "queued" ? "排队" : running ? "运行中" : dispatching ? "派发中" : tone === "failed" ? "失败" : unavailableJobs ? "已结束（含不可用 job）" : cancelledJobs === totalJobs && totalJobs ? "已中止" : cancelledJobs ? "已结束" : currentJobs.length ? "已完成" : "已结束";
         let countText = submission ? (statusText + " · 待生成 job") : deferredView ? deferredView.countText : totalJobs
           ? ("成功 " + completed + "/" + totalJobs + " · " + successRate + "%" + (running ? " · 运行 " + running : "") + (queued ? " · 排队 " + queued : "") + (blockedCount ? " · 阻塞 " + blockedCount : "") + (failedJobs ? " · 失败 " + failedJobs : "") + (recovery.missingCount ? " · 待核实 " + recovery.missingCount : "") + (recovery.conflict ? " · 服务器状态冲突" : ""))
           : ("操作 " + group.operations.length);
@@ -14431,6 +14483,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             ? " · 已托管，可关机" : " · 尚未完整确认托管";
         }
         if (dispatching) countText += " · 派发 " + dispatching;
+        if (unavailableJobs) countText += " · 不可用 " + unavailableJobs;
         if (unknown > recovery.missingCount) countText += " · 待核实 " + unknown;
         // Submission identity is immutable; progress/status timestamps must never reorder cards.
         const submitted = submission ? submission.enqueuedAt || submission.createdAt || submission.startedAt
@@ -14440,7 +14493,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const taskStamps = group.tasks.map((row) => Date.parse(row.enqueuedAt || row.createdAt || row.startedAt || "")).filter(Number.isFinite);
         const stamp = Date.parse(submitted || "") || (operationStamps.length ? Math.max(...operationStamps)
           : taskStamps.length ? Math.min(...taskStamps) : Number.MAX_SAFE_INTEGER);
-        return { ...group, currentJobs, tone, active, distributedActive, blockedOnly, blockedCount, queued, completed, running, submitting: !!submission, waitingSubmission, deferredCurrent, statusText, countText, failedJobs, label, stamp };
+        return { ...group, currentJobs, tone, active, distributedActive, blockedOnly, blockedCount, queued, completed, running, submitting: !!submission, waitingSubmission, deferredCurrent, statusText, countText, failedJobs, unavailableJobs, label, stamp };
       });
       items.sort((a, b) => a.stamp - b.stamp || a.key.localeCompare(b.key));
       if (selectedExecutionPlanFile && !items.some((item) => item.planFile && samePlanSelection(item.planFile, selectedExecutionPlanFile))) {
@@ -14482,9 +14535,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const retryView = automaticJobRetryView(job);
           const blocked = status === "pending" && fingerprintBlocked(job);
           const jobActive = ["pending", "dispatching", "queued", "running", "unknown"].includes(status) && !blocked;
-          const statusLabel = blocked ? (String(job.blockReason || "").indexOf("等待当前代码版本") === 0 ? "等待代码版本" : "代码版本不匹配") : retryView.label || ({ pending: "本机等待空卡", queued: "服务器排队", dispatching: "派发中", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已中止", unknown: "待核实" }[status] || status);
-          const placement = job.workerId ? job.workerId + (job.gpuId == null || job.gpuId === "" ? "" : " · GPU " + job.gpuId) : "未派发";
-          const canJumpLog = Boolean(job.workerId && (job.commandId || job.outputDir));
+          const unavailable = job.unavailable && status === "cancelled";
+          const preflightRejected = Boolean(job.admissionRejection && status === "failed");
+          const statusLabel = unavailable ? "不可用" : blocked ? (String(job.blockReason || "").indexOf("等待当前代码版本") === 0 ? "等待代码版本" : "代码版本不匹配") : retryView.label || ({ pending: "本机等待空卡", queued: "服务器排队", dispatching: "派发中", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已中止", unknown: "待核实" }[status] || status);
+          const placement = job.workerId ? job.workerId + (preflightRejected ? " · 未启动" : job.gpuId == null || job.gpuId === "" ? "" : " · GPU " + job.gpuId) : "未派发";
+          const canJumpLog = Boolean(!preflightRejected && job.workerId && (job.commandId || job.outputDir));
           const logButton = '<button type="button" class="mini secondary" data-job-tmux-log="1" data-worker-id="' + escAttr(job.workerId || "") + '" data-command-id="' + escAttr(job.commandId || "") + '" data-output-dir="' + escAttr(job.outputDir || "") + '"' + (canJumpLog ? '' : ' disabled') + ' title="' + (canJumpLog ? '在 TMUX 区域选中该 Worker 的真实任务窗口标签' : '等待任务派发后定位对应的 TMUX 日志标签') + '">跳转到日志</button>';
           const errorText = String(job.artifactError || job.error || "").trim();
           const trainingRecoveryButton = status === "failed" && errorText.indexOf("Validation-only tuning cannot access test patients") >= 0
@@ -14493,15 +14548,30 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const recallButton = status === "queued" || job.recallRequested === true
             ? '<button type="button" class="mini secondary" data-command="recallPlanToLocalQueue" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" title="只召回此排队 job；运行中、已结束或状态不明的任务保持原 Worker。">' + (job.recallRequested ? "重试召回" : "召回到本机") + '</button>' : "";
           const recallNote = job.recallRequested ? "召回待确认，仍固定在原 Worker" : "";
+          const failedRecallButton = status === "failed" && job.workerId && job.commandId && job.attempt
+            ? '<button type="button" class="mini secondary" data-command="recallFailedJob" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-attempt="' + escAttr(String(job.attempt)) + '" data-command-id="' + escAttr(job.commandId) + '" title="只为此失败 job 新建 attempt，放回本机分布式队列；原 Worker 恢复后核验并移走旧目录。">召回本机重跑</button>' : "";
+          const failedCleanup = asArray(group.failedAttemptRecoveries).filter(row => Number(row.jobIndex) === Number(job.index)).at(-1);
+          const canMarkUnavailable = !job.unavailable && !job.recoveryConflict && !group.distributedRecovery?.conflict
+            && (["failed", "cancelled"].includes(status) || status === "pending" && !job.workerId && !job.commandId);
+          const availabilityButton = unavailable || canMarkUnavailable
+            ? '<button type="button" class="mini secondary" data-command="' + (unavailable ? 'restoreJobAvailability' : 'markJobUnavailable') + '" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-attempt="' + escAttr(String(job.attempt)) + '" data-command-id="' + escAttr(job.commandId || "") + '">' + (unavailable ? '撤销不可用' : '标记不可用') + '</button>' : "";
+          const failedCleanupNote = failedCleanup ? (failedCleanup.status === "completed"
+            ? failedCleanup.alreadyAbsent ? "旧失败 attempt 已核验不存在，无需移动。" : "旧失败 attempt 已移入原 Worker 的 clean_dir。"
+            : (failedCleanup.status === "blocked" ? "旧 attempt 已保留。" : "原 Worker 恢复后自动核验并移走旧失败 attempt。") + (failedCleanup.error ? " " + failedCleanup.error : "")) : "";
           const blockText = blocked ? String(job.blockReason || "") : "";
           const blockAdvice = blocked ? (blockText.indexOf("等待当前代码版本") === 0 ? "这个已提交 job 保留排队；其他 Worker 可运行匹配版本。被占用的 Worker 收到旧任务结束回执后自动释放版本锁，无需再次提交。" : "下一步：空闲 GPU 不能运行这份旧代码。到实验准备的 Plan 列表手动选中，再点“校验并提交运行”；或恢复提交前的代码并重新同步 Worker。") : "";
-          const jobNext = codeProofBlocked
+          const jobNext = preflightRejected
+            ? '<div class="muted">启动前预检已拒绝此 job，训练未开始，不会自动重派。请核对上面的输出与结果路径；保留已有权重和结果，显式处理冲突或修改正式 job 声明后再提交。</div>'
+            : codeProofBlocked
             ? '<div class="muted">启动前代码校验阻塞，训练尚未开始。部署并重启该 Worker 的 Agent 后刷新状态；原 job 保留排队，无需重新提交 Plan。校验仍未通过时，请核对 Worker 的对应代码版本。</div><button type="button" class="mini secondary" data-command="snapshot">刷新状态</button>'
-            : errorText && !retryView.note
+            : failedRecallButton ? '<div class="muted">可召回这个失败 job 到本机排队重跑，其他 job 保持原状态。原 Worker 恢复后自动核验并将旧 attempt 移入 clean_dir。</div>'
+            : errorText && !retryView.note && !unavailable
             ? '<div class="muted">下一步：点本行“跳转到日志”查看对应 TMUX 任务窗口。这是已提交 job 的失败，不会自动清理。确认需要停止后，再点本 Plan 的“终止并清除该 Plan”（两次确认）。</div><span class="errorRowLinks" style="display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="mini secondary" data-section-target="execution" data-anchor-target="execution-operations" title="跳到运行进度，查看本 Plan 的状态">运行进度</button><button type="button" class="mini secondary" data-command="snapshot" title="重新拉取调度状态与操作记录">刷新状态</button></span>'
             : "";
-          return '<div class="executionDistributedJob' + (blocked ? " is-blocked" : "") + '" title="' + escAttr(job.outputDir || "") + '"><span>' + loadingPrefix(jobActive) + esc(job.case || "job " + job.index) + ' seed ' + esc(String(job.seed)) + '</span><span class="' + (blocked ? "status-warning" : statusClass(status)) + '">' + esc(statusLabel) + '</span><span>' + esc(blocked ? "阻塞" : placement) + '</span>' + recallButton + logButton + trainingRecoveryButton
+          return '<div class="executionDistributedJob' + (blocked ? " is-blocked" : "") + '" title="' + escAttr(job.outputDir || "") + '"><span>' + loadingPrefix(jobActive) + esc(job.case || "job " + job.index) + ' seed ' + esc(String(job.seed)) + '</span><span class="' + (blocked || unavailable ? "status-warning" : statusClass(status)) + '">' + esc(statusLabel) + '</span><span>' + esc(blocked ? "阻塞" : placement) + '</span>' + recallButton + failedRecallButton + availabilityButton + logButton + trainingRecoveryButton
+            + (unavailable ? '<div class="muted">不可用原因：' + esc(job.unavailable.reason) + ' · ' + esc(job.unavailable.markedAt) + '</div>' : '')
             + (recallNote ? '<div class="muted">' + esc(recallNote) + '</div>' : '')
+            + (failedCleanupNote ? '<div class="muted">' + esc(failedCleanupNote) + '</div>' : '')
             + (retryView.note ? '<div class="muted">' + esc(retryView.note) + '</div>' : '')
             + (blockText ? '<div class="executionDistributedJobError">' + esc(blockText) + (blockAdvice ? '<div>下一步：' + esc(blockAdvice.replace(/^下一步：/, "")) + '</div>' : '') + '</div>' : '')
             + (errorText ? '<div class="executionDistributedJobError">' + esc(errorText) + jobNext + '</div>' : '') + '</div>';
@@ -14550,7 +14620,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const foldRow = (group) => {
         const totalJobs = (group.currentJobs || []).length;
         const statusText = group.statusText;
-        const count = totalJobs ? ("成功 " + group.completed + "/" + totalJobs + (group.failedJobs ? " · 失败 " + group.failedJobs : "")) : group.countText;
+        const count = totalJobs ? ("成功 " + group.completed + "/" + totalJobs + (group.failedJobs ? " · 失败 " + group.failedJobs : "") + (group.unavailableJobs ? " · 不可用 " + group.unavailableJobs : "")) : group.countText;
         const foldRaw = stopClearForPlan(group.planFile);
         const foldClear = foldRaw && !stopClearNewerThan(group, foldRaw) && String(foldRaw.outcome || "") !== "completed" ? foldRaw : null;
         const foldOutcome = String(foldClear && foldClear.outcome || "");
@@ -14683,6 +14753,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           createdAt: row.createdAt,
           finishedAt: row.finishedAt,
           localSubmissionProgress: row.localSubmissionProgress,
+          workflowId: executionOperationWorkflowId(row),
           error: row.error,
           message: active ? "" : row.message,
           reconcileEvidenceActive: row.reconcileEvidenceActive,
@@ -14700,13 +14771,16 @@ export function renderPanelHtml(platform: string = process.platform): string {
           schedulingMode: plan.schedulingMode,
           localDispatchOverride: plan.localDispatchOverride,
           remoteAcceptedJobCount: plan.remoteAcceptedJobCount,
+          failedAttemptRecoveries: plan.failedAttemptRecoveries,
           jobs: asArray(plan.jobs).map((job) => ({
             jobIndex: job.jobIndex,
+            attempt: job.attempt,
             status: job.status,
             workerId: job.workerId,
             gpuId: job.gpuId,
             commandId: job.commandId,
             blockReason: job.blockReason,
+            admissionRejection: job.admissionRejection,
             outputDir: job.outputDir,
             logPath: job.logPath,
             outputRetiredAt: job.outputRetiredAt,
@@ -16020,7 +16094,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const legacyHtml = legacyTables.length ? '<details class="resultSpecialGroup" data-details-key="result-legacy-tables"' + detailsOpenAttr("result-legacy-tables", false) + '><summary>旧版结果结构（' + legacyTables.length + '）</summary><div class="resultSpecialBody"><div class="muted">旧结构只读保留；重新汇总后会生成按数据集组织的结果。</div>' + legacyTables.map(row => '<div class="resultTableName" title="' + escAttr(row.path || "") + '">' + esc(resultCatalogBasename(row.path)) + '</div>').join("") + '</div></details>' : "";
       const advancedHtml = sharedHtml || legacyHtml ? '<details class="resultSpecialGroup resultAdvancedSources" id="result-advanced-sources" data-details-key="result-advanced-sources"' + detailsOpenAttr("result-advanced-sources", false) + '><summary>高级来源</summary><div class="resultSpecialBody">' + sharedHtml + legacyHtml + '</div></details>' : "";
       const optionsHtml = (items, chosen) => items.map(item => '<option value="' + escAttr(item) + '"' + (item === chosen ? ' selected' : '') + '>' + esc(item) + '</option>').join("");
-      return '<div class="resultFinalCard resultTableBrowser"><div class="resultFinalHeader"><div><h3>结果总表</h3><p>按数据集组织结果。</p></div><div class="resultTopActions"><button type="button" class="secondary" data-command="refreshLocalResults" title="重新读取本机结果，并用已收录指标修复缺失或陈旧的 CSV/Markdown；不连接服务器、不下载。">刷新本地结果</button><button type="button" data-command="syncPendingPlanArtifacts" title="从任务所属服务器下载最新完整运行的指标，在本机更新总表；权重和日志保留在服务器。">同步服务器结果并更新总表</button><button type="button" class="secondary" data-command="rebuildProjectResultTables" title="下载已完成运行的指标并重新汇总；权重、检查点和日志保留在服务器。">下载指标并重新汇总</button></div></div>' +
+      return '<div class="resultFinalCard resultTableBrowser"><div class="resultFinalHeader"><div><h3>结果总表</h3><p>按数据集组织结果。</p></div><div class="resultTopActions"><button type="button" class="secondary" data-command="refreshLocalResults" data-action-section="results" title="重新读取本机结果，并用已收录指标修复缺失或陈旧的 CSV/Markdown；不连接服务器、不下载。">刷新本地结果</button><button type="button" data-command="syncPendingPlanArtifacts" data-action-section="results" title="从任务所属服务器下载最新完整运行的指标，在本机更新总表；权重和日志保留在服务器。">同步服务器结果并更新总表</button><button type="button" class="secondary" data-command="rebuildProjectResultTables" data-action-section="results" title="下载已完成运行的指标并重新汇总；权重、检查点和日志保留在服务器。">下载指标并重新汇总</button></div></div>' +
         reportHtml +
         catalogStatusHtml +
         (catalog.error ? '<div class="muted">结果目录需要检查：' + esc(catalog.error) + '</div>' : view.datasets.length ? '<section class="resultDatasetList"><h4 class="resultDatasetSectionTitle">数据集结果</h4>' + datasetsHtml + '</section>' : catalogLoadStatus === "ready" ? '<div class="muted">尚无总表。点击“同步服务器结果并更新总表”合并 Worker 结果、下载指标并生成总表。</div>' : '') +
@@ -16743,6 +16817,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         dryRunPlan: "预演计划",
         runPlan: "校验并提交运行",
         runAllPlans: "运行全部计划",
+        cleanupPlan: "清除 PLAN 及关联产物",
         archivePlan: "归档计划",
         restoreArchivedPlan: "恢复归档 Plan",
         reproducePlan: "复现实验",
@@ -17379,6 +17454,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (!payload.planFile && command === "archivePlan" && el("planFileInput")) payload.planFile = el("planFileInput").value;
       if (button.dataset.planId) payload.planId = button.dataset.planId;
       if (button.dataset.jobIndex !== undefined) payload.jobIndex = Number(button.dataset.jobIndex);
+      if (["recallFailedJob", "markJobUnavailable", "restoreJobAvailability"].includes(command)) {
+        payload.attempt = Number(button.dataset.attempt);
+        payload.commandId = button.dataset.commandId || "";
+      }
       if (button.dataset.file) {
         payload.file = button.dataset.file;
         payload.planFile = payload.planFile || button.dataset.file;
@@ -18187,6 +18266,7 @@ function projectSectionNextAction(status, label, section, anchor) {
         workerId: pick(rows, ["workerId", "worker_id", "worker"], serverId),
         gpuRows,
         status: String(pick(rows, ["status", "state"], gpuRows.length ? "online" : "stale")).toLowerCase(),
+        message: String(pick(rows, ["message", "error", "lastError"], "") || ""),
         updatedAt: pick(rows, ["updatedAt", "updated_at", "generatedAt", "generated_at", "timestamp"], "-"),
         source: pick(rows, ["source", "telemetrySource", "telemetry_source"], "-")
       };
@@ -18277,7 +18357,9 @@ function projectSectionNextAction(status, label, section, anchor) {
         memoryMb: pick(proc, ["usedMemoryMb", "used_memory_mb", "memoryMb", "memory"], "-"),
         user: pick(proc, ["username", "user", "owner"], "-"),
         command: pick(proc, ["command", "cmd", "commandLine", "cmdline", "args"], "-"),
-        pluginManaged: proc.pluginManaged === true
+        pluginManaged: proc.pluginManaged === true,
+        submittedByThisClient: proc.submittedByThisClient === true,
+        submittedJobCommandId: proc.submittedJobCommandId || ""
       }));
     }
     function normalizeSchedulerRows(rows) {
@@ -18635,6 +18717,12 @@ function projectSectionNextAction(status, label, section, anchor) {
           status: pick(row, ["status", "state"], pick(payload, ["status", "state"], operationStatusFromType(type))),
           planFile: pick(row, ["planFile", "plan_file", "plan"], pick(payload, ["planFile", "plan_file", "plan"], pick(options, ["planFile", "plan_file", "plan", "selectedPlanId"], ""))),
           planRevision: pick(row, ["planRevision", "plan_revision"], pick(payload, ["planRevision", "plan_revision"], pick(options, ["planRevision", "plan_revision"], ""))),
+          workflowId: executionOperationWorkflowId(row),
+          startedAt: pick(row, ["startedAt", "started_at"], pick(payload, ["startedAt", "started_at"], "")),
+          createdAt: pick(row, ["createdAt", "created_at"], pick(payload, ["createdAt", "created_at"], "")),
+          enqueuedAt: pick(row, ["enqueuedAt", "enqueued_at"], pick(payload, ["enqueuedAt", "enqueued_at"], "")),
+          finishedAt: pick(row, ["finishedAt", "finished_at"], pick(payload, ["finishedAt", "finished_at"], "")),
+          localSubmissionProgress: row.localSubmissionProgress === true,
           debugMode: pick(row, ["debugMode", "debug_mode"], pick(payload, ["debugMode", "debug_mode"], pick(options, ["debugMode", "debug_mode"], false))) === true,
           debugRunId: pick(row, ["debugRunId", "debug_run_id"], pick(payload, ["debugRunId", "debug_run_id"], "")),
           debugOutputDir: pick(row, ["debugOutputDir", "debug_output_dir"], pick(payload, ["debugOutputDir", "debug_output_dir"], "")),

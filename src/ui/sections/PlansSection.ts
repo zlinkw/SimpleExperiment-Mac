@@ -39,6 +39,7 @@ export class PlansSection implements Section {
           <button data-command="dryRunPlan" class="secondary">预演</button>
           <button data-command="runPlan" data-confirm="true">校验并提交运行</button>
           <button data-command="runAllPlans" data-confirm="true" class="secondary">运行全部计划</button>
+          <button data-command="cleanupPlan" class="secondary">清除 PLAN 及关联产物</button>
         </div>
         <div id="recentPlans" data-anchor="plans-list"></div>
         <div id="draftPlans" data-anchor="draft-list"></div>

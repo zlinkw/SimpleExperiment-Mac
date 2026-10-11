@@ -241,6 +241,8 @@ export function generateMissingOnlyRerunPlan(cells: CompletenessCell[], options:
   const yaml = [
     `suite: ${JSON.stringify(suite)}`,
     "mode: train_test",
+    "runner:",
+    "  result_path_policy: declared",
     "base_config: configs/base.yaml",
     `parent_plan_id: ${JSON.stringify(options.sourcePlanId || "")}`,
     `parent_study_id: ${JSON.stringify(options.sourceStudyId || "")}`,
@@ -249,7 +251,6 @@ export function generateMissingOnlyRerunPlan(cells: CompletenessCell[], options:
       `  - name: ${JSON.stringify(`rerun_${index}_${Object.values(cell.key).join("_")}`)}`,
       "    overrides:",
       ...Object.entries(cell.key).map(([key, value]) => `      ${key}: ${JSON.stringify(String(value))}`),
-      `      attempt_id: ${JSON.stringify(options.generateNewAttemptId ? `rerun-${Date.now()}-${index}` : "")}`,
     ].join("\n")),
   ].join("\n") + "\n";
   const record = importLegacyPlanYamlToRegistry(`simple_cluster/plans/generated/${suite}.yaml`, yaml);
