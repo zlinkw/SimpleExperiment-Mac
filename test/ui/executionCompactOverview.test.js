@@ -16,8 +16,48 @@ function executionPlanSource() {
   const helpers = panel.indexOf("function renderPlanTaskCards(");
   const end = panel.indexOf("function renderOperationSectionIfChanged(", helpers);
   assert.ok(helpers > 0 && end > helpers);
-  return panel.slice(helpers, end).replaceAll("\\\\", "\\");
+  const asArray = panel.slice(panel.indexOf("function asArray(")).split("\n")[0];
+  return asArray + "\n" + panel.slice(helpers, end).replaceAll("\\\\", "\\");
 }
+
+test("failed job recall is compact, scoped to the exact attempt, and redraws remote cleanup receipts", () => {
+  const sandbox = clickSandbox();
+  const state = { distributedPlans: [{ id: "failed-run", planFile: "plans/cpsc.yaml", failedAttemptRecoveries: [],
+    jobs: ["failed", "running", "completed"].map((status, index) => ({ index, case: "case" + index, seed: 42,
+      status, workerId: "worker-a", commandId: "command-" + index, attempt: 1, outputDir: "work_dirs/a/attempts/old" })) }] };
+  sandbox.render(state);
+  assert.equal((sandbox.html.match(/data-command="recallFailedJob"/g) || []).length, 1);
+  assert.match(sandbox.html, /data-command="recallFailedJob"[^>]*data-plan-id="failed-run"[^>]*data-job-index="0"[^>]*data-attempt="1"[^>]*data-command-id="command-0"/);
+  const oldKey = sandbox.executionRenderKeysForState(state).planList;
+  const updated = structuredClone(state);
+  updated.distributedPlans[0].failedAttemptRecoveries = [{ jobIndex: 0, attempt: 1, status: "pending" }];
+  updated.distributedPlans[0].jobs[0].attempt = 2;
+  updated.distributedPlans[0].jobs[0].status = "pending";
+  assert.notEqual(sandbox.executionRenderKeysForState(updated).planList, oldKey);
+  sandbox.render(updated); assert.match(sandbox.html, /原 Worker 恢复后自动核验并移走旧失败 attempt/);
+  const final = structuredClone(updated);
+  final.distributedPlans[0].failedAttemptRecoveries[0].status = "completed";
+  sandbox.render(final); assert.match(sandbox.html, /旧失败 attempt 已移入原 Worker 的 clean_dir/);
+  const absent = structuredClone(final);
+  absent.distributedPlans[0].failedAttemptRecoveries[0].alreadyAbsent = true;
+  sandbox.render(absent); assert.match(sandbox.html, /已核验不存在，无需移动/);
+});
+
+test("formal preflight rejection explains that training never started and disables nonexistent TMUX logs", () => {
+  const sandbox = clickSandbox();
+  const state = { distributedPlans: [{ id: "formal-run", planFile: "plans/formal.yaml", jobs: [{ index: 0,
+    case: "formal", seed: 42, status: "failed", workerId: "worker-a", commandId: "rejected-command", attempt: 0,
+    outputDir: "work_dirs/formal", error: "FORMAL_JOB_CONFLICT: work_dirs/formal",
+    admissionRejection: { code: "FORMAL_JOB_CONFLICT", message: "conflict", rejectedAt: "2026-10-12T00:00:00Z" } }] }] };
+  sandbox.render(state);
+  assert.match(sandbox.html, /启动前预检已拒绝此 job，训练未开始，不会自动重派/);
+  assert.match(sandbox.html, /worker-a · 未启动/);
+  assert.match(sandbox.html, /data-job-tmux-log="1"[^>]* disabled/);
+  assert.doesNotMatch(sandbox.html, /这是已提交 job 的失败|data-command="recallFailedJob"/);
+  const updated = structuredClone(state);
+  updated.distributedPlans[0].jobs[0].admissionRejection.code = "FORMAL_JOB_DECLARATION_CHANGED";
+  assert.notEqual(sandbox.executionRenderKeysForState(updated).planList, sandbox.executionRenderKeysForState(state).planList);
+});
 
 test("completed Plan history keeps explicit expansion across status refreshes, count changes and recreation", () => {
   const sandbox = clickSandbox({ detailsOpenState: {}, persistTransientPanelState: () => {} });
@@ -446,6 +486,99 @@ test("newer active preflight replaces an older completed run until the new run e
   assert.match(sandbox.html, /成功 0\/1 · 0% · 排队 1/);
   assert.match(sandbox.html, /edge seed 3/);
   assert.doesNotMatch(sandbox.html, /bus seed 1|校验中/);
+});
+
+test("background attempt recovery and result operations never hide restored Plan jobs", () => {
+  const plan = { id: "distributed-plan-1791608959184-9rrh9s",
+    planFile: "experiments/plans/comparison_tuning/qmf.yaml", enqueuedAt: "2026-10-10T05:09:19.203Z",
+    jobs: Array.from({ length: 18 }, (_, index) => ({ index, case: "qmf_pad_ufes_20_c00", seed: 42 + index,
+      status: index < 15 ? "completed" : "running", workerId: "nwpu2", commandId: "job-" + index })) };
+  const operation = { planFile: plan.planFile, status: "running", startedAt: "2026-10-10T09:35:16Z",
+    payload: { workflowId: plan.id } };
+  const sandbox = clickSandbox({ operationRowsForState: () => [operation] });
+  for (const type of ["archive-worker-artifacts", "parse-results", "download-results", "recover-training-completion",
+    "stop-worker-task", "refresh-state"]) {
+    operation.type = type;
+    // Repeated progress/restart snapshots must keep the real job list visible immediately.
+    for (let refresh = 0; refresh < 3; refresh++) {
+      operation.updatedAt = "2026-10-10T09:36:0" + refresh + "Z";
+      sandbox.render({ distributedPlans: [plan] });
+      assert.match(sandbox.html, /成功 15\/18 · 83% · 运行 3/, type);
+      assert.match(sandbox.html, /qmf_pad_ufes_20_c00 seed 42/, type);
+      assert.doesNotMatch(sandbox.html, /待生成 job|当前还没有新 job/, type);
+    }
+  }
+});
+
+test("restored execution identity and progress timestamps cannot masquerade as a new submission", () => {
+  const plan = { id: "current-run", planFile: "plans/live.yaml", enqueuedAt: "2026-10-10T05:09:19Z",
+    jobs: [{ index: 0, case: "live", seed: 42, status: "unknown" }] };
+  const operation = { planFile: plan.planFile, type: "run-plan", status: "running",
+    startedAt: "2026-10-10T09:35:16Z", payload: { workflowId: plan.id } };
+  const sandbox = clickSandbox({ operationRowsForState: () => [operation] });
+  const beforeIdentity = structuredClone(operation);
+  delete operation.payload;
+  const unboundKey = sandbox.executionRenderKeysForState({ distributedPlans: [plan] }).planList;
+  operation.payload = beforeIdentity.payload;
+  const boundKey = sandbox.executionRenderKeysForState({ distributedPlans: [plan] }).planList;
+  assert.notEqual(boundKey, unboundKey, "late workflow evidence must redraw immediately without a job status change");
+  sandbox.render({ distributedPlans: [plan] });
+  assert.match(sandbox.html, /live seed 42/);
+  assert.match(sandbox.html, /待核实/);
+  assert.doesNotMatch(sandbox.html, /待生成 job/);
+  delete operation.payload;
+  delete operation.startedAt;
+  operation.updatedAt = "2026-10-10T09:35:16Z";
+  sandbox.render({ distributedPlans: [plan] });
+  assert.match(sandbox.html, /live seed 42/, "missing submission time cannot displace known durable jobs");
+  assert.doesNotMatch(sandbox.html, /待生成 job/);
+  operation.createdAt = "2026-10-10T05:09:13Z";
+  sandbox.render({ distributedPlans: [plan] });
+  assert.match(sandbox.html, /live seed 42/);
+  assert.doesNotMatch(sandbox.html, /待生成 job/);
+  operation.createdAt = "2026-10-10T10:00:00Z";
+  sandbox.render({ distributedPlans: [plan] });
+  assert.match(sandbox.html, /提交中 · 待生成 job/, "a genuinely newer submission still has its own stage");
+  assert.doesNotMatch(sandbox.html, /live seed 42/);
+});
+
+test("production operation projection and normalization retain submission identity before Plan rendering", () => {
+  const ts = require("typescript");
+  const projected = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(readSource("src/ui/OperationPayload.ts"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText, projected);
+  const sandbox = clickSandbox({ resolveWorkerId: String, operationStatusFromType: () => "running",
+    normalizeUnparseableDetails: () => [], outputContractMissingLabel: String, operationSearchText: () => "" });
+  vm.runInContext(extract("operationPayload", "normalizeFileTransferRows") + extract("pick", "formatDuration")
+    + extract("normalizeOperationRows", "normalizeUnparseableDetails")
+    + "\noperationRowsForState = (state) => normalizeOperationRows(state.operations);", sandbox);
+  const plan = { id: "current-run", planFile: "plans/live.yaml", enqueuedAt: "2026-10-10T05:09:19Z",
+    jobs: [{ index: 0, case: "live", seed: 42, status: "running" }] };
+  const row = { operationId: "operation", planFile: plan.planFile, type: "run-plan", status: "running",
+    events: Array.from({ length: 100 }, (_, seq) => ({ seq, message: "large".repeat(5000) })),
+    payload: { log: "tail".repeat(5000), workflowId: plan.id },
+    startedAt: "2026-10-10T09:35:16Z", updatedAt: "2026-10-10T09:36:00Z" };
+  const render = () => sandbox.render({ distributedPlans: [plan],
+    operations: projected.exports.compactOperationsForWebview({ operation: { ...row } }) });
+  render();
+  assert.match(sandbox.html, /live seed 42/, "restored workflow survives large optional diagnostics");
+  assert.doesNotMatch(sandbox.html, /待生成 job/);
+  delete row.payload;
+  row.type = "validate-plan";
+  render();
+  assert.match(sandbox.html, /校验中 · 待生成 job/, "a real new preflight retains its immutable start time");
+  row.startedAt = "2026-10-10T05:09:13Z";
+  render();
+  assert.match(sandbox.html, /live seed 42/);
+  assert.doesNotMatch(sandbox.html, /待生成 job/);
+  row.startedAt = "2026-10-10T10:00:00Z";
+  row.type = "run-plan";
+  row.localSubmissionProgress = true;
+  row.status = "queued";
+  sandbox.operationIsActive = (status) => status === "running" || status === "queued";
+  render();
+  assert.match(sandbox.html, /等待继续提交 · 待生成 job/, "local submission metadata survives normalization");
 });
 
 test("deferred status stays distinct and is not hidden by an older distributed run", () => {

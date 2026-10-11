@@ -96,3 +96,30 @@ test('legacy jobs match exact argv values, accepting quoted paths but rejecting 
   p.command = fixture().gpu.w[0].processes[0].command + ' --seed 43';
   assert.equal(project(f).w[0].processes[0].submittedByThisClient, false);
 });
+
+test('Host projection, payload compaction and Webview normalization preserve job ownership before command truncation', () => {
+  const { readSource } = require('../_helpers/sourceReader');
+  const extension = readSource('src/extension.ts');
+  const ast = ts.createSourceFile('extension.ts', extension, ts.ScriptTarget.Latest, true);
+  const names = ['compactMergedGpuForWebview','compactGpuForWebview','compactGpuRowForWebview', 'compactGpuProcessesForWebview',
+    'gpuProcessEntries','compactGpuProcessForWebview','firstStringFieldForWebview','firstNumberFieldForWebview'];
+  const code = names.map(name => ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(ast)).join('\n');
+  const context = vm.createContext({ GpuJobOwnership: ownership, mergedGpuForWebviewCache: null, EMPTY_GPU_FOR_WEBVIEW_SOURCE: {},
+    WEBVIEW_GPU_PROCESS_LIMIT: 10, WEBVIEW_GPU_PROCESS_COMMAND_LIMIT: 20, objectRecord: x => x && typeof x === 'object' ? x : undefined,
+    compactSensitiveText: (x, n) => String(x).slice(0,n), dropUndefined: x => x, mergeFallbackRecords: (...x) => Object.assign({}, ...x) });
+  vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context);
+  const f = fixture();
+  const index = ownership.submittedGpuJobs(f.queue, [f.snapshot], projectId, {}, now);
+  const value = context.compactMergedGpuForWebview(null, null, f.gpu, null, index);
+  assert.equal(value.w[0].processes[0].command.length, 20);
+  assert.equal(value.w[0].processes[0].submittedByThisClient, true);
+  assert.equal(context.compactMergedGpuForWebview(null, null, f.gpu, null, index), value);
+  assert.equal(context.compactMergedGpuForWebview(null, null, f.gpu, null, new Map()).w[0].processes[0].submittedByThisClient, false);
+  const panel = readSource('src/ui/PanelHtml.ts');
+  const match = panel.match(/function normalizeGpuProcesses\(value\) \{([\s\S]*?)\n    \}/);
+  assert.ok(match);
+  const ui = vm.createContext({ asArray: x => Array.isArray(x) ? x : [], pick: (x, keys, fallback) => keys.map(k => x[k]).find(v => v !== undefined) ?? fallback });
+  vm.runInContext(match[0], ui);
+  assert.equal(ui.normalizeGpuProcesses(value.w[0].processes)[0].submittedByThisClient, true);
+  assert.equal(ui.normalizeGpuProcesses(value.w[3].processes)[0].submittedByThisClient, false);
+});

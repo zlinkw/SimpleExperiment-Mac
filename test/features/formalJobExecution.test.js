@@ -39,6 +39,16 @@ test('arbitrary recorded CLI commands cannot bypass formal PLAN admission in a r
     name: 'fixture', command: ['must-never-start'] }), /FORMAL_PLAN_REQUIRED/);
 });
 
+test('formal output review never offers the legacy new-attempt or overwrite rerun choices', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../../dist/extension/legacy.js'), 'utf8');
+  const start = source.indexOf('    async confirmPlanExistingOutputsFromValidation(');
+  const end = source.indexOf('    async confirmPlanRunSubmission(', start);
+  const owner = Function('vscode', 'return {'+source.slice(start,end)+'}')({window:{showWarningMessage(){throw Error('legacy dialog opened');}}});
+  await assert.rejects(owner.confirmPlanExistingOutputsFromValidation({}, {}, {result_path_policy:'declared', existing:[{output_dir:'work_dirs/formal/case/seed42'}]}), /FORMAL_JOB_CONFLICT.*[\s\S]*work_dirs\/formal\/case\/seed42/);
+  await assert.rejects(owner.confirmPlanExistingOutputsFromValidation({}, {overwrite:true}, {result_path_policy:'declared', existing:[]}), /FORMAL_JOB_CONFLICT/);
+  await owner.confirmPlanExistingOutputsFromValidation({}, {}, {result_path_policy:'declared', existing:[]});
+});
+
 test('formal three-seed queue persists stable paths, requires new Worker protocol and rejects duplicate writers', () => {
   const queue = Queue.enqueuePlan(Queue.emptyDistributedQueue(), plan(), 'workflow-formal');
   assert.equal(queue.plans[0].resultPathPolicy, 'declared');
