@@ -16,7 +16,11 @@
 - 范围：持久面板恢复、GPU快照与本机派发归属、失败召回/明确不可用、结果进度与正式路径/内存汇总、PLAN清理审核及配套受限接口、启动前拒绝回执。8b4aed70用户隔离和GPU窗口已同步，核对保留；不复制Windows发布/安装/入口默认值。
 - 分批：061队列与GPU/召回基础；062实时快照；063清理协调基础；064配套清理接口；065清理宿主/API；066正式runtime；067结果契约；068面板集成；069完整回归/发布。每批至多8文件，必要时细分；不执行真实传输/清理/Agent更新或任务操作。原目标18已验证11剩余，整体paused，仅执行本次授权。
 
-## 当前批次 mac-sync-063（passed，受限PLAN清理协调基础）
+## 当前批次 mac-sync-064（passed，配套受限文件生命周期接口）
+- 063提交2961599已同步。8文件边界：SF extension/api-server/cleanup-file-api/cleanup-files/package/verify-runtime/cleanup测试，加本计划。三方合并保留Mac认证/租约/持久恢复；新增包依赖闭包，VSCE纯元数据枚举上限30秒，Python及测试上限不变。Mac缺可靠句柄证明返回HANDLE_CHECK_UNAVAILABLE，不放行清理。
+- SF build/28闭包及清理18通过；初次VM未注入Mac路径依赖失败，修正为真实workspace-path消费者后通过，未修改生产路径规则。永久删除全模拟，实际移动仅测试新建夹具；未触碰真实目标，原目标18/11。
+
+## 已完成批次 mac-sync-063
 - 062提交913a794已同步。8文件边界：PlanCleanup/PlanCleanupEvidence/PlanArtifactSync/PlanOutputRetention/SimpleSftpProgressWait、清理与重连两测试、本计划。只移植审核/回执/所有权和隔离规则；精确目标、祖先Git、根/父目录/类型/双确认保护保留。Mac文件句柄无法证明时必须阻断，不声称Mac真实清理通过。
 - build/面板2/vm、协调22及重连6通过。初次全文件包含尚未引入的宿主/UI/API依赖而失败，现拆为基础范围；原完整用例保留参考快照，065补回4+3例并完整验证。非清理真实目标，仅临时夹具与模拟执行端；原目标仍18/11。
 
