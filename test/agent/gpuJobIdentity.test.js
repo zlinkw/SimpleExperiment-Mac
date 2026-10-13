@@ -10,13 +10,16 @@ test('GPU telemetry reads job identity and both tmux launch paths forward it wit
   const scope = fs.realpathSync(fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'simpleex-gpu-identity-')));
   const script = path.join(scope, 'fixture.py');
   const runtime = path.resolve(__dirname, '../../dist/runtime/cluster_agent.py');
-  fs.writeFileSync(script, String.raw`import ast, io, os, csv, shlex, subprocess, types, time, builtins
+  fs.writeFileSync(script, String.raw`import ast, io, os, csv, shlex, subprocess, types, time, builtins, json
 from unittest.mock import patch
 with open(${JSON.stringify(runtime)}, encoding='utf-8') as f:
     tree = ast.parse(f.read())
-names = {'collect_local_gpu', 'start_job_in_gpu_pane', 'start_simple_tmux_command'}
+names = {'collect_local_gpu', 'start_job_in_gpu_pane', 'start_simple_tmux_command', 'job_shell_environment_prefix', 'tmux_task_client_env'}
 selected = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
-assert len(selected) == 3
+assert len(selected) == 5
+fields = [n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'JOB_SHELL_ENV_FIELDS' for t in n.targets)]
+assert len(fields) == 1
+selected = fields + selected
 exec(compile(ast.Module(body=selected, type_ignores=[]), 'extracted-functions', 'exec'))
 SYSTEM_GPU_PROCESSES = set()
 now_iso = lambda: '2026-10-10T00:00:00Z'
@@ -38,6 +41,8 @@ assert 'SECRET' not in process and 'value' not in str(process)
 calls, lines = [], []
 def tmux_run(args, **kwargs):
     calls.append(args)
+    assert 'AGENT_API_TOKEN' not in kwargs.get('env', {})
+    assert 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID' not in kwargs.get('env', {})
     return types.SimpleNamespace(returncode=0, stdout='%42', stderr='')
 write_atomic_text = lambda *args: None
 simple_conda_env_name = lambda env: ''
@@ -50,15 +55,20 @@ _send_tmux_line = lambda session, line, *args, **kwargs: lines.append(line) or 0
 _wait_tmux_ready = lambda *args, **kwargs: True
 _truncate_text = lambda text, count: text[:count]
 env = {'SIMPLE_EXPERIMENT_MANAGED_JOB': '1', 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID': 'issued-command', 'SIMPLE_EXPERIMENT_JOB_PROJECT_ID': 'local-project'}
+env['SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY'] = json.dumps({'workflowId': 'workflow', 'commandId': 'issued-command', 'globalJobId': 'workflow:0', 'planRevision': 'revision', 'codeFingerprint': 'code'})
+env['AGENT_API_TOKEN'] = 'must-not-forward'
 with patch.object(subprocess, 'run', tmux_run), patch.object(os, 'makedirs'), patch.object(os.path, 'isdir', return_value=True), patch.object(time, 'sleep', return_value=None):
     assert start_job_in_gpu_pane('gpu-0', ['python', 'custom.py'], '/server/zlk/project', env, 'task.log', 'task.exit') == '%42'
     cmd = next(args[-1] for args in calls if args[:2] == ['tmux', 'new-window'])
-    assert 'export SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command;' in cmd
-    assert 'export SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project;' in cmd
+    assert 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command' in shlex.split(cmd)
+    assert 'SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project' in shlex.split(cmd)
+    assert 'must-not-forward' not in cmd
     tmux_session_alive = lambda *args: False
     start_simple_tmux_command('simple-sch-test', ['python', 'custom.py'], '/server/zlk/project', '', env)
-    assert 'export SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command' in lines
-    assert 'export SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project' in lines
+    command = lines[-1]
+    assert 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command' in shlex.split(command)
+    assert 'SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project' in shlex.split(command)
+    assert 'must-not-forward' not in command
 print('verified GPU job identity and tmux environment forwarding')
 `, 'utf8');
   try {

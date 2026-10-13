@@ -85,6 +85,10 @@
 - 7文件边界：SF package/lock，Exp package/lock/runtime/prepare及本计划；版本0.5.314/0.2.101，两仓源码普通同步后再完整prepare与真实包消费者/匿名下载发布。保留原127目标并加入本轮全部适用新回归；20秒测试/10秒Python/8秒Exp元数据枚举上限不放大，不省略失败门禁。原目标18/11。
 - 版本批次build/面板2/vm、runtime版本1/发布脚本4/manifest1及实际234模块闭包通过（已读取最终exit0）；SF build28闭包/排空2/正式owner4通过，版本提交3c58e082adeaafcce923a8f5a4d74ea39d770390已普通同步并fetch一致。074f3历史失败保留，此次实际闭包已重新通过；完整prepare/包消费者/发布仍待执行，不计真机证据。Exp版本提交以本节对应Git提交为准。
 
+### 074k旧GPU身份回归夹具（passed）
+- 2文件边界：gpuJobIdentity与本计划。完整prepare执行至101个测试记录后遇旧夹具缺job_shell_environment_prefix依赖的NameError，exit1，保留日志，尚未生成版本目录或发布。仅更新AST隔离依赖/正式身份及新命令级env断言，保留遥测脱敏/双启动路径/10秒/Python临时脚本精确归档；不改生产或超时。验证后普通同步新提交再完整prepare，原目标18/11。
+- build/面板2/vm和完整GPU身份文件1通过；tmux客户端不传任务控制或token，两种启动命令只携带本job身份，保留原遥测脱敏。版本提交4fbea69普通同步，发布最终绑定本修正批次对应Git提交；原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。
