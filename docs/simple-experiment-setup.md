@@ -355,6 +355,10 @@ Agent 持久队列的 Plan/outputDir 身份、接收回执、旧队列派发及 
 
 ## 正式任务、结果与PLAN审核
 
+新增操作和参考提交见[2026-10-13功能说明](windows-sync-2026-10-13.md)。新runtime需空闲后由用户主动更新并检测；旧Worker缺正式身份环境、无attempt停止或shell预检能力时拒绝操作，现有实验继续。失败job“重新排队此 job”遇占用输出会引导“审核遗留文件”，只读预览精确原job；审核执行和返回卡片重排分别确认，成功同伴和PLAN保持原状。
+
+整个正式Plan成功后，声明产物经SimpleSFTP在启用Worker间自动镜像；身份/路径/owner/SHA冻结，冲突和离线保留未完成项。结果解析、汇总与发布仍手动，原始文件不因此下载到本机。可通过live API的`tasks.preflight`、`tasks.preflight.status`、`tasks.preflight.cancel`检查原失败job，`environmentOnly: true`仅验证配置shell；先读discovery和capabilities，不使用诊断代替真实运行。
+
 | 页面入口 | Mac操作与结果 |
 | --- | --- |
 | GPU区 | 按服务器及GPU编号查看固定容器内任务标签。当前用户须与设置前缀及完整本机派发/Worker回执匹配；其他用户/未知负载继续显示，不靠SSH用户名推断 |

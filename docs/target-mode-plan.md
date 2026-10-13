@@ -77,6 +77,10 @@
 - 6文件边界：PrequeueRecall/PrequeueRecallLifecycle/DistributedQueueStartup/DistributedRerunAndWorkerDelta/PlanArtifactSyncStatus测试、本计划；验证正式无attempt身份，历史只读及镜像机器状态排除。先审核Python仅函数提取、10秒、无永久删除，再逐文件串行；原目标18/11。
 - 召回1/生命周期5/启动20/历史与差量8/镜像状态8通过；差量断言改用Mac原有命令命名空间，不改传输逻辑。无新超时/真实传输；原目标18/11。
 
+### 074i集中使用说明（passed）
+- 5文件边界：README/Mac配置说明/9+2提交功能矩阵/SF readme/本计划；一次性记录正式预检、停止/审核、全Plan成功的Worker镜像及可取消更新/未知回执恢复，区分手动本机汇总和自动Worker镜像，明确旧版首次升级顺序与Mac清理阻断。UTF8/配置入口/固定29条18/11/diff后分别普通同步；原目标18/11。
+- 配置入口1、UTF8五文件及固定29条18/11/diff通过；仅文档，不宣称新版已发布或真机通过。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。
