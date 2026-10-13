@@ -33,6 +33,9 @@ function main() {
   // Frozen Windows feature synchronization gates, serial and bounded like the native gates.
   for (const file of ["test/agent/failedAttemptQuarantine.test.js","test/agent/gpuJobIdentity.test.js","test/features/distributedSchedulingModes.test.js","test/features/failedJobRecovery.test.js","test/features/formalJobExecution.test.js","test/features/gpuSubmittedJobOwnership.test.js","test/features/idleGpuDispatchLifecycle.integration.test.js","test/features/jobUnavailable.test.js","test/features/mergedGpuWebviewCache.test.js","test/features/panelOvernightRecovery.test.js","test/features/panelStateProjection.test.js","test/features/planCleanup.test.js","test/features/planCleanupPanelBridge.test.js","test/features/planCleanupReconnect.test.js","test/features/planOutputRetention.test.js","test/features/planResultPathContract.test.js","test/features/planRunFreshness.test.js","test/features/preflightDispatchRejection.test.js","test/features/vsixRuntimeClosure.test.js","test/tunnel/gpuWorkerSnapshotRecovery.test.js","test/ui/executionCompactOverview.test.js","test/ui/extensionStatePost.test.js","test/ui/gpuMissingServerRows.test.js","test/ui/gpuOwnerMatching.test.js","test/ui/jobTmuxLogNavigation.test.js","test/ui/jobUnavailable.test.js","test/ui/resultCommandPhaseRouting.test.js","test/scripts/runtimeVersionHeader.test.js"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", file], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/cleanupFiles.test.js"], SFTP_ROOT, { inherit: true, timeout: 20000 });
+  // Additional frozen Windows 7bb96599 / SFTP ed75a5d regressions.
+  for (const file of ["test/features/macFormalIdentity.test.js","test/features/formalIdentityTmux.test.js","test/features/executionShellEnvironment.test.js","test/features/executionShellPreflight.test.js","test/features/formalJobPreflightProgress.test.js","test/features/failedJobCleanup.test.js","test/features/completedPlanWorkerMirror.test.js","test/features/formalJobPreflightApi.test.js","test/features/formalJobStop.test.js","test/features/formalJobRejectedRecovery.test.js","test/features/formalJobPreflightFailure.test.js","test/features/manualOnlyResultSync.test.js","test/features/distributedQueueStartup.test.js","test/features/distributedRerunAndWorkerDelta.test.js","test/features/planArtifactSyncStatus.test.js","test/features/prequeueRecallLifecycle.test.js","test/agent/prequeueRecall.test.js"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", file], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  for (const file of ["test/formalJobCleanupOwner.test.js", "test/pairedUpdateDrain.test.js"]) run(process.execPath, ["--test", "--test-force-exit", "--test-timeout", "20000", file], SFTP_ROOT, { inherit: true, timeout: 20000 });
   npm(["run", "verify:package-runtime"], EXPERIMENT_ROOT);
   run(process.execPath, ["-e", "new (require('vm').Script)(require('fs').readFileSync('dist/ui/PanelHtml.js','utf8'))"], EXPERIMENT_ROOT);
   const tag = `preview-v${packages[1].version}`, directory = path.join(EXPERIMENT_ROOT, "release-artifacts", tag);
@@ -57,21 +60,23 @@ function main() {
   const notes = `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-参考Windows从Mac分叉基线8934ed8b之后至42902a5a的17个提交，以及SimpleSFTP至acae730的对应改动，集中同步功能页和方法。保留Mac独立身份、静态preview更新、Termius手动端点、POSIX路径、认证、中转与共享租约。对应入口和提交矩阵见仓库docs/windows-sync-2026-10-12.md。
-GPU快照支持初始化/重连恢复与最后有效采样，当前用户任务只认本机派发身份及新鲜完整Worker回执，不按登录名或Plan名认领。保留按GPU编号的固定容器与内部任务标签；旧窗口不迁移、不自动关闭。
-执行与结果区同步长期面板恢复、失败召回、明确不可用、新鲜度和实际收集阶段。新正式任务使用Plan声明的稳定目录/CSV，不新建attempt，不直接覆盖；旧attempt历史只读、draft真实执行明确拒绝。所有格式结果只读入内存，保存摘要/来源大小和SHA，不新建原始下载副本，保留已有文件。
-持久启动前拒绝回执按精确身份显示failed/neverStarted，丢即时回执后可由Worker快照恢复；未启动任务不显示tmux日志操作。新派发要求Worker declaredJobPaths能力，不会偷偷绕过旧Agent。
-Plan区“清除 PLAN 及关联产物”同步独立审核、完整路径/所有权/Git祖先预检、阶段进度、离线未完成节点与手动重新预览。macOS可靠打开句柄证明尚缺，实际清理报HANDLE_CHECK_UNAVAILABLE并阻断，永久删除两次确认及物理直接父目录保护不放宽。
+参考Windows42902a5a至7bb96599的9次提交及SFTP acae730至ed75a5d的2次提交，采用正式任务身份/精确停止、进度与真实shell预检、人工拒绝恢复、失败job审核、全部正式Plan成功后的Worker镜像及更新等待优化。提交/操作矩阵见docs/windows-sync-2026-10-13.md。保留Mac独立身份/preview静态索引/Termius手动端点/POSIX/认证/本机中转/共享租约/GPU内部标签，未复制Windows发布或自动部署。
+正式任务身份通过独立shell传递，清除继承的其他job环境与Agent token；停止只针对原command绑定Pane，不关闭共享GPU容器。正式控制无需attempt；历史attempt只读，现有任务不迁移。Worker缺匹配正式身份/停止/环境预检能力时明确拒绝新控制。
+启动前预检只按真实资产进度延长等待，重复阶段心跳/停滞/计数倒退/坏JSON/取消都拒绝并保留neverStarted回执。预检和执行使用同一配置shell/解释器，缺环境先失败。tasks.preflight、tasks.preflight.status、tasks.preflight.cancel仅诊断原失败job，不训练或改队列；environmentOnly只检查原环境，调用前须读discovery和live capabilities。
+失败卡片“重新排队此 job”遇占用输出可进入“审核遗留文件”。只读预览冻结workflow/index/command，只处理独占正式目录和声明CSV，经完整终态owner及SHA核验。归档batch纳入不可变摘要/精确确认，CSV先于owner目录；成功同伴、PLAN和共享引用保留。全部节点完成后仍需返回原卡片人工确认重排，不自动清理或重跑。
+全部正式Plan成功后通过SimpleSFTP在启用Worker间镜像其声明权重、日志、配置和CSV，冻结原run身份、路径、owner/hash，持久回执合并、重连只补缺项。失败/运行中/取消/不可用/恢复不完整/历史attempt不触发；活动writer、清理hold、来源身份或目标内容冲突均阻止覆盖。本机解析、汇总、归档及论文发布继续手动，原始指标不自动下载到本机。
+更新门禁保留已有传输续租/验主，可取消更新等待且原传输继续。未知安装回执即使首项无完成记录也保持业务封锁；原批次/清单冻结，重载后仅提示用户点击补装，不自动安装。未完成入场ticket和存活/无法证明退出的持有者都要等待；协议要求SFTP Mac至少0.2.101。
+macOS仍缺可靠打开句柄证明，实际清理报HANDLE_CHECK_UNAVAILABLE并阻断。永久删除两次完整路径确认、物理直接父目录与最短子项执行器不放宽。
 
 本地验证
-两仓build、234/28模块依赖闭包、生成面板脚本与vm门禁、原Mac回归以及本轮Windows功能同步回归，全部逐文件串行20秒，Python只隔离函数10秒。正式目录/CSV、内存结果、精确GPU归属、持久拒绝及清理审核均覆盖；旧fixture按正式协议修正，不恢复已退休自动attempt。实际VSIX和源码快照另行核验。没有运行完整Agent/科研实验，没有连接服务器、传输真实文件、执行真实清理、部署Agent或安装开发机扩展。
+全部构建与验证在本机完成：两仓build、生成面板脚本及vm、234/28运行模块闭包，旧门禁保留并加入本轮回归，逐文件串行20秒，Python函数隔离10秒。真实专属WSL tmux/Git Bash/std库环境探针只处理新建夹具，没有科研训练；所有服务器API/传输/清理动作均替身。历史旧GPU生成脚本10秒终止及8秒闭包枚举失败回执保留，修正固定AST夹具/路径/更新hook后必须以本版完整门禁验证，不把旧失败写成通过。实际VSIX消费者及源码快照另行核验。
 
 M5 真机验证
-用户2026-10-11报告仍为.309/.97，部分最小启动、更新入口/失败恢复、Termius端点、密码传输、中文空格%20及共享写入保护取得证据；本轮新增页面/正式执行/结果/清理审核尚待真机。在线安装/重载/补装、完整密钥与ssh-agent、断连中转及三拓扑科研仍未验。原方案18已验证、11/29剩余，整体保持paused，不以本地模拟代替M5。
+用户现有报告仍为.309/.97，已证明部分最小启动、更新检查恢复、隧道、密码传输、中文空格%20及共享写入保护。本轮新增正式执行/预检/停止、完成Worker镜像、失败审核和更新恢复仍待M5；没有连接生产服务器、启停现有任务、部署Agent、真实传输/清理、开发机安装或Actions。固定原目标29条，18已验证11剩余，整体paused。
 
-首次安装与更新
-先SimpleSFTP Mac 0.2.100，再SimpleExperiment Mac 0.5.313并重载。以后点击底部Mac preview状态栏，或⇧⌘P“检查 preview 配套更新”，或面板“设置 → 插件配套更新 → 检查更新”，发现新版点击“更新并重载”。旧版若仍受更新租约阻塞，等本地传输完成后下载本Release两份VSIX依次手动安装，无需删锁。
-插件更新不会升级远端Agent。已有任务照常运行；任务空闲后用户主动“准备项目与 Agent”核对并确认上传，再在Termius手动处理Agent并点击检测。不要为验证新版中断现有实验。本次发布零远端任务操作、零开发机安装、零Actions。
+安装与更新
+从同一Release先安装SimpleSFTP Mac 0.2.101，再安装SimpleExperiment Mac 0.5.314并重载；首次过渡先等待本地传输完成，旧锁阻断时无需删锁，直接依次安装两份VSIX。以后点击底部Mac preview状态栏，或⇧⌘P“检查 preview 配套更新”，或面板“设置 → 插件配套更新 → 检查更新”；发现新版点击更新并重载，未完成时点击“安装 preview 配套更新”补原批次。
+插件更新不会部署远端Agent。任务空闲后用户主动通过“准备项目与 Agent”核对/确认上传，再在Termius手动处理并检测；不要为验证新runtime中断现有实验。
 
 源码提交
 SimpleSFTP-Mac ${commits[0]}
