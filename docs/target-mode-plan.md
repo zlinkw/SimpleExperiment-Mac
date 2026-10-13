@@ -21,6 +21,10 @@
 - 7文件边界：Exp ResourceOperationLease/UpdateGate/Bootstrap/macUpdateGate测试，SF资源租约/pairedUpdateDrain测试及本计划；仅Mac更新门禁可允许已有操作继续验主/心跳，新操作仍阻断，普通旧锁/未知所有权继续拒绝。更新前要求SF≥0.2.101协议；旧版首次需等本地传输完成后手动安装配套包。
 - build/234与SF28闭包/面板2/vm、更新门禁2/共享Mac租约3/Bootstrap4/SF排空2通过。缺semver类型声明首次构建失败，改为仓库既有require方式复验；不加依赖、不放宽验主。SF租约批次普通同步，原目标18/11。
 
+### 074b正式runtime/队列（passed）
+- 8文件边界：Agent/Scheduler/队列，Mac隔离身份测试与夹具、真实专属tmux身份测试与夹具、本计划。三方冲突保留Mac路径精确比较/物理日志路径，正式身份不经共享tmux环境串扰；不读取科研项目或重启Agent。仅新建隔离WSL tmux服务器，结束只关闭该专属服务器，保留全部文件；原目标18/11。
+- build/面板2/vm、隔离身份1/真实专属tmux并发2/Mac GPU标签5通过。首次真实tmux夹具遗漏probe脚本导致断言失败（非子进程超时），改为在专属临时根生成同一隔离writer probe后通过，未改生产逻辑；未来宿主完整协议回归留集成批次。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。

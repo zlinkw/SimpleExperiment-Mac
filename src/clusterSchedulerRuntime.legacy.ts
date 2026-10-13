@@ -41,6 +41,8 @@ SCHEDULER_VERSION = "0.4.64"
 RUNTIME_VERSION = "0.4.64"
 PLUGIN_VERSION = "0.4.64"
 FORMAL_JOB_PATH_PROTOCOL = 1
+FORMAL_JOB_IDENTITY_ENV_PROTOCOL = 1
+EXECUTION_SHELL_PREFLIGHT_PROTOCOL = 1
 
 TAIL_BYTES = 16 * 1024
 WORKER_AVAILABILITY_REFRESH_TIMEOUT_SECONDS = 5.0
@@ -1330,7 +1332,7 @@ def bind_execution_result_paths(job: Job, output_override: str = "") -> Job:
                    config=config, template_values=values, outputs=outputs)
 
 
-def result_path_preflight(root: Path, jobs: list[Job], include_attempt: bool = True, execution_mode: str = "") -> dict[str, Any]:
+def result_path_preflight(root: Path, jobs: list[Job], include_attempt: bool = True, execution_mode: str = "", validate_indices=None) -> dict[str, Any]:
     """Read-only project hook; no preview namespace or output creation."""
     metadata_path = root / "experiments/simple_project.yaml"
     metadata = load_yaml_file(metadata_path) if metadata_path.is_file() else {}
@@ -1347,13 +1349,24 @@ def result_path_preflight(root: Path, jobs: list[Job], include_attempt: bool = T
         validator = namespace.get("validate_result_paths")
         if not callable(validator):
             raise ValueError("RESULT_PATH_VALIDATOR_INVALID: " + hook_path + " requires validate_result_paths(config, contract)")
-    rows, seen = [], set()
+    rows, seen, seen_outputs = [], set(), set()
     for job in jobs:
         candidates = [job]
         for candidate in candidates:
             contract = candidate.config.get("runtime", {}).get("result_path_contract", {})
             error = ""
             try:
+                if contract.get("schemaVersion") != 1 or contract.get("policy") != "declared":
+                    raise ValueError("formal result path contract schema/policy invalid")
+                output = safe_project_relative_path(root, candidate.output_dir, "runtime.output_dir")
+                result = safe_project_relative_path(root, candidate.result_csv, "paper.result_csv")
+                if any(contract.get(key) != output for key in ("declared_output_dir", "execution_output_dir")) or any(
+                        contract.get(key) != result for key in ("declared_result_csv", "execution_result_csv", "collection_result_csv")):
+                    raise ValueError("declared/execution/collection result path binding changed")
+                for section, key, target in (("runtime", "output_dir", output), ("runtime", "result_csv", result),
+                                              ("test", "results_csv", result), ("paper", "result_csv", result)):
+                    if (root / candidate.working_directory / str(candidate.config.get(section, {}).get(key) or "")).resolve() != (root / target).resolve():
+                        raise ValueError(section + "." + key + " disagrees with declared binding")
                 if candidate.test_command and (execution_mode or candidate.template_values.get("execution_mode")) in ("test", "train_test"):
                     arguments = argparse.Namespace(worker_id="preflight", gpu_ids="", mode="test", debug_mode=False,
                                                   plan=str(candidate.template_values.get("plan_file") or ""))
@@ -1367,18 +1380,34 @@ def result_path_preflight(root: Path, jobs: list[Job], include_attempt: bool = T
                             value = tokens[position + 1] if position + 1 < len(tokens) else ""
                         if not value or (root / candidate.working_directory / value).resolve() != (root / candidate.result_csv).resolve():
                             raise ValueError("runner.test_command result CSV disagrees with execution binding; use {result_csv}")
-                if validator and validator(copy.deepcopy(candidate.config), {**contract, "project_root": str(root)}) is False:
-                    raise ValueError("project validator refused the execution path")
                 key = os.path.normcase(str((root / candidate.result_csv).resolve()))
                 if key in seen:
                     raise ValueError("multiple jobs share one execution CSV")
                 seen.add(key)
+                output_key = os.path.normcase(str((root / candidate.output_dir).resolve()))
+                if output_key in seen_outputs:
+                    raise ValueError("multiple jobs share one formal output directory")
+                seen_outputs.add(output_key)
             except Exception as exc:
                 error = ("RESULT_PATH_INCOMPATIBLE: " + hook_path + ": " + str(exc)
                          + "; declared=" + str(contract.get("declared_result_csv"))
                          + "; execution=" + candidate.result_csv
                          + "; check runner.result_path_policy / project validate_result_paths")
-            rows.append({"index": job.index, "ok": not error, "contract": contract, "error": error, "projectInterface": hook_path})
+            rows.append({"index": job.index, "ok": not error, "contract": contract, "error": error, "projectInterface": hook_path,
+                         "assetValidation": "not_selected" if validate_indices is not None and job.index not in validate_indices else "pending"})
+    # Full-PLAN structural rejection comes before expensive project callbacks.
+    if not any(row["error"] for row in rows):
+        for job, row in zip(jobs, rows):
+            if row["assetValidation"] == "not_selected":
+                continue
+            try:
+                if validator and validator(copy.deepcopy(job.config), {**row["contract"], "project_root": str(root)}) is False:
+                    raise ValueError("project validator refused the execution path")
+                row["assetValidation"] = "checked" if validator else "not_configured"
+            except Exception as exc:
+                row.update({"ok": False, "error": "RESULT_PATH_INCOMPATIBLE: " + hook_path + ": " + str(exc)
+                            + "; declared=" + str(row["contract"].get("declared_result_csv")) + "; execution=" + job.result_csv
+                            + "; check runner.result_path_policy / project validate_result_paths"})
     missing = [row["error"] for row in rows if not row["ok"]]
     return {"ok": not missing, "rows": rows, "missing": missing}
 
@@ -1716,16 +1745,18 @@ def simple_conda_activation_script(env: dict[str, str] | None = None) -> str:
     return (
         'export SIMPLE_EXPERIMENT_CONDA_ENV=' + shlex.quote(str(raw_env_name)) + '; '
         'if [ -n "$SIMPLE_EXPERIMENT_CONDA_ENV" ]; then '
+        '__simple_conda_env_dir="$SIMPLE_EXPERIMENT_CONDA_ENV"; case "$__simple_conda_env_dir" in */bin/python) __simple_conda_env_dir="$(dirname "$(dirname "$__simple_conda_env_dir")")";; esac; '
+        'if [ -x "$__simple_conda_env_dir/bin/python" ]; then export PATH="$__simple_conda_env_dir/bin:$PATH"; else '
         '__conda_root="$(conda info --base 2>/dev/null)"; '
         '__conda_sh=""; '
         'if [ -n "$CONDA_PREFIX" ] && [ -f "$CONDA_PREFIX/etc/profile.d/conda.sh" ]; then __conda_sh="$CONDA_PREFIX/etc/profile.d/conda.sh"; '
         'elif [ -n "$__conda_root" ] && [ -f "$__conda_root/etc/profile.d/conda.sh" ]; then __conda_sh="$__conda_root/etc/profile.d/conda.sh"; '
-        'elif [ -n "$CONDA_EXE" ]; then __conda_sh="$(dirname $CONDA_EXE)/../etc/profile.d/conda.sh"; fi; '
+        'elif [ -n "$CONDA_EXE" ]; then __conda_sh="$(dirname "$CONDA_EXE")/../etc/profile.d/conda.sh"; fi; '
         'if [ -n "$__conda_sh" ] && [ -f "$__conda_sh" ]; then . "$__conda_sh"; fi; '
         '_c_ok=0; for _i in 1 2 3 4 5; do '
         'if conda activate "$SIMPLE_EXPERIMENT_CONDA_ENV" 2>/dev/null; then _c_ok=1; break; fi; '
         'echo "[simple-agent] conda activate attempt $_i failed for $SIMPLE_EXPERIMENT_CONDA_ENV"; conda env list 2>&1 | head -20; sleep 1; done; '
-        'if [ "$_c_ok" != "1" ]; then echo "[simple-agent] conda activate $SIMPLE_EXPERIMENT_CONDA_ENV failed PATH=$PATH CONDA_EXE=$CONDA_EXE"; conda activate "$SIMPLE_EXPERIMENT_CONDA_ENV"; exit 127; fi; fi'
+        'if [ "$_c_ok" != "1" ]; then echo "[simple-agent] conda activate $SIMPLE_EXPERIMENT_CONDA_ENV failed PATH=$PATH CONDA_EXE=$CONDA_EXE"; conda activate "$SIMPLE_EXPERIMENT_CONDA_ENV"; exit 127; fi; fi; fi'
     )
 
 
@@ -1737,6 +1768,61 @@ def simple_conda_wrapped_args(args: list[str], env: dict[str, str]) -> list[str]
     if not (simple_conda_required(env) or conda_env):
         return args
     return shell_command_args(f"{simple_conda_activation_script(env)} && exec {shlex.join(args)}")
+
+def execution_shell_preflight() -> dict[str, Any]:
+    """Use the real task shell to probe only stdlib/interpreter identity, never a job."""
+    env = simple_runtime_env()
+    code = "import json,os,sys; print(json.dumps(dict(python=sys.executable,prefix=sys.prefix,identity=os.environ.get('SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY','')),ensure_ascii=False))"
+    proc = None
+    readers = []
+    try:
+        python = runtime_python_command(env)
+        proc = subprocess.Popen(simple_conda_wrapped_args([python, "-B", "-X", "utf8", "-c", code], env), env=env,
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        buffers = {"stdout": bytearray(), "stderr": bytearray()}
+        overflow = [False]
+        def drain(name, stream):
+            for chunk in iter(lambda: stream.read(4096), b""):
+                if name == "stdout":
+                    if len(buffers[name]) + len(chunk) > 65536:
+                        overflow[0] = True
+                    if not overflow[0]:
+                        buffers[name].extend(chunk)
+                else:
+                    buffers[name].extend(chunk)
+                    del buffers[name][:-32768]
+        readers = [threading.Thread(target=drain, args=(name, stream), daemon=True)
+                   for name, stream in (("stdout", proc.stdout), ("stderr", proc.stderr))]
+        for reader in readers: reader.start()
+        proc.wait(timeout=8)  # Bounded stdlib probe only; asset verification uses genuine-progress inactivity.
+        for reader in readers: reader.join(timeout=1)
+        if any(reader.is_alive() for reader in readers):
+            raise ValueError("execution environment output did not close")
+        stdout = buffers["stdout"].decode("utf-8")
+        stderr = buffers["stderr"].decode("utf-8", errors="replace")
+        if proc.returncode:
+            raise ValueError("task shell exited " + str(proc.returncode) + ": " + (stderr or stdout)[-1500:])
+        if overflow[0]:
+            raise ValueError("execution environment stdout exceeds limit")
+        report = json.loads(stdout)
+        if not isinstance(report, dict) or any(not isinstance(report.get(key), str) for key in ("python", "prefix", "identity")):
+            raise ValueError("invalid execution environment metadata")
+        selected = simple_conda_env_name(env)
+        prefix = selected[:-len("/bin/python")] if selected.endswith("/bin/python") else selected.rstrip("/")
+        if (os.path.realpath(report.get("python", "")) != os.path.realpath(python)
+                or prefix and os.path.realpath(report.get("prefix", "")) != os.path.realpath(prefix)
+                or report.get("identity") != env.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "")):
+            raise ValueError("selected interpreter, prefix or job identity changed across task shell")
+        return {"ok": True, "shellVerified": True, "declaredCondaEnv": selected, **report, "executionStarted": False}
+    except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "errorCode": "EXECUTION_SHELL_PREFLIGHT_FAILED", "error": str(exc)[-2000:], "executionStarted": False}
+    finally:
+        if proc is not None:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=2)
+            for reader in readers: reader.join(timeout=1)
+            for stream in (proc.stdout, proc.stderr): stream.close()
 
 
 def _replace_bare_python_prefix(text: str, python_bin: str) -> str:
@@ -2136,15 +2222,85 @@ def formal_resume_targets(job: Job) -> list[str]:
     return [target for target in targets if target]
 
 
+class FormalJobConflictError(ValueError):
+    def __init__(self, message, evidence):
+        super().__init__(message)
+        self.evidence = evidence
+
+def formal_job_conflict_evidence(job, expected, owner):
+    output = formal_job_safe_path(job.output_dir)
+    result = formal_job_safe_path(job.result_csv)
+    categories = set()
+    children = []
+    if output.is_dir():
+        for item in output.iterdir():
+            if len(children) >= 32:
+                categories.add("additional_entries")
+                break
+            name = item.name
+            kind = "symlink" if item.is_symlink() else "directory" if item.is_dir() else "file" if item.is_file() else "unknown"
+            children.append({"name": name, "type": kind})
+            if name == "attempts":
+                categories.add("historical_attempts_directory")
+            elif name == "formal_job_owner.json":
+                categories.add("formal_owner")
+            elif name == ".formal_job.lock":
+                categories.add("writer_lock")
+            elif name in ("checkpoint_manifest.json", "artifact_manifest.json", "run_wrapper_report.json"):
+                categories.add("manifest")
+            elif item.suffix in (".pth", ".pt", ".ckpt"):
+                categories.add("checkpoint")
+            elif item.suffix in (".yaml", ".yml"):
+                categories.add("configuration")
+            elif item.suffix in (".log", ".txt"):
+                categories.add("log")
+            else:
+                categories.add("other")
+    lock_state = "absent"
+    lock_path = formal_job_safe_path(job.output_dir + "/.formal_job.lock")
+    if lock_path.is_file():
+        lock_state = "unknown"
+        try:
+            with lock_path.open("rb") as handle:
+                if os.name == "nt":
+                    import msvcrt
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+                lock_state = "available"
+        except (OSError, ValueError):
+            lock_state = "held_or_unverifiable"
+    meaningful = [item for item in children if item["name"] != ".formal_job.lock"]
+    return {"schemaVersion": 1, "projectRoot": str(Path.cwd().resolve()), "outputDir": str(output.resolve()),
+        "resultCsv": str(result.resolve()), "resultExists": result.exists(), "categories": sorted(categories),
+        "entries": children, "ownerExists": bool(owner), "ownerState": str(owner.get("state") or "unknown"),
+        "identityDifferences": [key for key, value in expected.items() if owner and owner.get(key) != value],
+        "onlyHistoricalAttemptsDirectory": len(meaningful) == 1 and meaningful[0] == {"name": "attempts", "type": "directory"},
+        "lockState": lock_state, "hashesVerified": False}
+
 def formal_job_preflight(job: Job, identity: dict[str, Any], mode: str) -> dict[str, Any]:
-    if identity.get("planRevision") != job.template_values.get("plan_revision"):
-        raise ValueError("PLAN_REVISION_CHANGED")
+    if not isinstance(identity, dict):
+        raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: expected object")
     """Admission is read-only. Existing bytes cannot be adopted based on a directory name."""
     if job.config.get("runtime", {}).get("result_path_contract", {}).get("policy") != "declared":
         raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
     required = ("workflowId", "commandId", "planRevision", "codeFingerprint", "globalJobId")
-    if any(not identity.get(key) for key in required) or identity["globalJobId"] != str(identity["workflowId"]) + ":" + str(job.index):
-        raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED")
+    missing = [key for key in required if not isinstance(identity.get(key), str) or not identity[key].strip()]
+    if missing:
+        raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: missing=" + ",".join(missing))
+    mismatched = []
+    if identity["globalJobId"] != identity["workflowId"] + ":" + str(job.index):
+        mismatched.append("globalJobId")
+    expected_command = os.environ.get("SIMPLE_EXPERIMENT_JOB_COMMAND_ID")
+    if expected_command and identity["commandId"] != expected_command:
+        mismatched.append("commandId")
+    if mismatched:
+        raise ValueError("FORMAL_JOB_IDENTITY_MISMATCH: fields=" + ",".join(mismatched))
+    if identity["planRevision"] != job.template_values.get("plan_revision"):
+        raise ValueError("PLAN_REVISION_CHANGED: fields=planRevision")
     if mode in ("train", "train_test"):
         resume_targets = formal_resume_targets(job)
         if resume_targets:
@@ -2155,7 +2311,11 @@ def formal_job_preflight(job: Job, identity: dict[str, Any], mode: str) -> dict[
                 "outputDir": job.output_dir, "collectionResultCsv": job.result_csv, "configHash": formal_job_config_hash(job)}
     formal_job_safe_path(job.result_csv)
     owner_path = formal_job_safe_path(job.output_dir + "/formal_job_owner.json")
+    if owner_path.is_file() and owner_path.stat().st_size > 65536:
+        raise ValueError("FORMAL_JOB_OWNER_INVALID: owner metadata exceeds 64 KiB")
     owner = json.loads(owner_path.read_text(encoding="utf-8")) if owner_path.is_file() else {}
+    if not isinstance(owner, dict):
+        raise ValueError("FORMAL_JOB_OWNER_INVALID: expected object")
     same = owner and all(owner.get(key) == value for key, value in expected.items())
     if same and (owner.get("state") == "completed" or owner.get("state") == "training_completed" and mode == "train"):
         hashes = owner.get("sha256") or {}
@@ -2173,8 +2333,9 @@ def formal_job_preflight(job: Job, identity: dict[str, Any], mode: str) -> dict[
     directory = Path(job.output_dir)
     existing = directory.exists() and any(item.name != ".formal_job.lock" for item in directory.iterdir())
     if existing or Path(job.result_csv).exists():
-        raise ValueError("FORMAL_JOB_CONFLICT: existing output/checkpoint/result belongs to an unfinished or different writer; "
-                         "review explicitly or declare a different job; output=" + job.output_dir + "; result=" + job.result_csv)
+        raise FormalJobConflictError("FORMAL_JOB_CONFLICT: existing output/checkpoint/result belongs to an unfinished or different writer; "
+                         "review explicitly or declare a different job; output=" + job.output_dir + "; result=" + job.result_csv,
+                         formal_job_conflict_evidence(job, expected, owner))
     if mode == "test" or job.config.get("runtime", {}).get("checkpoint_source"):
         formal_checkpoint_source(job, identity, mode)
         return {"identity": expected, "checkpointVerified": True}
@@ -2243,10 +2404,20 @@ def formal_job_writer(job: Job, identity: dict[str, Any], mode: str):
 
 def run_job(job: Job, args: argparse.Namespace) -> None:
     raw = os.environ.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "")
-    identity = json.loads(raw) if raw else {"workflowId": str(getattr(args, "operation_id", "") or ""),
+    if not raw and os.environ.get("SIMPLE_EXPERIMENT_MANAGED_JOB") == "1":
+        raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: missing=workflowId,commandId,globalJobId,planRevision,codeFingerprint")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except ValueError as exc:
+            raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: invalid JSON") from exc
+        if not isinstance(parsed, dict):
+            raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: expected object")
+    identity = parsed if raw else {"workflowId": str(getattr(args, "operation_id", "") or ""),
         "commandId": str(getattr(args, "operation_id", "") or ""), "planRevision": job.template_values.get("plan_revision"),
         "codeFingerprint": formal_source_fingerprint(Path.cwd())}
-    identity.setdefault("globalJobId", str(identity.get("workflowId", "")) + ":" + str(job.index))
+    if not raw:
+        identity["globalJobId"] = str(identity.get("workflowId", "")) + ":" + str(job.index)
     if getattr(args, "overwrite", False) or getattr(args, "overwrite_existing", False):
         raise ValueError("FORMAL_JOB_CONFLICT: overwrite is retired; explicitly clean or change the declared job")
     try:
@@ -2328,6 +2499,9 @@ def run_job_unlocked(job: Job, args: argparse.Namespace) -> None:
 
 
 def formal_job_preflight_mode(args: argparse.Namespace) -> dict[str, Any]:
+    environment = execution_shell_preflight()
+    if not environment["ok"]:
+        raise ValueError(environment["errorCode"] + ": " + environment["error"])
     plan = load_plan(args.plan)
     if str(args.plan).replace("\\", "/").startswith("tmp/plan/"):
         raise ValueError("DRAFT_EXECUTION_RETIRED")
@@ -2339,14 +2513,23 @@ def formal_job_preflight_mode(args: argparse.Namespace) -> dict[str, Any]:
     if not selected:
         raise ValueError("FORMAL_JOB_INDEX_INVALID")
     job = bind_execution_result_paths(selected, args.output_dir_override)
-    report = result_path_preflight(Path.cwd(), jobs, execution_mode=mode)
+    report = result_path_preflight(Path.cwd(), jobs, execution_mode=mode, validate_indices={job.index})
     if not report["ok"]:
         raise ValueError(";".join(report["missing"]))
     identity = json.loads(os.environ.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "{}"))
     admission = formal_job_preflight(job, identity, mode)
-    return {**admission, "policy": "declared", "outputDir": job.output_dir, "checkpointSource": job.config.get("runtime", {}).get("checkpoint_source"),
+    return {**admission, "executionEnvironment": environment, "policy": "declared", "outputDir": job.output_dir, "checkpointSource": job.config.get("runtime", {}).get("checkpoint_source"),
+            "preflight": {"onlyIndex": job.index, "structuralJobCount": len(jobs), "assetValidationIndices": [job.index], "executionStarted": False},
             "collectionResultCsv": job.result_csv, "resultPathContract": job.config["runtime"]["result_path_contract"]}
 
+
+def formal_job_preflight_report(args):
+    try:
+        return {"ok": True, **formal_job_preflight_mode(args)}
+    except ValueError as exc:
+        code = str(exc).split(":", 1)[0]
+        return {"ok": False, "errorCode": code if re.fullmatch(r"[A-Z][A-Z0-9_]+", code) else "FORMAL_JOB_PREFLIGHT_FAILED",
+                "error": str(exc), "evidence": getattr(exc, "evidence", None)}
 
 def run_job_mode(args: argparse.Namespace) -> None:
     if args.debug_mode:
@@ -2780,14 +2963,14 @@ def require_formal_worker_protocol(worker: dict[str, Any]) -> None:
     cached = worker.get("_availability") or {}
     received = float(worker.get("_availability_received_monotonic") or 0)
     if (received and 0 <= time.monotonic() - received <= 30 and cached.get("declaredJobPaths") is True
-            and cached.get("runtimeVersion") == RUNTIME_VERSION):
+            and cached.get("formalJobIdentityEnv") == 1 and cached.get("runtimeVersion") == RUNTIME_VERSION):
         return
     base_url = str(worker.get("local_agent_url") or "").rstrip("/")
     if not base_url:
         raise ValueError("WORKER_PROTOCOL_UNVERIFIED: refresh/deploy matching Agent and Scheduler before submission")
     with urllib.request.urlopen(base_url + "/api/capabilities", timeout=5) as response:
         capability = json.loads(response.read(1024 * 1024).decode("utf-8"))
-    if capability.get("endpoints", {}).get("declaredJobPaths") is not True or capability.get("runtimeVersion") != RUNTIME_VERSION:
+    if capability.get("endpoints", {}).get("declaredJobPaths") is not True or capability.get("endpoints", {}).get("formalJobIdentityEnv") != 1 or capability.get("runtimeVersion") != RUNTIME_VERSION:
         raise ValueError("WORKER_PROTOCOL_INCOMPATIBLE: deploy matching Agent and Scheduler before submission")
 
 
@@ -3870,6 +4053,7 @@ def main() -> None:
     parser.add_argument("--state-path", default="")
     parser.add_argument("--run-job", action="store_true")
     parser.add_argument("--formal-job-preflight", action="store_true")
+    parser.add_argument("--check-execution-shell-json", action="store_true")
     parser.add_argument("--print-job-dir", action="store_true")
     parser.add_argument("--validate-plan", action="store_true")
     parser.add_argument("--dry-run-plan", action="store_true")
@@ -3914,8 +4098,11 @@ def main() -> None:
     args = parser.parse_args()
     _SCHEDULER_ARGS_FOR_GUARD = args
     args.default_result_csv_dir = normalize_default_result_csv_dir(args.default_result_csv_dir)
+    if args.check_execution_shell_json:
+        print(json.dumps(execution_shell_preflight(), ensure_ascii=False))
+        return
     if args.formal_job_preflight:
-        print(json.dumps(formal_job_preflight_mode(args), ensure_ascii=False))
+        print(json.dumps(formal_job_preflight_report(args), ensure_ascii=False))
         return
     if args.debug_mode:
         raise SystemExit("DRAFT_EXECUTION_RETIRED: use a formal PLAN job; dryRun remains read-only")

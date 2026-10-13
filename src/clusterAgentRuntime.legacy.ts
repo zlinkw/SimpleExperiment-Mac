@@ -189,6 +189,7 @@ ACTION_NAMES = [
     "diagnose-result-anomaly",
     "compare-with-best-config",
     "start-worker-task",
+    "preflight-worker-task",
     "register-code-sync-proof",
     "rebuild-distributed-results",
     "retry-worker-task",
@@ -250,6 +251,7 @@ ACTION_PATHS = [
     "/api/actions/diagnose-result-anomaly",
     "/api/actions/compare-with-best-config",
     "/api/actions/start-worker-task",
+    "/api/actions/preflight-worker-task",
     "/api/actions/register-code-sync-proof",
     "/api/actions/rebuild-distributed-results",
     "/api/actions/retry-worker-task",
@@ -2557,7 +2559,7 @@ def availability_from_gpu(worker_id, gpu_payload, source="worker_agent_direct", 
 def api_worker_availability(root):
     gpu_payload = api_worker_gpu(root)
     row = availability_from_gpu(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker", gpu_payload)
-    row.update({"declaredJobPaths": formal_job_path_capable(root), "runtimeVersion": RUNTIME_VERSION})
+    row.update({"declaredJobPaths": formal_job_path_capable(root), "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0, "runtimeVersion": RUNTIME_VERSION})
     return {"schemaVersion": SCHEMA_VERSION, "workers": [row]}
 
 def availability_cache_path(root):
@@ -2796,9 +2798,9 @@ def durable_plan_identity(command):
     return {key: durable_plan_value(command, key) for key in DURABLE_PLAN_IDENTITY_FIELDS}
 
 def durable_plan_public_identity(row):
-    identity = durable_plan_identity(row)
+    identity = {key: durable_plan_value(row, key) for key in DURABLE_PLAN_IDENTITY_FIELDS
+                if key != "attempt" or row.get("resultPathPolicy") != "declared"}
     if row.get("resultPathPolicy") == "declared":
-        identity.pop("attempt", None)
         for key in ("resultPathPolicy", "globalJobId", "collectionResultCsv", "checkpointSource"):
             if row.get(key) is not None:
                 identity[key] = row[key]
@@ -2812,8 +2814,8 @@ def durable_plan_public_task(row):
     for key in ("mode", "executionMode", "executionModeSource", "resultPathPolicy", "globalJobId", "collectionResultCsv", "checkpointSource"):
         if row.get(key) is not None:
             public[key] = row.get(key)
-    for key in ("finishedAt", "cancelledAt", "stopReason", "error", "exitCode", "identityConflict", "lastDispatchResult", "trainingRecovery", "originalExecution",
-                "admissionRejected", "reason", "errorCode", "message", "neverStarted", "neverStartedEvidence"):
+    for key in ("finishedAt", "cancelledAt", "stopReason", "error", "exitCode", "identityConflict", "lastDispatchResult", "trainingRecovery", "originalExecution", "failureDiagnostic",
+                "admissionRejected", "reason", "errorCode", "message", "neverStarted", "neverStartedEvidence", "logPath", "tmuxPane", "tmuxWindowId", "tmuxSession", "formalConflictEvidence"):
         if row.get(key) is not None:
             public[key] = row.get(key)
     if (public["status"] == "cancelled" and row.get("stopReason") == "requeue"
@@ -3153,7 +3155,7 @@ def durable_plan_preflight_failure(command, exc, accepted=False):
     code = message.split(":", 1)[0]
     if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,80}", code):
         code = "FORMAL_JOB_PREFLIGHT_FAILED"
-    return {**command, "status": "failed", "durableAccepted": bool(accepted),
+    return {**command, **({"formalConflictEvidence": exc.evidence} if getattr(exc, "evidence", None) else {}), "status": "failed", "durableAccepted": bool(accepted),
             "admissionRejected": not accepted, "reason": "formal_preflight_rejected", "errorCode": code,
             "error": message, "message": message, "finishedAt": now_iso(),
             "neverStarted": True, "neverStartedEvidence": "formal_preflight_rejected"}
@@ -3294,22 +3296,18 @@ def cancel_durable_plan_job(root, command):
         row = next((item for item in data["jobs"] if isinstance(item, dict) and str(item.get("commandId") or "") == target), None)
         if not row or str(row.get("status") or "").lower() != "queued":
             return None
-        required = tuple(key for key in DURABLE_PLAN_IDENTITY_FIELDS if key != "commandId")
-        supplied = {key: durable_plan_value(command, key) for key in required}
-        missing = [key for key, value in supplied.items() if value in (None, "")]
-        if missing:
-            raise ValueError("待启动任务取消缺少完整身份：" + ",".join(missing))
-        if any(not isinstance(value, str) or row.get(key) != value
-               for key, value in supplied.items() if key in ("planFile", "outputDir")):
-            raise ValueError("取消请求路径身份与持久队列 job 不匹配")
-        if any(str(row.get(key) if row.get(key) is not None else "") != str(value) for key, value in supplied.items()):
-            raise ValueError("取消请求身份与持久队列 job 不匹配")
+        differences = worker_task_stop_identity_mismatches(command, row)
+        if differences:
+            failure = ValueError("取消请求身份与持久队列 job 不匹配：" + ",".join(differences))
+            failure.identity_mismatch_fields = differences
+            raise failure
         cancelled_at = now_iso()
         row.update({"status": "cancelled", "cancelledAt": cancelled_at,
                     "cancelCommandId": str(command.get("commandId") or command.get("operationId") or "")})
         write_durable_plan_queue(root, data)
         receipt = {**durable_plan_public_identity(row), "planJobCount": row.get("planJobCount"), "enqueuedAt": row.get("enqueuedAt"),
-                   "status": "cancelled", "finishedAt": cancelled_at, "stopReason": "user_cancel", "gpuId": ""}
+                   "status": "cancelled", "finishedAt": cancelled_at, "stopReason": "user_cancel", "gpuId": row.get("gpuId") or ""}
+        release_distributed_gpu_reservation(str(row.get("gpuId") or ""), target)
     append_worker_task(root, {**receipt, "schemaVersion": SCHEMA_VERSION})
     append_event(root, {"type": "distributed_plan_job_cancelled", "workerId": receipt["workerId"],
                         "operationId": target, "payload": receipt})
@@ -3604,29 +3602,39 @@ def historical_command_is_unprocessed(root, worker_id, sequence):
     except (OSError, KeyError, TypeError, ValueError):
         return False
 
-def worker_task_matches_stop_identity(command, task):
+def worker_task_stop_identity_mismatches(command, task):
+    """Compare the frozen execution identity; formal jobs never require an attempt version."""
     target_command = str(command.get("targetCommandId") or command.get("commandIdTarget") or "").strip()
     task_command = str(task.get("commandId") or task.get("operationId") or "").strip()
     if not target_command or task_command != target_command:
-        return False
+        return ["targetCommandId"]
     fields = (*DURABLE_PLAN_IDENTITY_FIELDS, "gpuId", "planJobCount") if task.get("projectId") else LEGACY_WORKER_STOP_IDENTITY_FIELDS
+    formal = command.get("resultPathPolicy") == "declared" or task.get("resultPathPolicy") == "declared"
+    if formal:
+        fields = tuple(field for field in fields if field != "attempt") + ("resultPathPolicy", "globalJobId", "collectionResultCsv")
+    differences = []
+    if formal and "attempt" in command:
+        differences.append("attempt")
     for field in fields:
         if field == "commandId":
             continue  # targetCommandId identifies the job; commandId identifies this stop.
-        expected = command.get(field)
-        actual = task.get("plan") if field == "planFile" and task.get("planFile") in (None, "") else task.get(field)
+        expected = durable_plan_value(command, field)
+        actual = durable_plan_value(task, field)
         if field in ("seed", "attempt", "experimentIndex", "planJobCount"):
             try:
                 if int(actual) != int(expected):
-                    return False
+                    differences.append(field)
             except (TypeError, ValueError):
-                return False
+                differences.append(field)
         elif field in ("planFile", "outputDir"):
             if not isinstance(actual, str) or not isinstance(expected, str) or actual != expected:
-                return False
-        elif str(actual if actual is not None else "") != str(expected):
-            return False
-    return True
+                differences.append(field)
+        elif str(actual) != str(expected) or (formal and field != "gpuId" and not str(expected)):
+            differences.append(field)
+    return differences
+
+def worker_task_matches_stop_identity(command, task):
+    return not worker_task_stop_identity_mismatches(command, task)
 def durable_plan_task_status(task):
     status = str(task.get("status") or "").lower()
     return {"running": "running", "completed": "completed", "failed": "failed",
@@ -3681,7 +3689,7 @@ def sync_durable_plan_task_rows(root):
             mapped = durable_plan_task_status(task)
             if mapped and mapped != old_status:
                 row.update({"status": mapped, "updatedAt": now_iso()})
-                for key in ("finishedAt", "exitCode", "error", "logPath", "cancelledAt", "stopReason"):
+                for key in ("finishedAt", "exitCode", "error", "logPath", "cancelledAt", "stopReason", "failureDiagnostic"):
                     if task.get(key) is not None:
                         row[key] = task[key]
                 changed = True
@@ -3864,6 +3872,9 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
             if current and current.get("status") == "dispatching":
                 current["status"] = new_status
                 current["lastDispatchResult"] = result
+                for field in ("logPath", "tmuxPane", "tmuxWindowId", "tmuxSession"):
+                    if result.get(field):
+                        current[field] = result[field]
                 current["updatedAt"] = now_iso()
                 if new_status == "queued":
                     current["gpuId"] = ""
@@ -4710,7 +4721,71 @@ def _send_tmux_line(session, line, env, retries=3):
         time.sleep(0.3 * attempt)
     return last_rc
 
+JOB_SHELL_ENV_FIELDS = (
+    "SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "SIMPLE_EXPERIMENT_JOB_COMMAND_ID", "SIMPLE_EXPERIMENT_JOB_PROJECT_ID",
+    "SIMPLE_EXPERIMENT_MANAGED_JOB", "SIMPLE_EXPERIMENT_CHECKPOINT_TEST_ONLY", "SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS",
+    "SIMPLE_EXPERIMENT_TMUX_SESSION", "SIMPLE_EXPERIMENT_TMUX_LOG_DIR", "SIMPLE_EXPERIMENT_EXIT_CODE_PATH",
+    "SIMPLE_EXPERIMENT_CONDA_ENV", "SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV", "CUDA_VISIBLE_DEVICES", "PYTHONUNBUFFERED",
+)
+
+def fresh_task_runtime_env():
+    env = simple_runtime_env(os.environ.copy())
+    for key in JOB_SHELL_ENV_FIELDS:
+        if key not in ("SIMPLE_EXPERIMENT_CONDA_ENV", "SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV", "PYTHONUNBUFFERED"):
+            env.pop(key, None)
+    return env
+
+def tmux_task_client_env(env):
+    # A new server inherits the client environment, so exclude credentials and task controls.
+    fields = ("PATH", "HOME", "SHELL", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "USER", "LOGNAME", "TZ",
+              "TMPDIR", "TMUX_TMPDIR", "XDG_RUNTIME_DIR", "SIMPLE_EXPERIMENT_REMOTE_TMUX_SESSION_PREFIX")
+    return {key: str(env[key]) for key in fields if env.get(key) is not None}
+
+def job_shell_environment_prefix(env, args=None):
+    """Command-scoped allowlist; never depend on or mutate a shared tmux environment."""
+    raw = str(env.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY") or "")
+    if raw or str(env.get("SIMPLE_EXPERIMENT_MANAGED_JOB") or "") == "1":
+        required = ("workflowId", "commandId", "globalJobId", "planRevision", "codeFingerprint")
+        try:
+            identity = json.loads(raw) if raw else {}
+        except (ValueError, TypeError) as exc:
+            raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: invalid JSON") from exc
+        if not isinstance(identity, dict):
+            raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: expected object")
+        missing = [key for key in required if not isinstance(identity.get(key), str) or not identity[key].strip()]
+        if missing:
+            raise ValueError("FORMAL_JOB_IDENTITY_REQUIRED: missing=" + ",".join(missing))
+        mismatch = []
+        suffix = identity["globalJobId"][len(identity["workflowId"]) + 1:]
+        if not identity["globalJobId"].startswith(identity["workflowId"] + ":") or not suffix.isdigit():
+            mismatch.append("globalJobId")
+        if identity.get("index") is not None and identity["globalJobId"] != identity["workflowId"] + ":" + str(identity["index"]):
+            mismatch.append("index")
+        if env.get("SIMPLE_EXPERIMENT_JOB_COMMAND_ID") and identity["commandId"] != str(env["SIMPLE_EXPERIMENT_JOB_COMMAND_ID"]):
+            mismatch.append("commandId")
+        tokens = [str(item) for item in (args or [])]
+        for option, field in (("--only-index", "index"), ("--plan-revision", "planRevision")):
+            if option in tokens:
+                position = tokens.index(option) + 1
+                expected = tokens[position] if position < len(tokens) else ""
+                actual = suffix if field == "index" else identity[field]
+                if actual != expected:
+                    mismatch.append(field)
+        if mismatch:
+            raise ValueError("FORMAL_JOB_IDENTITY_MISMATCH: fields=" + ",".join(sorted(set(mismatch))))
+    # Explicitly remove absent controls inherited from an older task/server shell.
+    tokens = ["env"]
+    for key in JOB_SHELL_ENV_FIELDS:
+        if env.get(key) in (None, ""):
+            tokens.extend(("-u", key))
+    for key in JOB_SHELL_ENV_FIELDS:
+        if env.get(key) not in (None, ""):
+            tokens.append(key + "=" + str(env[key]))
+    return shlex.join(tokens)
+
 def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=None):
+    task_environment = job_shell_environment_prefix(env, args)
+    client_env = tmux_task_client_env(env)
     # Simulate a human operator: open a detached tmux session (login shell so conda/profile
     # is available), mirror the pane to a log file (screen + log), then type 'conda activate',
     # 'cd', and finally the command. No nested 'bash -lc' quoting, no process substitution.
@@ -4732,7 +4807,7 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
     # 围栏：显式拒绝主 shell target 作为 session（仅针对调度类 session 名，建窗指令本身可在主 shell 执行）
     if _is_main_shell_target(session):
         raise RuntimeError(f"refusing to create tmux session on main shell target {session!r}; must be simple-sch-*/simple-gpu-*/simple-worker-*-agent; " + _build_tmux_error_context(session, None, "", "", cwd, 1, env))
-    proc = subprocess.run(["tmux", "new-session", "-d", "-s", session] + shell_cmd, cwd=cwd, capture_output=True, text=True, env=env, timeout=20)
+    proc = subprocess.run(["tmux", "new-session", "-d", "-s", session] + shell_cmd, cwd=cwd, capture_output=True, text=True, env=client_env, timeout=20)
     if proc.returncode != 0:
         err = (proc.stderr or "") + (proc.stdout or "")
         # A duplicate may belong to a failed run whose console must be retained.
@@ -4753,22 +4828,6 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
         lines.append("conda activate " + shlex.quote(conda_env))
     if cwd:
         lines.append("cd " + shlex.quote(str(cwd)))
-    # tmux does not forward arbitrary env vars into the session shell, so export the
-    # session/log dir explicitly. The scheduler (run_job) reads these to publish the
-    # experiment output_dir sidecar used by the split-pane log mirror.
-    if env.get("SIMPLE_EXPERIMENT_TMUX_SESSION") and env.get("SIMPLE_EXPERIMENT_TMUX_LOG_DIR"):
-        lines.append("export SIMPLE_EXPERIMENT_TMUX_SESSION=" + shlex.quote(str(env.get("SIMPLE_EXPERIMENT_TMUX_SESSION"))))
-        lines.append("export SIMPLE_EXPERIMENT_TMUX_LOG_DIR=" + shlex.quote(str(env.get("SIMPLE_EXPERIMENT_TMUX_LOG_DIR"))))
-    # Forward the exit-code path so the launched --run-job writes it from Python too (belt-and-suspenders
-    # completion signal that does not depend on the trailing shell 'printf' surviving tmux send-keys).
-    if env.get("SIMPLE_EXPERIMENT_EXIT_CODE_PATH"):
-        lines.append("export SIMPLE_EXPERIMENT_EXIT_CODE_PATH=" + shlex.quote(str(env.get("SIMPLE_EXPERIMENT_EXIT_CODE_PATH"))))
-    if env.get("SIMPLE_EXPERIMENT_MANAGED_JOB"):
-        lines.append("export SIMPLE_EXPERIMENT_MANAGED_JOB=1")
-    for key in ("SIMPLE_EXPERIMENT_JOB_COMMAND_ID", "SIMPLE_EXPERIMENT_JOB_PROJECT_ID"):
-        lines.append("export " + key + "=" + shlex.quote(str(env.get(key) or "")))
-    if env.get("SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS"):
-        lines.append("export SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS=1")
     # The command below appends its rc via '; printf "%s" "$?" > exit_code_path'. That redirect
     # fails (and the completion signal is lost forever) if the parent dir does not exist, which
     # would leave the scheduler waiting on a never-written file while the session stays alive.
@@ -4780,20 +4839,10 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
                 os.makedirs(_ec_dir, exist_ok=True)
         except Exception:
             pass
-    command = shlex.join([str(item) for item in args])
+    command = task_environment + " " + shlex.join([str(item) for item in args])
     if exit_code_path:
         command = command + "; printf '%s' \"$?\" > " + shlex.quote(str(exit_code_path))
     lines.append(command)
-    # Forward critical env vars directly into the tmux session environment so the
-    # launched scheduler sees them even if a later send-keys line is dropped by the
-    # startup race. This complements the export lines above (belt-and-suspenders).
-    for _key in ("SIMPLE_EXPERIMENT_TMUX_SESSION", "SIMPLE_EXPERIMENT_TMUX_LOG_DIR", "SIMPLE_EXPERIMENT_EXIT_CODE_PATH", "SIMPLE_EXPERIMENT_MANAGED_JOB", "SIMPLE_EXPERIMENT_JOB_COMMAND_ID", "SIMPLE_EXPERIMENT_JOB_PROJECT_ID", "SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS", "SIMPLE_EXPERIMENT_CONDA_ENV", "CUDA_VISIBLE_DEVICES"):
-        _val = env.get(_key)
-        if _val:
-            try:
-                subprocess.run(["tmux", "set-environment", "-t", session, _key, str(_val)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, env=env)
-            except Exception:
-                pass
     # cwd 存在性校验（前置）：若 cwd 不存在直接抛错带路径，避免高负载下 bash -l 慢启与 capture 超时静默
     if cwd:
         try:
@@ -4808,7 +4857,7 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
     _wait_ok = False
     _wait_exc_info = None
     try:
-        _wait_ok = _wait_tmux_ready(session, env, timeout=60.0, poll=0.3, cwd=cwd)
+        _wait_ok = _wait_tmux_ready(session, client_env, timeout=60.0, poll=0.3, cwd=cwd)
     except RuntimeError as _wait_exc:
         _wait_exc_info = _wait_exc
         print(f"[warn] tmux _wait_tmux_ready exception for {session!r}: {_wait_exc!r}, attempting fallback via main shell", file=sys.stderr, flush=True)
@@ -4829,7 +4878,7 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
         except Exception:
             pass
         # 尝试在主 shell (zlk1:0.0) 上人工发送 tmux new-session 建窗，不阻断调度
-        _fallback_ok = _fallback_bootstrap_via_main_shell(session, shell_cmd, cwd, env, log_path)
+        _fallback_ok = _fallback_bootstrap_via_main_shell(session, shell_cmd, cwd, client_env, log_path)
         if _fallback_ok:
             print(f"[info] fallback bootstrap succeeded for {session!r}, retrying _wait_tmux_ready", file=sys.stderr, flush=True)
             try:
@@ -4863,15 +4912,15 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
     # Type each line, validating the send-keys return code. 宽松：失败先尝试 fallback 重建 session 并重发，仍失败则 Popen 兜底
     _send_failed_lines = []
     for line in lines:
-        rc = _send_tmux_line(session, line, env)
+        rc = _send_tmux_line(session, line, client_env)
         if rc != 0:
             print(f"[warn] tmux send-keys failed rc={rc} for {session!r} line={_truncate_text(line, 200)!r}, attempting retry via fallback", file=sys.stderr, flush=True)
             # 若 session 已死，尝试 fallback 重建
             if not tmux_session_alive(session, cwd, env):
-                _fallback_ok2 = _fallback_bootstrap_via_main_shell(session, shell_cmd, cwd, env, log_path)
+                _fallback_ok2 = _fallback_bootstrap_via_main_shell(session, shell_cmd, cwd, client_env, log_path)
                 if _fallback_ok2:
                     time.sleep(0.5)
-                    rc = _send_tmux_line(session, line, env)
+                    rc = _send_tmux_line(session, line, client_env)
                     if rc == 0:
                         print(f"[info] retry send-keys after fallback succeeded for {session!r}", file=sys.stderr, flush=True)
                         continue
@@ -4904,6 +4953,8 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
     return tmux_pane_pid(session, cwd, env) or 0
 
 def start_job_in_gpu_pane(gpu_window, args, cwd, env, log_path, exit_code_path):
+    task_environment = job_shell_environment_prefix(env, args)
+    client_env = tmux_task_client_env(env)
     # Mark the command identity pending before publishing a pane; readers only accept
     # an integer exit code as completion, so a prior command's value cannot leak forward.
     write_atomic_text(str(exit_code_path), "pending\n")
@@ -4911,7 +4962,7 @@ def start_job_in_gpu_pane(gpu_window, args, cwd, env, log_path, exit_code_path):
         shell = os.environ.get("SHELL") or ("/bin/bash" if os.path.isfile("/bin/bash") else "/bin/sh")
         # 宽松建窗：不强制 bash -l，与 start_simple_tmux_command 一致
         shell_cmd = [shell]
-        proc_gs = subprocess.run(["tmux", "new-session", "-d", "-s", gpu_window] + shell_cmd, cwd=cwd, capture_output=True, text=True, env=env, timeout=20)
+        proc_gs = subprocess.run(["tmux", "new-session", "-d", "-s", gpu_window] + shell_cmd, cwd=cwd, capture_output=True, text=True, env=client_env, timeout=20)
         if proc_gs.returncode != 0:
             err = (proc_gs.stderr or proc_gs.stdout or "")
             # Do not kill a duplicate session: it may contain failed-task logs.
@@ -4981,15 +5032,14 @@ def start_job_in_gpu_pane(gpu_window, args, cwd, env, log_path, exit_code_path):
             os.makedirs(os.path.dirname(str(log_path)) or ".", exist_ok=True)
         except Exception:
             pass
-        _distributed_export = "export SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS=1; " if env.get("SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS") else ""
-        _job_export = "".join("export " + key + "=" + shlex.quote(str(env.get(key) or "")) + "; " for key in ("SIMPLE_EXPERIMENT_JOB_COMMAND_ID", "SIMPLE_EXPERIMENT_JOB_PROJECT_ID"))
-        _cmd = f"export SIMPLE_EXPERIMENT_MANAGED_JOB=1; {_job_export}{_distributed_export}set -o pipefail; {{ {_inner}; }} 2>&1 | tee -a {_tee_log}; printf '%s' \"$?\" > {__import__('shlex').quote(str(exit_code_path))}; exec bash"
+        _task_command = task_environment + " bash -c " + shlex.quote(_inner)
+        _cmd = f"set -o pipefail; {{ {_task_command}; }} 2>&1 | tee -a {_tee_log}; printf '%s' \"$?\" > {__import__('shlex').quote(str(exit_code_path))}; exec bash"
         # Each task gets a separate window in the GPU session. A failed window
         # remains visible; later plans can launch another window on this GPU.
         window_name = "run-" + str(int(time.time() * 1000))
         split_args = ["tmux", "new-window", "-d", "-t", gpu_window, "-n", window_name, "-c", str(cwd or "."), "-P", "-F", "#{pane_id}", "--", "bash", "-c", _cmd]
         for split_attempt in range(3):
-            result = subprocess.run(split_args, capture_output=True, text=True, timeout=10, cwd=cwd, env=env)
+            result = subprocess.run(split_args, capture_output=True, text=True, timeout=10, cwd=cwd, env=client_env)
             if result.returncode == 0:
                 break
             split_error = ((result.stderr or "") + " " + (result.stdout or "")).lower()
@@ -5154,6 +5204,15 @@ def start_gpu_log_tail_sampler(root, poll_seconds=60, jitter_seconds=30):
     _th.Thread(target=loop, daemon=True, name="gpu-log-tail-sampler").start()
 
 
+def worker_task_tmux_location(pane, session, cwd, env):
+    target = str(pane) if str(pane).startswith("%") else str(session)
+    result = subprocess.run(["tmux", "display-message", "-p", "-t", target, "#{pane_id}\t#{session_name}\t#{window_id}"],
+                            cwd=cwd, env=env, capture_output=True, text=True, timeout=3)
+    fields = result.stdout.strip().split("\t")
+    if result.returncode or len(fields) != 3 or not re.fullmatch(r"%[0-9]+", fields[0]) or not re.fullmatch(r"@[0-9]+", fields[2]):
+        raise RuntimeError("TMUX_TASK_LOCATION_UNVERIFIED: command started but its exact pane/window receipt is missing")
+    return {"tmuxPane": fields[0], "tmuxSession": fields[1], "tmuxWindowId": fields[2]}
+
 def read_task_exit_code(exit_code_path):
     try:
         return int(str(pathlib.Path(exit_code_path).read_text(encoding="utf-8")).strip())
@@ -5211,6 +5270,8 @@ def reconcile_worker_task_exit_codes(root):
             task["exitCode"] = exit_code
             task["finishedAt"] = now_iso()
             task["reconciledAt"] = task["finishedAt"]
+            if exit_code != 0:
+                task.update(worker_task_failure_diagnostic(root, task))
             events.append(("worker_task_completed" if exit_code == 0 else "worker_task_failed", dict(task)))
         if events:
             atomic_write(path_for(root, "worker_task_snapshot.json"), {"schemaVersion": SCHEMA_VERSION, "tasks": retain_worker_task_snapshot(tasks), "generatedAt": now_iso()})
@@ -5325,6 +5386,13 @@ def _execute_worker_command_unfenced(root, command, worker_id):
     action = str(command.get("action") or "").strip()
     command_id = str(command.get("commandId") or command.get("operationId") or f"cmd-{int(time.time() * 1000)}")
     append_event(root, {"type": "worker_command_started", "workerId": worker_id, "operationId": command_id, "payload": command})
+    if action == "stop-worker-task" and command.get("resultPathPolicy") == "declared" and "attempt" in command:
+        result = {"commandId": command_id, "targetCommandId": command.get("targetCommandId"), "status": "failed",
+                  "errorCode": "FORMAL_ATTEMPT_RETIRED", "identityMismatchFields": ["attempt"],
+                  "message": "正式 job 已停用 attempt；中止或召回请求必须使用原 workflow/command/revision 身份，不允许 attempt 或 attempt=0。",
+                  "stoppedPids": [], "stoppedTasks": []}
+        append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
+        return result
     if action == "stop-worker-task" and command.get("requeueRequested") is True:
         try:
             result = requeue_durable_plan_job(root, command)
@@ -5347,11 +5415,16 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             result = {"commandId": command_id, "status": "failed", "message": "停止操作 ID 不能与目标 job ID 相同", "stoppedPids": [], "stoppedTasks": []}
             append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
             return result
-        identity_fields = LEGACY_WORKER_STOP_IDENTITY_FIELDS
+        identity_fields = (tuple(field for field in DURABLE_PLAN_IDENTITY_FIELDS if field not in ("commandId", "attempt"))
+                           + ("planJobCount", "resultPathPolicy", "globalJobId", "collectionResultCsv")) if command.get("resultPathPolicy") == "declared" else tuple(field for field in LEGACY_WORKER_STOP_IDENTITY_FIELDS if field != "attempt")
+        # The persisted task determines whether attempt is required; a missing
+        # formal policy must report that mismatch, not invent a legacy attempt.
         if target_command:
             missing_identity = [field for field in identity_fields if command.get(field) in (None, "") and field != "gpuId"]
             if missing_identity:
-                result = {"commandId": command_id, "status": "failed", "message": "精确停止缺少完整身份：" + ",".join(missing_identity), "stoppedPids": [], "stoppedTasks": []}
+                result = {"commandId": command_id, "targetCommandId": target_command, "status": "failed",
+                          "errorCode": "WORKER_TASK_IDENTITY_REQUIRED", "identityMismatchFields": missing_identity,
+                          "message": "精确停止缺少完整身份：" + ",".join(missing_identity), "stoppedPids": [], "stoppedTasks": []}
                 append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
                 return result
         elif not session:
@@ -5365,12 +5438,15 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         try:
             cancelled = cancel_durable_plan_job(root, command) if target_command else None
         except ValueError as exc:
-            result = {"commandId": command_id, "status": "failed", "message": str(exc), "stoppedPids": [], "stoppedTasks": []}
+            result = {"commandId": command_id, "targetCommandId": target_command, "status": "failed",
+                      "errorCode": "WORKER_TASK_IDENTITY_MISMATCH", "identityMismatchFields": getattr(exc, "identity_mismatch_fields", []),
+                      "message": str(exc), "stoppedPids": [], "stoppedTasks": []}
             append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
             return result
         if cancelled:
             result = {"commandId": command_id, "status": "completed", "message": "已确认取消尚未启动的 Agent 队列 job", "stoppedPids": [],
-                      "stoppedTasks": [{key: cancelled.get(key) for key in (*DURABLE_PLAN_IDENTITY_FIELDS, "planJobCount", "enqueuedAt", "gpuId")} | {"paneClosed": True}]}
+                      "stoppedTasks": [{**durable_plan_public_identity(cancelled),
+                                        **{key: cancelled.get(key) for key in ("planJobCount", "enqueuedAt", "gpuId")}, "paneClosed": True}]}
             append_event(root, {"type": "worker_task_stopped", "workerId": worker_id, "operationId": command_id, "payload": result})
             return result
         matched = []
@@ -5424,7 +5500,8 @@ def _execute_worker_command_unfenced(root, command, worker_id):
                     result = {"commandId": command_id, "status": "failed", "message": "该 job 的 tmux 标签未确认关闭，未结束整会话", "stoppedPids": stopped, "stoppedTasks": [], "stopReason": stop_reason, "manualStopType": stop_reason, "stopSource": stop_source}
                     append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
                     return result
-                receipt = {k: current.get(k) for k in (*DURABLE_PLAN_IDENTITY_FIELDS, "operationId", "session", "gpuId", "planJobCount", "enqueuedAt", "stopReason", "manualStopType", "stopSource", "planId", "tmuxPane", "tmuxSession") if current.get(k) not in (None, "")}
+                receipt = {**durable_plan_public_identity(current),
+                           **{k: current.get(k) for k in ("operationId", "session", "gpuId", "planJobCount", "enqueuedAt", "stopReason", "manualStopType", "stopSource", "planId", "tmuxPane", "tmuxSession", "tmuxWindowId") if current.get(k) not in (None, "")}}
                 receipt["paneClosed"] = bool(task.get("_paneClosed")) or not str(task.get("tmuxPane") or "").strip()
                 if proof:
                     receipt["paneAlreadyMissing"] = proof.get("paneAlreadyMissing") is True
@@ -5432,7 +5509,13 @@ def _execute_worker_command_unfenced(root, command, worker_id):
                     receipt["paneCloseError"] = "tmux 标签未确认关闭，未结束整会话"
                 stopped_tasks.append(receipt)
         if target_command and not matched:
-            result = {"commandId": command_id, "status": "failed", "message": "没有与指定 job 身份一致的任务，未停止其他任务", "stoppedPids": [], "stoppedTasks": [], "stopReason": stop_reason, "manualStopType": stop_reason, "stopSource": stop_source}
+            same_command = next((task for task in tasks if isinstance(task, dict) and str(task.get("commandId") or task.get("operationId") or "") == target_command), None)
+            differences = worker_task_stop_identity_mismatches(command, same_command) if same_command else []
+            result = {"commandId": command_id, "targetCommandId": target_command, "status": "failed",
+                      "errorCode": "WORKER_TASK_IDENTITY_MISMATCH" if same_command else "WORKER_TASK_NOT_FOUND",
+                      "identityMismatchFields": differences,
+                      "message": "没有与指定 job 身份一致的任务，未停止其他任务" + ("；不一致字段：" + ",".join(differences) if differences else "；当前快照缺少原 commandId"),
+                      "stoppedPids": [], "stoppedTasks": [], "stopReason": stop_reason, "manualStopType": stop_reason, "stopSource": stop_source}
             append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
             return result
         result = {"commandId": command_id, "status": "completed", "message": f"stopped={len(stopped)} matched={len(matched)}", "stoppedPids": stopped, "stoppedTasks": stopped_tasks, "stopReason": stop_reason, "manualStopType": stop_reason, "stopSource": stop_source}
@@ -5493,7 +5576,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         session = str(command.get("session"))
     else:
         session = worker_tmux_session_name(worker_id, gpu_id, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID"))
-    _raw_log = worker_plan_path(worker_path_value(command, options, ("logPath",), f"tmp/tmux_logs/{session}.log"), "logPath", allow_absolute=True)
+    _raw_log = worker_plan_path(worker_task_console_log(command_id) if command.get("resultPathPolicy") == "declared" else worker_path_value(command, options, ("logPath",), f"tmp/tmux_logs/{session}.log"), "logPath", allow_absolute=True)
     if os.path.isabs(_raw_log):
         rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir))
     else:
@@ -5501,7 +5584,8 @@ def _execute_worker_command_unfenced(root, command, worker_id):
     log_path = worker_plan_project_path(project_dir, rel_log)
     if log_path != safe_project_path(project_dir, rel_log):
         raise ValueError("Worker 日志路径身份不一致")
-    env = simple_runtime_env(os.environ.copy())
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    env = formal_job_command_env(command)
     env["SIMPLE_EXPERIMENT_MANAGED_JOB"] = "1"
     env["SIMPLE_EXPERIMENT_JOB_COMMAND_ID"] = str(command_id)
     env["SIMPLE_EXPERIMENT_JOB_PROJECT_ID"] = str(command.get("projectId") or "")
@@ -5622,6 +5706,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         if reserved_gpu:
             release_distributed_gpu_reservation(gpu_id, command_id)
         raise RuntimeError("tmux available but launch failed and ALLOW_POPEN_FALLBACK not enabled; refusing silent bash fallback\uff1b\u8bf7\u5b89\u88c5 tmux \u6216\u542f\u7528 ALLOW_POPEN_FALLBACK")
+    location = worker_task_tmux_location(pid, tmux_session, project_dir, env) if used_tmux else {}
     task = {
         "schemaVersion": SCHEMA_VERSION,
         "commandId": command_id,
@@ -5669,6 +5754,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             "reassignmentRunKey": reassignment_run_key or command_id,
         } if manual_reassignment else {}),
     }
+    task.update(location)
     try:
         append_worker_task(root, task)
     except Exception as exc:
@@ -5678,6 +5764,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
     if reserved_gpu:
         release_distributed_gpu_reservation(gpu_id, command_id)
     result = {"commandId": command_id, "status": "running", "pid": pid, "session": session, "tmuxSession": tmux_session if used_tmux else "", "logPath": rel_log, "debugMode": debug_mode, "debugRunId": debug_run_id, "debugOutputDir": debug_output_dir, "resultOwnerWorkerId": worker_id, **({"manualReassignment": True, "sourceWorkerId": source_worker_id, "targetWorkerId": worker_id, "originalRunKey": original_run_key, "reassignmentRunKey": reassignment_run_key or command_id} if manual_reassignment else {}), "message": "Debug Worker 任务已启动" if debug_mode else "Worker 任务已启动"}
+    result.update(location)
     append_event(root, {"type": "worker_task_started", "workerId": worker_id, "operationId": command_id, "payload": {**task, **result}})
     def wait_task():
         def _resolve_pane_id():
@@ -5716,6 +5803,8 @@ def _execute_worker_command_unfenced(root, command, worker_id):
                 if worker_task_was_stopped(root, task) or str(current_worker_task(root, task).get("status") or "").lower() != "running":
                     return
                 finished = {**task, "status": "completed" if rc == 0 else "failed", "exitCode": rc, "finishedAt": now_iso()}
+                if rc != 0:
+                    finished.update(worker_task_failure_diagnostic(project_dir, task))
                 append_worker_task(root, finished)
             append_event(root, {"type": "worker_task_completed" if rc == 0 else "worker_task_failed", "workerId": worker_id, "operationId": command_id, "payload": finished})
             if used_tmux and rc == 0:
@@ -5806,6 +5895,38 @@ def verified_durable_execution_mode(project_dir, command):
     return mode
 
 
+def formal_job_command_env(command):
+    """Use the same configured prefix at preflight and task execution, with fresh job identity."""
+    env = fresh_task_runtime_env()
+    options = command.get("options") if isinstance(command.get("options"), dict) else {}
+    if any(key in command for key in ("condaEnv", "conda_env")) or any(key in options for key in ("condaEnv", "conda_env")):
+        selected = str(command.get("condaEnv") or command.get("conda_env") or options.get("condaEnv") or options.get("conda_env") or "").strip()
+        env["SIMPLE_EXPERIMENT_CONDA_ENV"] = "" if selected in {"-", "--"} else selected
+        env["SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV"] = "1" if env["SIMPLE_EXPERIMENT_CONDA_ENV"] else "0"
+    identity = {key: command.get(key) for key in ("workflowId", "globalJobId", "commandId", "planRevision", "codeFingerprint")}
+    env["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = json.dumps(identity, ensure_ascii=False)
+    env["SIMPLE_EXPERIMENT_JOB_COMMAND_ID"] = str(identity.get("commandId") or "")
+    return env
+
+def verified_worker_execution_shell(project_dir, command):
+    """Only probe the task shell; occupied output directories remain untouched and unadmitted."""
+    if not execution_shell_preflight_capable(project_dir):
+        raise ValueError("WORKER_PROTOCOL_INCOMPATIBLE: execution shell preflight requires matching Agent/Scheduler")
+    if command.get("resultPathPolicy") != "declared" or "attempts" in str(command.get("outputDir") or "").split("/"):
+        raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
+    env = formal_job_command_env(command)
+    args = [simple_runtime_python(env), "-B", "-X", "utf8", cluster_scheduler_path(project_dir), "--check-execution-shell-json"]
+    job_shell_environment_prefix(env, args)
+    proc = subprocess_inactivity_run(args, cwd=project_dir, env=env, progress_stream="stderr")
+    if proc.returncode:
+        raise ValueError((proc.stderr or proc.stdout or "EXECUTION_SHELL_PREFLIGHT_FAILED")[-4000:])
+    report = json.loads(proc.stdout)
+    if report.get("ok") is not True or report.get("shellVerified") is not True:
+        raise ValueError("EXECUTION_SHELL_PREFLIGHT_FAILED: " + str(report.get("error") or "invalid shell probe report"))
+    if report.get("identity") != env["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"]:
+        raise ValueError("FORMAL_JOB_PREFLIGHT_IDENTITY_MISMATCH: task shell")
+    return {**report, "environmentOnly": True, "formalJobAdmissionChecked": False}
+
 def verified_formal_job_command(project_dir, command):
     """Check the real Scheduler message contract before queue admission or tmux creation."""
     if command.get("resultPathPolicy") != "declared" or "attempts" in str(command.get("outputDir") or "").split("/"):
@@ -5813,18 +5934,25 @@ def verified_formal_job_command(project_dir, command):
     scheduler_path = cluster_scheduler_path(project_dir)
     if not scheduler_path or not formal_job_path_capable(project_dir):
         raise ValueError("WORKER_PROTOCOL_INCOMPATIBLE: deploy matching formal-path Scheduler and Agent")
-    identity = {key: command.get(key) for key in ("workflowId", "globalJobId", "commandId", "planRevision", "codeFingerprint")}
-    identity["globalJobId"] = identity.get("globalJobId") or str(identity.get("workflowId") or "") + ":" + str(command.get("experimentIndex"))
-    env = simple_runtime_env(os.environ.copy())
-    env["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = json.dumps(identity)
+    env = formal_job_command_env(command)
     requested_mode = "test" if command.get("checkpointTestOnly") is True else str(command.get("mode") or "")
-    args = [simple_runtime_python(env), scheduler_path, "--formal-job-preflight", "--plan", durable_plan_value(command, "planFile"),
+    args = [simple_runtime_python(env), "-B", "-X", "utf8", scheduler_path, "--formal-job-preflight", "--plan", durable_plan_value(command, "planFile"),
             "--only-index", str(command.get("experimentIndex")), "--mode", requested_mode,
             "--plan-revision", str(command.get("planRevision") or ""), "--output-dir-override", str(command.get("outputDir") or "")]
-    proc = subprocess.run(args, cwd=project_dir, env=env, capture_output=True, text=True, encoding="utf-8", timeout=10)
+    job_shell_environment_prefix(env, args)  # Validate the supplied identity; never fabricate a missing globalJobId.
+    try:
+        proc = subprocess_inactivity_run(args, cwd=project_dir, env=env, progress_stream="stderr")
+    except RuntimeError as exc:
+        code = "FORMAL_JOB_PREFLIGHT_CANCELLED" if "操作已取消" in str(exc) else "FORMAL_JOB_PREFLIGHT_STALLED" if "无真实进展" in str(exc) else "FORMAL_JOB_PREFLIGHT_PROCESS_FAILED"
+        raise ValueError(code + ": " + " | ".join(str(exc).splitlines())[:3500]) from exc
     if proc.returncode:
         raise ValueError((proc.stderr or proc.stdout or "FORMAL_JOB_PREFLIGHT_FAILED")[-4000:])
     result = json.loads(proc.stdout)
+    if result.get("ok") is False:
+        failure = ValueError(str(result.get("error") or result.get("errorCode") or "FORMAL_JOB_PREFLIGHT_FAILED"))
+        if isinstance(result.get("evidence"), dict):
+            failure.evidence = {**result["evidence"], "workerId": durable_plan_value(command, "workerId"), "projectId": command.get("projectId")}
+        raise failure
     if result.get("policy") != "declared" or result.get("outputDir") != command.get("outputDir"):
         raise ValueError("FORMAL_JOB_DECLARATION_CHANGED")
     if not command.get("collectionResultCsv") or command["collectionResultCsv"] != result.get("collectionResultCsv"):
@@ -5834,6 +5962,47 @@ def verified_formal_job_command(project_dir, command):
     if (command.get("checkpointSource") or None) != (result.get("checkpointSource") or None):
         raise ValueError("FORMAL_JOB_DECLARATION_CHANGED: checkpoint source")
     return result
+
+def preflight_existing_worker_task(root, payload, worker_id):
+    """Run the startup gate for one frozen rejection, without admission or execution."""
+    target = str(payload.get("targetCommandId") or "").strip()
+    expected = payload.get("expectedIdentity")
+    if not target or not isinstance(expected, dict):
+        raise ValueError("FORMAL_JOB_PREFLIGHT_IDENTITY_REQUIRED")
+    with WORKER_TASK_SNAPSHOT_LOCK:
+        row = next((item for item in read_durable_plan_queue(root)["jobs"]
+                    if isinstance(item, dict) and item.get("commandId") == target), None)
+        if not row:
+            raise ValueError("FORMAL_JOB_PREFLIGHT_TARGET_UNAVAILABLE")
+        row = dict(row)
+    if (row.get("workerId") != worker_id or expected.get("commandId") != target
+            or not durable_plan_same_identity(row, expected)
+            or any(row.get(key) != expected.get(key) for key in
+                   ("resultPathPolicy", "globalJobId", "collectionResultCsv", "checkpointSource", "executionMode", "mode"))):
+        raise ValueError("FORMAL_JOB_PREFLIGHT_IDENTITY_MISMATCH")
+    environment_only = payload.get("environmentOnly") is True
+    if (row.get("status") != "failed" or not environment_only and (row.get("neverStarted") is not True
+            or row.get("neverStartedEvidence") != "formal_preflight_rejected")):
+        raise ValueError("FORMAL_JOB_PREFLIGHT_REQUIRES_NEVER_STARTED_REJECTION")
+    # Read the original proof without renewing it or writing a new admission record.
+    proof_id = str(row.get("codeSyncProofId") or "")
+    if proof_id:
+        proof = code_sync_proof_document(root).get("proofs", {}).get(proof_id)
+        if not isinstance(proof, dict):
+            raise ValueError("code-sync proof missing; original source cannot be verified")
+        verify_code_sync_proof_record(root, proof, row, runtime_generation=proof.get("runtimeGeneration"))
+    elif isinstance(row.get("codeManifest"), dict):
+        manifest = row["codeManifest"]
+        if durable_code_manifest_digest(manifest) != row.get("codeFingerprint"):
+            raise ValueError("code manifest fingerprint mismatch")
+        for relative, digest in manifest.items():
+            _code_sync_stat_record(root, relative, digest, verify_content=True)
+    else:
+        raise ValueError("code-sync proof missing; original source cannot be verified")
+    verified_durable_execution_mode(root, row)
+    report = verified_worker_execution_shell(root, row) if environment_only else verified_formal_job_command(root, row)
+    return {"schemaVersion": 1, "targetCommandId": target, "workerId": worker_id,
+            "executionStarted": False, "queueChanged": False, "report": report}
 
 def recover_train_only_completion(root, command, worker_id):
     """Review/adopt existing validation-only adapter evidence; never execute training or test."""
@@ -6040,7 +6209,7 @@ def start_worker_hub_uplink(root, hub_uplink_url="", worker_id="", availability_
                 availability = None
                 if now_ts >= next_availability:
                     availability = availability_from_gpu(worker_id, api_worker_gpu(root), "worker_uplink", 180)
-                    availability.update({"declaredJobPaths": formal_job_path_capable(root), "runtimeVersion": RUNTIME_VERSION})
+                    availability.update({"declaredJobPaths": formal_job_path_capable(root), "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0, "runtimeVersion": RUNTIME_VERSION})
                     next_availability = now_ts + availability_base + (random.random() * jitter if jitter else 0)
                 if events or availability:
                     payload = {
@@ -6497,7 +6666,14 @@ def formal_job_path_capable(root):
         with open(scheduler, "r", encoding="utf-8") as stream:
             header = stream.read(8192)
         version = re.search(r'(?m)^RUNTIME_VERSION = "([^"]+)"', header)
-        return bool("FORMAL_JOB_PATH_PROTOCOL = 1" in header and version and version.group(1) == RUNTIME_VERSION)
+        return bool("FORMAL_JOB_PATH_PROTOCOL = 1" in header and "FORMAL_JOB_IDENTITY_ENV_PROTOCOL = 1" in header and version and version.group(1) == RUNTIME_VERSION)
+    except (OSError, TypeError):
+        return False
+
+def execution_shell_preflight_capable(root):
+    try:
+        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
+            return formal_job_path_capable(root) and "EXECUTION_SHELL_PREFLIGHT_PROTOCOL = 1" in stream.read(8192)
     except (OSError, TypeError):
         return False
 
@@ -6524,6 +6700,8 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
                 "workerHubUplink": True,
                 "workerTasks": True,
                 "declaredJobPaths": formal_job_path_capable(root),
+                "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0,
+                "executionShellPreflight": 1 if execution_shell_preflight_capable(root) else 0,
                 "durablePlanQueue": True,
                 "codeSyncProof": True,
                 "idleGpuAdmission": True,
@@ -6540,11 +6718,14 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
             },
             "actionEndpoints": {
                 "start-worker-task": True,
+                "preflight-worker-task": True,
                 "register-code-sync-proof": True,
                 "rebuild-distributed-results": True,
                 "retry-worker-task": True,
                 "stop-worker-task": True,
                 "stop-worker-task-exact-pane": True,
+                "stop-worker-task-formal-identity": True,
+                "stop-worker-task-formal-no-attempt": True,
                 "delete-worker-artifacts": True,
                 "archive-worker-artifacts": True,
                 "validate-plan": True,
@@ -6577,6 +6758,8 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
             "workerHubUplink": True,
             "scheduler": True,
             "declaredJobPaths": formal_job_path_capable(root),
+            "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0,
+            "executionShellPreflight": 1 if execution_shell_preflight_capable(root) else 0,
             "traces": True,
             "liveOutput": True,
             "diagnostics": True,
@@ -11620,7 +11803,9 @@ def subprocess_file_io(process, proc_root="/proc"):
     except (OSError, ValueError, TypeError, AttributeError):
         return None
 
-def subprocess_inactivity_run(command, cwd=None, env=None, input=None, file_step=False):
+def subprocess_inactivity_run(command, cwd=None, env=None, input=None, file_step=False, progress_stream=None):
+    if progress_stream not in (None, "stdout", "stderr"):
+        raise ValueError("invalid subprocess progress stream")
     entry = getattr(INACTIVITY_ACTION_CONTEXT, "entry", None)
     if entry and entry["cancel"].is_set():
         raise RuntimeError("操作已取消")
@@ -11632,6 +11817,7 @@ def subprocess_inactivity_run(command, cwd=None, env=None, input=None, file_step
     last_progress = [time.monotonic()]
     progress_lock = threading.Lock()
     counters = {}
+    cumulative_counts = [0, 0]
     streams = {"stdout": io.StringIO(), "stderr": deque()}
     stream_bytes = {"stdout": 0, "stderr": 0}
     output_overflow = [False]
@@ -11655,23 +11841,30 @@ def subprocess_inactivity_run(command, cwd=None, env=None, input=None, file_step
                     stream_bytes[name] += size
                     while name == "stderr" and stream_bytes[name] > 32768:
                         stream_bytes[name] -= len(streams[name].popleft().encode("utf-8"))
-            if not line.startswith("SIMPLE_PROGRESS "):
+            if (progress_stream and name != progress_stream) or not line.startswith("SIMPLE_PROGRESS "):
                 continue
             try:
                 item = json.loads(line[len("SIMPLE_PROGRESS "):])
                 if not isinstance(item, dict):
                     continue
                 phase = str(item.get("phase") or "processing")[:64]
-                counts = (int(item.get("processedBytes") or 0), int(item.get("processedFiles") or 0))
+                values = (item.get("processedBytes", 0), item.get("processedFiles", 0))
+                if progress_stream and any(not isinstance(value, int) or isinstance(value, bool) for value in values):
+                    continue
+                counts = tuple(int(value or 0) for value in values)
                 if any(value < 0 or value > (1 << 64) - 1 for value in counts):
                     continue
                 with progress_lock:
                     if phase not in counters and len(counters) >= 32:
-                        continue
-                    previous = counters.get(phase, (0, 0))
+                        if not progress_stream:
+                            continue
+                        counters.pop(next(iter(counters)))
+                    previous = tuple(cumulative_counts) if progress_stream else counters.get(phase, (0, 0))
                     current = (max(previous[0], counts[0]), max(previous[1], counts[1]))
-                    changed = phase not in counters or current != previous
+                    changed = current != previous
                     counters[phase] = current
+                    if progress_stream:
+                        cumulative_counts[:] = current
                     if changed:
                         last_progress[0] = time.monotonic()
                 if changed and entry:
@@ -11727,6 +11920,7 @@ def subprocess_inactivity_run(command, cwd=None, env=None, input=None, file_step
                             process.kill()
                     except OSError:
                         pass
+                    process.wait(timeout=2)  # Reap even after SIGKILL; never abandon an owned child.
                 if cancelled:
                     raise RuntimeError("操作已取消")
                 for reader in readers:
@@ -11748,6 +11942,24 @@ def subprocess_inactivity_run(command, cwd=None, env=None, input=None, file_step
             raise RuntimeError("子进程标准输出超过 4 MiB，未采用截断的结果")
         return subprocess.CompletedProcess(command, process.returncode, streams["stdout"].getvalue(), "".join(streams["stderr"]))
     finally:
+        if process.returncode is None:
+            try:
+                if hasattr(os, "killpg"):
+                    os.killpg(process.pid, signal.SIGTERM)
+                else:
+                    process.terminate()
+                process.wait(timeout=2)
+            except (OSError, subprocess.TimeoutExpired):
+                try:
+                    if hasattr(os, "killpg"):
+                        os.killpg(process.pid, signal.SIGKILL)
+                    else:
+                        process.kill()
+                except OSError:
+                    pass
+                process.wait(timeout=2)
+        for reader in readers:
+            reader.join(timeout=0.2)
         if entry:
             with INACTIVITY_ACTIONS_LOCK:
                 entry["processes"].discard(process)
@@ -13387,6 +13599,25 @@ def handle_action(root, action, payload, operation_id, op_id):
             return {"schemaVersion": SCHEMA_VERSION, "opId": op_id, "status": "failed", "message": str(exc)}
     if action in DEBUG_BLOCKED_ACTIONS and (action_debug_mode(payload) or action_targets_debug_run(payload)):
         return terminal_action(root, action, operation_id, op_id, "failed", "Debug 模式产物与正式实验隔离，禁止执行归档、删除、有效结果、统计、论文或 PPT 操作。", request=payload)
+    if action == "preflight-worker-task":
+        worker_id = str(payload.get("workerId") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker")
+        try:
+            if payload.get("targetPreflightOperationId"):
+                target = str(payload["targetPreflightOperationId"])
+                with INACTIVITY_ACTIONS_LOCK:
+                    entry = INACTIVITY_ACTIONS.get((os.path.abspath(root), target))
+                    if not entry or entry["action"] != action or entry["payload"].get("workerId") != worker_id:
+                        raise ValueError("FORMAL_JOB_PREFLIGHT_OPERATION_MISMATCH")
+                if not cancel_inactivity_action(root, target):
+                    raise ValueError("FORMAL_JOB_PREFLIGHT_OPERATION_UNAVAILABLE")
+                return terminal_action(root, action, operation_id, op_id, "completed", "已取消指定预检；未停止科研作业",
+                                       {"targetPreflightOperationId": target, "executionStarted": False, "queueChanged": False})
+            result = preflight_existing_worker_task(root, payload, worker_id)
+            message = "任务 shell 核验通过；未核验目录准入、未启动或重新入队" if payload.get("environmentOnly") is True else "单作业启动前预检通过；未启动或重新入队"
+            return terminal_action(root, action, operation_id, op_id, "completed", message, result)
+        except Exception as exc:
+            return terminal_action(root, action, operation_id, op_id, "failed", str(exc),
+                                   {"executionStarted": False, "queueChanged": False, "targetCommandId": payload.get("targetCommandId")})
     if action in ("start-worker-task", "retry-worker-task", "stop-worker-task"):
         command = dict(payload)
         command["action"] = action
@@ -13563,7 +13794,7 @@ def handle_action(root, action, payload, operation_id, op_id):
         gpu_idle_util = max(0, min(100, int(options.get("gpuIdleUtilThreshold") or options.get("gpu_idle_util_threshold") or 5)))
         gpu_idle_mem = max(0, min(8192, int(options.get("gpuIdleMemThresholdMb") or options.get("gpu_idle_mem_threshold") or 200)))
         session_check_min = max(1, min(60, int(options.get("sessionCheckMinSeconds") or options.get("session_check_min_seconds") or 5)))
-        env = simple_runtime_env(os.environ.copy())
+        env = fresh_task_runtime_env()
         env["SIMPLE_GPU_IDLE_UTIL_THRESHOLD"] = str(gpu_idle_util)
         env["SIMPLE_GPU_IDLE_MEM_THRESHOLD"] = str(gpu_idle_mem)
         scheduler_args = [
@@ -14146,7 +14377,36 @@ def recover_worker_task_launch_paths(root, task):
 
 WORKER_TASK_FAILURE_CACHE = {}
 
+def worker_task_console_log(command_id):
+    return "simple_cluster/tmux_logs/" + hashlib.sha256(str(command_id).encode("utf-8")).hexdigest() + ".console.log"
+
+def worker_task_failure_diagnostic(root, task):
+    command_id = str(task.get("commandId") or "")
+    if not command_id or str(task.get("runKey") or command_id) != command_id:
+        return {}
+    expected = worker_task_console_log(command_id)
+    if str(task.get("logPath") or "").replace("\\", "/") != expected:
+        return {}  # Shared GPU/session logs cannot be attributed to this command.
+    try:
+        filename = safe_project_path(root, expected)
+        with open(filename, "rb") as stream:
+            stream.seek(0, os.SEEK_END)
+            stream.seek(max(0, stream.tell() - 16384))
+            tail = stream.read(16384).decode("utf-8", errors="replace")
+        lines = [line.strip() for line in tail.splitlines() if line.strip()]
+        message = next((line for line in reversed(lines) if "Error:" in line or "Exception:" in line), lines[-1] if lines else "")
+        trace_start = tail.rfind("Traceback (most recent call last):")
+        diagnostic = {"schemaVersion": 1, "commandId": command_id, "runKey": command_id,
+            "tmuxPane": str(task.get("tmuxPane") or ""), "tmuxSession": str(task.get("tmuxSession") or ""), "tmuxWindowId": str(task.get("tmuxWindowId") or ""),
+            "logPath": expected, "traceback": tail[trace_start:] if trace_start >= 0 else "", "message": message}
+        return {"error": message, "failureDiagnostic": diagnostic} if message else {}
+    except (OSError, ValueError):
+        return {}
+
 def worker_task_failure_message(root, task, use_cache=True):
+    diagnostic = worker_task_failure_diagnostic(root, task)
+    if diagnostic.get("error"):
+        return diagnostic["error"]
     output_dir = str(task.get("outputDir") or "").strip().replace("\\", "/").rstrip("/")
     if not output_dir:
         return ""
@@ -14184,6 +14444,7 @@ def api_worker_tasks(root):
                 continue
             _row = recover_worker_task_launch_paths(root, _item)
             if str(_row.get("status") or "").lower() == "failed" and not _row.get("error"):
+                _row.update(worker_task_failure_diagnostic(root, _row))
                 failure_message = worker_task_failure_message(root, _row)
                 if failure_message:
                     _row["error"] = failure_message
@@ -14259,6 +14520,7 @@ def api_openapi(root, token_required=False, mode="hub_control"):
             "/api/events/sse",
             "/api/operations/{id}",
             "/api/actions/start-worker-task",
+            "/api/actions/preflight-worker-task",
             "/api/actions/register-code-sync-proof",
             "/api/actions/rebuild-distributed-results",
             "/api/actions/retry-worker-task",
@@ -16339,7 +16601,7 @@ def serve_http(args):
             route = urlparse(self.path).path
             if mode == "worker_telemetry":
                 worker_action = route.rsplit("/", 1)[-1] if route.startswith("/api/actions/") else ""
-                if route not in ("/api/actions/save-result-policy", "/api/actions/start-worker-task", "/api/actions/register-code-sync-proof", "/api/actions/rebuild-distributed-results", "/api/actions/retry-worker-task", "/api/actions/stop-worker-task", "/api/actions/delete-worker-artifacts", "/api/actions/archive-worker-artifacts", "/api/actions/validate-plan", "/api/actions/dry-run-plan", "/api/actions/run-plan", "/api/actions/reproduce-plan", "/api/actions/stop-scheduler-operation", "/api/actions/clear-cache", "/api/actions/clearCache", "/api/actions/preview-cache-cleanup", "/api/actions/delete-cache-candidates", "/api/tmux/kill-window", "/api/tensorboard/proxy", "/api/tensorboard/scalars/query") and not route.startswith(TENSORBOARD_BROWSER_PREFIX + "/") and route != TENSORBOARD_BROWSER_PREFIX and worker_action not in WORKER_RESULT_ACTIONS and worker_action not in WORKER_TENSORBOARD_ACTIONS and worker_action not in WORKER_ENV_ACTIONS:
+                if route not in ("/api/actions/save-result-policy", "/api/actions/start-worker-task", "/api/actions/preflight-worker-task", "/api/actions/register-code-sync-proof", "/api/actions/rebuild-distributed-results", "/api/actions/retry-worker-task", "/api/actions/stop-worker-task", "/api/actions/delete-worker-artifacts", "/api/actions/archive-worker-artifacts", "/api/actions/validate-plan", "/api/actions/dry-run-plan", "/api/actions/run-plan", "/api/actions/reproduce-plan", "/api/actions/stop-scheduler-operation", "/api/actions/clear-cache", "/api/actions/clearCache", "/api/actions/preview-cache-cleanup", "/api/actions/delete-cache-candidates", "/api/tmux/kill-window", "/api/tensorboard/proxy", "/api/tensorboard/scalars/query") and not route.startswith(TENSORBOARD_BROWSER_PREFIX + "/") and route != TENSORBOARD_BROWSER_PREFIX and worker_action not in WORKER_RESULT_ACTIONS and worker_action not in WORKER_TENSORBOARD_ACTIONS and worker_action not in WORKER_ENV_ACTIONS:
                     return self.send_json({"error": "worker telemetry only accepts local worker actions"}, status=404)
             if route == "/api/tensorboard/proxy" or route == TENSORBOARD_BROWSER_PREFIX or route.startswith(TENSORBOARD_BROWSER_PREFIX + "/"):
                 return self.proxy_tensorboard(urlparse(self.path))
@@ -16674,6 +16936,10 @@ def serve_http(args):
                 return
             action = route.rsplit("/", 1)[-1]
             operation_id = str(payload.get("operationId") or f"{action}-{op_id}")
+            if action == "preflight-worker-task":
+                current_worker = str(getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip()
+                if payload.get("workerId") != current_worker:
+                    return self.send_json({"error": "FORMAL_JOB_PREFLIGHT_WORKER_MISMATCH"}, status=403)
             if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan", "run-plan", "reproduce-plan"):
                 options = payload.get("options") or {}
                 topology_mode = str(options.get("topologyMode") or payload.get("topologyMode") or "")
@@ -16711,8 +16977,8 @@ def serve_http(args):
                              "executionMode": validation.get("execution_mode") or "train_test"}, request=payload))
                 except Exception as exc:
                     return self.send_json(terminal_action(root, action, operation_id, op_id, "failed", str(exc), request=payload))
-            if action in ("validate-plan", "dry-run-plan", "rebuild-distributed-results") or (action == "preview-cache-cleanup" and "planOutputPaths" in payload) or (action == "archive-worker-artifacts" and payload.get("quarantineFailedAttempt") is True):
-                worker = (selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker") if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan") else ""
+            if action in ("validate-plan", "dry-run-plan", "preflight-worker-task", "rebuild-distributed-results") or (action == "preview-cache-cleanup" and "planOutputPaths" in payload) or (action == "archive-worker-artifacts" and payload.get("quarantineFailedAttempt") is True):
+                worker = (selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker") if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan", "preflight-worker-task") else ""
                 return self.send_json(start_inactivity_action(root, action, payload, operation_id, op_id, worker), status=202)
             if action not in ("preview-cache-cleanup", "delete-cache-candidates"):
                 try:
