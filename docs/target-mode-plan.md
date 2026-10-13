@@ -45,6 +45,10 @@
 - 8文件边界：legacy宿主/Panel/PlanArtifactSyncStatus、完成镜像/手动结果边界/失败job审核/预检API测试及本计划。失败遗留仅打开只读审核，执行仍独立精确确认；完成镜像只全部成功正式run经本机认证中转，保留内存汇总、无代码上传和原始本机下载。三方更新入口四冲突全部保留Mac实现；原目标18/11。
 - build/面板2/vm、完成镜像11/手动结果边界6/失败审核4/预检API7通过。来源/目标冲突、项目变化、活动writer、离线与清理hold不传输；全部SimpleSFTP调用替身，不操作生产服务器。原目标18/11。
 
+### 074e2精确停止/人工恢复（passed）
+- 6文件边界：formalJobStop测试及WSL专属tmux夹具、formalJobRejectedRecovery/formalJobPreflightFailure测试、Mac身份测试补旧协议拒绝、本计划；只关闭新建专属测试tmux服务器，任务/文件均夹具，保留失败文件。不读取真实科研Plan；原目标18/11。
+- 专属tmux精确停止3/人工恢复5/无进展与取消失败2/Mac身份及旧能力拒绝2通过；没有超时重试或真实Agent操作。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。
