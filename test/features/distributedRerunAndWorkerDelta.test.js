@@ -12,7 +12,7 @@ const extension = fs.readFileSync(path.join(root, "src/extension/legacy.ts"), "u
 const panel = fs.readFileSync(path.join(root, "src/ui/PanelHtml.legacy.ts"), "utf8");
 const renderedPanel = require("../../dist/ui/PanelHtml.legacy.js").renderPanelHtml();
 
-test("completed jobs from a prior distributed run are identified by Plan and job identity", () => {
+test("old completed queue rows cannot be adopted into a current declaration", () => {
   const stored = { schemaVersion: 1, plans: [
     { id: "old", planFile: "experiments/plans/comparison/concatenation.yaml", revision: "r1", codeFingerprint: "abc", enqueuedAt: "2026-01-01",
       jobs: [
@@ -24,10 +24,10 @@ test("completed jobs from a prior distributed run are identified by Plan and job
   ] };
   assert.deepEqual(queue.completedJobOutputs(stored, "./experiments/plans/comparison/concatenation.yaml", [
     { index: 0, case: "bus", seed: 42 }, { index: 1, case: "bus", seed: 43 },
-  ]), [{ index: 0, case: "bus", seed: 42, output_dir: "work_dirs/bus/attempts/old" }]);
-  const selected = [{ index: 1, case: "bus", seed: 43, outputDir: "work_dirs/bus43/attempts/new" }];
+  ]), []);
+  const selected = [{ index: 1, case: "bus", seed: 43, outputDir: "work_dirs/bus43/direct_job", collectionResultCsv: "tmp/result/bus43/metrics.csv" }];
   const next = queue.enqueuePlan(stored, { planFile: "experiments/plans/comparison/concatenation.yaml",
-    revision: "r1", codeFingerprint: "abc", overwriteExisting: false, jobs: selected }, "new");
+    revision: "r1", codeFingerprint: "abc", resultPathPolicy: "declared", overwriteExisting: false, jobs: selected }, "new");
   assert.equal(next.plans.at(-1).jobs.length, 1);
   assert.equal(next.plans.at(-1).jobs[0].seed, 43);
 });
@@ -74,7 +74,7 @@ test("publish reports each pre-upload stage and transfers only changed files", (
   const localAt = sync.indexOf("正在建立本地代码清单并核对文件哈希");
   const remoteAt = sync.indexOf("正在比对");
   const transferAt = sync.indexOf("正在传输");
-  const uploadAt = sync.indexOf('executeCommand("simpleSftp.uploadWorkspace"');
+  const uploadAt = sync.indexOf('executeCommand("simpleSftpMac.uploadWorkspace"');
   assert.ok(localAt >= 0 && remoteAt > localAt && transferAt > remoteAt && uploadAt > transferAt);
   assert.match(sync, /缓存命中 \$\{stats\.reused\}，重新哈希 \$\{stats\.hashed\}/);
   assert.match(sync, /个未变化文件不传输/);
@@ -123,6 +123,7 @@ test("distributed job exposes one identity-bound tmux log jump and no inline log
   const source = renderedPanel.slice(start, end);
   let html = "";
   const sandbox = {
+    asArray: value => Array.isArray(value) ? value : [],
     selectedExecutionPlanFile: "",
     collapsedExecutionPlanKeys: new Set(),
     persistWebviewState: () => undefined,

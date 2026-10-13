@@ -19,11 +19,11 @@ function definition(name) {
 function fixture(root) {
   const names = [
     "durable_plan_queue_path", "read_durable_plan_queue", "write_durable_plan_queue",
-    "durable_plan_value", "durable_plan_identity", "durable_plan_public_task", "durable_plan_same_identity",
+    "durable_plan_value", "durable_plan_identity", "durable_plan_public_identity", "durable_plan_public_task", "durable_plan_same_identity",
     "worker_recall_tombstones_path", "read_worker_recall_tombstones", "recalled_worker_command",
     "write_worker_recall_tombstone", "_legacy_recall_value", "_legacy_recall_identity",
     "worker_start_claims_path", "read_worker_start_claims", "worker_start_claim", "write_worker_start_claim",
-    "_legacy_recall_identity_matches", "_legacy_recall_has_execution_marker", "worker_task_matches_stop_identity",
+    "_legacy_recall_identity_matches", "_legacy_recall_has_execution_marker", "worker_task_stop_identity_mismatches", "worker_task_matches_stop_identity",
     "worker_command_checkpoint_path", "worker_command_queue_identity", "save_worker_command_checkpoint", "historical_command_is_unprocessed",
     "requeue_durable_plan_job", "execute_worker_command",
   ];
@@ -31,7 +31,7 @@ function fixture(root) {
   const legacy = source.match(/^LEGACY_WORKER_STOP_IDENTITY_FIELDS\s*=\s*\([^\n]+/m);
   assert.ok(durable && legacy, "missing recall identity constants");
   return String.raw`
-import json, os, threading, time, hashlib
+import copy, json, os, threading, time, hashlib
 ROOT = ${JSON.stringify(root.replace(/\\/g, "/"))}
 SCHEMA_VERSION = 1
 WORKER_TASK_SNAPSHOT_LOCK = threading.RLock()

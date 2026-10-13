@@ -30,6 +30,8 @@ function snapshot(plan, job, status = 'queued', aliases = false, extra = {}) {
           codeFingerprint: plan.codeFingerprint, planJobCount: plan.planJobCount, experimentIndex: job.index,
           runKey: job.runKey || job.commandId, case: job.case }),
       seed: job.seed, attempt: job.attempt, outputDir: job.outputDir, workerId: job.workerId,
+      ...(plan.resultPathPolicy === 'declared' ? { resultPathPolicy: 'declared', globalJobId: job.globalJobId,
+        collectionResultCsv: job.collectionResultCsv } : {}),
       commandId: job.commandId, gpuId: job.gpuId, status, ...extra,
     }] };
 }
@@ -59,7 +61,7 @@ test('lost release ACK retains durable intent and restart replays the same opera
   let queue = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), { projectId: queueApi.canonicalProjectId(root),
     schedulingMode: 'server_prequeue', planFile: 'plans/recall.yaml', revision: 'r1', codeFingerprint: 'f1',
     jobs: [0, 1].map((index) => ({ index, case: `case-${index}`, seed: 40 + index,
-      outputDir: `runs/${index}/attempts/old-run` })) }, 'plan-recall', stamp);
+      outputDir: `runs/${index}`, collectionResultCsv: `tmp/result/${index}/metrics.csv` })) }, 'plan-recall', stamp);
   const plan = queue.plans[0];
   const [queued, running] = plan.jobs;
   Object.assign(queued, { status: 'queued', workerId: 'worker-a', commandId: 'target-command-0001', runKey: 'target-command-0001', gpuId: '' });
@@ -93,8 +95,8 @@ test('lost release ACK retains durable intent and restart replays the same opera
   persisted = stored.value.plans[0];
   assert.equal(calls[1].opId, operationId, 'the restart must replay the saved operation id');
   assert.equal(persisted.jobs[0].status, 'pending');
-  assert.equal(persisted.jobs[0].attempt, 2);
-  assert.equal(persisted.jobs[0].outputDir, 'runs/0/attempts/distributed-attempt-12345678');
+  assert.equal(persisted.jobs[0].attempt, 0);
+  assert.equal(persisted.jobs[0].outputDir, 'runs/0');
   assert.equal(persisted.jobs[0].workerId, undefined);
   assert.equal(persisted.jobs[1].status, 'running');
 });
@@ -123,7 +125,8 @@ test('a projectless all-legacy queue recalls one job while a running legacy sibl
   assert.ok(current.projectId, 'released historical Plan enters the current durable queue');
   assert.equal(current.jobs[0].status, 'pending');
   assert.equal(current.jobs[0].localQueueOnly, true);
-  assert.equal(current.jobs[0].outputDir, 'runs/historical/attempts/distributed-attempt-12345678');
+  assert.equal(current.jobs[0].outputDir, 'runs/historical');
+  assert.equal(current.jobs[0].attempt, 0);
   assert.equal(current.jobs[1].status, 'running');
   assert.equal(queueApi.hasLegacyOwnership(current.jobs[1]), true,
     'the promoted Plan must preserve the old worker identity as an assigned legacy job');
@@ -149,7 +152,7 @@ test('restart reconciles a persisted cancelled requeue tombstone only with its c
   const stamp = new Date().toISOString();
   const queue = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), { projectId: queueApi.canonicalProjectId(root),
     schedulingMode: 'local_idle', localDispatchOverride: true, planFile: 'plans/tombstone.yaml', revision: 'r1',
-    codeFingerprint: 'f1', jobs: [{ index: 0, case: 'case', seed: 3, outputDir: 'runs/case/attempts/old' }] },
+    codeFingerprint: 'f1', jobs: [{ index: 0, case: 'case', seed: 3, outputDir: 'runs/case', collectionResultCsv: 'tmp/result/case/metrics.csv' }] },
   'tombstone-plan', stamp);
   const plan = queue.plans[0];
   const job = plan.jobs[0];
@@ -169,7 +172,7 @@ test('restart reconciles a persisted cancelled requeue tombstone only with its c
   const released = stored.value.plans[0].jobs[0];
   assert.equal(rpcCalls, 0);
   assert.equal(released.status, 'pending');
-  assert.equal(released.attempt, 2);
+  assert.equal(released.attempt, 0);
   assert.equal(released.recallRequested, undefined);
 });
 
@@ -195,7 +198,7 @@ test('a partial historical requeue snapshot replays the saved operation to obtai
   await p.processDistributedRecall(root, plan.id, job.index, 0);
   assert.equal(calls, 1);
   assert.equal(stored.value.plans[0].jobs[0].status, 'pending');
-  assert.equal(stored.value.plans[0].jobs[0].attempt, 2);
+  assert.equal(stored.value.plans[0].jobs[0].attempt, 0);
 });
 
 test('historical pending receipts can be recalled through the Agent queued-only release', async () => {
@@ -214,5 +217,5 @@ test('historical pending receipts can be recalled through the Agent queued-only 
   await p.recallPlanToLocalQueueFromUi({ planId: plan.id, planFile: plan.planFile, jobIndex: job.index });
   assert.equal(calls, 1, 'historical pending must reach the queued-only Agent recall');
   assert.equal(stored.value.plans[0].jobs[0].status, 'pending');
-  assert.equal(stored.value.plans[0].jobs[0].attempt, 2);
+  assert.equal(stored.value.plans[0].jobs[0].attempt, 0);
 });

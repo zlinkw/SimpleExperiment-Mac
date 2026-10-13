@@ -8,7 +8,8 @@ const ts = require("typescript");
 function compile(source, globals = {}) {
   const loaded = { exports: {} };
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  vm.runInNewContext(code, { module: loaded, exports: loaded.exports, require, ...globals });
+  const resolve = name => require(name.startsWith("./") ? path.join(__dirname, "../../dist/features", name) : name);
+  vm.runInNewContext(code, { module: loaded, exports: loaded.exports, require: resolve, ...globals });
   return loaded.exports;
 }
 const source = fs.readFileSync(path.join(__dirname, "../../src/extension/legacy.ts"), "utf8");

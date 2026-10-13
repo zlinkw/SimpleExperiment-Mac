@@ -73,6 +73,10 @@
 - 8文件边界：Exp UpdateGate/Bootstrap及两测试、SF extension/mac-bootstrap/macBootstrap测试、本计划。取消仅停止更新等待，原传输controller/子进程继续；等待也计入未完成入场ticket并拒绝坏PID。安装回执未知的启动恢复先封业务，检查/补装只使用冻结原批次，重载不自动安装。保持Mac静态索引/preview/平台/退出证明，原目标18/11。
 - Exp build/面板2/vm、门禁3/Bootstrap7/事务11/Mac共享租约3、SF Bootstrap4/build28闭包通过；SF普通同步99cedf7。恢复夹具首次资产文件名/最小大小不符合真实协议而失败，改为真实parseManifest规范输出后通过，不放宽清单校验。原目标18/11。
 
+### 074h1启动/召回/镜像状态回归（passed）
+- 6文件边界：PrequeueRecall/PrequeueRecallLifecycle/DistributedQueueStartup/DistributedRerunAndWorkerDelta/PlanArtifactSyncStatus测试、本计划；验证正式无attempt身份，历史只读及镜像机器状态排除。先审核Python仅函数提取、10秒、无永久删除，再逐文件串行；原目标18/11。
+- 召回1/生命周期5/启动20/历史与差量8/镜像状态8通过；差量断言改用Mac原有命令命名空间，不改传输逻辑。无新超时/真实传输；原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。

@@ -191,10 +191,10 @@ test("successful artifact pass clears an old disconnected warning", async () => 
   const context = { workspaceRoot: () => "C:/project", Date, Set, Map, Object, errorMessage: String,
     PlanOutputRetention: require("../../dist/features/PlanOutputRetention.js") };
   vm.createContext(context);
-  vm.runInContext(compiled.slice(first, last).replace("async syncDistributedJobArtifacts(root, queue, phase, verifyAll = false, report)", "async function syncJobArtifacts(root, queue, phase, verifyAll = false, report)")
+  vm.runInContext(compiled.slice(first, last).replace("async syncDistributedJobArtifacts(", "async function syncJobArtifacts(")
     + "\nthis.sync = syncJobArtifacts;", context);
   const job = { index: 0, attempt: 1, status: "completed", workerId: "worker-b", outputDir: "runs/a",
-    artifacts: {}, fragmentWorkerIds: ["worker-a"], mirroredWorkerIds: ["worker-a"], artifactError: "old disconnect" };
+    artifacts: { "runs/a/formal_job_owner.json": "a".repeat(64) }, fragmentWorkerIds: ["worker-a"], mirroredWorkerIds: ["worker-a"], artifactError: "old disconnect" };
   const patched = [];
   const provider = {
     distributedLaunchInFlight: new Set(),
@@ -205,15 +205,15 @@ test("successful artifact pass clears an old disconnected warning", async () => 
     sftpServerOptions: () => ({}),
     patchDistributedJob: async (_root, _plan, _index, _attempt, fields) => patched.push(fields),
   };
-  await context.sync.call(provider, "C:/project", { plans: [{ id: "plan-1", planFile: "plans/p.yaml", jobs: [job] }] }, "bulk");
+  await context.sync.call(provider, "C:/project", { plans: [{ id: "plan-1", resultPathPolicy: "declared", planFile: "plans/p.yaml", jobs: [job] }] }, "bulk");
   assert.equal(job.artifactError, undefined);
   assert.ok(patched.some((row) => Object.hasOwn(row, "artifactError") && row.artifactError === undefined));
 });
 
-test("automatic completion does not rebuild previews or mirror completed job artifacts", async () => {
+test("automatic completion invokes only the Worker mirror, never preview or final rebuilding", async () => {
   const compiled = compiledSource;
   const first = compiled.indexOf("scheduleDistributedPostprocess(root, rerunIfBusy = false) {");
-  const last = compiled.indexOf("queuePlanArtifactSyncStatusCheck(", first);
+  const last = compiled.indexOf("async syncCompletedPlanArtifacts(", first);
   assert.ok(first >= 0 && last > first);
   const context = { workspaceRoot: () => "C:/project", errorMessage: String };
   vm.createContext(context);
@@ -222,6 +222,9 @@ test("automatic completion does not rebuild previews or mirror completed job art
     + "\nthis.schedule = scheduleDistributedPostprocess;", context);
   const calls = [];
   const provider = {
+    isRealtimeMode: () => true, projectTopologyAssessment: () => ({ mode: "worker_pool" }),
+    captureProjectContext: () => ({ root: "C:/project" }), projectContextIsCurrent: () => true,
+    syncCompletedPlanArtifacts: async () => calls.push("worker-mirror"), queuePlanArtifactSyncStatusCheck: () => {},
     distributedLaunchInFlight: new Set(),
     loadDistributedQueue: async () => ({ plans: [{ planFile: "plans/p.yaml", jobs: [] }] }),
     syncDistributedJobArtifacts: async (_root, _queue, phase) => calls.push(phase),
@@ -234,10 +237,11 @@ test("automatic completion does not rebuild previews or mirror completed job art
   };
   context.schedule.call(provider, "C:/project");
   await provider.distributedPostprocessPromise;
-  assert.deepEqual(calls, []);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, ["worker-mirror", "state"]);
 });
 
-test("every newly completed job rechecks all recorded job mirrors and repairs drift", async () => {
+test("formal mirror drift remains blocked rather than overwriting a conflicting destination", async () => {
   const compiled = compiledSource;
   const first = compiled.indexOf("async syncDistributedJobArtifacts(");
   const last = compiled.indexOf("async distributedOutputHashes(", first);
@@ -247,12 +251,13 @@ test("every newly completed job rechecks all recorded job mirrors and repairs dr
     DistributedJobArtifacts_1: { collectDistributedJobArtifacts: (_dir, inventory) => Object.fromEntries(Object.entries(inventory || {}).map(([name, row]) => [name, row.sha256])) },
     PlanArtifactTransfer_1: { workerFpsyncTaskLabel: (input) => [input.action, input.sourceId, input.destinationId].filter(Boolean).join(" ") } };
   vm.createContext(context);
-  vm.runInContext(compiled.slice(first, last).replace("async syncDistributedJobArtifacts(root, queue, phase, verifyAll = false, report)",
-    "async function syncJobArtifacts(root, queue, phase, verifyAll = false, report)")
+  vm.runInContext(compiled.slice(first, last).replace("async syncDistributedJobArtifacts(",
+    "async function syncJobArtifacts(")
     + "\nthis.sync = syncJobArtifacts;", context);
   const file = "runs/a/result.csv";
+  const digest = "a".repeat(64), changed = "b".repeat(64), owner = "runs/a/formal_job_owner.json";
   const job = { index: 0, attempt: 1, status: "completed", workerId: "w2", outputDir: "runs/a",
-    artifacts: { [file]: "new" }, fragmentWorkerIds: ["w2", "w3"], mirroredWorkerIds: ["w2", "w3"] };
+    artifacts: { [file]: digest, [owner]: digest }, fragmentWorkerIds: ["w2", "w3"], mirroredWorkerIds: ["w2", "w3"] };
   let copied = false;
   const patches = [];
   const provider = {
@@ -262,16 +267,16 @@ test("every newly completed job rechecks all recorded job mirrors and repairs dr
     workerCodeSyncTargets: () => [{ id: "w2" }, { id: "w3" }],
     lastWorkerProbes: { w2: { status: "ok" }, w3: { status: "ok" } },
     sftpServerOptions: (target) => ({ id: target.id }),
-    verifiedSftpProjectInventory: async ({ source }) => ({ files: { [file]: { sha256: source.id === "w2" || copied ? "new" : "old" } } }),
-    distributedOutputHashes: async (source) => ({ [file]: source.id === "w2" || copied ? "new" : "old" }),
+    verifiedSftpProjectInventory: async ({ source }) => ({ files: { [file]: { sha256: source.id === "w2" ? digest : changed }, [owner]: { sha256: digest } } }),
+    distributedOutputHashes: async (source) => ({ [file]: source.id === "w2" ? digest : changed, [owner]: digest }),
     assertSshTransportIdentities: async () => undefined,
     simpleSftpApiCall: async () => { copied = true; },
     patchDistributedJob: async (_root, _plan, _index, _attempt, fields) => patches.push(fields),
     recordActionError: () => undefined,
   };
-  await context.sync.call(provider, "C:/project", { plans: [{ id: "p", planFile: "p.yaml", jobs: [job] }] }, "bulk", true);
-  assert.equal(copied, true);
-  assert.ok(patches.some((fields) => fields.replaceMirroredWorkerIds && !fields.mirroredWorkerIds.includes("w3")));
+  await assert.rejects(context.sync.call(provider, "C:/project", { plans: [{ id: "p", resultPathPolicy: "declared", planFile: "p.yaml", jobs: [job] }] }, "bulk", true), /FORMAL_JOB_MIRROR_CONFLICT/);
+  assert.equal(copied, false);
+  assert.ok(patches.some(fields => /MIRROR_CONFLICT/.test(fields.artifactError)));
   assert.deepEqual(Array.from(job.mirroredWorkerIds), ["w2", "w3"]);
 });
 
@@ -281,6 +286,7 @@ test("legacy explicit rebuilding can repair a stale shared preview without autom
   const last = compiled.indexOf("planOutputRetentionMode(root)", first);
   const context = {
     PlanOutputRetention: require("../../dist/features/PlanOutputRetention.js"),
+    DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
     workspaceRoot: () => "C:/project", Map, Set, Object, errorMessage: String,
     uniqueStrings: (values) => [...new Set(values)],
     PlanRunFreshness: { selectLatestCompletePlanRun(queue, planFile) {
@@ -325,6 +331,7 @@ test("legacy rebuild retries use fresh operation identities and cache only succe
   const last = compiledSource.indexOf("planOutputRetentionMode(root)", first);
   let sequence = 0;
   const context = { PlanOutputRetention: require("../../dist/features/PlanOutputRetention.js"),
+    DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
     PlanRunFreshness: { selectLatestCompletePlanRun: queue => ({ plan: queue.plans[0] }) },
     crypto: require("node:crypto"), workspaceRoot: () => "C:/project",
     uniqueStrings: values => [...new Set(values)], makeOpId: prefix => `${prefix}-new-${++sequence}`,
@@ -490,6 +497,7 @@ function loadTickQueue() {
   assert.ok(start >= 0 && end > start);
   const context = {
     workspaceRoot: () => "C:/project", DistributedPlanQueue: loadSourceModule("src/features/DistributedPlanQueue.ts"),
+    GpuJobOwnership: require("../../dist/features/GpuJobOwnership.js"),
     DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"),
     mapLimited: async (items, _limit, fn) => Promise.all(items.map(fn)),
     Object, Set, Map, Date, JSON, setInterval, clearInterval, errorMessage: String,
@@ -545,7 +553,7 @@ test("mixed durable and legacy queues reconcile old completion and fence missing
   assert.equal(sends, 0, "missing legacy receipts cannot authorize replay or duplicate work");
 });
 
-test("verified idle Workers on the new fingerprint dispatch edrl and block stale ebmc pending", async () => {
+test("verified idle Workers cannot resume old execution-policy records on either code fingerprint", async () => {
   const context = loadTickQueue();
   const oldFingerprint = "a84a822d";
   const newFingerprint = "ec594411";
@@ -580,16 +588,15 @@ test("verified idle Workers on the new fingerprint dispatch edrl and block stale
     refreshSelectedDistributedLog: () => undefined, recordActionError: () => undefined,
   };
   await context.tickQueue.call(provider);
-  assert.deepEqual(sent.map((row) => row.planId), ["edrl"]);
-  assert.equal(queue.plans.find((plan) => plan.id === "edrl").jobs[0].status, "running");
+  assert.deepEqual(sent.map((row) => row.planId), []);
+  assert.equal(queue.plans.find((plan) => plan.id === "edrl").jobs[0].status, "pending");
   const stale = queue.plans.find((plan) => plan.id === "ebmc").jobs[0];
   assert.equal(stale.status, "pending");
   assert.equal(stale.commandId, undefined);
-  assert.match(stale.blockReason, /代码指纹不匹配/);
-  assert.match(stale.blockReason, /重新提交/);
+  assert.equal(stale.workerId, undefined);
 });
 
-test("a persisted deferred Plan is retired while an already submitted job still dispatches", async () => {
+test("a persisted deferred Plan is retired without resuming a pending legacy job", async () => {
   const context = loadTickQueue();
   const body = { planFile: "experiments/plans/comparison/edrl.yaml", planRevision: "rev-edrl", options: {} };
   let queue = { schemaVersion: 1, plans: [
@@ -623,11 +630,11 @@ test("a persisted deferred Plan is retired while an already submitted job still 
     refreshSelectedDistributedLog: () => undefined, recordActionError: (error) => errors.push(error.message),
   };
   await context.tickQueue.call(provider);
-  assert.deepEqual(sent, ["ebmc"]);
+  assert.deepEqual(sent, []);
   assert.equal(queue.deferred.find((row) => row.id === "deferred-edrl").status, "superseded");
   assert.equal(queue.deferred.find((row) => row.id === "deferred-edrl").supersededBy, "manual-rerun-policy");
   assert.match(errors.join("\n"), /不会自动接续/);
-  assert.equal(queue.plans.find((plan) => plan.id === "ebmc").jobs[0].status, "running");
+  assert.equal(queue.plans.find((plan) => plan.id === "ebmc").jobs[0].status, "pending");
 });
 
 test("running work and missing Worker version evidence still hold a deferred Plan", async () => {
