@@ -13,9 +13,30 @@ test('portable formal PLAN + tmp/result isolates concurrent jobs and rejects inc
   assert.equal(JSON.parse(proc.stdout.trim()).ok, true);
 });
 
-test('actual MultiModal path guard, config snapshot and result collector agree; no training or writes', t => {
-  const project = process.env.MULTIMODAL_PATH_CONTRACT_ROOT || 'D:/GitRepo/MultiModal';
-  if (!fs.existsSync(path.join(project, 'experiments/quality_composition.py'))) { t.skip('set MULTIMODAL_PATH_CONTRACT_ROOT to the actual research checkout'); return; }
+test('portable declared paths, real generated adapter snapshot and collector agree in a dedicated fixture', () => {
+  const project = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'simple-plan-adapter-'));
+  const adapter = path.join(project, 'result_writer.py');
+  fs.writeFileSync(adapter, require('../../dist/templates/ProjectAdapterTemplates').outputAdapterTemplate('isolated-contract'), { encoding: 'utf8', flag: 'wx' });
+  const proc = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-B', '-X', 'utf8', path.join(__dirname, 'planResultPathAdapter.fixture.py'), project], {
+    cwd: path.join(__dirname, '../..'), encoding: 'utf8', timeout: 10000, windowsHide: true,
+  });
+  assert.equal(proc.status, 0, proc.stderr || proc.stdout);
+  const result = JSON.parse(proc.stdout.trim());
+  assert.equal(result.ok, true);
+  const collector = require('../../dist/results/WrapperResultBundle');
+  for (const job of result.jobs) {
+    const files = collector.declaredWrapperResults(JSON.stringify(job.manifest), job.outputDir, job.resultCsv);
+    assert.ok(files.includes(job.outputDir + '/config_snapshot.yaml'));
+    assert.equal(collector.jobResultPath(job.resultCsv, job.outputDir, job.resultCsv), job.resultCsv);
+    assert.throws(() => collector.jobResultPath('tmp/result/foreign.csv', job.outputDir, job.resultCsv));
+  }
+});
+
+// Preserve the optional checkout-specific entry. Its mutable external project is
+// not a required release fixture, and must be deliberately selected by the caller.
+if (process.env.MULTIMODAL_PATH_CONTRACT_ROOT) test('actual MultiModal path guard, config snapshot and result collector agree; no training or writes', () => {
+  const project = process.env.MULTIMODAL_PATH_CONTRACT_ROOT;
+  assert.ok(fs.existsSync(path.join(project, 'experiments/quality_composition.py')));
   const proc = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-B', '-X', 'utf8', path.join(__dirname, 'planResultPathContract.fixture.py'), project], {
     cwd: path.join(__dirname, '../..'), encoding: 'utf8', timeout: 10000, windowsHide: true,
   });

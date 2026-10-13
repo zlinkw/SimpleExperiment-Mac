@@ -89,6 +89,11 @@
 - 2文件边界：gpuJobIdentity与本计划。完整prepare执行至101个测试记录后遇旧夹具缺job_shell_environment_prefix依赖的NameError，exit1，保留日志，尚未生成版本目录或发布。仅更新AST隔离依赖/正式身份及新命令级env断言，保留遥测脱敏/双启动路径/10秒/Python临时脚本精确归档；不改生产或超时。验证后普通同步新提交再完整prepare，原目标18/11。
 - build/面板2/vm和完整GPU身份文件1通过；tmux客户端不传任务控制或token，两种启动命令只携带本job身份，保留原遥测脱敏。版本提交4fbea69普通同步，发布最终绑定本修正批次对应Git提交；原目标18/11。
 
+### 074l隔离结果路径与正式召回UI夹具（passed）
+- 5文件边界：planResultPathContract、新固定adapter夹具、executionCompactOverview/jobTmuxLogNavigation及本计划。第二次完整prepare保留exit1日志；旧门禁默认读取外部MultiModal工作树，其中原Plan已不存在。保留显式MULTIMODAL_PATH_CONTRACT_ROOT兼容验收入口，不修改科研仓库、不复制其源码；发布默认改为专属新建夹具，实际Scheduler解析/预检/配置/命令与生成adapter/真实结果collector集成，所有必须门禁仍运行且不skip。科研项目专属hook兼容验收延期，不能声称已验。原目标18/11。
+- 后段探索审计33文件只有两个旧UI断言失败（正式召回仍期望attempt与自动移走旧产物）；夹具改核验新正式command/index及无attempt、历史只读说明，不改生产。原目标18/11。
+- build/面板2/vm、结果路径集成3/执行总览25/日志导航10通过，必需集成无skip；既有外部专属兼容入口须由调用者显式选择，不读取工作树作为默认发布输入。所有夹具文件保留，完整prepare须在本修正提交同步后重跑，不将探索审计当作发布门禁。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。

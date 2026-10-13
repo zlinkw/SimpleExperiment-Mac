@@ -102,17 +102,22 @@ test("missing real tmux windows report a bounded toast without a showToast Refer
   assert.equal(f.elements.simpleExperimentToast.hidden, true);
 });
 
-test("failed recall click payload and pending state retain the exact attempt and command identity", () => {
+test("formal failed recall payload and pending state retain the original job and command without attempt", () => {
   const sandbox = { RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS: new Set(), ARTIFACT_SCOPE_COMMANDS: new Set(), el: () => null };
   vm.createContext(sandbox);
   vm.runInContext(["payloadFromButton", "pendingKeyForAction", "pendingKeyFromButtonDataset"].map(fn).join("\n"), sandbox);
-  const button = { dataset: { command: "recallFailedJob", planFile: "plans/cpsc.yaml", planId: "workflow", jobIndex: "0", attempt: "1", commandId: "old-command" } };
+  const button = { dataset: { command: "recallFailedJob", planFile: "plans/cpsc.yaml", planId: "workflow", jobIndex: "0", commandId: "old-command" } };
   const payload = sandbox.payloadFromButton(button);
-  assert.equal(payload.attempt, 1); assert.equal(payload.jobIndex, 0); assert.equal(payload.commandId, "old-command");
+  assert.equal(Object.hasOwn(payload, "attempt"), false); assert.equal(payload.jobIndex, 0); assert.equal(payload.commandId, "old-command");
   const key = sandbox.pendingKeyForAction(button.dataset.command, payload);
   assert.equal(sandbox.pendingKeyFromButtonDataset(button), key);
-  const next = { ...payload, attempt: 2, commandId: "new-command" };
+  const next = { ...payload, commandId: "new-command" };
   assert.notEqual(sandbox.pendingKeyForAction(button.dataset.command, next), key);
+  assert.notEqual(sandbox.pendingKeyForAction(button.dataset.command, { ...payload, jobIndex: 1 }), key);
+  button.dataset.attempt = "1";
+  assert.equal(Object.hasOwn(sandbox.payloadFromButton(button), "attempt"), false);
+  button.dataset.command = "markJobUnavailable";
+  assert.equal(sandbox.payloadFromButton(button).attempt, 1, "the other retained action keeps its historical payload");
 });
 function windows(commandId = "command-new", outputDir = "work_dirs/plan/attempts/new") {
   return [{ name: "custom-gpu-0", windows: [
