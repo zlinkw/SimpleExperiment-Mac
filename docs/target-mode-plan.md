@@ -69,6 +69,10 @@
 - 3文件边界：Mac UpdateTransaction/测试/本计划。Windows7bb96599服务反向参考Mac，但新增“安装已请求而回执未知”的保护及冻结批次不可替换、调用快照和取消等待可借鉴；按Mac原清单/ID实现，保留成功项不重复安装与旧journal兼容。其他服务/平台/源不复制；原目标18/11。
 - build/面板2/vm、更新事务11通过；安装首项回执未知仍保留门禁，冻结清单或原tag更改不进入下载，取消安装前等待释放门禁。发布闭包仍待最终版本门禁，不标真机通过；原目标18/11。
 
+### 074g2取消等待与原批次恢复（passed）
+- 8文件边界：Exp UpdateGate/Bootstrap及两测试、SF extension/mac-bootstrap/macBootstrap测试、本计划。取消仅停止更新等待，原传输controller/子进程继续；等待也计入未完成入场ticket并拒绝坏PID。安装回执未知的启动恢复先封业务，检查/补装只使用冻结原批次，重载不自动安装。保持Mac静态索引/preview/平台/退出证明，原目标18/11。
+- Exp build/面板2/vm、门禁3/Bootstrap7/事务11/Mac共享租约3、SF Bootstrap4/build28闭包通过；SF普通同步99cedf7。恢复夹具首次资产文件名/最小大小不符合真实协议而失败，改为真实parseManifest规范输出后通过，不放宽清单校验。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。
