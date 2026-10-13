@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import type { DistributedQueue, QueuedPlan } from "./DistributedPlanQueue";
+import { safePlanArtifactPath } from "./PlanArtifactSync";
+import { collectDistributedJobArtifacts } from "./DistributedJobArtifacts";
 
 export type PlanArtifactSyncStatus = {
   runId: string; revision: string; status: "checking" | "synced" | "partial" | "unknown";
@@ -30,6 +32,32 @@ export function latestCompletePlansForSyncCheck(queue: DistributedQueue, metadat
   return [...latest.values()].slice(0, 500);
 }
 
+/** A durable mirror receipt belongs to a complete formal run, never to a partial job or a basename. */
+export function pendingCompletedPlanMirrors(queue: DistributedQueue, metadata: any[], workerIds: string[], now = Date.now()): QueuedPlan[] {
+  return completeFormalPlansForWorkerMirror(queue, metadata).filter(plan => {
+    if (plan.cleanup || plan.resultPathPolicy !== "declared" || !plan.revision || !plan.codeFingerprint
+      || plan.jobs.some(job => job.unavailable || job.resultPathPolicy !== "declared" || job.globalJobId !== `${plan.id}:${job.index}`
+        || !safePlanArtifactPath(job.outputDir) || job.outputDir.split("/").length < 2 || job.outputDir.split("/").includes("attempts")
+        || job.collectionResultCsv && !safePlanArtifactPath(job.collectionResultCsv)
+        || job.artifactRetryAfter && Date.parse(job.artifactRetryAfter) > now)) return false;
+    return plan.jobs.some(job => !/^[a-f0-9]{64}$/i.test(job.artifacts?.[`${job.outputDir}/formal_job_owner.json`] || "")
+      || job.artifactError || workerIds.some(id => !job.mirroredWorkerIds?.includes(id)));
+  });
+}
+
+/** Mirror each frozen run, including a run finishing after the on-disk PLAN has advanced. */
+export function completeFormalPlansForWorkerMirror(queue: DistributedQueue, metadata: any[]): QueuedPlan[] {
+  return queue.plans.filter(plan => !plan.cleanup && plan.resultPathPolicy === "declared").flatMap(plan =>
+    latestCompletePlansForSyncCheck({ ...queue, plans: [plan] }, metadata.filter(row => row.revision === plan.revision)));
+}
+
+/** Excludes changing mirror receipts; includes every execution binding used by a fresh pre-transfer check. */
+export function completedPlanMirrorIdentity(plan: QueuedPlan): string {
+  return JSON.stringify([plan.id, plan.projectId, plan.revision, plan.codeFingerprint, plan.resultPathPolicy, plan.executionMode,
+    plan.jobs.map(job => [job.index, job.case, job.seed, job.globalJobId, job.commandId, job.workerId,
+      job.outputDir, job.collectionResultCsv, job.actualExecutionMode, job.checkpointSource])]);
+}
+
 export function planArtifactSyncCheckKey(plans: QueuedPlan[], workerIds: string[], onlineIds: string[]): string {
   return createHash("sha256").update(JSON.stringify([workerIds.slice().sort(), onlineIds.slice().sort(), plans.map(plan => [
     plan.id, plan.revision, plan.jobs.map(job => [job.index, job.attempt, job.commandId, job.workerId, job.outputDir,
@@ -43,9 +71,13 @@ export function assessPlanArtifactSync(plan: QueuedPlan, workerIds: string[], in
   const pending = new Set<string>();
   const unavailable = new Set<string>();
   let missingSource = false;
-  const subtree = (workerId: string, directory: string, csv?: string) => Object.entries(inventories.get(workerId) || {})
-    .filter(([file, hash]) => (file.startsWith(directory + "/") || csv && file === csv) && /^[a-f0-9]{64}$/i.test(hash))
-    .sort(([a], [b]) => a.localeCompare(b));
+  const subtree = (workerId: string, directory: string, csv?: string) => {
+    const inventory = inventories.get(workerId) || {};
+    const files = collectDistributedJobArtifacts(directory,
+      Object.fromEntries(Object.entries(inventory).map(([file, sha256]) => [file, { sha256 }])), false);
+    if (csv && /^[a-f0-9]{64}$/i.test(inventory[csv] || "")) files[csv] = inventory[csv].toLowerCase();
+    return Object.entries(files).sort(([a], [b]) => a.localeCompare(b));
+  };
   for (const job of plan.jobs) {
     const csv = job.resultPathPolicy === "declared" ? job.collectionResultCsv : undefined;
     const source = subtree(job.workerId!, job.outputDir, csv);

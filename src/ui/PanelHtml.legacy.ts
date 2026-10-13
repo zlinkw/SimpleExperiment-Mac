@@ -14548,23 +14548,25 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const recallButton = status === "queued" || job.recallRequested === true
             ? '<button type="button" class="mini secondary" data-command="recallPlanToLocalQueue" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" title="只召回此排队 job；运行中、已结束或状态不明的任务保持原 Worker。">' + (job.recallRequested ? "重试召回" : "召回到本机") + '</button>' : "";
           const recallNote = job.recallRequested ? "召回待确认，仍固定在原 Worker" : "";
-          const failedRecallButton = status === "failed" && job.workerId && job.commandId && job.attempt
-            ? '<button type="button" class="mini secondary" data-command="recallFailedJob" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-attempt="' + escAttr(String(job.attempt)) + '" data-command-id="' + escAttr(job.commandId) + '" title="只为此失败 job 新建 attempt，放回本机分布式队列；原 Worker 恢复后核验并移走旧目录。">召回本机重跑</button>' : "";
+          const failedRecallButton = status === "failed" && job.resultPathPolicy === "declared" && job.workerId && job.commandId
+            && job.globalJobId === String(job.planId || group.distributedPlanId || "") + ":" + String(job.index)
+            && !job.unavailable && !job.recoveryConflict && !group.distributedRecovery?.conflict
+            ? '<button type="button" class="mini secondary" data-command="recallFailedJob" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="核对原作业身份、已停止状态及空输出；若有遗留文件，打开仅针对该 job 的人工审核预览。不会自动移动或覆盖产物。">重新排队此 job</button>' : "";
           const failedCleanup = asArray(group.failedAttemptRecoveries).filter(row => Number(row.jobIndex) === Number(job.index)).at(-1);
           const canMarkUnavailable = !job.unavailable && !job.recoveryConflict && !group.distributedRecovery?.conflict
             && (["failed", "cancelled"].includes(status) || status === "pending" && !job.workerId && !job.commandId);
           const availabilityButton = unavailable || canMarkUnavailable
             ? '<button type="button" class="mini secondary" data-command="' + (unavailable ? 'restoreJobAvailability' : 'markJobUnavailable') + '" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-attempt="' + escAttr(String(job.attempt)) + '" data-command-id="' + escAttr(job.commandId || "") + '">' + (unavailable ? '撤销不可用' : '标记不可用') + '</button>' : "";
           const failedCleanupNote = failedCleanup ? (failedCleanup.status === "completed"
-            ? failedCleanup.alreadyAbsent ? "旧失败 attempt 已核验不存在，无需移动。" : "旧失败 attempt 已移入原 Worker 的 clean_dir。"
-            : (failedCleanup.status === "blocked" ? "旧 attempt 已保留。" : "原 Worker 恢复后自动核验并移走旧失败 attempt。") + (failedCleanup.error ? " " + failedCleanup.error : "")) : "";
+            ? failedCleanup.alreadyAbsent ? "历史失败目录已核验不存在。" : "历史回执：失败目录已移入原 Worker 的 clean_dir。"
+            : "历史遗留清理记录需人工审核，不会自动移动或删除。" + (failedCleanup.error ? " " + failedCleanup.error : "")) : "";
           const blockText = blocked ? String(job.blockReason || "") : "";
           const blockAdvice = blocked ? (blockText.indexOf("等待当前代码版本") === 0 ? "这个已提交 job 保留排队；其他 Worker 可运行匹配版本。被占用的 Worker 收到旧任务结束回执后自动释放版本锁，无需再次提交。" : "下一步：空闲 GPU 不能运行这份旧代码。到实验准备的 Plan 列表手动选中，再点“校验并提交运行”；或恢复提交前的代码并重新同步 Worker。") : "";
           const jobNext = preflightRejected
             ? '<div class="muted">启动前预检已拒绝此 job，训练未开始，不会自动重派。请核对上面的输出与结果路径；保留已有权重和结果，显式处理冲突或修改正式 job 声明后再提交。</div>'
             : codeProofBlocked
             ? '<div class="muted">启动前代码校验阻塞，训练尚未开始。部署并重启该 Worker 的 Agent 后刷新状态；原 job 保留排队，无需重新提交 Plan。校验仍未通过时，请核对 Worker 的对应代码版本。</div><button type="button" class="mini secondary" data-command="snapshot">刷新状态</button>'
-            : failedRecallButton ? '<div class="muted">可召回这个失败 job 到本机排队重跑，其他 job 保持原状态。原 Worker 恢复后自动核验并将旧 attempt 移入 clean_dir。</div>'
+            : failedRecallButton ? '<div class="muted">仅重新排队这个正式失败 job。若有遗留文件，先打开精确 job 的人工审核预览；确认清理完成后再重排。PLAN、源配置和其他 job 保留。</div>'
             : errorText && !retryView.note && !unavailable
             ? '<div class="muted">下一步：点本行“跳转到日志”查看对应 TMUX 任务窗口。这是已提交 job 的失败，不会自动清理。确认需要停止后，再点本 Plan 的“终止并清除该 Plan”（两次确认）。</div><span class="errorRowLinks" style="display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="mini secondary" data-section-target="execution" data-anchor-target="execution-operations" title="跳到运行进度，查看本 Plan 的状态">运行进度</button><button type="button" class="mini secondary" data-command="snapshot" title="重新拉取调度状态与操作记录">刷新状态</button></span>'
             : "";
@@ -14775,6 +14777,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
           jobs: asArray(plan.jobs).map((job) => ({
             jobIndex: job.jobIndex,
             attempt: job.attempt,
+            resultPathPolicy: job.resultPathPolicy,
+            globalJobId: job.globalJobId,
             status: job.status,
             workerId: job.workerId,
             gpuId: job.gpuId,
@@ -17455,7 +17459,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (button.dataset.planId) payload.planId = button.dataset.planId;
       if (button.dataset.jobIndex !== undefined) payload.jobIndex = Number(button.dataset.jobIndex);
       if (["recallFailedJob", "markJobUnavailable", "restoreJobAvailability"].includes(command)) {
-        payload.attempt = Number(button.dataset.attempt);
+        if (command !== "recallFailedJob" && button.dataset.attempt !== undefined)
+          payload.attempt = Number(button.dataset.attempt);
         payload.commandId = button.dataset.commandId || "";
       }
       if (button.dataset.file) {

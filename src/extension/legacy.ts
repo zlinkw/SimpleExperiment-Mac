@@ -1163,6 +1163,7 @@ export class RealtimeTunnelPanelProvider {
     distributedQueueWritePromise = Promise.resolve();
     distributedPostprocessPromise;
     distributedPostprocessScope;
+    private completedPlanMirrorRescan = false;
     private readonly planSyncSummaryRetries = new Map<string, { timer: ReturnType<typeof setTimeout>; attempt: number }>();
     confirmedRemotePaths = [];
     confirmedPptPaths = [];
@@ -1393,6 +1394,9 @@ export class RealtimeTunnelPanelProvider {
                     workerTasks,
                 };
             },
+            "tasks.preflight": (params, _server, context) => this.apiTaskPreflight(params, "start", context.signal),
+            "tasks.preflight.status": (params, _server, context) => this.apiTaskPreflight(params, "status", context.signal),
+            "tasks.preflight.cancel": (params, _server, context) => this.apiTaskPreflight(params, "cancel", context.signal),
             "operations.list": async (params = {}) => {
                 const runtime = this.buildPlanRuntimeEvidenceState();
                 const rows = Object.entries(runtime.operations || {}).map(([operationId, operation]) => ({
@@ -3382,6 +3386,7 @@ export class RealtimeTunnelPanelProvider {
         this.operationProbeTimers.clear();
         for (const retry of this.planSyncSummaryRetries.values()) clearTimeout(retry.timer);
         this.planSyncSummaryRetries.clear();
+        this.completedPlanMirrorRescan = false;
         this.selectedPlanId = undefined;
         this.planFileInput = undefined;
         this.recentPlans = [];
@@ -4141,6 +4146,7 @@ export class RealtimeTunnelPanelProvider {
         this.disposeSelectedPlanFileWatchers();
         for (const retry of this.planSyncSummaryRetries.values()) clearTimeout(retry.timer);
         this.planSyncSummaryRetries.clear();
+        this.completedPlanMirrorRescan = false;
         if (this.planLocalChangeParseTimer)
             clearTimeout(this.planLocalChangeParseTimer);
         this.planLocalChangeParseTimer = undefined;
@@ -6033,6 +6039,8 @@ export class RealtimeTunnelPanelProvider {
             const submission = PLAN_SUBMISSION_COMMANDS.has(command)
                 ? this.localOperations?.[this.planSubmissionOperationId(message)] : undefined;
             if (submission?.status === "failed") return { status: "failed", message: submission.message || "计划未提交。" };
+            if (["recallFailedJob", "retryDistributedJob"].includes(command) && value?.status === "blocked")
+                return { status: "cancelled", message: String(value.message || "未提交重新排队；请先审核该 job 的遗留文件。") };
             if (["stopAndClearPlan", "retryDistributedJob", "markJobUnavailable", "restoreJobAvailability"].includes(command) && value && typeof value === "object" && (value.status === "completed" || value.status === "failed" || value.status === "cancelled" || value.status === "partial")) {
                 const outcome = value.status === "partial" ? "failed" : value.status;
                 return { status: outcome, message: String(value.message || outcome), planStopClear: value.planStopClear };
@@ -6152,6 +6160,7 @@ export class RealtimeTunnelPanelProvider {
         return undefined;
     }
     async runActionCommand(command, message) {
+        require("../updates/Bootstrap").assertBusinessAllowed();
         if (PLAN_SUBMISSION_COMMANDS.has(command)) {
             this.planRunStageStartedAt = Date.now();
             this.beginPlanSubmissionProgress(message, this.actionBody(message));
@@ -10393,9 +10402,98 @@ export class RealtimeTunnelPanelProvider {
                 ? latest : { ...latest, ...fields } });
     }
     scheduleDistributedPostprocess(root, rerunIfBusy = false) {
-        // Result files and summaries are user pulled. Keep this hook inert for legacy tick callers.
-        void root;
-        void rerunIfBusy;
+        if (root !== workspaceRoot() || this.panelDisposed || !this.isRealtimeMode()
+            || this.projectTopologyAssessment().mode !== "worker_pool" || this.distributedPlanStopEpoch
+            || this.planCleanupHosts?.get(root)?.executing) return;
+        if (this.distributedPostprocessPromise) {
+            this.completedPlanMirrorRescan ||= rerunIfBusy;
+            return;
+        }
+        if (this.codeSyncInFlight || this.planSyncInFlight || this.syncScopeMutationInFlight || this.manualResultSyncCounts?.get(root)) return;
+        const context = this.captureProjectContext();
+        const work = Promise.resolve().then(() => this.syncCompletedPlanArtifacts(context));
+        this.distributedPostprocessPromise = work;
+        this.distributedPostprocessScope = "automatic";
+        void work.catch(error => this.recordActionError({ command: "completedPlanWorkerMirror", message: errorMessage(error) })).finally(() => {
+            if (this.distributedPostprocessPromise !== work) return;
+            this.distributedPostprocessPromise = undefined;
+            this.distributedPostprocessScope = undefined;
+            if (!this.projectContextIsCurrent(context) || this.panelDisposed) return;
+            this.queuePlanArtifactSyncStatusCheck(true);
+            this.postState();
+            if (this.completedPlanMirrorRescan) {
+                this.completedPlanMirrorRescan = false;
+                this.scheduleDistributedPostprocess(root);
+            }
+        });
+    }
+    private async syncCompletedPlanArtifacts(context) {
+        const root = context.root;
+        const client = this.client;
+        const targetsKey = () => JSON.stringify(this.workerCodeSyncTargets().map(row => [row.id, row.host, row.port, row.user, row.remotePath]));
+        const expectedTargets = targetsKey();
+        const current = () => this.projectContextIsCurrent(context) && !this.panelDisposed && !this.distributedPlanStopEpoch
+            && !this.planCleanupHosts?.get(root)?.executing && client === this.client && expectedTargets === targetsKey();
+        if (!current()) return;
+        const workerIds = this.workerCodeSyncTargets().map(target => target.id);
+        if (workerIds.length < 2) return;
+        const queue = await this.loadDistributedQueue(root);
+        if (!current() || this.distributedQueueStorageDiagnostics?.status === "stale") return;
+        const plans = PlanArtifactSyncStatus.pendingCompletedPlanMirrors(queue, this.localPlanMetadata?.plans || [], workerIds)
+            .filter(plan => plan.projectId === DistributedPlanQueue.canonicalProjectId(root)
+                && workerIds.some(id => this.lastWorkerProbes[id]?.status === "ok" && plan.jobs.some(job =>
+                    !job.mirroredWorkerIds?.includes(id) || job.artifactError
+                    || !/^[a-f0-9]{64}$/i.test(job.artifacts?.[`${job.outputDir}/formal_job_owner.json`] || ""))));
+        if (!plans.length) return;
+        const identities = new Map(plans.map(plan => [plan.id, PlanArtifactSyncStatus.completedPlanMirrorIdentity(plan)]));
+        const assertCurrent = async () => {
+            if (!current()) throw new Error("PLAN_MIRROR_CONTEXT_CHANGED：项目或清理状态已变化，停止自动同步。");
+            const latest = await this.loadDistributedQueue(root);
+            const complete = PlanArtifactSyncStatus.completeFormalPlansForWorkerMirror(latest, this.localPlanMetadata?.plans || []);
+            if (!current() || this.distributedQueueStorageDiagnostics?.status === "stale" || [...identities].some(([id, identity]) =>
+                !complete.some(plan => !plan.cleanup && plan.id === id && PlanArtifactSyncStatus.completedPlanMirrorIdentity(plan) === identity)))
+                throw new Error("PLAN_MIRROR_IDENTITY_CHANGED：完成状态或正式作业身份已变化，停止自动同步。");
+            const holds = await loadSyncHolds(this.context.globalStorageUri.fsPath, root);
+            if (plans.some(plan => plan.jobs.some(job => isSyncHeld(job.outputDir, holds)
+                || job.collectionResultCsv && isSyncHeld(job.collectionResultCsv, holds)
+                || Object.keys(holds).some(file => file.startsWith(job.outputDir + "/") && isSyncHeld(file, holds)))))
+                throw new Error("PLAN_MIRROR_HELD：清理或保留记录禁止重新同步这些产物。");
+            const overlap = (a, b) => a && b && (a === b || a.startsWith(b + "/") || b.startsWith(a + "/"));
+            if (plans.some(plan => plan.jobs.some(job => latest.plans.some(other => other.jobs.some(row =>
+                !(other.id === plan.id && row.index === job.index)
+                && (overlap(job.outputDir, row.outputDir) || job.collectionResultCsv && row.collectionResultCsv === job.collectionResultCsv
+                    || overlap(job.collectionResultCsv, row.outputDir) || overlap(row.collectionResultCsv, job.outputDir)))))))
+                throw new Error("FORMAL_JOB_MIRROR_PATH_CONFLICT：其他作业登记引用了这些正式路径，禁止自动传输。");
+        };
+        if (this.codeSyncInFlight || this.planSyncInFlight || this.syncScopeMutationInFlight || this.manualResultSyncCounts?.get(root)) return;
+        this.planSyncInFlight = true;
+        try {
+            await assertCurrent();
+            // Worker-only copies: never parse/publish results, upload code, reconcile the whole project or remove files.
+            await this.syncDistributedJobArtifacts(root, { ...queue, plans }, "bulk", true, undefined, { assertCurrent });
+        } finally { this.planSyncInFlight = false; }
+    }
+    private async verifyCompletedJobMirrorOwner(root, plan, job, sourceId, sha256) {
+        if (!/^[a-f0-9]{64}$/i.test(sha256 || "")) throw new Error("FORMAL_JOB_MIRROR_OWNER_REQUIRED：缺少正式作业归属文件。");
+        const remotePath = `${job.outputDir}/formal_job_owner.json`;
+        const context = this.captureProjectContext();
+        if (context.root !== root) throw new Error("PLAN_MIRROR_CONTEXT_CHANGED：身份核验的项目已变化。");
+        const result = await this.downloadMetricMemoryBatch({ ...context, resultInspection: true }, this.client,
+            { sourceId, workerId: sourceId, entries: [{ remotePath, localRelativePath: remotePath, sha256 }] },
+            "只读核验完成作业身份", { isCancellationRequested: false }, { report() {} });
+        const file = result.metricFiles?.find(row => row.remotePath === remotePath);
+        if (!file || file.sha256 !== sha256 || Buffer.byteLength(file.text || "", "utf8") > 65536)
+            throw new Error("FORMAL_JOB_MIRROR_OWNER_INVALID：身份文件缺失、过大或 SHA256 变化。");
+        const owner = JSON.parse(file.text);
+        const expected = { workflowId: plan.id, commandId: job.commandId, globalJobId: job.globalJobId, planRevision: plan.revision,
+            codeFingerprint: plan.codeFingerprint, index: job.index, case: job.case, seed: job.seed,
+            outputDir: job.outputDir, collectionResultCsv: job.collectionResultCsv };
+        const mismatched = Object.keys(expected).filter(key => owner?.[key] !== expected[key]);
+        const mode = job.actualExecutionMode || plan.executionMode;
+        if (owner?.schemaVersion !== 1 || owner?.mode !== mode
+            || owner?.state !== (mode === "train" ? "training_completed" : "completed") || mismatched.length
+            || JSON.stringify(owner.checkpointSource || null) !== JSON.stringify(job.checkpointSource || null))
+            throw new Error(`FORMAL_JOB_MIRROR_OWNER_MISMATCH：${mismatched.join(",") || "mode/state"}`);
     }
     private queuePlanArtifactSyncStatusCheck(force = false): void {
         void this.refreshPlanArtifactSyncStatus(force).catch((error) => console.warn(`[SimpleExperiment] 产物同步状态读取未完成：${errorMessage(error).slice(0, 300)}`));
@@ -10572,8 +10670,9 @@ export class RealtimeTunnelPanelProvider {
         if (body.overwriteExisting === true || body.overwrite === true || body.existingOutputChoice === "rerun_all"
             || body.options?.overwriteExisting === true || body.options?.overwrite === true)
             throw new Error("FORMAL_JOB_CONFLICT：正式 job 禁止覆盖；请显式清理或修改 case/job 路径。");
-        const incompatible = this.workerActionTargets().filter(target => this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.declaredJobPaths !== true);
-        if (incompatible.length) throw new Error("WORKER_PROTOCOL_INCOMPATIBLE：请部署支持 declaredJobPaths 的 Agent/Scheduler：" + incompatible.map(target => target.id).join("、"));
+        const incompatible = this.workerActionTargets().filter(target => this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.declaredJobPaths !== true
+            || this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.formalJobIdentityEnv !== 1);
+        if (incompatible.length) throw new Error("WORKER_PROTOCOL_INCOMPATIBLE：请部署支持 declaredJobPaths 与 formalJobIdentityEnv=1 的匹配 Agent/Scheduler：" + incompatible.map(target => target.id).join("、"));
         const root = workspaceRoot();
         if (!root) throw new Error("没有当前项目目录。");
         if (this.isMacVariant?.() && !binding) binding = WorkflowBinding_1.bindWorkflowWorkspace(body.workspace, root);
@@ -10671,6 +10770,7 @@ export class RealtimeTunnelPanelProvider {
         void Promise.resolve(task).then(() => undefined, () => undefined);
     }
     async tickDistributedQueue() {
+        if (require("../updates/Bootstrap").getUpdater()?.blocked) return;
         if (this.planCleanupHosts.get(workspaceRoot())?.executing) return;
         if (this.distributedQueueTickPromise) return this.distributedQueueTickPromise;
         if (this.distributedPlanStopEpoch) return;
@@ -10708,8 +10808,9 @@ export class RealtimeTunnelPanelProvider {
     async sendDistributedJob(plan, job, workerId, gpuId, commandId, sharedCodeManifest?) {
         if (plan.resultPathPolicy !== "declared" || job.outputDir.split("/").includes("attempts"))
             throw new Error("HISTORICAL_ATTEMPT_READ_ONLY：旧队列仅供查看，不会重启既有任务。");
-        if (this.lastWorkerProbes?.[workerId]?.capabilities?.endpoints?.declaredJobPaths !== true)
-            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE：${workerId} 未声明 declaredJobPaths；请部署匹配的 Scheduler 和 Agent。`);
+        if (this.lastWorkerProbes?.[workerId]?.capabilities?.endpoints?.declaredJobPaths !== true
+            || this.lastWorkerProbes?.[workerId]?.capabilities?.endpoints?.formalJobIdentityEnv !== 1)
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE：${workerId} 未声明正式身份环境协议；请部署匹配的 Scheduler 和 Agent。`);
         const executionMode = PlanExecutionMode.requirePlanExecutionMode(plan.executionMode);
         const target = this.workerActionTargets().find((item) => item.id === workerId);
         if (!target) throw new Error(`Worker ${workerId} 配置已失效`);
@@ -10993,7 +11094,7 @@ export class RealtimeTunnelPanelProvider {
                     const retry = DistributedPlanQueue.retryPinnedDispatch(queue, plan.id, job.index,
                         snapshot, idleByWorker.get(job.workerId || "") || []);
                     if (!retry) continue;
-                    const launchKey = `${plan.id}\0${job.index}\0${job.attempt}`;
+                    const launchKey = DistributedPlanQueue.distributedJobControlKey(plan, job);
                     if (this.distributedLaunchInFlight.has(launchKey)) continue;
                     this.distributedLaunchInFlight.add(launchKey);
                     // Reconciliation retains unknown ownership until the same command is verified.
@@ -11077,12 +11178,8 @@ export class RealtimeTunnelPanelProvider {
                     await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
                     const stopOperationId = makeOpId("distributed-requeue");
                     const request = { schemaVersion: 1, opId: stopOperationId, operationId: stopOperationId,
-                        commandId: stopOperationId, targetCommandId: job.commandId, runKey: job.runKey || job.commandId,
-                        requeueRequested: true, workflowId: plan.id, planId: plan.id, projectId,
-                        planRevision: plan.revision, codeFingerprint: plan.codeFingerprint,
-                        planJobCount: Number(plan.planJobCount || plan.jobs.length), planFile: plan.planFile,
-                        experimentIndex: job.index, case: job.case, seed: job.seed, attempt: job.attempt,
-                        outputDir: job.outputDir, workerId: job.workerId, gpuId: job.gpuId };
+                        commandId: stopOperationId, requeueRequested: true,
+                        ...DistributedPlanQueue.workerStopJobIdentity(plan, job), projectId };
                     try {
                         const result: any = await this.withRemoteActionResource(job.workerId, "stop-worker-task", request,
                             () => this.client.postWorkerAction(job.workerId, "stop-worker-task", request));
@@ -11122,7 +11219,8 @@ export class RealtimeTunnelPanelProvider {
                 const workerConfig = this.enabledWorkerConfigs().find((worker) => worker.id === target.id);
                 const configuredCapacity = Number(workerConfig?.maxConcurrentGpus);
                 return { workerId: target.id, online: live, idleGpuAdmission: snapshot?.capabilities?.idleGpuAdmission === true,
-                    declaredJobPaths: this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.declaredJobPaths === true,
+                    declaredJobPaths: this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.declaredJobPaths === true
+                        && this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.formalJobIdentityEnv === 1,
                     codeFingerprint: workerFingerprint,
                     idleGpuIds: (idleByWorker.get(target.id) || []).filter((gpuId) => !occupiedGpuIds.has(`${target.id}:${gpuId}`)),
                     capacity: Number.isInteger(configuredCapacity) && configuredCapacity > 0
@@ -11175,7 +11273,7 @@ export class RealtimeTunnelPanelProvider {
                 const job = plan?.jobs.find((item) => item.index === dispatch.jobIndex && item.attempt === dispatch.attempt);
                 if (!plan || !job || !queueWriteCurrent()) return;
                 const gpuId = "gpuId" in dispatch ? dispatch.gpuId as string : undefined;
-                const launchKey = `${plan.id}\0${job.index}\0${job.attempt}`;
+                const launchKey = DistributedPlanQueue.distributedJobControlKey(plan, job);
                 this.distributedLaunchInFlight.add(launchKey);
                 let receipt: any;
                 let receiptError: unknown;
@@ -11327,7 +11425,7 @@ export class RealtimeTunnelPanelProvider {
             const plan = queue.plans.find((item) => item.id === dispatch.planId);
             const job = plan?.jobs.find((item) => item.index === dispatch.jobIndex);
             if (!plan || !job || !queueWriteCurrent()) return { dispatch, plan, job };
-            const launchKey = `${plan.id}\0${job.index}\0${job.attempt}`;
+            const launchKey = DistributedPlanQueue.distributedJobControlKey(plan, job);
             this.distributedLaunchInFlight.add(launchKey);
             try {
                 const started: any = await this.sendDistributedJob(plan, job, dispatch.workerId, dispatch.gpuId, dispatch.commandId);
@@ -11370,13 +11468,13 @@ export class RealtimeTunnelPanelProvider {
         }
         this.postState();
     }
-    async syncDistributedJobArtifacts(root, queue, phase: "fragments" | "bulk", verifyAll = false, report?) {
+    async syncDistributedJobArtifacts(root, queue, phase: "fragments" | "bulk", verifyAll = false, report?, automatic?) {
         const contract = this.distributedProjectContract();
         const targets = new Map(this.workerCodeSyncTargets().map((target) => [target.id, target]));
         const online = [...targets.keys()].filter((id) => this.lastWorkerProbes[id]?.status === "ok");
         const selectedIds = new Set(PlanOutputRetention.plansForOutputSync(
             PlanOutputRetention.withValidatedPlanJobCounts(queue, this.localPlanMetadata?.plans || [])).map((plan) => plan.id));
-        const plans = (this.planOutputRetentionMode(root) === "keep-history" ? queue.plans : queue.plans.filter((plan) => selectedIds.has(plan.id)))
+        const plans = (automatic || this.planOutputRetentionMode(root) === "keep-history" ? queue.plans : queue.plans.filter((plan) => selectedIds.has(plan.id)))
             .filter(plan => plan.resultPathPolicy === "declared"); // Historical attempts are display/collection sources only.
         const transfers = [];
         const failures = [];
@@ -11436,7 +11534,7 @@ export class RealtimeTunnelPanelProvider {
                     `${job.outputDir}/formal_job_owner.json`, ...(job.collectionResultCsv && job.actualExecutionMode !== "train" ? [job.collectionResultCsv] : [])];
                 const ownedPaths = () => Object.keys(job.artifacts || {}).filter((file) => file.startsWith(job.outputDir + "/") || file === job.collectionResultCsv);
                 // A complete old manifest does not prove that later checkpoints/logs were inventoried.
-                // Manual full sync rescans only selected attempt directories in the shared preflight.
+                // Full sync inventories only selected formal job directories, never their historical parents.
                 const needsInventory = verifyAll && phase === "bulk" || !job.artifacts || fragmentPaths.some((file) => !job.artifacts[file])
                     || phase === "bulk" && !contract.requiredPaths.every((name) => job.artifacts[`${job.outputDir}/${name}`]);
                 let sourceId, collected;
@@ -11469,9 +11567,12 @@ export class RealtimeTunnelPanelProvider {
                                 if (!/^[a-f0-9]{64}$/i.test(csvHashes[job.collectionResultCsv] || "")) throw new Error("声明的正式 CSV 缺失或 SHA256 未核实");
                                 collected[job.collectionResultCsv] = csvHashes[job.collectionResultCsv];
                             }
-                            const required = phase === "fragments" ? fragmentPaths : contract.requiredPaths.map((name) => `${job.outputDir}/${name}`);
+                            const required = phase === "fragments" ? fragmentPaths : [...contract.requiredPaths.map((name) => `${job.outputDir}/${name}`),
+                                `${job.outputDir}/formal_job_owner.json`];
                             if (required.some((file) => !/^[a-f0-9]{64}$/.test(collected[file] || ""))) throw new Error("缺少检查点或结果片段");
                         }
+                        if (automatic) await this.verifyCompletedJobMirrorOwner(root, plan, job, id,
+                            collected?.[`${job.outputDir}/formal_job_owner.json`] || job.artifacts?.[`${job.outputDir}/formal_job_owner.json`]);
                         sourceId = id;
                         break;
                     } catch (error) {
@@ -11501,6 +11602,11 @@ export class RealtimeTunnelPanelProvider {
                     const existingHashes = await initialHashes(workerId, destination, paths);
                     if (paths.some(file => existingHashes[file] && existingHashes[file] !== job.artifacts[file]))
                         throw new Error(`FORMAL_JOB_MIRROR_CONFLICT：${workerId} 已有不同的正式作业产物，禁止覆盖。`);
+                    if (automatic && paths.every(file => existingHashes[file] === job.artifacts[file])) {
+                        job[mirrorField] = [...new Set([...(job[mirrorField] || []), workerId])];
+                        await this.patchDistributedJob(root, plan.id, job.index, job.attempt, { [mirrorField]: [workerId] });
+                        continue;
+                    }
                     if (previouslyMirrored) {
                         let matches = false;
                         try {
@@ -11537,15 +11643,17 @@ export class RealtimeTunnelPanelProvider {
             const first = items[0];
             try {
                 await this.assertSshTransportIdentities([first.sourceRow, first.target]);
+                await automatic?.assertCurrent();
                 const paths = [...new Set<string>(items.flatMap((item) => item.paths))].sort();
                 for (let offset = 0; offset < paths.length; offset += 5000) {
+                    await automatic?.assertCurrent();
                     report?.({ phase: "transferring", workerId: `${first.sourceId} → ${first.workerId}`,
                         batch: offset / 5000 + 1, batchCount: Math.ceil(paths.length / 5000), fileCount: paths.slice(offset, offset + 5000).length });
                     await this.simpleSftpApiCall("sync.serverToServerFpsync", { source: first.source,
                         destination: { ...first.destination, host: first.destination.networkHost || first.destination.host },
                         relativePaths: paths.slice(offset, offset + 5000), compression: "auto", singleStream: true,
                         confirm: true, pathConfirmed: true,
-                        taskLabel: workerFpsyncTaskLabel({ action: "压缩同步最新版 Plan 产物",
+                        taskLabel: workerFpsyncTaskLabel({ action: automatic ? "自动同步已完成 Plan 产物" : "压缩同步最新版 Plan 产物",
                             sourceId: first.sourceId, destinationId: first.workerId,
                             detail: `${new Set(items.map((item) => item.plan.planFile)).size} 个 Plan / ${items.length} 个 job（${phase === "fragments" ? "结果片段" : "检查点、日志与结果"}）`,
                             batch: offset / 5000 + 1, batchCount: Math.ceil(paths.length / 5000) }) }, 0,
@@ -11554,6 +11662,7 @@ export class RealtimeTunnelPanelProvider {
                 }
                 const checked = await this.distributedOutputHashes(first.destination, paths,
                     report ? (detail) => report({ ...detail, workerId: first.workerId }) : undefined);
+                await automatic?.assertCurrent();
                 for (const { plan, job, workerId, paths } of items) {
                     if (paths.some((file) => checked[file] !== job.artifacts[file])) {
                         await failJob(plan, job, new Error(`${workerId} 内容校验失败：${job.outputDir}`));
@@ -11963,7 +12072,11 @@ export class RealtimeTunnelPanelProvider {
         const job = plan?.jobs.find((row) => row.index === Number(message.jobIndex));
         if (!plan || !job || !job.workerId || !job.commandId || !["failed", "unknown"].includes(job.status))
             throw new Error("目标 job 当前不能恢复");
+        if (String(message.commandId || "") !== job.commandId)
+            throw new Error("任务 commandId 已变化；请刷新原 job 后重新确认，未重排。");
         if (plan.resultPathPolicy !== "declared") throw new Error("HISTORICAL_ATTEMPT_READ_ONLY：保留权重和日志，旧 attempt 不会恢复执行。");
+        if (job.cleanup?.state === "partial" || job.cleanup?.pendingNodes?.length)
+            throw new Error("FAILED_JOB_CLEANUP_PENDING：该 job 尚有节点未完成人工清理审核；请先核对全部回执，未重排。");
         const fresh: any = await client.getWorkerTasks(job.workerId);
         if (!isCurrent()) return { status: "cancelled", message: "项目已切换，训练恢复已取消。" };
         const task = (fresh?.tasks || []).find((row) => String(row.commandId || "") === job.commandId);
@@ -11976,12 +12089,29 @@ export class RealtimeTunnelPanelProvider {
             if (!sourceRow) throw new Error("原 Worker 配置不可用，未重排。");
             const inventory = await this.simpleSftpApiCall("sync.projectInventory", { source: this.sftpServerOptions(sourceRow),
                 relativePath: ".", scopePaths: [job.outputDir, ...(job.collectionResultCsv ? [job.collectionResultCsv] : [])] });
-            if (!inventory?.files || Object.keys(inventory.unverifiedFiles || {}).length
-                || Object.keys(inventory.files).some(file => file !== job.outputDir + "/.formal_job.lock"))
-                throw new Error("FORMAL_JOB_CONFLICT：失败目录或结果仍存在；请自行清理，或显式声明新的 case/job。不会自动移走、覆盖或创建 attempt。");
+            if (!inventory?.files) throw new Error("FAILED_JOB_INVENTORY_UNVERIFIED：原 Worker 产物清单未核实，未重排。");
+            if (Object.keys(inventory.unverifiedFiles || {}).length
+                || Object.keys(inventory.files).some(file => file !== job.outputDir + "/.formal_job.lock")) {
+                const files = [...Object.keys(inventory.files), ...Object.keys(inventory.unverifiedFiles || {})];
+                const answer = await vscode.window.showWarningMessage(`正式 job 仍有遗留文件，尚未重新排队：${plan.planFile} / ${job.case} / seed ${job.seed}\nWorker ${job.workerId}：${job.outputDir}\n${files.slice(0, 8).join("\n")}${files.length > 8 ? "\n另有 " + (files.length - 8) + " 项" : ""}\n可打开仅针对这个失败 job 的只读预览。移入 clean_dir 或删除均需另行确认；PLAN、源配置和其他 job 保留。`, { modal: true }, "审核遗留文件");
+                if (answer === "审核遗留文件" && isCurrent()) {
+                    const current = await this.loadDistributedQueue(root);
+                    const currentPlan = current.plans.find(row => row.id === plan.id);
+                    const currentJob = currentPlan?.jobs.find(row => row.index === job.index);
+                    if (!currentPlan || !currentJob || !DistributedPlanQueue.remoteTaskMatchesJob(currentPlan, currentJob, task))
+                        throw new Error("任务身份在审核期间已变化；未打开清理预览。");
+                    await this.planCleanupHost().openJob(plan.planFile, { workflowId: plan.id, index: job.index, commandId: job.commandId });
+                }
+                return { status: "blocked", code: "FORMAL_JOB_CONFLICT", message: "未提交重新排队；遗留文件仍受保护，审核清理后再重排。当前队列未改变。" };
+            }
             const answer = await vscode.window.showWarningMessage(`重新排队正式 job：${plan.planFile} / ${job.case} / seed ${job.seed}\n目录 ${job.outputDir}\n已确认原任务停止、输出为空。`, { modal: true }, "重新排队");
             if (answer !== "重新排队" || !isCurrent()) return;
-            await this.saveDistributedQueue(root, DistributedPlanQueue.retryVerifiedJob(await this.loadDistributedQueue(root), plan.id, job.index, makeOpId("job-command")));
+            const latest = await this.loadDistributedQueue(root);
+            const latestPlan = latest.plans.find(row => row.id === plan.id);
+            const latestJob = latestPlan?.jobs.find(row => row.index === job.index);
+            if (!isCurrent() || !latestPlan || !latestJob || !DistributedPlanQueue.remoteTaskMatchesJob(latestPlan, latestJob, task))
+                throw new Error("任务身份在核验或确认期间已变化；未重排。");
+            await this.saveDistributedQueue(root, DistributedPlanQueue.retryVerifiedJob(latest, plan.id, job.index, makeOpId("job-command")));
             await this.tickDistributedQueue();
             return;
         }
@@ -12120,11 +12250,7 @@ export class RealtimeTunnelPanelProvider {
                 return;
             }
             const request = { schemaVersion: 1, opId: operationId, operationId, commandId: operationId,
-                targetCommandId: job.commandId, runKey: job.runKey || job.commandId, requeueRequested: true,
-                workflowId: plan.id, planId: plan.id, projectId: plan.projectId, codeFingerprint: plan.codeFingerprint,
-                planRevision: plan.revision, planJobCount: Number(plan.planJobCount || plan.jobs.length), planFile: plan.planFile,
-                experimentIndex: job.index, case: job.case, seed: job.seed, attempt: job.attempt,
-                outputDir: job.outputDir, workerId: job.workerId, gpuId: job.gpuId };
+                requeueRequested: true, ...DistributedPlanQueue.workerStopJobIdentity(plan, job) };
             try {
                 const result: any = await this.withRemoteActionResource(job.workerId, "stop-worker-task", request,
                     () => this.client.postWorkerAction(job.workerId, "stop-worker-task", request));
@@ -13003,6 +13129,48 @@ export class RealtimeTunnelPanelProvider {
             };
         }
         return void 0;
+    }
+    async apiTaskPreflight(params, action: "start" | "status" | "cancel", signal: AbortSignal) {
+        const root = workspaceRoot();
+        const workerId = stringField(params, "workerId");
+        if (!root || !workerId || !this.workerActionTargets().some(worker => worker.id === workerId))
+            throw new Error("FORMAL_JOB_PREFLIGHT_WORKER_REQUIRED");
+        const client = this.client;
+        if (!client) throw new Error("FORMAL_JOB_PREFLIGHT_CLIENT_UNAVAILABLE: 请先识别工作区并连接配置的 Worker");
+        await this.refreshDistributedResultSyncProbes(root);
+        signal.throwIfAborted();
+        if (workspaceRoot() !== root || this.client !== client)
+            throw new Error("FORMAL_JOB_PREFLIGHT_PROJECT_CHANGED");
+        const missing = this.missingWorkerActionCapabilities(workerId, "preflight-worker-task");
+        if (missing.length) throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: ${missing.join(",")}; 请更新 Agent/Scheduler`);
+        if (action !== "start") {
+            const operationId = stringField(params, "operationId");
+            if (!/^formal-preflight-[a-zA-Z0-9-]+$/.test(operationId))
+                throw new Error("FORMAL_JOB_PREFLIGHT_OPERATION_REQUIRED");
+            const operation: any = await client.getWorkerOperation(workerId, operationId);
+            if ((operation?.action || operation?.payload?.action) !== "preflight-worker-task") throw new Error("FORMAL_JOB_PREFLIGHT_OPERATION_MISMATCH");
+            signal.throwIfAborted();
+            return action === "status" ? operation : client.postWorkerAction(workerId, "preflight-worker-task",
+                { opId: makeOpId("cancel-preflight"), targetPreflightOperationId: operationId, workerId }, { signal });
+        }
+        const commandId = stringField(params, "commandId");
+        if (!commandId) throw new Error("FORMAL_JOB_PREFLIGHT_COMMAND_REQUIRED");
+        if (params.environmentOnly !== undefined && typeof params.environmentOnly !== "boolean")
+            throw new Error("FORMAL_JOB_PREFLIGHT_INVALID_ENVIRONMENT_ONLY");
+        const environmentOnly = params.environmentOnly === true;
+        if (environmentOnly && this.lastWorkerProbes[workerId]?.capabilities?.endpoints?.executionShellPreflight !== 1)
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: executionShellPreflight; 请更新匹配的 Agent/Scheduler`);
+        const snapshot = await this.readWorkerTaskSnapshot(workerId, { fresh: true, signal });
+        const row = snapshot.tasks?.find(task => task.commandId === commandId);
+        if (!row || row.projectId !== DistributedPlanQueue.canonicalProjectId(root) || row.workerId !== workerId)
+            throw new Error("FORMAL_JOB_PREFLIGHT_TARGET_UNAVAILABLE");
+        if (row.status !== "failed" || !environmentOnly && (row.neverStarted !== true || row.neverStartedEvidence !== "formal_preflight_rejected"))
+            throw new Error("FORMAL_JOB_PREFLIGHT_REQUIRES_NEVER_STARTED_REJECTION");
+        signal.throwIfAborted();
+        if (workspaceRoot() !== root || this.client !== client) throw new Error("FORMAL_JOB_PREFLIGHT_PROJECT_CHANGED");
+        const operationId = makeOpId("formal-preflight");
+        return client.postWorkerAction(workerId, "preflight-worker-task", { schemaVersion: 1, opId: operationId,
+            operationId, workerId, targetCommandId: commandId, expectedIdentity: row, environmentOnly }, { signal });
     }
     missingWorkerActionCapabilities(workerId, action) {
         workerId = this.resolveWorkerEndpointId(workerId) || workerId;
@@ -16403,40 +16571,31 @@ export class RealtimeTunnelPanelProvider {
         const probe = this.lastWorkerProbes?.[workerId];
         return probe?.status === "ok" && probe?.capabilities?.actionEndpoints?.["stop-worker-task-exact-pane"] === true;
     }
-    async refreshExactPaneStopCapability(workerId) {
+    async refreshExactPaneStopCapability(workerId, formal = false) {
         const item = this.tunnelLaunchItems().find((entry) => entry.id === workerId && entry.role === "worker");
-        if (!item) return this.workerSupportsExactPaneStop(workerId);
-        const probe = this.stampWorkerProbeGeneration(workerId,
-            await (0, XshellTunnelPortProbe_1.probeWorkerTelemetryTunnel)({ ...item.config, token: this.tunnelConfig.token }, { timeoutMs: 1500 }));
-        this.lastWorkerProbes = { ...(this.lastWorkerProbes || {}), [workerId]: probe };
-        return probe?.status === "ok" && probe?.capabilities?.actionEndpoints?.["stop-worker-task-exact-pane"] === true;
+        let probe = this.lastWorkerProbes?.[workerId];
+        if (item) {
+            probe = this.stampWorkerProbeGeneration(workerId,
+                await (0, XshellTunnelPortProbe_1.probeWorkerTelemetryTunnel)({ ...item.config, token: this.tunnelConfig.token }, { timeoutMs: 1500 }));
+            this.lastWorkerProbes = { ...(this.lastWorkerProbes || {}), [workerId]: probe };
+        }
+        return probe?.status === "ok" && probe?.capabilities?.actionEndpoints?.["stop-worker-task-exact-pane"] === true
+            && (!formal || probe?.capabilities?.actionEndpoints?.["stop-worker-task-formal-identity"] === true
+                && probe?.capabilities?.actionEndpoints?.["stop-worker-task-formal-no-attempt"] === true);
     }
     async stopDistributedJobForClear(plan, job) {
         if (!job.workerId || !job.commandId) throw new Error("活动 job 缺少 Worker 或 commandId，未发送停止");
-        const exactPane = job.gpuId === undefined ? true : await this.refreshExactPaneStopCapability(job.workerId);
+        const formal = plan.resultPathPolicy === "declared";
+        const exactPane = job.gpuId === undefined && !formal ? true : await this.refreshExactPaneStopCapability(job.workerId, formal);
         if (exactPane !== true)
-            throw new Error(`Worker ${job.workerId} 的实时能力没有 stop-worker-task-exact-pane。请先更新并重启该 Worker Agent，再重试；未发送停止命令。`);
+            throw new Error(`Worker ${job.workerId} 的实时能力没有 ${formal ? "stop-worker-task-formal-identity / stop-worker-task-formal-no-attempt" : "stop-worker-task-exact-pane"}。请先更新并重启该 Worker Agent，再重试；未发送停止命令。`);
         const stopOperationId = makeOpId("stop-distributed-job");
         const request = {
             schemaVersion: 1,
             opId: stopOperationId,
             operationId: stopOperationId,
-            targetCommandId: job.commandId,
-            runKey: job.runKey || job.commandId,
-            workflowId: plan.id,
-            planId: plan.id,
+            ...DistributedPlanQueue.workerStopJobIdentity(plan, job),
             projectId: plan.projectId || DistributedPlanQueue.canonicalProjectId(workspaceRoot()),
-            planRevision: plan.revision,
-            codeFingerprint: plan.codeFingerprint,
-            planJobCount: Number(plan.planJobCount || plan.jobs.length),
-            planFile: plan.planFile,
-            experimentIndex: job.index,
-            case: job.case,
-            seed: job.seed,
-            attempt: job.attempt,
-            outputDir: job.outputDir,
-            workerId: job.workerId,
-            ...(job.gpuId !== undefined ? { gpuId: String(job.gpuId) } : {}),
             manualStopType: "scheduler_aborted",
             stopReason: "scheduler_aborted",
             stopSource: "user",
@@ -16729,13 +16888,13 @@ export class RealtimeTunnelPanelProvider {
         for (const row of DistributedPlanQueue.distributedStopTargets(latest, planFile)) {
             if (!clearStillHere()) break;
             const plan = latest.plans.find((item) => item.id === row.planId);
-            const job = plan?.jobs.find((item) => item.index === row.jobIndex && item.attempt === row.attempt);
+            const job = plan?.jobs.find((item) => DistributedPlanQueue.distributedJobControlKey(plan, item) === row.jobKey);
             if (row.kind === "deferred") {
                 confirmedDeferred.add(row.planId);
                 continue;
             }
             if (!plan || !job) continue;
-            const launchKey = `${row.planId}\0${row.jobIndex}\0${row.attempt}`;
+            const launchKey = DistributedPlanQueue.distributedJobControlKey(plan, job);
             if (this.distributedLaunchInFlight?.has(launchKey)) {
                 failures.push(`${row.planFile} ${row.planId} job ${row.jobIndex}: 正在向 Worker 发起启动，远端身份尚未回写，不能按未派发清除。下一步：等这一次启动回执落地后再点“终止并清理”。`);
                 continue;
@@ -16744,7 +16903,7 @@ export class RealtimeTunnelPanelProvider {
             const needsRemoteStop = ["dispatching", "queued", "running", "unknown"].includes(job.status) || remoteIdentity;
             if (!needsRemoteStop) {
                 if (DistributedPlanQueue.jobClearableWithoutRemoteReceipt(job)) {
-                    confirmedJobs.add(`${row.planId}\0${row.jobIndex}\0${row.attempt}`);
+                    confirmedJobs.add(launchKey);
                     continue;
                 }
                 failures.push(`${row.planFile} ${row.planId} job ${row.jobIndex}: 终态 job 没有 Worker 身份，无法确认没有残留 tmux 标签，队列保留`);
@@ -16777,7 +16936,7 @@ export class RealtimeTunnelPanelProvider {
                 continue;
             }
             else if (!pane && !session) {
-                confirmedJobs.add(`${row.planId}\0${row.jobIndex}\0${row.attempt}`);
+                confirmedJobs.add(launchKey);
                 continue;
             }
             if (!clearStillHere()) break;
@@ -16790,7 +16949,7 @@ export class RealtimeTunnelPanelProvider {
                 continue;
             }
             if (!clearStillHere()) break;
-            confirmedJobs.add(`${row.planId}\0${row.jobIndex}\0${row.attempt}`);
+            confirmedJobs.add(launchKey);
         }
         if (!clearStillHere()) {
             return this.finishPlanStopClear(planFile, {
@@ -18162,8 +18321,9 @@ export class RealtimeTunnelPanelProvider {
         });
     }
     async queueCompletedPlanArtifactSync(operation) {
-        void operation;
-        return;
+        if (String(operation?.status || "").toLowerCase() !== "completed") return;
+        const root = workspaceRoot();
+        if (root) this.scheduleDistributedPostprocess(root, true);
     }
     schedulePlanSyncRetry(root, syncKey, operation) {
         if (this.planSyncSummaryRetries.has(syncKey) || this.planSyncSummaryRetries.size >= 64) return;
@@ -21884,12 +22044,13 @@ export class RealtimeTunnelPanelProvider {
                     .map(row => ({ jobIndex: row.job.index, attempt: row.job.attempt, status: row.status, error: row.error,
                         alreadyAbsent: row.receipt?.alreadyAbsent === true })),
                 jobs: plan.jobs.map((job) => ({ index: job.index, case: job.case, seed: job.seed, attempt: job.attempt,
+                    resultPathPolicy: plan.resultPathPolicy, globalJobId: job.globalJobId,
                     unavailable: DistributedPlanQueue.jobIsUnavailable(plan, job) ? job.unavailable : undefined,
                     status: job.status, workerId: job.workerId, gpuId: job.gpuId, outputDir: job.outputDir,
                     localQueueOnly: job.localQueueOnly === true, recallRequested: job.recallRequested === true,
                     recallOperationId: job.recallOperationId || "",
                     commandId: job.commandId, logPath: job.logPath, finishedAt: job.finishedAt, outputRetiredAt: job.outputRetiredAt,
-                    error: job.error, blockReason: job.blockReason, admissionRejection: job.admissionRejection,
+                    error: job.error, blockReason: job.blockReason, admissionRejection: job.admissionRejection, failureDiagnostic: job.failureDiagnostic, formalConflictEvidence: job.formalConflictEvidence,
                     artifactError: job.artifactError, mirroredWorkerIds: job.mirroredWorkerIds || [] })) }));
         const summaryInputs = {
             plans: [

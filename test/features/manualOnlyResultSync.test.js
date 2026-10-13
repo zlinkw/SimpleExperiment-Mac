@@ -82,17 +82,25 @@ function distributedHost() {
   return provider;
 }
 
-test("background queue ticks, completion sync, and selection parsing do not start result work", async () => {
+test("background Worker mirroring keeps local result parsing and publication manual", async () => {
   const calls = [];
   const provider = selectedMethods(["scheduleDistributedPostprocess", "queuePlanScopedResultParse", "queueCompletedPlanArtifactSync"]);
   provider.distributedPostprocessPromise = undefined;
   provider.syncDistributedJobArtifacts = async () => calls.push("transfer");
   provider.rebuildDistributedResults = async () => calls.push("rebuild");
   provider.runActionCommand = async () => calls.push("parse");
+  provider.isRealtimeMode = () => true;
+  provider.projectTopologyAssessment = () => ({ mode: "worker_pool" });
+  provider.captureProjectContext = () => ({ root: "/project" });
+  provider.projectContextIsCurrent = () => true;
+  provider.syncCompletedPlanArtifacts = async () => calls.push("worker-mirror");
+  provider.queuePlanArtifactSyncStatusCheck = () => {};
+  provider.postState = () => {};
   provider.scheduleDistributedPostprocess("/project", true);
   provider.queuePlanScopedResultParse("plan selected", "experiments/plans/a.yaml", "a");
   await provider.queueCompletedPlanArtifactSync({ status: "completed" });
-  assert.deepEqual(calls, []);
+  await provider.distributedPostprocessPromise;
+  assert.ok(calls.every(call => call === "worker-mirror"));
 });
 
 test("manual result sync directly downloads metrics and publishes local tables without remote rebuild or full mirroring", async () => {
