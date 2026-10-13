@@ -15,36 +15,35 @@ const {
   workerTelemetryForbiddenEndpoints,
   workerTelemetryRequiredEndpoints,
   validateWorkerTelemetryCapabilities,
+  isWorkerDirectAction,
+  isWorkerTelemetryAction,
 } = require("../../dist/tunnel/WorkerTelemetryApi.js");
 
 function productionWorkerTelemetryCapabilities() {
-  const source = readSource("src/clusterAgentRuntime.legacy.ts");
-  const fn = source.indexOf("def api_capabilities(");
-  const branch = source.indexOf('if mode == "worker_telemetry":', fn);
-  const actionsAt = source.indexOf('"actionEndpoints": {', branch);
-  const endpointsAt = source.indexOf('"endpoints": {', branch);
-  const endpointsBlock = source.slice(endpointsAt, actionsAt);
-  const actionsEnd = source.indexOf("},", actionsAt);
-  const names = (constant) => {
-    const at = source.indexOf(`${constant} = `);
-    assert.ok(at >= 0, constant);
-    const brace = source.indexOf("{", at);
-    let depth = 0;
-    for (let index = brace; index < source.length; index += 1) {
-      if (source[index] === "{") depth += 1;
-      if (source[index] === "}") {
-        depth -= 1;
-        if (depth === 0) return [...source.slice(brace, index + 1).matchAll(/"([^"]+)"/g)].map((match) => match[1]);
-      }
-    }
-    throw new Error(`unterminated ${constant}`);
-  };
-  const quoted = (block, key) => [...block.matchAll(new RegExp(`"${key}":\\s*(True|False)`, "g"))].map((match) => [key, match[1] === "True"]);
-  const endpoints = Object.fromEntries(["health", "capabilities", "gpu", "workerTasks", "codeSyncProof", "liveOutput", "diagnostics", "resultsSummary", "websocketEvents", "sseEvents", "actions", "fileList", "fileStat", "fileDownload", "fileRangeDownload", "fileUploadInit", "fileUploadChunk", "fileUploadComplete"].flatMap((key) => quoted(endpointsBlock, key)));
-  const actionEndpoints = Object.fromEntries([...source.slice(actionsAt, actionsEnd).matchAll(/"([a-z0-9-]+)":\s*True/g)].map((match) => [match[1], true]));
-  for (const name of [...names("WORKER_RESULT_ACTIONS"), ...names("WORKER_TENSORBOARD_ACTIONS"), ...names("WORKER_ENV_ACTIONS")]) actionEndpoints[name] = true;
-  return { schemaVersion: 1, apiVersion: "1", agentVersion: "1", mode: "worker_telemetry", endpoints, actionEndpoints };
+  return require('../_helpers/workerTelemetryCapabilities')();
 }
+
+test("formal stop capability markers validate without becoming callable controls", async (context) => {
+  context.mock.method(global, "fetch", async () => { throw Error("capability marker must never dispatch HTTP"); });
+  const capabilities = productionWorkerTelemetryCapabilities();
+  for (const marker of ['stop-worker-task-formal-identity', 'stop-worker-task-formal-no-attempt']) {
+    assert.equal(capabilities.actionEndpoints[marker], true);
+    assert.equal(isWorkerDirectAction(marker), false);
+    assert.equal(isWorkerTelemetryAction(marker), false);
+    assert.ok(!workerTelemetryAllowedActions.includes(`POST /api/actions/${marker}`));
+    const client = new MultiEndpointRealtimeClient([{ id: 'worker', role: 'worker', localHost: '127.0.0.1', localPort: 1 }],
+      () => new RequestBudget({ ...defaultRequestBudgetConfig, minIntervalByPurpose: {}, disabledPurposes: [] }));
+    await assert.rejects(client.postWorkerAction('worker', marker, {}), /action not allowed/);
+  }
+  const result = validateWorkerTelemetryCapabilities(capabilities);
+  assert.equal(result.ok, true, result.warnings.join('; '));
+  assert.deepEqual(result.warnings, []);
+  for (const action of ['deploy-runtime', 'stop-worker-task-formal-all', 'stop-worker-task-formal-no-attempt-extra']) {
+    const bad = validateWorkerTelemetryCapabilities({ ...capabilities, actionEndpoints: { ...capabilities.actionEndpoints, [action]: true } });
+    assert.equal(bad.ok, false);
+    assert.ok(bad.warnings.some(warning => warning.endsWith(action)));
+  }
+});
 
 function panelFunction(name) {
   const source = readSource("src/ui/PanelHtml.ts");
@@ -66,6 +65,7 @@ test("worker telemetry permits bounded worker controls plus local scheduler acti
   assert.ok(workerTelemetryRequiredEndpoints.includes("/api/results/summary"));
   assert.deepEqual([...workerTelemetryAllowedActions].sort(), [
     "POST /api/actions/start-worker-task",
+    "POST /api/actions/preflight-worker-task",
     "POST /api/actions/register-code-sync-proof",
     "POST /api/actions/rebuild-distributed-results",
     "POST /api/actions/retry-worker-task",

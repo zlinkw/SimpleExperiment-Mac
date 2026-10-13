@@ -28,6 +28,7 @@ export const workerTelemetryRequiredEndpoints = [
 
 export const workerTelemetryActionNames = [
   "start-worker-task",
+  "preflight-worker-task",
   "register-code-sync-proof",
   "rebuild-distributed-results",
   "retry-worker-task",
@@ -40,6 +41,12 @@ export const workerTelemetryActionNames = [
   "get-tensorboard-status",
   "install-rich",
   "save-result-policy",
+] as const;
+
+/** Protocol traits published in actionEndpoints; these names are not POST actions. */
+export const workerTelemetryCapabilityMarkerNames = [
+  "stop-worker-task-formal-identity",
+  "stop-worker-task-formal-no-attempt",
 ] as const;
 
 export const workerLocalSchedulerActionNames = [
@@ -203,7 +210,8 @@ export function validateWorkerTelemetryCapabilities(value: unknown): { ok: boole
   if (caps.endpoints.actions) {
     const actions = caps.actionEndpoints || {};
     for (const action of Object.keys(actions)) {
-      if (!isWorkerDirectAction(action) && actions[action]) {
+      const protocolMarker = workerTelemetryCapabilityMarkerNames.includes(action as typeof workerTelemetryCapabilityMarkerNames[number]);
+      if (!isWorkerDirectAction(action) && !protocolMarker && actions[action]) {
         warnings.push(`Worker Telemetry 暴露了不允许的控制动作：${action}`);
       }
     }
