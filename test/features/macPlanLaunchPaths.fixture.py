@@ -110,6 +110,7 @@ if scenario in ("physical", "agent", "changed", "revision"):
             "simple_runtime_python": lambda _: "virtual-python", "verified_durable_execution_mode": lambda *args: "train",
             "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
             "tmux_available": lambda: True, "start_job_in_gpu_pane": lambda window, args, *rest: launched.append((args, rest)) or "%virtual",
+            "worker_task_tmux_location": lambda *args: {"tmuxPane": "%virtual", "tmuxWindowId": "@virtual", "tmuxSession": "session"},
             "append_worker_task": lambda _, task: saved.append(task), "append_event": lambda *args: None,
         }
         with contextlib.ExitStack() as scope:
@@ -128,7 +129,8 @@ if scenario in ("physical", "agent", "changed", "revision"):
                 assert rest[0] == root
                 assert saved[0]["planFile"] == plan_name and saved[0]["outputDir"] == attempt
                 assert saved[0]["configPath"] == attempt + "/job_config.yaml"
-                assert saved[0]["logPath"] == command["logPath"]
+                assert saved[0]["logPath"] == agent.worker_task_console_log(command["commandId"])
+                assert saved[0]["logPath"] != command["logPath"]  # Formal diagnostics never borrow the shared tmux log.
                 launched.clear(); saved.clear(); mkdirs.clear()
                 for changes in [{"planFile": plan_name.rstrip()}, {"plan": []}, {"outputDir": "/invalid"},
                                 {"configPath": "../outside"}, {"defaultResultCsvDir": 2}, {"logPath": "tmp//log"},

@@ -6160,7 +6160,7 @@ export class RealtimeTunnelPanelProvider {
         return undefined;
     }
     async runActionCommand(command, message) {
-        require("../updates/Bootstrap").assertBusinessAllowed();
+        require("../mac/UpdateGate").assertBusinessAllowed();
         if (PLAN_SUBMISSION_COMMANDS.has(command)) {
             this.planRunStageStartedAt = Date.now();
             this.beginPlanSubmissionProgress(message, this.actionBody(message));
@@ -10770,7 +10770,7 @@ export class RealtimeTunnelPanelProvider {
         void Promise.resolve(task).then(() => undefined, () => undefined);
     }
     async tickDistributedQueue() {
-        if (require("../updates/Bootstrap").getUpdater()?.blocked) return;
+        try { require("../mac/UpdateGate").assertBusinessAllowed(); } catch { return; }
         if (this.planCleanupHosts.get(workspaceRoot())?.executing) return;
         if (this.distributedQueueTickPromise) return this.distributedQueueTickPromise;
         if (this.distributedPlanStopEpoch) return;

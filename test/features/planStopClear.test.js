@@ -11,6 +11,18 @@ const OperationOutcome = require("../../dist/core/OperationOutcome.js");
 const extension = fs.readFileSync(path.join(__dirname, "../../src/extension/legacy.ts"), "utf8");
 const panel = fs.readFileSync(path.join(__dirname, "../../src/ui/PanelHtml.legacy.ts"), "utf8");
 
+// Queue insertion now initializes new jobs as pending. Stop fixtures model
+// an already persisted execution, so restore their explicit states afterwards.
+function enqueueStopFixture(queue, plan, id) {
+  const api = require("../../dist/features/DistributedPlanQueue.js");
+  const saved = api.enqueuePlan(queue, plan, id);
+  for (const declaration of plan.jobs) {
+    const job = saved.plans.at(-1).jobs.find(row => row.index === declaration.index);
+    Object.assign(job, declaration);
+  }
+  return saved;
+}
+
 function panelScriptContaining(html, marker) {
   const scripts = [...String(html).matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => match[1]);
   const script = scripts.find((item) => item.includes(marker));
@@ -104,7 +116,8 @@ test("one-click stop and clear keeps the hide-only control and requires two conf
   assert.match(handler, /distributedStopTargets/);
   assert.match(handler, /removeConfirmedDistributedPlan/);
   assert.match(handler, /stopDistributedJobForClear/);
-  assert.match(handler, /targetCommandId/);
+  assert.match(handler, /workerStopJobIdentity/);
+  assert.match(fs.readFileSync(path.join(__dirname, "../../src/features/DistributedPlanQueue.ts"), "utf8"), /targetCommandId: job\.commandId/);
   assert.match(handler, /distributedPlanStopEpoch/);
   assert.match(panel, /代码版本不匹配/);
   assert.match(panel, /空闲 GPU 不能运行这份旧代码/);
@@ -139,7 +152,7 @@ test("queued-only plan clears without a worker stop and a mixed failure keeps th
     .replaceAll("this.planStopClearWaitMs()", "30");
   let saved = null;
   const calls = [];
-  const queued = queue.enqueuePlan(queue.enqueuePlan(queue.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(enqueueStopFixture(queue.emptyDistributedQueue(), {
     planFile: "plans/ebmc.yaml", revision: "rev-ebmc", codeFingerprint: "old",
     jobs: [0, 1, 2].map((index) => ({ index, case: "bus", seed: index, outputDir: `work/ebmc/${index}` })),
   }, "plan-ebmc"), {
@@ -147,10 +160,10 @@ test("queued-only plan clears without a worker stop and a mixed failure keeps th
     jobs: [{ index: 0, case: "pad", seed: 9, outputDir: "work/keep/0" }],
   }, "plan-keep");
   queued.deferred = [{ id: "defer-ebmc", planFile: "plans/ebmc.yaml", revision: "rev-ebmc", codeFingerprint: "old", body: {}, enqueuedAt: "t", status: "processing" }];
-  const allocated = queue.allocateAvailable(queue.enqueuePlan(queue.emptyDistributedQueue(), {
+  const allocated = queue.allocateAvailable(enqueueStopFixture(queue.emptyDistributedQueue(), {
     planFile: "plans/mix.yaml", revision: "rev-mix", codeFingerprint: "new",
     jobs: [0, 1].map((index) => ({ index, case: "bus", seed: index, outputDir: `work/mix/${index}` })),
-  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
+  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true, formalJobIdentityEnv: 1 }]);
   const running = allocated.queue.plans[0].jobs.find((job) => job.status === "dispatching");
   running.status = "running";
   const sandbox = {
@@ -185,7 +198,7 @@ test("queued-only plan clears without a worker stop and a mixed failure keeps th
   assert.equal(saved.plans[0].jobs.length, 1);
   assert.equal(saved.plans[0].jobs.some((job) => job.status === "running"), true);
   assert.match(sandbox.failures.join("\n"), /旧 Agent/);
-  const finished = queue.enqueuePlan(queue.emptyDistributedQueue(), {
+  const finished = enqueueStopFixture(queue.emptyDistributedQueue(), {
     planFile: "plans/done.yaml", revision: "rev-done", codeFingerprint: "new",
     jobs: [
       { index: 0, case: "bus", seed: 1, outputDir: "work/done/session" },
@@ -194,6 +207,7 @@ test("queued-only plan clears without a worker stop and a mixed failure keeps th
   }, "plan-done");
   const sessionJob = finished.plans[0].jobs[0];
   const clearJob = finished.plans[0].jobs[1];
+  delete finished.plans[0].resultPathPolicy; // These two records model the read-only legacy schema.
   for (const job of [sessionJob, clearJob]) Object.assign(job, { status: "completed", workerId: "w1", gpuId: "0", commandId: "cmd-" + job.index, attempt: 1 });
   sandbox.planFile = "plans/done.yaml";
   sandbox.failures = [];
@@ -249,6 +263,7 @@ test("each execution plan row can stop and clear its own plan file", () => {
     renderTaskCards: () => "",
     setHtmlIfChanged: (_id, value) => { html = value; },
   };
+  sandbox.asArray = (value) => Array.isArray(value) ? value : [];
   vm.createContext(sandbox);
   vm.runInContext(script.slice(script.indexOf("function distributedPlanRecoveryView("), script.indexOf("function executionCurrentDistributedJobs(")) + source + "\nthis.render = renderExecutionPlanList;", sandbox);
   sandbox.render({
@@ -328,10 +343,15 @@ function loadExtensionHandler(name, nextName) {
 function installStopClearHost(sandbox) {
   const notices = [];
   const context = {
+    require: name => { assert.equal(name, "../mac/UpdateGate"); return { assertBusinessAllowed: () => undefined }; },
     fs: { readFile: async () => "suite: fixture\n" }, path,
     queueApi: require("../../dist/features/DistributedPlanQueue.js"),
     planner: require("../../dist/features/PlanStopClear.js"),
     PlanStopClear_1: require("../../dist/features/PlanStopClear.js"),
+    PlanExecutionMode: require("../../dist/features/PlanExecutionMode.js"),
+    PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence.js"),
+    fs: { readFile: async (file) => `id: fixture_${path.basename(file, ".yaml")}\n` },
+    path,
     DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
     DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"),
     PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence.js"),
@@ -372,6 +392,7 @@ function installStopClearHost(sandbox) {
   const sourceDetach = provider.detachStaleDistributedTick;
   provider.planCleanupHosts=new Map();provider.workerActionTargets=()=>[];
   Object.assign(provider, sandbox);
+  if (!provider.planCleanupHosts) provider.planCleanupHosts = new Map();
   if (!provider.schedulerSettings) provider.schedulerSettings = () => ({ dispatchMode: "local_idle" });
   if (!provider.distributedSubmissionTimings) provider.distributedSubmissionTimings = new Map();
   if (sandbox.tickDistributedQueue) provider.tickDistributedQueue = sourceTick;
@@ -385,7 +406,7 @@ function installStopClearHost(sandbox) {
 
 test("production stop-clear removes a queue-only blocked plan without waiting on unrelated workers", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/stuck.yaml", revision: "rev-stuck", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work/stuck/0" }, { index: 1, case: "pad", seed: 2, outputDir: "work/stuck/1" }],
   }, "plan-stuck"), {
@@ -429,10 +450,10 @@ test("production stop-clear removes a queue-only blocked plan without waiting on
 
 test("an unconfirmed active job stays queued and the plan card records the reason", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const allocated = queueApi.allocateAvailable(enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/live.yaml", revision: "rev-live", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 3, outputDir: "work/live/0" }],
-  }, "plan-live"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
+  }, "plan-live"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true, formalJobIdentityEnv: 1 }]);
   const running = allocated.queue.plans[0].jobs[0];
   running.status = "running";
   let saved = allocated.queue;
@@ -471,10 +492,10 @@ test("an unconfirmed active job stays queued and the plan card records the reaso
 
 test("a hung worker stop returns a bounded plan failure and a late receipt cannot clear the job", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const allocated = queueApi.allocateAvailable(enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/hang.yaml", revision: "rev-hang", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 6, outputDir: "work/hang/0" }],
-  }, "plan-hang"), [{ workerId: "w-hang", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
+  }, "plan-hang"), [{ workerId: "w-hang", idleGpuIds: ["0"], online: true, declaredJobPaths: true, formalJobIdentityEnv: 1 }]);
   const running = allocated.queue.plans[0].jobs[0];
   running.status = "running";
   let saved = allocated.queue;
@@ -541,7 +562,7 @@ test("an error before confirmation is stored on the plan card", async () => {
 
 test("queue-only clear proceeds while a scheduler tick is still querying a worker", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/local.yaml", revision: "rev-local", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 7, outputDir: "work/local/0" }],
   }, "plan-local");
@@ -595,7 +616,7 @@ test("queue-only clear proceeds while a scheduler tick is still querying a worke
 
 test("a stuck worker probe does not block clearing an undispatched plan, and a remote job stays", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/tick.yaml", revision: "rev-tick", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 4, outputDir: "work/tick/0" }],
   }, "plan-tick"), {
@@ -644,7 +665,7 @@ test("a stuck worker probe does not block clearing an undispatched plan, and a r
 
 test("a tick that resumes after the timeout still cannot save or dispatch, and scheduling resumes after it ends", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/late.yaml", revision: "rev-late", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 8, outputDir: "work/late/0", status: "running", workerId: "w-late", gpuId: "0", commandId: "cmd-late", attempt: 1 }],
   }, "plan-late");
@@ -764,11 +785,11 @@ test("a late old tick cannot revive a queue-only plan after a newer tick saves",
   const tickEnd = dist.indexOf("async syncDistributedJobArtifacts(", tickStart);
   assert.ok(tickStart >= 0 && tickEnd > tickStart);
   const tickBody = dist.slice(tickStart, tickEnd).replace(/async tickDistributedQueueCore\(generation[^)]*\)/, "async function tickDistributedQueueCore(generation, signal)");
-  const stale = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const stale = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/stale.yaml", revision: "rev-stale", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work/stale/0", status: "running", workerId: "w1", gpuId: "0", commandId: "cmd-stale", attempt: 1 }],
   }, "plan-stale");
-  const fresh = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const fresh = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/fresh.yaml", revision: "rev-fresh", codeFingerprint: "new",
     jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work/fresh/0" }],
   }, "plan-fresh");
@@ -862,10 +883,10 @@ test("a stale reconciliation launch does not start after the project changes", a
   const tickStart = dist.indexOf("async tickDistributedQueueCore(generation");
   const tickEnd = dist.indexOf("async syncDistributedJobArtifacts(", tickStart);
   const tickBody = dist.slice(tickStart, tickEnd).replace(/async tickDistributedQueueCore\(generation[^)]*\)/, "async function tickDistributedQueueCore(generation, signal)");
-  const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const allocated = queueApi.allocateAvailable(enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/retry.yaml", revision: "rev-retry", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work/retry/0" }],
-  }, "plan-retry"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
+  }, "plan-retry"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true, formalJobIdentityEnv: 1 }]);
   const queued = allocated.queue;
   queued.plans[0].jobs[0].status = "running";
   let root = "D:/project";
@@ -926,7 +947,7 @@ test("a stale reconciliation launch does not start after the project changes", a
 
 test("cancelling the second confirmation publishes a cancelled card state", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/cancel.yaml", revision: "rev-cancel", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 5, outputDir: "work/cancel/0" }],
   }, "plan-cancel");
@@ -989,6 +1010,7 @@ test("the plan card renders the persistent stop-clear reason beside the target p
     renderTaskCards: () => "",
     setHtmlIfChanged: (_id, value) => { html = value; },
   };
+  sandbox.asArray = (value) => Array.isArray(value) ? value : [];
   vm.createContext(sandbox);
   vm.runInContext(source + "\nthis.render = renderExecutionPlanList;", sandbox);
   sandbox.render({
@@ -1069,6 +1091,7 @@ test("completed stop-clear feedback does not invent a plan card and a newer run 
     renderTaskCards: () => "",
     setHtmlIfChanged: (_id, value) => { html = value; },
   };
+  sandbox.asArray = (value) => Array.isArray(value) ? value : [];
   vm.createContext(sandbox);
   vm.runInContext(source + "\nthis.render = renderExecutionPlanList;", sandbox);
   sandbox.render({
@@ -1148,6 +1171,7 @@ test("execution section redraws when only the stop-clear feedback changes", () =
     renderExecutionSection: (state) => { renders.push(JSON.stringify(state.planStopClearByFile || {})); },
     applyResourceTreeChildLayout: () => undefined,
   };
+  sandbox.asArray = (value) => Array.isArray(value) ? value : [];
   vm.createContext(sandbox);
   vm.runInContext(script.slice(script.indexOf("function renderSectionIfVisible("), script.indexOf("function panelNow(", script.indexOf("function renderSectionIfVisible("))) + "\nthis.render = renderSectionIfVisible;", sandbox);
   const state = { planStopClearByFile: {} };
@@ -1234,7 +1258,7 @@ test("a preview failure before confirmation stays on the plan card", async () =>
     captureProjectContext: () => ({ root: "D:/project" }),
     projectContextIsCurrent: () => true,
     buildPlanRuntimeEvidenceState: () => ({ operations: {} }),
-    loadDistributedQueue: async () => queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+    loadDistributedQueue: async () => enqueueStopFixture(queueApi.emptyDistributedQueue(), {
       planFile: "plans/preview.yaml", revision: "rev", codeFingerprint: "old",
       jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work/preview/0" }],
     }, "plan-preview"),
@@ -1255,7 +1279,7 @@ test("a preview failure before confirmation stays on the plan card", async () =>
   }
 });
 
-test("only explicitly supported commands consume a structured command result", async () => {
+test("stop-clear and explicit job commands consume structured outcomes", async () => {
   const dist = fs.readFileSync(path.join(__dirname, "../../dist/extension/legacy.js"), "utf8");
   const start = dist.indexOf("const guardedWork = work()");
   const end = dist.indexOf("const result = await guardedWork", start);
@@ -1289,17 +1313,17 @@ test("only explicitly supported commands consume a structured command result", a
 
 test("mixed clear drops the pending job and keeps the running job when the worker never answers", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const allocated = queueApi.allocateAvailable(queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const allocated = queueApi.allocateAvailable(enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/mix.yaml", revision: "rev-mix", codeFingerprint: "new",
     jobs: [
       { index: 0, case: "bus", seed: 1, outputDir: "work/mix/0" },
       { index: 1, case: "bus", seed: 2, outputDir: "work/mix/1" },
     ],
-  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
+  }, "plan-mix"), [{ workerId: "w1", idleGpuIds: ["0"], online: true, declaredJobPaths: true, formalJobIdentityEnv: 1 }]);
   const queued = allocated.queue;
   const remote = queued.plans[0].jobs.find((job) => job.workerId);
   remote.status = "running";
-  const other = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const other = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/other.yaml", revision: "rev-other", codeFingerprint: "new",
     jobs: [{ index: 0, case: "pad", seed: 9, outputDir: "work/other/0", status: "running", workerId: "w9", gpuId: "1", commandId: "cmd-other", attempt: 1 }],
   }, "plan-other");
@@ -1342,7 +1366,7 @@ test("mixed clear drops the pending job and keeps the running job when the worke
 
 test("a launch still in flight is not treated as an undispatched job", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/launch.yaml", revision: "rev-launch", codeFingerprint: "new",
     jobs: [{ index: 0, case: "bus", seed: 3, outputDir: "work/launch/0" }],
   }, "plan-launch");
@@ -1355,7 +1379,7 @@ test("a launch still in flight is not treated as an undispatched job", async () 
     distributedQueueTickPromise: undefined,
     distributedQueueWritePromise: Promise.resolve(),
     distributedPlanStopEpoch: 0,
-    distributedLaunchInFlight: new Set([`${queued.plans[0].id}\0${job.index}\0${job.attempt}`]),
+    distributedLaunchInFlight: new Set([queueApi.distributedJobControlKey(queued.plans[0], job)]),
     planStopClearByFile: {},
     client: { getWorkerTasks: async () => { throw new Error("must not query"); } },
     isRealtimeMode: () => false,
@@ -1379,7 +1403,7 @@ test("a launch still in flight is not treated as an undispatched job", async () 
 
 test("a hung queue write keeps the undispatched plan and a later clear removes it", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/write.yaml", revision: "rev-write", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 5, outputDir: "work/write/0" }],
   }, "plan-write");
@@ -1421,7 +1445,7 @@ test("a hung queue write keeps the undispatched plan and a later clear removes i
 
 test("cancelling either confirmation and switching projects writes nothing", async () => {
   const queueApi = require("../../dist/features/DistributedPlanQueue.js");
-  const queued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const queued = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/cancel.yaml", revision: "rev-cancel", codeFingerprint: "old",
     jobs: [{ index: 0, case: "bus", seed: 6, outputDir: "work/cancel/0" }],
   }, "plan-cancel");
@@ -1529,7 +1553,9 @@ test("stopping during a hung fingerprint cancels that submission and a new one c
     distributedCodeVersionHold: (body) => new Promise((resolve) => { hashReleases.set(body.planFile, () => resolve(null)); }),
     localDistributedCodeFingerprint: async () => "code-1",
     ensureCodeReadyForRun: async () => undefined,
-    runPlanPreflight: async (body) => ({ validation: { execution_mode: "train", jobs: [{ index: 0, case: "bus", seed: 1, output_dir: "work/" + body.planFile }] } }),
+    runPlanPreflight: async (body) => ({ validation: { execution_mode: "train_test", result_path_policy: "declared",
+      jobs: [{ index: 0, case: "bus", seed: 1, output_dir: `work/${path.basename(body.planFile, ".yaml")}`,
+        result_csv: `tmp/result/${path.basename(body.planFile, ".yaml")}/metrics.csv` }] } }),
     confirmDistributedPlanExistingOutputs: async () => undefined,
     assertExecutionCondaEnvReady: () => undefined,
     reportPlanStage: () => undefined,
@@ -1630,10 +1656,10 @@ test("concurrent submissions append to the latest queue and reject the old sched
     await host.fs.rename(file + ".writing", file);
   } };
   vm.runInContext(method + "\nthis.save = saveDistributedQueue;", host);
-  const a = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const a = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/a.yaml", revision: "rev-a", codeFingerprint: "code-1", jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work/a" }],
   }, "a");
-  const b = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
+  const b = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/b.yaml", revision: "rev-b", codeFingerprint: "code-1", jobs: [{ index: 0, case: "bus", seed: 2, outputDir: "work/b" }],
   }, "b");
   const first = host.save("D:/project", a, { appendPlanId: "a", queueGeneration: 0, submissionOperationId: "submit-a", submissionEpoch: 1 });
@@ -1694,6 +1720,41 @@ test("plugin refuses exact pane stop unless the live worker probe advertises it"
   assert.ok(arm >= 0 && wait > arm && restore > wait);
   assert.ok(clear.indexOf("try {") < wait);
   assert.ok(clear.lastIndexOf("finally {") < restore);
+});
+
+test("the full formal stop-clear chain accepts no attempt field and never recreates an attempt key", async () => {
+  const queueApi = require("../../dist/features/DistributedPlanQueue.js");
+  let saved = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), { projectId: "d:/project", planFile: "plans/no_attempt.yaml",
+    revision: "frozen-revision", codeFingerprint: "frozen-code", executionMode: "train",
+    jobs: [{ index: 0, case: "case", seed: 42, outputDir: "work_dirs/direct/job", collectionResultCsv: "tmp/result/direct/job.csv" }] }, "original-workflow");
+  const plan = saved.plans[0], job = plan.jobs[0];
+  Object.assign(job, { status: "failed", workerId: "worker", commandId: "original-command", runKey: "original-command", gpuId: "0" });
+  Object.defineProperty(job, "attempt", { enumerable: false, configurable: true,
+    get() { throw Error("formal stop-clear must not read attempt"); } });
+  const task = { ...queueApi.workerStopJobIdentity(plan, job), commandId: job.commandId, status: "failed",
+    tmuxPane: "%123", tmuxSession: "isolated-test-session", enqueuedAt: plan.enqueuedAt, durableAccepted: true };
+  const client = { getWorkerTasks: async () => ({ tasks: [task] }), postWorkerAction: async (_worker, _action, request) => {
+    assert.equal(Object.hasOwn(request, "attempt"), false);
+    return { status: "completed", stoppedTasks: [{ ...task, paneClosed: true }] };
+  } };
+  const host = installStopClearHost({ root: "D:/project", answers: ["继续中止并清除", "确认中止并清除"],
+    distributedPlanStopEpoch: 0, planStopClearByFile: {}, client, isRealtimeMode: () => false, enabledWorkerConfigs: () => [],
+    captureProjectContext: () => ({ root: "D:/project" }), projectContextIsCurrent: () => true,
+    buildPlanRuntimeEvidenceState: () => ({ operations: {} }), loadDistributedQueue: async () => saved,
+    saveDistributedQueue: async (_root, next) => { saved = next; }, postState: () => undefined,
+    refreshExactPaneStopCapability: async () => true, withRemoteActionResource: async (_worker, _action, _request, action) => action(),
+    context: { workspaceState: { get: () => [], update: async () => undefined } } });
+  const stopper = loadExtensionHandler("async stopDistributedJobForClear(", "async stopAndClearPlanFromUi(");
+  vm.runInContext(`class Stopper { ${stopper} } this.Stopper = Stopper;`, host);
+  host.provider.stopDistributedJobForClear = host.Stopper.prototype.stopDistributedJobForClear;
+  const result = await host.provider.stopAndClearPlanFromUi({ planFile: plan.planFile });
+  assert.equal(result.status, "completed", JSON.stringify(result));
+  assert.equal(saved.plans.length, 0);
+  assert.ok(saved.clearedJobs.every(entry => !Object.hasOwn(entry, "attempt")));
+  const now = Date.now();
+  const refreshed = queueApi.mergeDurableWorkerSnapshots(saved, [{ workerId: "worker", capabilities: { durablePlanQueue: true, schemaVersion: 1 },
+    generatedAt: new Date(now).toISOString(), fetchedAt: new Date(now).toISOString(), tasks: [task] }], plan.projectId, now);
+  assert.equal(refreshed.plans.length, 0);
 });
 
 test("serialized Agent stop receipts pass the production project-scoped clear chain", async () => {

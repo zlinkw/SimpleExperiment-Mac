@@ -112,6 +112,7 @@ with contextlib.ExitStack() as scope:
     elif scenario == "recall":
         task = {**job(), "gpuId": "0"}
         request = {**task, "commandId": "stop", "targetCommandId": "command"}
+        request.pop("attempt", None)  # Formal control messages have no attempt field.
         assert agent.worker_task_matches_stop_identity(request, task)
         assert agent._legacy_recall_identity_matches(request, task)
         for field in ("planFile", "outputDir"):
@@ -147,6 +148,7 @@ with contextlib.ExitStack() as scope:
         assert queue["jobs"][0]["status"] == "cancelled"
         agent.accept_durable_plan_job("virtual", job("second"), "worker")
         second = {**job("second"), "targetCommandId": "second", "commandId": "cancel-second"}
+        second.pop("attempt", None)
         cancelled = agent.cancel_durable_plan_job("virtual", second)
         assert cancelled["planFile"] == plan_path and cancelled["outputDir"] == job("second")["outputDir"]
         # Typed identities cannot alias a string filename through str(value).
@@ -154,11 +156,12 @@ with contextlib.ExitStack() as scope:
         queue["jobs"] = [row]
         for field, value in (("planFile", 123), ("outputDir", 456)):
             before = copy.deepcopy(queue), len(writes)
+            typed = {**row, field: value, "commandId": "cancel-typed", "targetCommandId": "typed"}
+            typed.pop("attempt", None)
             try:
-                agent.cancel_durable_plan_job("virtual", {**row, field: value,
-                    "commandId": "cancel-typed", "targetCommandId": "typed"})
-            except ValueError:
-                pass
+                agent.cancel_durable_plan_job("virtual", typed)
+            except ValueError as exc:
+                assert field in getattr(exc, "identity_mismatch_fields", [])
             else:
                 raise AssertionError("non-string path impersonated stored filename")
             assert (queue, len(writes)) == before

@@ -6,7 +6,7 @@ import threading
 
 source = pathlib.Path(os.environ["TEST_AGENT_PATH"]).read_text(encoding="utf-8")
 tree = ast.parse(source)
-wanted = {"execute_worker_command", "_execute_worker_command_unfenced", "worker_task_matches_stop_identity", "close_worker_task_pane", "worker_task_pane_presence", "append_event", "read_json", "atomic_write", "path_for", "current_worker_task", "append_worker_task", "now_iso"}
+wanted = {"execute_worker_command", "_execute_worker_command_unfenced", "worker_task_matches_stop_identity", "worker_task_stop_identity_mismatches", "durable_plan_value", "durable_plan_identity", "durable_plan_public_identity", "close_worker_task_pane", "worker_task_pane_presence", "append_event", "read_json", "atomic_write", "path_for", "current_worker_task", "append_worker_task", "now_iso"}
 body = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFrom)) or getattr(node, "name", None) in wanted
         or isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id == "DURABLE_PLAN_IDENTITY_FIELDS" for target in node.targets)]
 module = ast.Module(body=body, type_ignores=[])

@@ -5576,7 +5576,10 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         session = str(command.get("session"))
     else:
         session = worker_tmux_session_name(worker_id, gpu_id, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID"))
-    _raw_log = worker_plan_path(worker_task_console_log(command_id) if command.get("resultPathPolicy") == "declared" else worker_path_value(command, options, ("logPath",), f"tmp/tmux_logs/{session}.log"), "logPath", allow_absolute=True)
+    supplied_log = worker_plan_path(worker_path_value(command, options, ("logPath",), f"tmp/tmux_logs/{session}.log"), "logPath", allow_absolute=True)
+    # A formal task uses its bound console, but invalid caller paths must still fail closed.
+    worker_plan_project_path(project_dir, supplied_log)
+    _raw_log = worker_plan_path(worker_task_console_log(command_id) if command.get("resultPathPolicy") == "declared" else supplied_log, "logPath", allow_absolute=True)
     if os.path.isabs(_raw_log):
         rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir))
     else:
@@ -5584,7 +5587,6 @@ def _execute_worker_command_unfenced(root, command, worker_id):
     log_path = worker_plan_project_path(project_dir, rel_log)
     if log_path != safe_project_path(project_dir, rel_log):
         raise ValueError("Worker 日志路径身份不一致")
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     env = formal_job_command_env(command)
     env["SIMPLE_EXPERIMENT_MANAGED_JOB"] = "1"
     env["SIMPLE_EXPERIMENT_JOB_COMMAND_ID"] = str(command_id)

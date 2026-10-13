@@ -284,7 +284,7 @@ test("late local lock ACK is fenced before the captured Worker client can send",
     provider.workerActionTargets = () => [{ id: "worker-a", condaEnv: "env-a" }];
     provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
     const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
-    host.distributedQueueGeneration = 7;host.lastWorkerProbes={"worker-a":{capabilities:{endpoints:{declaredJobPaths:true}}}};
+    host.distributedQueueGeneration = 7;host.lastWorkerProbes={"worker-a":{capabilities:{endpoints:{declaredJobPaths:true,formalJobIdentityEnv:1}}}};
     host.withRemoteActionResource = async (workerId, resource, request, callback) => {
       locks += 1;
       assert.equal(workerId, "worker-a");
