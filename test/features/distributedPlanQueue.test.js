@@ -86,7 +86,7 @@ test("clear markers never suppress active receipts, new attempts, reruns or a di
 
 function plan(name, fingerprint = "code-a") {
   return { planFile: `experiments/plans/comparison/${name}.yaml`, revision: `rev-${name}`, codeFingerprint: fingerprint,
-    jobs: ["bus", "pad"].flatMap((caseName, c) => [42, 43, 44].map((seed, s) => ({ index: c * 3 + s, case: caseName, seed, outputDir: `work_dirs/${name}/${caseName}_${seed}` }))) };
+    jobs: ["bus", "pad"].flatMap((caseName, c) => [42, 43, 44].map((seed, s) => ({ index: c * 3 + s, case: caseName, seed, outputDir: `work_dirs/${name}/${caseName}_${seed}` , collectionResultCsv:(`work_dirs/${name}/${caseName}_${seed}`)+"/metrics.csv"}))) };
 }
 
 test("one Worker takes a Plan when it has enough idle GPU slots", () => {
@@ -121,8 +121,7 @@ test("different code revision waits; uncertain job cannot be reassigned", () => 
 
 test("explicit verified recovery keeps the formal directory and retains prior receipt", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("a"), jobs: [{
-    index: 0, case: "bus", seed: 42, outputDir: "work_dirs/a/bus/seed_42",
-  }] }, "run-a");
+    index: 0, case: "bus", seed: 42, outputDir: "work_dirs/a/bus/seed_42", collectionResultCsv:("work_dirs/a/bus/seed_42")+"/metrics.csv"}] }, "run-a");
   const first = queue.allocateAvailable(input, [{ workerId: "nwpu2", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const failed = queue.setJobState(first.queue, "run-a", 0, "failed", first.dispatches[0].commandId);
   const recovered = queue.retryVerifiedJob(failed, "run-a", 0, "run-retry-1234");
@@ -146,13 +145,13 @@ test("a request blocked locally returns to the queue without losing its job", ()
 
 test("an explicit idle GPU admission rejection releases only the matching reservation", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("busy"), jobs: [
-    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/busy/bus" },
+    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/busy/bus" , collectionResultCsv:("work_dirs/busy/bus")+"/metrics.csv"},
   ] }, "run-busy");
   const allocation = queue.allocateAvailable(input, [{ workerId: "nwpu5", idleGpuIds: ["2"], online: true, declaredJobPaths: true }]);
   const dispatch = allocation.dispatches[0];
   const planRow = allocation.queue.plans[0];
   const job = planRow.jobs[0];
-  const rejected = { durableAccepted: false, admissionRejected: true, status: "pending", reason: "gpu_busy",
+  const rejected = { ...queue.workerStopJobIdentity(planRow, job), durableAccepted: false, admissionRejected: true, status: "pending", reason: "gpu_busy",
     commandId: dispatch.commandId, workerId: dispatch.workerId, gpuId: dispatch.gpuId, workflowId: planRow.id,
     planFile: planRow.planFile, planRevision: planRow.revision, case: job.case, seed: job.seed,
     resultPathPolicy: "declared", globalJobId: job.globalJobId, attempt: job.attempt, outputDir: job.outputDir };
@@ -166,7 +165,7 @@ test("an explicit idle GPU admission rejection releases only the matching reserv
 
 test("queued reassignment requires exact atomic release proof and keeps the formal directory", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("release"), projectId: "project-release", jobs: [
-    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/release/bus" },
+    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/release/bus" , collectionResultCsv:("work_dirs/release/bus")+"/metrics.csv"},
   ] }, "run-release");
   const allocation = queue.allocateAvailable(input, [{ workerId: "nwpu5", idleGpuIds: ["2"], online: true, declaredJobPaths: true }]);
   const dispatch = allocation.dispatches[0];
@@ -175,7 +174,7 @@ test("queued reassignment requires exact atomic release proof and keeps the form
   const planRow = accepted.plans[0];
   const job = planRow.jobs[0];
   job.runKey = job.commandId;
-  const release = { durableReleased: true, durableAccepted: true, neverStarted: true, neverStartedEvidence: "durable_queued_row",
+  const release = { ...queue.workerStopJobIdentity(planRow, job), durableReleased: true, durableAccepted: true, neverStarted: true, neverStartedEvidence: "durable_queued_row",
     status: "cancelled", stopReason: "requeue",
     commandId: job.commandId, targetCommandId: job.commandId, workerId: job.workerId, gpuId: job.gpuId,
     workflowId: planRow.id, projectId: planRow.projectId, planRevision: planRow.revision, codeFingerprint: planRow.codeFingerprint,
@@ -192,7 +191,7 @@ test("queued reassignment requires exact atomic release proof and keeps the form
   assert.equal(next.history[0].stopReason, "requeue");
   assert.equal(next.history[0].finishedAt, release.finishedAt);
   assert.equal(next.history[0].commandId, job.commandId);
-  for (const invalid of [{ ...release, durableReleased: false }, { ...release, stopReason: "scheduler_aborted" }, { ...release, attempt: 2 }]) {
+  for (const invalid of [{ ...release, durableReleased: false }, { ...release, stopReason: "scheduler_aborted" }, { ...release, globalJobId: "foreign:0" }]) {
     assert.throws(() => queue.releaseQueuedForReassignment(accepted, planRow.id, job.index, invalid, "run-next"));
   }
   assert.throws(() => queue.releaseQueuedForReassignment(accepted, planRow.id, job.index, { ...release, planJobCount: 99 }, "run-next"));
@@ -216,7 +215,7 @@ test("idle GPU evidence fails closed for missing process, memory, utilization, o
 
 test("crash before send retries the same pinned command only after fresh owner evidence", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("crash"), jobs: [
-    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/crash/bus" },
+    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/crash/bus" , collectionResultCsv:("work_dirs/crash/bus")+"/metrics.csv"},
   ] }, "run-crash");
   const allocated = queue.allocateAvailable(input, [{ workerId: "nwpu3", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const dispatch = allocated.dispatches[0];
@@ -238,8 +237,8 @@ test("crash before send retries the same pinned command only after fresh owner e
 
 test("fresh idle GPU slots skip a saturated earlier Worker and never reserve busy cards", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("late-bind"), jobs: [
-    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/late-bind/bus/seed_42" },
-    { index: 1, case: "bus", seed: 43, outputDir: "work_dirs/late-bind/bus/seed_43" },
+    { index: 0, case: "bus", seed: 42, outputDir: "work_dirs/late-bind/bus/seed_42" , collectionResultCsv:("work_dirs/late-bind/bus/seed_42")+"/metrics.csv"},
+    { index: 1, case: "bus", seed: 43, outputDir: "work_dirs/late-bind/bus/seed_43" , collectionResultCsv:("work_dirs/late-bind/bus/seed_43")+"/metrics.csv"},
   ] }, "run-late-bind");
   const result = queue.allocateAvailable(input, [
     { workerId: "nwpu5", idleGpuIds: [], online: true, declaredJobPaths: true, capacity: 8, codeFingerprint: "code-a" },
@@ -262,8 +261,8 @@ test("local preflight previews the same slots without modifying the persisted qu
 });
 
 test("an older pending fingerprint does not starve a newer Plan once Workers only have the newer code", () => {
-  const older = { ...plan("ebmc", "a84a822d"), jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work_dirs/ebmc/bus_1" }] };
-  const newer = { ...plan("edrl", "ec594411"), jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work_dirs/edrl/pad_2" }] };
+  const older = { ...plan("ebmc", "a84a822d"), jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work_dirs/ebmc/bus_1" , collectionResultCsv:("work_dirs/ebmc/bus_1")+"/metrics.csv"}] };
+  const newer = { ...plan("edrl", "ec594411"), jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work_dirs/edrl/pad_2" , collectionResultCsv:("work_dirs/edrl/pad_2")+"/metrics.csv"}] };
   const input = queue.enqueuePlan(queue.enqueuePlan(queue.emptyDistributedQueue(), older, "old-pending"), newer, "new-pending");
   const workers = [
     { workerId: "nwpu3", idleGpuIds: ["0", "1", "2", "3"], online: true, declaredJobPaths: true, codeFingerprint: "ec594411" },
@@ -284,8 +283,8 @@ test("an older pending fingerprint does not starve a newer Plan once Workers onl
 });
 
 test("a fingerprint with no idle GPU does not lock out another fingerprint that has free slots", () => {
-  const busy = { ...plan("old", "code-old"), jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work_dirs/old/bus_1" }] };
-  const ready = { ...plan("new", "code-new"), jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work_dirs/new/pad_2" }] };
+  const busy = { ...plan("old", "code-old"), jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work_dirs/old/bus_1" , collectionResultCsv:("work_dirs/old/bus_1")+"/metrics.csv"}] };
+  const ready = { ...plan("new", "code-new"), jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work_dirs/new/pad_2" , collectionResultCsv:("work_dirs/new/pad_2")+"/metrics.csv"}] };
   const input = queue.enqueuePlan(queue.enqueuePlan(queue.emptyDistributedQueue(), busy, "busy-version"), ready, "ready-version");
   const result = queue.allocateAvailable(input, [
     { workerId: "nwpu3", idleGpuIds: [], online: true, declaredJobPaths: true, codeFingerprint: "code-old" },
@@ -297,8 +296,8 @@ test("a fingerprint with no idle GPU does not lock out another fingerprint that 
 });
 
 test("different verified Workers dispatch different versions while an older Plan is still running", () => {
-  const active = { ...plan("live", "code-live"), jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work_dirs/live/bus_1" }] };
-  const next = { ...plan("next", "code-next"), jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work_dirs/next/pad_2" }] };
+  const active = { ...plan("live", "code-live"), jobs: [{ index: 0, case: "bus", seed: 1, outputDir: "work_dirs/live/bus_1" , collectionResultCsv:("work_dirs/live/bus_1")+"/metrics.csv"}] };
+  const next = { ...plan("next", "code-next"), jobs: [{ index: 0, case: "pad", seed: 2, outputDir: "work_dirs/next/pad_2" , collectionResultCsv:("work_dirs/next/pad_2")+"/metrics.csv"}] };
   let input = queue.enqueuePlan(queue.enqueuePlan(queue.emptyDistributedQueue(), active, "live-plan"), next, "next-plan");
   input = queue.allocateAvailable(input, [{ workerId: "worker-old", idleGpuIds: ["0"], online: true, declaredJobPaths: true, codeFingerprint: "code-live" }]).queue;
   input.plans[0].jobs[0].status = "running";
@@ -338,7 +337,7 @@ test("stop clear removes only the confirmed plan and keeps a failed sibling job"
   assert.equal(targets.filter((row) => row.kind === "job").length, 6);
   assert.equal(targets.filter((row) => row.kind === "deferred" && row.status === "blocked").length, 1);
   assert.equal(targets.some((row) => row.tmuxSession || row.tmuxTarget), false);
-  const confirmed = new Set(targets.filter((row) => row.kind === "job" && row.jobIndex !== 0).map((row) => `${row.planId}\0${row.jobIndex}\0${row.attempt}`));
+  const confirmed = new Set(targets.filter((row) => row.kind === "job" && row.jobIndex !== 0).map((row) => row.jobKey));
   const next = queue.removeConfirmedDistributedPlan(input, "experiments/plans/comparison/ebmc.yaml", { jobKeys: confirmed, deferredIds: new Set(["defer-ebmc"]) });
   assert.deepEqual(next.plans.find((row) => row.id === "run-ebmc").jobs.map((job) => job.index), [0]);
   assert.equal(next.plans.find((row) => row.id === "run-keep").jobs.length, 6);
@@ -346,29 +345,28 @@ test("stop clear removes only the confirmed plan and keeps a failed sibling job"
 });
 
 test("stop identity rejects another plan that shares only the worker", () => {
-  const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("a"), jobs: [{ index: 0, case: "bus", seed: 42, outputDir: "work_dirs/a/bus" }] }, "run-a");
+  const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("a"), jobs: [{ index: 0, case: "bus", seed: 42, outputDir: "work_dirs/a/bus" , collectionResultCsv:("work_dirs/a/bus")+"/metrics.csv"}] }, "run-a");
   const allocated = queue.allocateAvailable(input, [{ workerId: "worker-a", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const current = allocated.queue.plans[0];
   const job = current.jobs[0];
-  const identity = { commandId: job.commandId, workflowId: current.id, planRevision: current.revision, planFile: current.planFile, case: job.case, seed: job.seed, attempt: job.attempt, outputDir: job.outputDir, workerId: job.workerId, gpuId: job.gpuId };
+  const identity = { ...queue.workerStopJobIdentity(current, job), commandId: job.commandId, workflowId: current.id, planRevision: current.revision, planFile: current.planFile, case: job.case, seed: job.seed, attempt: job.attempt, outputDir: job.outputDir, workerId: job.workerId, gpuId: job.gpuId };
   assert.equal(queue.stopIdentityMatchesJob(current, job, identity), true);
-  assert.equal(queue.stopIdentityMatchesJob(current, job, { ...identity, commandId: "" }), false);
+  assert.equal(queue.stopIdentityMatchesJob(current, job, { ...identity, commandId: "", targetCommandId: "" }), false);
   assert.equal(queue.stopIdentityMatchesJob(current, job, { ...identity, workflowId: "other-plan" }), false);
   assert.equal(queue.stopIdentityMatchesJob(current, job, { workerId: job.workerId }), false);
 });
 
-test("reconnection accepts only the exact persisted Plan, job, attempt and Worker", () => {
+test("formal reconnection accepts only the exact persisted Plan, global job, command and Worker", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { ...plan("a"), jobs: [{
-    index: 0, case: "bus", seed: 42, outputDir: "work_dirs/a/bus",
-  }] }, "run-a");
+    index: 0, case: "bus", seed: 42, outputDir: "work_dirs/a/bus", collectionResultCsv:("work_dirs/a/bus")+"/metrics.csv"}] }, "run-a");
   const allocated = queue.allocateAvailable(input, [{ workerId: "worker-a", idleGpuIds: ["0"], online: true, declaredJobPaths: true }]);
   const current = allocated.queue.plans[0];
   const job = current.jobs[0];
-  const remote = { commandId: job.commandId, workflowId: current.id, planRevision: current.revision,
+  const remote = { ...queue.workerStopJobIdentity(current, job), commandId: job.commandId, workflowId: current.id, planRevision: current.revision,
     case: job.case, seed: job.seed, attempt: job.attempt, outputDir: job.outputDir,
     workerId: job.workerId, gpuId: job.gpuId, status: "running" };
   assert.equal(queue.remoteTaskMatchesJob(current, job, remote), true);
-  for (const [field, value] of [["attempt", 2], ["case", "pad"], ["workerId", "worker-b"],
+  for (const [field, value] of [["globalJobId", "foreign:0"], ["case", "pad"], ["workerId", "worker-b"],
     ["planRevision", "old"], ["outputDir", "other"]]) {
     assert.equal(queue.remoteTaskMatchesJob(current, job, { ...remote, [field]: value }), false, field);
   }
@@ -459,7 +457,7 @@ test("cold recovery keeps a released older attempt as provenance without replaci
   const projectId = queue.canonicalProjectId("C:/research/project");
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 1,
     planFile: "experiments/plans/a.yaml", revision: "rev-a", codeFingerprint: "code-a", jobs: [
-      { index: 0, case: "case-a", seed: 7, outputDir: "runs/a" },
+      { index: 0, case: "case-a", seed: 7, outputDir: "runs/a" , collectionResultCsv:("runs/a")+"/metrics.csv"},
     ] }, "workflow-a");
   input.plans[0].jobs[0].attempt = 2;
   delete input.plans[0].resultPathPolicy;
@@ -483,7 +481,7 @@ test("a delayed old queued row contradicting release fences the plan", () => {
   const projectId = queue.canonicalProjectId("C:/research/project");
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 1,
     planFile: "experiments/plans/a.yaml", revision: "rev-a", codeFingerprint: "code-a", jobs: [
-      { index: 0, case: "case-a", seed: 7, outputDir: "runs/a" },
+      { index: 0, case: "case-a", seed: 7, outputDir: "runs/a" , collectionResultCsv:("runs/a")+"/metrics.csv"},
     ] }, "workflow-a");
   input.plans[0].jobs[0].attempt = 2;
   delete input.plans[0].resultPathPolicy;

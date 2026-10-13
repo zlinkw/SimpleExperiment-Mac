@@ -57,9 +57,13 @@
 - 3文件边界：IdleGpuDispatchLifecycle、MacFormalIdentity固定夹具、本计划。补真实新能力、独立声明CSV、formal回执字段；G2更换为既有固定入口的AST隔离，仅复核占用/不可信遥测，原10秒超时脚本保留且不重跑；没有调整生产代码或放大超时。原目标18/11。
 - 更新后的全文件19/固定身份2通过；G2新固定入口约0.8秒，旧超时脚本未再执行。剩余旧attempt控制key断言改为实际正式command/revision控制key，不弱化保护。原目标18/11。
 
-### 074f3Mac路径与控制门禁（passed）
+### 074f3Mac路径与控制门禁（源码已同步，发布闭包待验证）
 - 8文件边界：Agent/legacy宿主、MacAgentPlanIdentity/MacPlanLaunchPaths夹具、MetricsDownloadEndToEnd/PlanStopClear测试及ExactPaneStop夹具、本计划。重复提前mkdir移除，保留二次路径检查之后创建日志目录；formal绑定console仍先拒绝坏logPath。Windows新增两个非冲突更新hook改用Mac共享门禁，后台tick暂停派发；保留独立Mac源。夹具补无attempt控制/tmux位置叶子/新协议/停止比较依赖，原超时审计保留；原目标18/11。
-- build234闭包/面板2/vm、Mac Agent身份5/启动路径8/结果端到端6/停止清理33通过；坏路径先拒绝、目录变更前零写入，停止类型负例核对具体不匹配字段。原目标18/11。
+- build生成234模块清单/面板2/vm、Mac Agent身份5/启动路径8/结果端到端6/停止清理34通过；坏路径先拒绝、目录变更前零写入，停止类型负例核对具体不匹配字段。追加verify:package-runtime的Node枚举子进程ETIMEDOUT，误在读取最终状态前写“闭包通过”并提交9130491；此处更正，批次发布验证未完成，不覆盖历史记录，后续须实际闭包门禁通过。原目标18/11。
+
+### 074f4正式队列旧门禁（passed）
+- 3文件边界：DistributedPlanQueue/DistributedJobAutoRetry测试、本计划；明确声明独立CSV、使用实际command/revision控制key与全量停止身份，历史attempt恢复夹具不改。旧72文件审计仅这两文件及已修四文件失败，无新超时；原目标18/11。
+- 队列29/失败策略21通过；正式负例改核对globalJobId/原command身份，历史attempt负例保留；第一轮插入夹具遇尾逗号语法错误，修正后通过，没有改生产逻辑。原目标18/11。
 
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。

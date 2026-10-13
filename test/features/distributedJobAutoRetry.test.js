@@ -18,7 +18,7 @@ let serial = 0;
 function fixture(states = ['completed', 'failed', 'pending', 'pending', 'pending', 'pending'], id = 'current-plan') {
   const queue = api.enqueuePlan(api.emptyDistributedQueue(), { projectId, planFile: 'plans/model.yaml', revision: 'rev',
     codeFingerprint: 'code', jobs: states.map((_, index) => ({ index, case: index < 3 ? 'bus' : 'pad', seed: 42 + index % 3,
-      outputDir: `work_dirs/job${index}` })) }, id, new Date(initialTime).toISOString());
+      outputDir: `work_dirs/job${index}`, collectionResultCsv: `tmp/result/job${index}/metrics.csv` })) }, id, new Date(initialTime).toISOString());
   queue.plans[0].jobs.forEach((job, index) => {
     job.status = states[index];
     if (states[index] !== 'pending') Object.assign(job, { workerId: 'worker', gpuId: String(index),
@@ -34,7 +34,7 @@ function snapshots(queue, now) {
     tasks: queue.plans.flatMap(plan => plan.jobs.filter(job => job.commandId).map(job => ({
       projectId, workflowId: plan.id, planRevision: plan.revision, planFile: plan.planFile, codeFingerprint: plan.codeFingerprint,
       planJobCount: plan.planJobCount, fullPlanJobCount: plan.fullPlanJobCount, enqueuedAt: plan.enqueuedAt,
-      resultPathPolicy: plan.resultPathPolicy, globalJobId: job.globalJobId, experimentIndex: job.index, case: job.case, seed: job.seed,
+      resultPathPolicy: plan.resultPathPolicy, globalJobId: job.globalJobId, collectionResultCsv: job.collectionResultCsv, experimentIndex: job.index, case: job.case, seed: job.seed,
       ...(job.attempt ? { attempt: job.attempt } : {}), outputDir: job.outputDir,
       commandId: job.commandId, runKey: job.runKey || job.commandId, workerId: job.workerId, gpuId: job.gpuId,
       status: job.status, finishedAt: job.finishedAt, error: job.error, stopReason: job.stopReason,
