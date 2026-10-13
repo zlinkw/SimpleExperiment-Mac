@@ -72,6 +72,7 @@ test('formal three-seed queue persists stable paths, requires new Worker protoco
     planRevision: dispatchedPlan.revision, codeFingerprint: dispatchedPlan.codeFingerprint, experimentIndex: job.index,
     case: job.case, seed: job.seed, outputDir: job.outputDir, resultPathPolicy: 'declared', globalJobId: job.globalJobId,
     workerId: job.workerId, gpuId: job.gpuId, commandId: job.commandId, targetCommandId: job.commandId,
+    collectionResultCsv: job.collectionResultCsv,
     runKey: job.commandId, planJobCount: dispatchedPlan.planJobCount, durableAccepted: true, durableReleased: true,
     neverStarted: true, neverStartedEvidence: 'durable_queued_row', status: 'cancelled', stopReason: 'requeue' };
   assert.equal(Queue.remoteTaskMatchesJob(dispatchedPlan, job, receipt), true);

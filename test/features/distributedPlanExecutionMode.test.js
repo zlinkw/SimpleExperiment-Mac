@@ -28,7 +28,7 @@ function method(start, end, scope = {}) {
 function host(queue = Queue.emptyDistributedQueue()) {
   const owner = { queue, distributedQueueGeneration: 0, context: { globalStorageUri: { fsPath: 'C:/storage' } },
     lastCodeSyncState: { fingerprint: 'code', workerVersions: { worker: { codeSyncProofId: 'proof' } } },
-    lastWorkerProbes: { worker: { capabilities: { endpoints: { declaredJobPaths: true }, actionEndpoints: { 'register-code-sync-proof': true } } } },
+    lastWorkerProbes: { worker: { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1 }, actionEndpoints: { 'register-code-sync-proof': true } } } },
     workerActionTargets: () => [{ id: 'worker', condaEnv: 'env' }], enabledWorkerConfigs: () => [],
     schedulerSettings: () => ({}), loadDistributedQueue: async () => owner.queue,
     saveDistributedQueue: async (_, value) => { owner.queue = value; }, postState() {},
@@ -179,7 +179,7 @@ test('training recovery requires confirmation for the unchanged job and current 
         return scenario === 'cancel' ? undefined : '恢复训练完成';
       } } },
     }).retryDistributedJobFromUi;
-    await assert.rejects(retry.call(owner, { planId: 'run', jobIndex: 0 }),/HISTORICAL_ATTEMPT_READ_ONLY/);
+    await assert.rejects(retry.call(owner, { planId: 'run', jobIndex: 0, commandId: 'command' }),/HISTORICAL_ATTEMPT_READ_ONLY/);
     assert.equal(confirmations,0);
     assert.equal(owner.queue.plans[0].jobs[0].status,'failed');
   }

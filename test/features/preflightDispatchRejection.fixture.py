@@ -13,7 +13,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "_helpers"))
 from extractRuntimeFunctions import extract_runtime_functions
 runtime = pathlib.Path(__file__).resolve().parents[2] / "dist/runtime"
-scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["formal_job_preflight_mode", "formal_source_fingerprint"])
+scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["formal_job_preflight_report", "formal_source_fingerprint"])
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"), ["accept_durable_plan_job", "handle_action", "drain_durable_plan_queue_once"])
 root = pathlib.Path(tempfile.mkdtemp(prefix="simple-preflight-rejection-")).resolve()
 os.chdir(root)
@@ -49,14 +49,14 @@ def persist(_, value):
     queue.update(copy.deepcopy(value))
 
 def scheduler_rpc(argv, **kw):
-    assert kw["timeout"] == 10 and kw["cwd"] == str(root)
+    assert kw["progress_stream"] == "stderr" and kw["cwd"] == str(root)
     args = SimpleNamespace(plan=plan_file, only_index=int(argv[argv.index("--only-index") + 1]),
         mode=argv[argv.index("--mode") + 1], plan_revision=argv[argv.index("--plan-revision") + 1],
         output_dir_override=argv[argv.index("--output-dir-override") + 1], default_result_csv_dir="experiments/results")
     preflight_calls.append(args.only_index)
     with patch.dict(os.environ, kw["env"]):
         try:
-            report = scheduler.formal_job_preflight_mode(args)
+            report = scheduler.formal_job_preflight_report(args)
             return SimpleNamespace(returncode=0, stdout=json.dumps(report), stderr="")
         except ValueError as exc:
             return SimpleNamespace(returncode=1, stdout="", stderr="Traceback (fixture)\nValueError: " + str(exc))
@@ -65,7 +65,7 @@ def forbidden(*a, **kw):
     raise AssertionError("No GPU probe, tmux, process, or signal is allowed for rejection")
 
 with patch.object(agent, "cluster_scheduler_path", lambda _: str(runtime / "cluster_scheduler.py")), \
-     patch.object(agent.subprocess, "run", scheduler_rpc), \
+     patch.object(agent, "subprocess_inactivity_run", scheduler_rpc), \
      patch.object(agent, "simple_runtime_env", lambda env: env), \
      patch.object(agent, "simple_runtime_python", lambda _: sys.executable), \
      patch.object(agent, "read_durable_plan_queue", read_queue), \
@@ -85,6 +85,16 @@ with patch.object(agent, "cluster_scheduler_path", lambda _: str(runtime / "clus
     assert receipt["neverStarted"] and receipt["neverStartedEvidence"] == "formal_preflight_rejected"
     assert receipt["errorCode"] == "FORMAL_JOB_CONFLICT" and command["outputDir"] in receipt["error"]
     assert command["collectionResultCsv"] in receipt["error"] and "Traceback" not in receipt["message"]
+    evidence = receipt["formalConflictEvidence"]
+    assert evidence["workerId"] == "worker" and evidence["projectRoot"] == str(root)
+    assert evidence["outputDir"] == str(output) and evidence["ownerExists"] is False
+    assert "checkpoint" in evidence["categories"] and evidence["hashesVerified"] is False
+    try:
+        agent.verified_formal_job_command(str(root), {key: value for key, value in command.items() if key != "globalJobId"})
+    except ValueError as exc:
+        assert "missing=globalJobId" in str(exc)
+    else:
+        raise AssertionError("Agent fabricated a missing original globalJobId")
     assert "attempt" not in receipt and "attempt" not in queue["jobs"][0]
     assert events[-1]["type"] == "operation_failed" and events[-1]["payload"]["reason"] == "formal_preflight_rejected"
     again = agent.accept_durable_plan_job(str(root), command, "worker")

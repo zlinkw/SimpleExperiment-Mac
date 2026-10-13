@@ -43,7 +43,7 @@ command = {**identity, "projectId": "project-fixture", "planFile": plan_file, "w
            "schedulerPath": "simple_cluster/runtime/cluster_scheduler.py"}
 
 def scheduler_rpc(argv, **kw):
-    assert kw["timeout"] == 10 and kw["cwd"] == str(root)
+    assert kw["progress_stream"] == "stderr" and kw["cwd"] == str(root)
     args = SimpleNamespace(plan=argv[argv.index("--plan") + 1], only_index=int(argv[argv.index("--only-index") + 1]),
         mode=argv[argv.index("--mode") + 1], plan_revision=argv[argv.index("--plan-revision") + 1],
         output_dir_override=argv[argv.index("--output-dir-override") + 1], default_result_csv_dir="experiments/results")
@@ -67,7 +67,7 @@ def read_queue(_):
     return restored
 
 with patch.object(agent, "cluster_scheduler_path", lambda _: str(runtime / "cluster_scheduler.py")), \
-     patch.object(agent.subprocess, "run", scheduler_rpc), \
+     patch.object(agent, "subprocess_inactivity_run", scheduler_rpc), \
      patch.object(agent, "simple_runtime_env", lambda value: value), \
      patch.object(agent, "simple_runtime_python", lambda _: sys.executable), \
      patch.object(agent, "read_durable_plan_queue", read_queue), \
@@ -139,7 +139,7 @@ def fails(callback, token):
 job = jobs[0]
 assert len({item.output_dir for item in jobs}) == len({item.result_csv for item in jobs}) == 3
 worker = {"id":"worker","project_dir":str(root),"conda_env":"fixture-env",
-          "_availability":{"declaredJobPaths":True,"runtimeVersion":scheduler.RUNTIME_VERSION},
+          "_availability":{"declaredJobPaths":True,"formalJobIdentityEnv":1,"runtimeVersion":scheduler.RUNTIME_VERSION},
           "_availability_received_monotonic":scheduler.time.monotonic()}
 with patch.object(scheduler,"scheduler_agent_state_dir",lambda: root/"fixture-hub-state"), \
      patch.object(scheduler.urllib.request,"urlopen",side_effect=AssertionError("unexpected server access")):

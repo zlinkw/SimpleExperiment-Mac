@@ -64,6 +64,7 @@ for mode in ("train", "test", "train_test"):
                 "simple_runtime_python": lambda _: "virtual-python",
                 "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
                 "tmux_available": lambda: True, "start_job_in_gpu_pane": lambda session, args, *rest: launched.append(args) or "%virtual",
+                "worker_task_tmux_location": lambda *a: {"tmuxPane": "%1", "tmuxSession": "fixture", "tmuxWindowId": "@1"},
                 "append_worker_task": lambda _, task: saved.append(task), "append_event": lambda *args: None,
             }
             for key, replacement in replacements.items(): scope.enter_context(patch.object(agent, key, replacement))

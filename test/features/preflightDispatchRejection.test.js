@@ -41,7 +41,7 @@ function fixture(initial = true) {
   const p = new Provider();
   Object.assign(p, { distributedQueueGeneration: 0, distributedPlanStopEpoch: 0, distributedLaunchInFlight: new Set(),
     distributedNextFailureDetailAt: Infinity, distributedNextPostprocessAt: Infinity, lastWorkerProbes: { worker: {
-      status: 'ok', capabilities: { endpoints: { declaredJobPaths: true } } } },
+      status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1 } } } },
     lastCodeSyncState: { workerVersions: { worker: { fingerprint: agentReceipt.codeFingerprint } } } });
   p.isRealtimeMode = () => true;
   p.projectTopologyAssessment = () => ({ mode: 'worker_pool' });
