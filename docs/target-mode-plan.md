@@ -29,6 +29,10 @@
 - 6文件边界：TunnelClient/WorkerTelemetryApi、JS/Python capabilities测试辅助、WorkerTelemetryApiContract及本计划；识别formal停止能力标记与preflight动作，动态端点/手动Termius不变。基线834b553，原目标18/11。
 - build/面板2/vm、协议8通过，无任何服务器通信；原目标18/11。
 
+### 074c2执行环境/预检进度（passed）
+- 7文件边界：executionShellEnvironment/executionShellPreflight/formalJobPreflightProgress各测试及Python夹具、本计划；测试已构建runtime，实际专属stdlib/Git Bash只执行环境探针，缺环境/错误解释器/输出上限/无进展超时均拒绝并结算；不运行科研。原目标18/11。
+- 环境1/真实shell3/进度2通过。预检夹具首次将Windows临时物理路径当服务器POSIX路径而失败；仅注入物理文件系统叶子，实际durable_plan_path继续校验，复验通过；原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。
