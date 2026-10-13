@@ -49,3 +49,9 @@
 [preview-v0.5.313](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.313)配套SimpleSFTP Mac 0.2.100已发布，参考Windows至42902a5a/acae730，17提交功能页映射见[同步说明](windows-sync-2026-10-12.md)。本地127目标文件、234/28闭包、面板vm、实际包200消费者、1588/87源码快照以及真实匿名四请求/REST0通过。源码`1be91b4248518c32d06c667b3c73c8b8d5c4b28c`/`2d5d5aced0a49621d84e5a9f00d65b22c053f2f3`，索引`bd7e14f0d8c5081031f05be4bc77bad6eed460f9`。
 
 新正式任务、内存结果、精确GPU归属、启动前拒绝和PLAN审核属于新增本地实现，M5Validation仍pending。macOS缺可靠句柄证明，实际清理仍阻断；用户须任务空闲后主动升级Agent才能验证新runtime。没有连接服务器、启停现有任务、部署Agent、真实清理或开发机安装；本轮无新增真机证据，原目标仍18已验证11剩余。
+
+## Windows新增功能本地交付（2026-10-13）
+
+[preview-v0.5.314](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.314)配套SimpleSFTP Mac 0.2.101已发布，新增9+2提交映射见[同步说明](windows-sync-2026-10-13.md)。146个目标文件（含build面板标记147），234/28运行模块闭包与面板vm、实际两份VSIX消费者232项、1609/89源码快照、匿名四请求/REST0及大小/SHA/CRC/身份/平台核验通过；Exp源码`cfc46572020a437096e9aa4ffb8d87d64e69e879`、SF源码`3c58e082adeaafcce923a8f5a4d74ea39d770390`，索引`c6709ea95d3f311f519c34d4060e629026cfe1e9`。最终完整prepare exit0，前期夹具/外部Plan失败与历史超时记录保留。
+
+新增正式任务身份/精确停止、配置环境预检、失败遗留审核、完成Plan的受限Worker镜像、可取消更新等待及未知安装回执恢复均只有本地证据，M5仍pending。外部科研项目专属hook兼容入口须显式选择，未以隔离集成夹具替代它。用户应等待任务空闲后主动升级Agent；现有远端任务未动。Mac实际清理仍因缺可靠句柄证明阻断，原29条18已验证11剩余，整体paused。

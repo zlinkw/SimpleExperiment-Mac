@@ -1,6 +1,6 @@
 # Windows 新增功能参考同步
 
-本轮冻结 SimpleExperiment Windows `42902a5a → 7bb96599` 的9次提交、SimpleSFTP `acae730 → ed75a5d` 的2次提交。计划通过 Mac preview 交付 Experiment 0.5.314 / SFTP 0.2.101；最终发布记录以 Releases 与 `mac-project-facts.md` 为准。
+本轮冻结 SimpleExperiment Windows `42902a5a → 7bb96599` 的9次提交、SimpleSFTP `acae730 → ed75a5d` 的2次提交。已通过[preview-v0.5.314](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.314)交付 Experiment 0.5.314 / SFTP 0.2.101；Exp源码`cfc46572020a437096e9aa4ffb8d87d64e69e879`、SF源码`3c58e082adeaafcce923a8f5a4d74ea39d770390`，索引`c6709ea95d3f311f519c34d4060e629026cfe1e9`。
 
 | 参考提交 | Mac采用的思路 | 本地验证 |
 | --- | --- | --- |
@@ -35,3 +35,9 @@ Mac仍缺可靠打开文件句柄证明，实际清理返回 `HANDLE_CHECK_UNAVA
 验证全部在本机：真实编译消费者、隔离Python函数、专属新建WSL tmux服务器、Git Bash/std库环境探针及API/传输替身。没有连接生产服务器、部署Agent、执行科研或真实传输/清理、开发机安装及Actions。曾保留一份10秒终止的旧临时GPU夹具，随后以固定入口AST隔离验证替代；闭包枚举8秒失败也保留，最终发布须重新通过更高版本的完整门禁，不能把失败记录写成通过。
 
 原29条目标维持 **18已验证、11剩余**，整体paused。本轮新增行为尚待M5，旧`.309/.97`报告不能作为新版正式执行、镜像、审核或安装恢复的真机证明。
+
+## 本轮发布验证
+
+146个目标文件（含build面板标记147），234/28运行模块闭包与面板vm、实际两份VSIX消费者232项、1609/89源码快照、匿名四请求/REST0及大小/SHA/CRC/身份/平台核验通过。完整prepare最终exit0；旧GPU身份依赖及两处正式召回UI夹具已修正，早期失败日志保留。外部科研工作树的原Plan已不存在，发布改用实际Scheduler/生成adapter/collector的专属隔离集成夹具；原MULTIMODAL_PATH_CONTRACT_ROOT验收入口保留，须显式指定，未验证该项目专属hook。没有把这一变化当作科研或M5验收。
+
+Release 411312487于2026-10-13T05:27:24Z公开，三附件上传后逐项核验再发布，静态索引普通同步/fetch。实际公开客户端不用REST、无需登录，缓存及同版/高版/已更新SFTP跳过通过。没有安装开发机扩展或操作生产服务器；完整目标保持paused，原29条18已验证11剩余。
