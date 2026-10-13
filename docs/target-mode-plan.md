@@ -53,6 +53,10 @@
 - 调整为7文件边界：DistributedPlanExecutionMode测试/夹具、FormalJobExecution测试/夹具、PreflightDispatchRejection测试/夹具、本计划；三方保留Mac相对路径和零attempt夹具，补新能力与公共身份。IdleGpuDispatchLifecycle旧正向能力夹具失败，且G2生成临时脚本的Python子进程达到10秒并终止，Node文件15.8秒退出；保留超时脚本，不重跑该脚本，不改生产代码修测试。转074f2用AST隔离固定夹具入口检验同一占用/缺遥测拒绝，后续完整门禁必须通过。原目标18/11。
 - 模式9/正式执行6/持久拒绝6通过；历史人工恢复夹具补原commandId后仍被历史只读守卫拒绝，不靠缺commandId触发无关错误。IdleGPU文件留未提交至下一批，不计通过；原目标18/11。
 
+### 074f2旧派发生命周期夹具（passed）
+- 3文件边界：IdleGpuDispatchLifecycle、MacFormalIdentity固定夹具、本计划。补真实新能力、独立声明CSV、formal回执字段；G2更换为既有固定入口的AST隔离，仅复核占用/不可信遥测，原10秒超时脚本保留且不重跑；没有调整生产代码或放大超时。原目标18/11。
+- 更新后的全文件19/固定身份2通过；G2新固定入口约0.8秒，旧超时脚本未再执行。剩余旧attempt控制key断言改为实际正式command/revision控制key，不弱化保护。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。

@@ -13,6 +13,18 @@ from unittest.mock import patch
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "_helpers"))
 from extractRuntimeFunctions import extract_runtime_functions
 runtime = pathlib.Path(__file__).resolve().parents[2] / "dist/runtime"
+if len(sys.argv) > 1 and sys.argv[1] == "gpu-admission":
+    gpu = extract_runtime_functions(str(runtime / "cluster_agent.py"), ["_durable_gpu_busy_reason"])
+    gpu.DISTRIBUTED_GPU_RESERVATIONS = {}
+    gpu.read_json = lambda *args: {}
+    gpu.path_for = lambda *args: ""
+    gpu.read_durable_plan_queue = lambda *args: {"jobs": []}
+    gpu.gpu_row_id = lambda row: str(row["gpuId"])
+    gpu.gpu_row_busy = lambda *args, **kwargs: False
+    occupied = {"gpuId": "0", "utilizationPercent": 0, "memoryUsedMb": 7, "processes": [{"pid": 7}]}
+    print(json.dumps([gpu._durable_gpu_busy_reason("", "0", "c", [occupied]),
+                      gpu._durable_gpu_busy_reason("", "0", "c", [{"gpuId": "0"}])]))
+    sys.exit(0)
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"), ["job_shell_environment_prefix", "fresh_task_runtime_env", "tmux_task_client_env", "worker_task_failure_diagnostic"])
 scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["formal_job_preflight", "run_job", "launch_experiment"])
 identity = {"workflowId": "wf", "commandId": "cmd", "globalJobId": "wf:0", "planRevision": "rev", "codeFingerprint": "code", "index": 0}
