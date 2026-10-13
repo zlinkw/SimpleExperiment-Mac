@@ -9,7 +9,7 @@ function setup(options = {}) {
   let journal = options.journal;
   const io = {
     readJournal: () => journal, saveJournal: async value => { journal = JSON.parse(JSON.stringify(value)); events.push(`save:${value.status}`); },
-    currentVersion: id => versions[id], beginGate: async () => events.push("gate"), waitForTransfers: async () => { events.push("wait"); await options.wait?.(); }, endGate: async () => events.push("ungate"),
+    currentVersion: id => versions[id], beginGate: async () => events.push("gate"), waitForTransfers: async signal => { events.push("wait"); await options.wait?.(signal); }, endGate: async () => events.push("ungate"),
     downloadAndVerify: async item => { events.push(`download:${item.extensionId}`); if (options.downloadFailure === item.extensionId) throw Error("hash mismatch"); return item.extensionId; },
     verifyPrepared: async file => events.push(`verify:${file}`), install: async file => { events.push(`install:${file}`); if (options.installFailure === file) throw Error("install failed"); },
     reload: async () => events.push("reload"),
@@ -22,6 +22,42 @@ test("blocks new work and drains transfers then verifies ALL packages before ord
   assert.ok(f.events.indexOf("gate") < f.events.indexOf("wait"));
   assert.ok(f.events.indexOf(`download:${COMPONENT_IDS[1]}`) < sftp); assert.ok(sftp < experiment); assert.ok(experiment < f.events.indexOf("reload"));
   assert.equal(f.journal().status, "reload_required"); assert.ok(!f.events.includes("ungate"));
+});
+
+test("a failed first installer receipt preserves the gate even with zero completed components", async () => {
+  const f = setup({ installFailure: COMPONENT_IDS[0] }); await assert.rejects(f.engine.install(f.plan), /install failed/);
+  assert.equal(f.journal().installationRequested, true); assert.deepEqual(f.journal().completed, []);
+  assert.ok(!f.events.includes("ungate")); assert.ok(!f.events.includes(`install:${COMPONENT_IDS[1]}`));
+});
+test("a partial or uncertain update cannot replace its frozen batch or same-tag manifest", async () => {
+  const f = setup({ installFailure: COMPONENT_IDS[0] }); await assert.rejects(f.engine.install(f.plan));
+  for (const changeTag of [true, false]) {
+    const retry = setup({ journal: f.journal() });
+    if (changeTag) retry.plan.manifest.releaseTag = "preview-v0.1.3";
+    else retry.plan.manifest.components[0].sha256 = "b".repeat(64);
+    await assert.rejects(retry.engine.install(retry.plan), /不能替换更新清单/);
+    assert.equal(retry.events.length, 0);
+  }
+});
+test("caller mutation during transfer wait cannot change the validated update snapshot", async () => {
+  let release; const f = setup({ wait: () => new Promise(resolve => { release = resolve; }) });
+  const pending = f.engine.install(f.plan); await new Promise(resolve => setImmediate(resolve));
+  f.plan.manifest.components[0].version = "9.0.0"; f.plan.manifest.releaseTag = "preview-v9.0.0";
+  release(); await pending;
+  assert.equal(f.journal().manifest.releaseTag, "preview-v0.1.2"); assert.equal(f.journal().manifest.components[0].version, "0.1.2");
+});
+test("cancelling update wait releases admission before any download or installation", async () => {
+  const controller = new AbortController();
+  const f = setup({ wait: signal => { controller.abort(Error("cancel update wait")); signal.throwIfAborted(); } });
+  await assert.rejects(f.engine.install(f.plan, controller.signal), /cancel update wait/);
+  assert.ok(f.events.includes("ungate"));
+  assert.equal(f.journal().installationRequested, false); assert.ok(!f.events.some(item => item.startsWith("download:")));
+});
+test("a tampered persisted fingerprint cannot resume an installer", async () => {
+  const f = setup({ installFailure: COMPONENT_IDS[0] }); await assert.rejects(f.engine.install(f.plan));
+  const journal = structuredClone(f.journal()); journal.manifest.components[0].version = "9.0.0";
+  const retry = setup({ journal }); await assert.rejects(retry.engine.install(retry.plan), /清单身份发生变化/);
+  assert.equal(retry.events.length, 0);
 });
 test("verification failure installs nothing and releases business gate", async () => {
   const f = setup({ downloadFailure: COMPONENT_IDS[1] }); await assert.rejects(f.engine.install(f.plan), /hash mismatch/);
