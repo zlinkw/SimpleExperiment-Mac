@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 import { PreviewReleaseClient, PreviewPlan, parseManifest, planPreview } from "./PreviewRelease";
 import { UpdateTransaction, TRANSACTION_KEY, UpdateJournal } from "./UpdateTransaction";
 import { verifyVsix, ReleaseComponent } from "./Vsix";
-import { beginUpdateGate, endUpdateGate, waitForLocalOperations } from "./UpdateGate";
+import { beginUpdateGate, endUpdateGate, waitForLocalOperations, assertCompatibleSftpForUpdate } from "./UpdateGate";
 import { registerMacCli } from "./CliLauncher";
 
 export const CHECK_COMMAND = "simpleExperimentMac.checkPreviewUpdates";
@@ -30,6 +30,7 @@ export function registerPreviewUpdater(context: any, vscode: any, client: Pick<P
     currentVersion: current,
     beginGate: async () => {
       if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("仅 Apple Silicon Mac 可安装 preview 更新");
+      assertCompatibleSftpForUpdate(current("simple-local.simple-sftp-mac"));
       await beginUpdateGate(context.globalStorageUri.fsPath); sf()?.exports?.setUpdateGate?.(true); status({ status: "installing", message: "等待本地传输完成" });
     },
     waitForTransfers: async () => { await sf()?.exports?.waitForUpdateIdle?.(); await waitForLocalOperations(); },

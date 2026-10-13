@@ -2,9 +2,15 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+const semver = require("semver");
 import { LegacyHostOperationLeaseManager, defaultHostOperationLeasePath } from "../core/HostOperationLease";
 
 let held: any;
+export const MINIMUM_SFTP_DRAIN_VERSION = "0.2.101";
+export function assertCompatibleSftpForUpdate(version: string): void {
+  if (!semver.valid(version) || semver.lt(version, MINIMUM_SFTP_DRAIN_VERSION))
+    throw new Error("配套更新等待协议需要 SimpleSFTP Mac 0.2.101 或以上；请等待本地传输完成后先安装配套 SimpleSFTP VSIX 并重载，再检查更新。");
+}
 export function assertBusinessAllowed(): void {
   try {
     const record = JSON.parse(fs.readFileSync(defaultHostOperationLeasePath(), "utf8"));
