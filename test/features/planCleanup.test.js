@@ -58,6 +58,19 @@ test('preview performs no journal writes, no mutation, keeps exact evidence and 
   assert.ok(f.calls.every(row=>['files.cleanup.preview','files.cleanup.inspect'].includes(row.method)));
   p.rows[0].relativePath='foreign.csv';const operation=await f.confirm(p);assert.notEqual(operation.preview.rows[0].relativePath,'foreign.csv');
 });
+test('job review freezes archive layout, orders external CSV before its owner directory, and continuation cannot change job',async()=>{
+  const f=await fixture(),job={workflowId:'run',index:1,commandId:'command'};f.scope.job=job;
+  f.scope.candidates[0].type='directory';f.scope.candidates[0].relativePath='work_dirs/exact/owner';
+  f.scope.candidates[1].relativePath='tmp/result/exact.csv';
+  f.sources.set('local:work_dirs/exact/owner','owner');f.sources.set('w1:tmp/result/exact.csv','csv');
+  const p=await f.service.preview({planFile:f.scope.planFile,job:{commandId:'command',index:1,workflowId:'run'}});
+  assert.equal(p.rows[0].type,'file');assert.equal(p.rows[1].type,'directory');
+  assert.ok(p.rows.every(row=>/^job-[a-f0-9]{48}$/.test(row.archiveBatch)));
+  assert.ok(p.rows.every(row=>row.destination==='clean_dir/'+row.archiveBatch+'/'+row.relativePath));
+  const op=await f.confirm(p);await f.service.execute(op.id);
+  f.scope.job={...job,index:2};
+  await assert.rejects(f.service.preview({planFile:f.scope.planFile,job:f.scope.job,continuationOf:op.id}),/JOB_SCOPE_CHANGED/);
+});
 test('preview reports real preflight progress without storing observers or authorizing mutation',async()=>{
   const f=await fixture(),events=[];
   const p=await f.service.preview({planFile:f.scope.planFile},event=>{events.push(event);if(event.phase==='discovery')throw new Error('UI detached');});
@@ -251,9 +264,12 @@ test('partial restore discovery skips metadata files already restored and rechec
 test('Host refuses a backend without the required Git ancestor safety capability before approvals',async()=>{
   const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};
   vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>['vscode','./PlanCleanupPanel'].includes(name)?{}:from(name)});
-  let safe=false;const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}},simpleSftpApiCall:async()=>({safety:{gitRepositoryAncestors:safe,readOnlyReceiptCheck:safe}})},'C:/fixture');
+  let safe=false,formal=false;const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}},simpleSftpApiCall:async()=>({safety:{gitRepositoryAncestors:safe,readOnlyReceiptCheck:safe,formalJobOwner:formal,immutableArchiveBatch:formal}})},'C:/fixture');
   await assert.rejects(host.service.ports.sftp('files.cleanup.preview',{}),error=>error.apiData.code==='SFTP_SAFE_CLEANUP_UPGRADE_REQUIRED');
   safe=true;assert.equal((await host.service.ports.sftp('files.cleanup.preview',{})).safety.gitRepositoryAncestors,true);
+  const params={targets:[{expectedOwner:{resultPathPolicy:'declared'},archiveBatch:'job-'+'a'.repeat(48)}]};
+  await assert.rejects(host.service.ports.sftp('files.cleanup.preview',params),error=>error.apiData.code==='SFTP_FORMAL_OWNER_UPGRADE_REQUIRED');
+  formal=true;assert.equal((await host.service.ports.sftp('files.cleanup.preview',params)).safety.formalJobOwner,true);
 });
 
 test('recorded stable identity joins renamed PLAN; unknown historical and dynamic config references stay protected',async()=>{

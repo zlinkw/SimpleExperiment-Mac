@@ -33,6 +33,14 @@
 - 7文件边界：executionShellEnvironment/executionShellPreflight/formalJobPreflightProgress各测试及Python夹具、本计划；测试已构建runtime，实际专属stdlib/Git Bash只执行环境探针，缺环境/错误解释器/输出上限/无进展超时均拒绝并结算；不运行科研。原目标18/11。
 - 环境1/真实shell3/进度2通过。预检夹具首次将Windows临时物理路径当服务器POSIX路径而失败；仅注入物理文件系统叶子，实际durable_plan_path继续校验，复验通过；原目标18/11。
 
+### 074d1配套正式owner审核（passed）
+- 5文件边界：SF cleanup-files/cleanup-file-api/extension/formalJobCleanupOwner测试及本计划；正式输出和独立CSV绑定完整终态owner及其哈希，归档batch纳入冻结摘要/精确确认；保留Mac路径、共享租约、物理父目录/最短子项/两确认及句柄证明失败阻断。新测试仅inspect/check/preview，不执行真实move/delete。原目标18/11。
+- SF build28闭包/正式owner4/清理18通过并普通同步1e3ae07；所有永久删除均替身，不使用数据根作夹具。原目标18/11。
+
+### 074d2失败job审核基础（passed）
+- 8文件边界：PlanCleanup/Evidence/Host/Panel、LocalApiServer、清理/审核桥测试及本计划。精确冻结workflow/index/command的单job预览，终态owner与独立CSV、共享引用保护、阶段/恢复及两次确认继续保留；人工重排宿主入口待074e整合，不把清理当重排授权。原目标18/11。
+- build/面板2/vm、清理27/审核桥13/重连9通过；仅夹具和替身，不放行真实Mac清理。原目标18/11。
+
 ## 当前批次 mac-sync-073（完整验证、发布及收尾）
 - 状态passed：本次追加授权的Windows分叉后功能页/方法同步已交付。冻结参考Exp42902a5a/SFacae730；三方合并保留Mac身份/路径/Termius/认证/静态更新/租约/GPU内部标签，17提交对应功能见windows-sync-2026-10-12.md。完整目标保持paused，18已验证11剩余，不标complete。
 - .313/.100 prepare127目标文件（含build面板标记128）、build234/28闭包及vm通过；逐文件20秒/Python隔离10秒，无skip/超时。实际VSIX200消费者含清理26/重连9/编译审核桥12/正式执行6/SF清理18新增；1588/87源码快照和真实匿名四请求200、REST0、缓存/同版/高版跳过与两包身份/平台/CRC/大小/SHA通过。

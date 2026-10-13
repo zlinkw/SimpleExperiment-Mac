@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { PlanCleanup, cleanupDigest, cleanupError, type CleanupOperation, type CleanupPreview, type CleanupRemovedMetadata, type CleanupProgressSink } from "../features/PlanCleanup";
+import { PlanCleanup, cleanupDigest, cleanupError, type CleanupOperation, type CleanupPreview, type CleanupRemovedMetadata, type CleanupProgressSink, type CleanupJobSelection } from "../features/PlanCleanup";
 import { collectPlanCleanupEvidence } from "../features/PlanCleanupEvidence";
 import { distributedQueuePath, emptyDistributedQueue } from "../features/DistributedPlanQueue";
 import { planSyncLedgerStoragePath, emptyPlanSyncLedger } from "../features/PlanArtifactSync";
@@ -24,11 +24,15 @@ export class PlanCleanupHost {
   constructor(private readonly host: any, readonly root: string) {
     const storage = host.context.globalStorageUri.fsPath;
     this.service = new PlanCleanup({ storageRoot: path.join(storage, "plan-cleanup", cleanupDigest(root)),
-      collect: (file, options) => this.collect(file, Boolean(options?.removedMetadata), options?.archivedFiles, options?.removedMetadata, options?.onProgress),
+      collect: (file, options) => this.collect(file, Boolean(options?.removedMetadata), options?.archivedFiles, options?.removedMetadata, options?.onProgress, options?.job),
       sftp: async (method, params) => {
         const result = await host.simpleSftpApiCall(method, params);
         if (method === "files.cleanup.preview" && (result.safety?.gitRepositoryAncestors !== true || result.safety?.readOnlyReceiptCheck !== true))
           cleanupError("SFTP_SAFE_CLEANUP_UPGRADE_REQUIRED", "当前 SimpleSFTP 缺少 Git 祖先仓库预检或只读回执核查；请更新配套插件后重新预览。");
+        if (method === "files.cleanup.preview" && params.targets?.some((target: any) => target.expectedOwner?.resultPathPolicy === "declared") && result.safety?.formalJobOwner !== true)
+          cleanupError("SFTP_FORMAL_OWNER_UPGRADE_REQUIRED", "需要支持正式 job 身份核验的 SimpleSFTP，尚未执行任何清理。");
+        if (method === "files.cleanup.preview" && params.targets?.some((target: any) => target.archiveBatch) && result.safety?.immutableArchiveBatch !== true)
+          cleanupError("SFTP_ARCHIVE_BATCH_UPGRADE_REQUIRED", "需要支持预先确定的归档批次布局的 SimpleSFTP，尚未执行任何清理。");
         return result;
       },
       restoreGate: (preview, operation) => this.restoreGate(preview, operation),
@@ -76,14 +80,14 @@ export class PlanCleanupHost {
             this.assertWorkspace();
             if (choice === "审核未完成清理") {
               const operation = await this.service.status(reports[0].operationId);
-              await this.open(operation.preview.scope.planFile, operation.id);
+              await this.open(operation.preview.scope.planFile, operation.id, operation.preview.scope.job);
             }
           }).catch(() => undefined).finally(() => this.notices.delete(nodeId));
       }
     })().finally(() => { this.reconnectWork = undefined; });
     return this.reconnectWork;
   }
-  async collect(file: string, allowMissing = false, archivedFiles?: Record<string, string>, removedMetadata?: CleanupRemovedMetadata, onProgress?: CleanupProgressSink) {
+  async collect(file: string, allowMissing = false, archivedFiles?: Record<string, string>, removedMetadata?: CleanupRemovedMetadata, onProgress?: CleanupProgressSink, job?: CleanupJobSelection) {
     this.assertWorkspace();
     const storage = this.host.context.globalStorageUri.fsPath;
     const queue = await json(distributedQueuePath(storage, this.root), emptyDistributedQueue());
@@ -113,12 +117,14 @@ export class PlanCleanupHost {
     const operations = Object.values(state.operations || {});
     onProgress?.({ phase: "references", message: "核对 PLAN/attempt 所有权、共享引用与受保护资产…" });
     const scope = await collectPlanCleanupEvidence({ root: this.root, planFile: file, queue, ledger, registry,
-      resultDir: this.host.resultCsvDirectory || "experiments/results", nodes, snapshots, operations, allowMissing, archivedFiles, removedMetadata });
+      resultDir: this.host.resultCsvDirectory || "experiments/results", nodes, snapshots, operations, allowMissing, archivedFiles, removedMetadata, job });
+    if (!job) {
     scope.nodes.push({ id: "pluginState", kind: "local", root: storage });
     for (const indexFile of [distributedQueuePath(storage, this.root), planSyncLedgerStoragePath(storage, this.root)]) {
       scope.candidates.push({ nodeId: "pluginState", relativePath: path.relative(storage, indexFile).replace(/\\/g, "/"), type: "file",
         category: "插件缓存/任务索引", owners: [scope.planKey], evidence: ["当前项目的持久化登记与清理生命周期标记"],
         dependencies: ["同项目其他 PLAN 与历史恢复证据"], protectedReason: "共享索引保留，完成后仅追加生命周期标记" });
+    }
     }
     for (const document of vscode.workspace.textDocuments.filter(document => document.isDirty && document.uri.scheme === "file")) {
       const relative = path.relative(this.root, document.uri.fsPath).replace(/\\/g, "/");
@@ -132,7 +138,7 @@ export class PlanCleanupHost {
     const archivedFiles = Object.fromEntries(preview.rows.filter(row => row.node.kind === "local" && ["PLAN 文件", "专用配置"].includes(row.category)
       && operation?.targets[row.id]?.state !== "completed")
       .map(row => [row.destination, row.relativePath]));
-    const fresh = await this.collect(preview.scope.planFile, true, archivedFiles);
+    const fresh = await this.collect(preview.scope.planFile, true, archivedFiles, undefined, undefined, preview.scope.job);
     if (fresh.blockers.length) cleanupError("RESTORE_PREFLIGHT_BLOCKED", JSON.stringify(fresh.blockers));
     for (const row of preview.rows) {
       const node = fresh.nodes.find(node => node.id === row.node.id);
@@ -150,13 +156,23 @@ export class PlanCleanupHost {
     const restoreIds = new Set(restoreChain.map(row => row.id));
     const queue = await this.host.loadDistributedQueue(this.root);
     const ids = new Set(operation.preview.scope.runIds);
+    const selection = operation.preview.scope.job;
+    if (selection) {
+      const plan = queue.plans.find((plan: any) => plan.id === selection.workflowId);
+      const job = plan?.jobs.find((job: any) => job.index === selection.index && job.commandId === selection.commandId && job.status === "failed");
+      if (!job) cleanupError("JOB_SCOPE_CHANGED");
+      if (restore) { if (restoreIds.has(job.cleanup?.operationId)) delete job.cleanup; }
+      else job.cleanup = { operationId: operation.id, state: operation.pendingNodes.length ? "partial" : operation.preview.action === "delete" ? "deleted" : "archived",
+        completedTargets: operation.preview.rows.filter(row => operation.targets[row.id]?.state === "completed").map(row => row.node.id + ":" + row.absolutePath), pendingNodes: operation.pendingNodes };
+    } else {
     for (const plan of queue.plans) if (ids.has(plan.id)) {
       if (restore) { if (restoreIds.has(plan.cleanup?.operationId)) delete plan.cleanup; }
       else plan.cleanup = { operationId: operation.id, state: operation.pendingNodes.length ? "partial" : operation.preview.action === "delete" ? "deleted" : "archived",
         completedTargets: operation.preview.rows.filter(row => operation.targets[row.id]?.state === "completed").map(row => row.node.id + ":" + row.absolutePath), pendingNodes: operation.pendingNodes };
     }
+    }
     await this.host.saveDistributedQueue(this.root, queue);
-    await this.host.updatePlanSyncLedger(this.root, (ledger: any) => {
+    if (!selection) await this.host.updatePlanSyncLedger(this.root, (ledger: any) => {
       for (const entry of Object.values(ledger.entries) as any[]) if (ids.has(entry.runId)) {
         if (restore) { if (restoreIds.has(entry.cleanupOperationId)) delete entry.cleanupOperationId; }
         else entry.cleanupOperationId = operation.id;
@@ -183,5 +199,6 @@ export class PlanCleanupHost {
         { resources: [{ server: "local", project: this.root, target: this.root }] });
     } finally { this.executing = false; void this.drainReconnects().catch(() => undefined); }
   }
-  open(file: string, operationId?: string) { return openPlanCleanupPanel(this, file, operationId); }
+  open(file: string, operationId?: string, job?: CleanupJobSelection) { return openPlanCleanupPanel(this, file, operationId, job); }
+  openJob(file: string, job: CleanupJobSelection) { return this.open(file, undefined, job); }
 }

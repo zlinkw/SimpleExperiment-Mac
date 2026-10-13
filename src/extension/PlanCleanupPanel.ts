@@ -1,13 +1,18 @@
 import * as vscode from "vscode";
 import { randomBytes } from "node:crypto";
 import type { PlanCleanupHost } from "./PlanCleanupHost";
-import { cleanupError, type CleanupPreview } from "../features/PlanCleanup";
+import { cleanupError, cleanupJobKey, type CleanupPreview, type CleanupJobSelection } from "../features/PlanCleanup";
 
-export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: string, initialOperationId = "") {
-  const panel = vscode.window.createWebviewPanel("simpleExperiment.planCleanup", "清除 PLAN 及关联产物", vscode.ViewColumn.Active, { enableScripts: true });
+export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: string, initialOperationId = "", job?: CleanupJobSelection) {
+  const selection = job && { ...job };
+  const title = selection ? "审核失败 job 遗留文件" : "清除 PLAN 及关联产物";
+  const panel = vscode.window.createWebviewPanel("simpleExperiment.planCleanup", title, vscode.ViewColumn.Active, { enableScripts: true });
   const nonce = randomBytes(16).toString("hex");
   const initialId = /^[a-f0-9]{48}$/.test(initialOperationId) ? initialOperationId : "";
   let preview: CleanupPreview | undefined, operationId = "", working = false;
+  const assertScope = (operation: { preview: CleanupPreview }) => {
+    if (selection && (operation.preview.scope.planFile !== planFile || cleanupJobKey(operation.preview.scope.job) !== cleanupJobKey(selection))) cleanupError("JOB_SCOPE_CHANGED");
+  };
   // Register the bridge before loading HTML: the Webview may send its initial
   // history request as soon as its script starts.
   const subscription = panel.webview.onDidReceiveMessage(async message => {
@@ -24,18 +29,21 @@ export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: stri
     try {
       if (message.type === "poll") {
         const operation = await host.service.status(String(message.operationId || ""));
+        assertScope(operation);
         const states = Object.values(operation.targets);
         response = { type: "progress", operationId: operation.id, message: operation.state + " · 已处理 " + states.filter(row => row.state === "completed").length + "/" + states.length };
       } else if (message.type === "history") {
-        response = { type: "history", rows: await host.service.list() };
+        const rows = await host.service.list();
+        response = { type: "history", rows: selection ? rows.filter(row => row.planFile === planFile && cleanupJobKey(row.job) === cleanupJobKey(selection)) : rows };
       } else if (message.type === "status") {
         if (!message.operationId) cleanupError("OPERATION_REQUIRED", "请先选择历史清理操作，或点击完整预览。");
         const operation = await host.service.status(String(message.operationId));
+        assertScope(operation);
         operationId = operation.id; preview = operation.preview;
         response = { type: "operation", operation };
       } else if (message.type === "preview") {
         preview = undefined; operationId = "";
-        preview = await host.service.preview({ planFile, action: message.action, verifiedOnly: message.verifiedOnly }, progress);
+        preview = await host.service.preview({ planFile, action: message.action, verifiedOnly: message.verifiedOnly, job: selection }, progress);
         response = { type: "preview", preview };
       } else if (message.type === "continue") {
         if (!operationId) cleanupError("OPERATION_REQUIRED", "请先选择历史清理操作。");
@@ -79,7 +87,7 @@ export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: stri
   panel.onDidDispose(() => subscription.dispose());
   panel.webview.html = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'"><style>
 body{font:var(--vscode-font-size) var(--vscode-font-family);color:var(--vscode-foreground);background:var(--vscode-editor-background);padding:16px}button,select{margin:4px;padding:6px}table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--vscode-panel-border);padding:6px;text-align:left;overflow-wrap:anywhere}code{font-size:11px}summary{cursor:pointer}#status{white-space:pre-wrap}.warning{color:var(--vscode-editorWarning-foreground)}
-</style></head><body><h2>清除 PLAN 及关联产物</h2><p>默认移入各安全根 clean_dir，保留恢复证据。活动任务不会自动停止。共享资产和正式/历史结果保留。</p>
+</style></head><body><h2>${title}</h2><p>${selection ? "仅审核选中失败 job 的精确产物目录与声明指标；PLAN、源配置和其他 job 保留。确认并执行后返回原卡片，再点击重新排队。本页不会启动任务。" : "默认移入各安全根 clean_dir，保留恢复证据。活动任务不会自动停止。共享资产和正式/历史结果保留。"}</p>
 <select id="action"><option value="move">移入 clean_dir（可恢复）</option><option value="delete">永久删除（不可恢复，两次完整路径确认）</option></select>
 <label><input type="checkbox" id="partial">仅处理已验证节点（结论为部分完成）</label><button id="preview">完整预览</button>
 <p><select id="history"><option value="">历史清理操作</option></select><button id="load">查看状态/恢复</button></p><p id="status" role="status"></p><p id="progress" role="status" aria-live="polite"></p><div id="review"></div><button id="confirm" disabled>确认完整路径</button><button id="execute" disabled>执行</button><button id="cancel" disabled>暂停操作</button><button id="recheck" disabled>核查未完成信号</button><button id="continue" disabled>重新预览未完成项</button><button id="resume" disabled>幂等恢复未完成项</button><button id="restore" disabled>预览恢复已移动项</button>

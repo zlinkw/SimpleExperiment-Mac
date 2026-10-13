@@ -45,7 +45,7 @@ function bridge({ immediateBoot = true, service = {} } = {}) {
     async confirm() { calls.push('confirm'); throw new Error('Not authorized in fixture'); },
     ...service,
   }, async execute() { calls.push('execute'); throw new Error('Not authorized in fixture'); } };
-  return { async open() { await exports.openPlanCleanupPanel(host, 'experiments/plans/p.yaml'); if (!immediateBoot) boot(); await flush(); },
+  return { async open(job) { await exports.openPlanCleanupPanel(host, 'experiments/plans/p.yaml', '', job); if (!immediateBoot) boot(); await flush(); },
     element, requests, responses, calls, hostMessage: message => hostListener(message),
     deliver: message => viewers.forEach(listener => listener({ data: clone(message) })),
     advance: seconds => { now += seconds * 1000; timers.forEach(callback => callback()); } };
@@ -58,6 +58,17 @@ test('fast Webview startup reaches the host and its automatic preview completes 
   assert.equal(f.element('confirm').disabled, false);
   assert.equal(f.element('execute').disabled, true);
   assert.equal(f.calls.includes('execute'), false);
+});
+test('failed-job panel freezes its job scope in the host, starts only preview and filters unrelated histories', async () => {
+  const job = { workflowId: 'workflow', index: 1, commandId: 'command1' }, params = [];
+  const f = bridge({ service: { async list() { return [{ id: 'foreign', planFile: 'experiments/plans/p.yaml' }]; },
+    async preview(input) { params.push(input); const p = preview(); p.scope.job = job; p.rows[0].absolutePath = 'C:/fixture/work_dirs/job1'; return p; } } });
+  await f.open(job);
+  assert.deepEqual(clone(params[0].job), job);
+  assert.equal(f.calls.includes('execute'), false);
+  assert.doesNotMatch(f.element('history').innerHTML, /foreign/);
+  await f.hostMessage({ type: 'preview', action: 'move', requestId: 'manual', job: { workflowId: 'foreign', index: 9, commandId: 'foreign' } });
+  assert.deepEqual(clone(params.at(-1).job), job);
 });
 
 test('history response can immediately request a preview while the preceding host response is still being delivered', async () => {

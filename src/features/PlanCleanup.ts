@@ -4,11 +4,13 @@ import * as path from "node:path";
 import { atomicWriteText } from "../state/StateStore";
 
 export type CleanupNode = { id: string; kind: "local" | "remote"; root: string; host?: string; port?: number; user?: string; error?: string };
+export type CleanupJobSelection = { workflowId: string; index: number; commandId: string };
 export type CleanupCandidate = { nodeId: string; relativePath: string; type: "file" | "directory"; category: string;
   owners: string[]; evidence: string[]; protectedReason?: string; dependencies: string[]; expectedSha256?: string;
-  expectedOwner?: { workflowId: string; commandId: string; workerId: string; outputDir: string; attempt: number; case: string; seed: number } };
+  expectedOwner?: { workflowId: string; commandId: string; workerId: string; outputDir: string; attempt?: number; case: string; seed: number;
+    resultPathPolicy?: "declared"; globalJobId?: string; planRevision?: string; codeFingerprint?: string; index?: number; collectionResultCsv?: string; expectedState?: string } };
 export type CleanupScope = { projectId: string; planKey: string; planFile: string; planHash: string; runIds: string[];
-  revision: string; nodes: CleanupNode[]; candidates: CleanupCandidate[]; references?: Record<string, string[]>;
+  revision: string; nodes: CleanupNode[]; candidates: CleanupCandidate[]; references?: Record<string, string[]>; job?: CleanupJobSelection;
   blockers: Array<{ code: string; nodeId?: string; detail: string }>;
   notices?: Array<{ code: string; nodeId?: string; detail: string }> };
 export type CleanupRemovedMetadata = { planKey: string; planHash: string; planFile: string; runIds: string[];
@@ -18,6 +20,7 @@ export type CleanupProgressSink = (progress: CleanupProgress) => void;
 export type CleanupRow = CleanupCandidate & { id: string; node: CleanupNode; destination: string; fingerprint?: string;
   contentFingerprint?: string; size?: number; absolutePath: string; inventory?: any[]; inode?: string; device?: string;
   backendToken?: string; backendDigest?: string; backendIndex?: number; rootIdentity?: Record<string, unknown>;
+  archiveBatch?: string;
   disposition: "move" | "delete" | "restore" | "protected" | "unverified" | "absent" | "completed"; error?: string };
 export type CleanupPreview = { token: string; digest: string; action: "move" | "delete" | "restore"; scope: CleanupScope;
   rows: CleanupRow[]; blockers: CleanupScope["blockers"]; verifiedOnly: boolean; expiresAt: number; confirmations: number;
@@ -30,7 +33,7 @@ export type CleanupOperation = { id: string; preview: CleanupPreview; state: "re
   pendingNodes: string[]; error?: string; updatedAt: string; indexed?: boolean; restoredBy?: string; continuedBy?: string;
   nodeChecks?: Record<string, CleanupNodeCheck> };
 export type CleanupPorts = {
-  collect(planFile: string, options?: { archivedFiles: Record<string, string>; removedMetadata?: CleanupRemovedMetadata; onProgress?: CleanupProgressSink }): Promise<CleanupScope>;
+  collect(planFile: string, options?: { archivedFiles: Record<string, string>; removedMetadata?: CleanupRemovedMetadata; onProgress?: CleanupProgressSink; job?: CleanupJobSelection }): Promise<CleanupScope>;
   sftp(method: string, params: any): Promise<any>;
   updateIndexes(operation: CleanupOperation, restore: boolean): Promise<void>;
   restoreGate(preview: CleanupPreview, operation?: CleanupOperation): Promise<void>;
@@ -39,6 +42,7 @@ export type CleanupPorts = {
 };
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 export const cleanupDigest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const cleanupJobKey = (job?: CleanupJobSelection) => cleanupDigest(job ? [job.workflowId, job.index, job.commandId] : null);
 export function cleanupError(code: string, detail = code): never {
   const error = Object.assign(new Error(detail), { apiCode: code === "CONFIRM_REQUIRED" ? 2001 : 2010, apiData: { code, detail } });
   throw error;
@@ -77,13 +81,13 @@ export class PlanCleanup {
     try { return JSON.parse(await fs.readFile(this.file(id), "utf8")); }
     catch (error: any) { if (error.code === "ENOENT") cleanupError("OPERATION_NOT_FOUND"); throw error; }
   }
-  async list(): Promise<Array<Pick<CleanupOperation, "id" | "state" | "updatedAt" | "pendingNodes" | "continuedBy" | "restoredBy" | "nodeChecks"> & { planFile: string; action: string }>> {
+  async list(): Promise<Array<Pick<CleanupOperation, "id" | "state" | "updatedAt" | "pendingNodes" | "continuedBy" | "restoredBy" | "nodeChecks"> & { planFile: string; action: string; job?: CleanupJobSelection }>> {
     const names = await fs.readdir(this.ports.storageRoot).catch((error: any) => { if (error.code === "ENOENT") return []; throw error; });
     const rows = [];
     for (const name of names.filter(name => /^[a-f0-9]{48}\.json$/.test(name))) {
       const operation = await this.status(name.slice(0, -5));
       rows.push({ id: operation.id, state: operation.state, updatedAt: operation.updatedAt, pendingNodes: operation.pendingNodes,
-        planFile: operation.preview.scope.planFile, action: operation.preview.action,
+        planFile: operation.preview.scope.planFile, action: operation.preview.action, job: operation.preview.scope.job,
         continuedBy: operation.continuedBy, restoredBy: operation.restoredBy, nodeChecks: operation.nodeChecks });
     }
     return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -133,7 +137,7 @@ export class PlanCleanup {
     const original = await this.status(id);
     if (original.continuedBy || original.restoredBy || original.preview.action === "restore" || this.busy.has(id)) cleanupError("NOT_CONTINUABLE");
     return this.preview({ planFile: original.preview.scope.planFile, action: original.preview.action,
-      verifiedOnly: params.verifiedOnly, continuationOf: id }, onProgress);
+      verifiedOnly: params.verifiedOnly, continuationOf: id, job: original.preview.scope.job }, onProgress);
   }
   /** Reconnection observes receipts and source presence only. It never settles or executes a mutation. */
   async recheckNode(nodeId: string): Promise<CleanupNodeCheck[]> {
@@ -167,7 +171,7 @@ export class PlanCleanup {
     }
     return reports;
   }
-  async preview(params: { planFile: string; action?: "move" | "delete"; verifiedOnly?: boolean; continuationOf?: string }, onProgress?: CleanupProgressSink): Promise<CleanupPreview> {
+  async preview(params: { planFile: string; action?: "move" | "delete"; verifiedOnly?: boolean; continuationOf?: string; job?: CleanupJobSelection }, onProgress?: CleanupProgressSink): Promise<CleanupPreview> {
     // UI observations cannot change the frozen preview or authorize execution.
     const notify: CleanupProgressSink = progress => { try { onProgress?.(progress); } catch {} };
     notify({ phase: "discovery", message: "读取 PLAN、历史登记与完成回执…" });
@@ -179,13 +183,16 @@ export class PlanCleanup {
     if (history[0]?.continuedBy || history[0]?.restoredBy || history.some(row => row.preview.action !== action)) cleanupError("NOT_CONTINUABLE");
     const completed = await this.completedHistory(history);
     const scope = await this.ports.collect(cleanupRelative(params.planFile), { archivedFiles: action === "move" ? this.archivedMetadata(completed) : {},
-      removedMetadata: this.removedMetadata(history, completed), onProgress: notify });
+      removedMetadata: this.removedMetadata(history, completed), onProgress: notify, job: params.job });
+    if (cleanupJobKey(scope.job) !== cleanupJobKey(params.job)
+        || history.length && cleanupJobKey(scope.job) !== cleanupJobKey(history[0].preview.scope.job)) cleanupError("JOB_SCOPE_CHANGED");
     if (history.length && (scope.planKey !== history[0].preview.scope.planKey || scope.planHash !== history[0].preview.scope.planHash)) cleanupError("PREVIEW_CHANGED");
     for (const original of history[0]?.preview.scope.nodes || []) {
       const current = scope.nodes.find(node => node.id === original.id);
       if (!current || this.nodeIdentity(current) !== this.nodeIdentity(original)) cleanupError("SERVER_IDENTITY_CHANGED");
     }
     const token = randomBytes(24).toString("hex");
+    const archiveBatch = scope.job ? history[0]?.preview.rows.find(row => row.archiveBatch)?.archiveBatch || "job-" + token : undefined;
     const result: CleanupPreview = { token, digest: "", action, scope, rows: [], blockers: clone(scope.blockers),
       verifiedOnly: params.verifiedOnly === true, expiresAt: Date.now() + 30 * 60 * 1000, confirmations: 0,
       ...(params.continuationOf ? { continuationOf: params.continuationOf } : {}) };
@@ -197,10 +204,11 @@ export class PlanCleanup {
       if (!node) { result.blockers.push({ code: "SERVER_IDENTITY_UNVERIFIED", nodeId: candidate.nodeId, detail: candidate.relativePath }); continue; }
       const absolutePath = node.kind === "local" ? path.join(node.root, candidate.relativePath) : path.posix.join(node.root, candidate.relativePath);
       const row: CleanupRow = { ...candidate, id: cleanupDigest([node.id, node.root, candidate.relativePath, candidate.type]), node,
-        absolutePath, destination: "clean_dir/" + candidate.relativePath,
+        absolutePath, destination: "clean_dir/" + (archiveBatch ? archiveBatch + "/" : "") + candidate.relativePath, ...(archiveBatch ? { archiveBatch } : {}),
         disposition: candidate.protectedReason ? "protected" : node.error ? "unverified" : action };
       result.rows.push(row);
     }
+    if (scope.job) result.rows.sort((a, b) => Number(a.type === "directory") - Number(b.type === "directory"));
     // Parent targets absorb exact registered children only; evidence is preserved in the parent review.
     for (const row of result.rows) if (row.disposition === action) {
       const child = result.rows.filter(other => other !== row && other.node.id === row.node.id && under(row.relativePath, other.relativePath));
@@ -220,7 +228,7 @@ export class PlanCleanup {
       if (!rows.length) { notify({ ...progress, completed: index + 1, message: node.id + "：无可处理的独占目标" }); continue; }
       try {
         const backend = await this.ports.sftp("files.cleanup.preview", { node, action, targets: rows.map(row => ({ relativePath: row.relativePath, type: row.type,
-          destination: row.destination, expectedSha256: row.expectedSha256, expectedOwner: row.expectedOwner })) });
+          destination: row.destination, expectedSha256: row.expectedSha256, expectedOwner: row.expectedOwner, archiveBatch: row.archiveBatch })) });
         rows.forEach((row, index) => {
           const info = backend.targets[index];
           Object.assign(row, { ...info, relativePath: row.relativePath, destination: row.destination,
@@ -243,7 +251,7 @@ export class PlanCleanup {
         if (approved.length && rows.some(row => row.disposition === "protected")) {
           const exact = await this.ports.sftp("files.cleanup.preview", { node, action,
             targets: approved.map(row => ({ relativePath: row.relativePath, type: row.type, destination: row.destination,
-              expectedSha256: row.expectedSha256, expectedOwner: row.expectedOwner })) });
+              expectedSha256: row.expectedSha256, expectedOwner: row.expectedOwner, archiveBatch: row.archiveBatch })) });
           if (cleanupDigest(exact.rootIdentity) !== cleanupDigest(backend.rootIdentity)
             || exact.targets.length !== approved.length
             || approved.some((row, index) => exact.targets[index].fingerprint !== row.fingerprint)) cleanupError("PREVIEW_CHANGED");
@@ -263,7 +271,7 @@ export class PlanCleanup {
       const progress = { phase: "protected", completed: index, total: protectedRows.length };
       notify({ ...progress, message: row.node.id + "：只读核对受保护条目，保持原样…" });
       try {
-        const info = await this.ports.sftp("files.cleanup.inspect", { node: row.node, target: { relativePath: row.relativePath, type: row.type } });
+        const info = await this.ports.sftp("files.cleanup.inspect", { node: row.node, target: { relativePath: row.relativePath, type: row.type, expectedOwner: row.expectedOwner } });
         Object.assign(row, info.target);
       } catch { row.error ||= "受保护目标未读取或不存在；不会处理"; }
       notify({ ...progress, completed: index + 1, message: "受保护条目核对完成，保持原样" });
@@ -318,7 +326,7 @@ export class PlanCleanup {
     const completed = await this.completedHistory(prior);
     const archivedFiles = { ...(preview.action === "move" ? this.archivedMetadata(completed) : {}), ...Object.fromEntries(preview.rows.filter(row => row.node.kind === "local" && ["PLAN 文件", "专用配置"].includes(row.category)
       && operation?.targets[row.id]?.state === "completed" && preview.action === "move").map(row => [row.relativePath, row.destination])) };
-    const fresh = await this.ports.collect(preview.scope.planFile, { archivedFiles, removedMetadata: this.removedMetadata(prior, completed) });
+    const fresh = await this.ports.collect(preview.scope.planFile, { archivedFiles, removedMetadata: this.removedMetadata(prior, completed), job: preview.scope.job });
     if (fresh.revision !== preview.scope.revision || fresh.planHash !== preview.scope.planHash) cleanupError("PREVIEW_CHANGED");
     const allowedOffline = new Set(preview.verifiedOnly ? preview.blockers.filter(row => ["OFFLINE_NODE", "NODE_UNREACHABLE"].includes(row.code)).map(row => row.nodeId) : []);
     if (fresh.blockers.some(row => !allowedOffline.has(row.nodeId))) cleanupError("ACTIVE_OR_UNVERIFIED_NODE", JSON.stringify(fresh.blockers));
@@ -326,7 +334,7 @@ export class PlanCleanup {
       if (operation && preview.rows.some(parent => operation.targets[parent.id]?.state === "completed"
         && (parent.node.id === row.node.id && under(parent.relativePath, row.relativePath)
           || parent.inode === row.inode && parent.device === row.device && cleanupDigest(parent.rootIdentity) === cleanupDigest(row.rootIdentity)))) continue;
-      const current = await this.ports.sftp("files.cleanup.inspect", { node: row.node, target: { relativePath: row.relativePath, type: row.type } });
+      const current = await this.ports.sftp("files.cleanup.inspect", { node: row.node, target: { relativePath: row.relativePath, type: row.type, expectedOwner: row.expectedOwner } });
       if (current.target.fingerprint !== row.fingerprint) cleanupError("DEPENDENCY_CHANGED");
     }
   }
@@ -351,13 +359,13 @@ export class PlanCleanup {
       if (preview.continuationOf || Object.values(operation.targets).some(target => target.state !== "completed")) await this.revalidate(preview, operation);
       for (const row of preview.rows.filter(row => row.disposition === "absent")) {
         const check = await this.ports.sftp("files.cleanup.preview", { node: row.node, action: preview.action,
-          targets: [{ relativePath: row.relativePath, destination: row.destination, type: row.type }] });
+          targets: [{ relativePath: row.relativePath, destination: row.destination, type: row.type, archiveBatch: row.archiveBatch, expectedOwner: row.expectedOwner }] });
         if (!check.targets[0].missing || cleanupDigest(check.rootIdentity) !== cleanupDigest(row.rootIdentity)) cleanupError("PREVIEW_CHANGED");
       }
       // Recheck every unprocessed node before any mutation; successful targets are never resent.
       for (const row of preview.rows.filter(row => operation.targets[row.id]?.state === "pending")) {
         const check = await this.ports.sftp("files.cleanup.preview", { node: row.node, action: preview.action,
-          targets: [{ relativePath: row.relativePath, destination: row.destination, type: row.type }] });
+          targets: [{ relativePath: row.relativePath, destination: row.destination, type: row.type, archiveBatch: row.archiveBatch, expectedOwner: row.expectedOwner }] });
         if (check.targets[0].fingerprint !== row.fingerprint || cleanupDigest(check.rootIdentity) !== cleanupDigest(row.rootIdentity)) cleanupError("PREVIEW_CHANGED");
       }
       if (preview.continuationOf) for (const previous of await this.history(preview.continuationOf)) {
@@ -401,7 +409,7 @@ export class PlanCleanup {
     preview.rows = [];
     for (const row of (await this.completedHistory(await this.history(id))).filter(row => row.fingerprint)) {
       const backend = await this.ports.sftp("files.cleanup.preview", { node: row.node, action: "restore",
-        targets: [{ relativePath: row.destination, type: row.type, destination: row.relativePath }] });
+        targets: [{ relativePath: row.destination, type: row.type, destination: row.relativePath, archiveBatch: row.archiveBatch }] });
       if (backend.targets[0].contentFingerprint !== row.contentFingerprint || backend.targets[0].inode !== row.inode) cleanupError("CONTENT_CHANGED");
       preview.rows.push({ ...row, ...backend.targets[0], relativePath: row.destination, destination: row.relativePath, disposition: "restore",
         backendToken: backend.token, backendDigest: backend.digest, backendIndex: 0, rootIdentity: backend.rootIdentity });
