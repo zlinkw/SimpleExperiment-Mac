@@ -25,7 +25,9 @@ wrapper = root / "tmux"
 wrapper.write_text("#!/bin/sh\nexec /usr/bin/tmux -L " + shlex.quote(socket) + " -f /dev/null \"$@\"\n", encoding="utf-8")
 wrapper.chmod(0o700)
 shell = root / "probe-shell"
-shell.write_text("#!/bin/sh\nexec /bin/bash --noprofile --norc\n", encoding="utf-8")
+# 现行 task_shell_args 会把重绑脚本作为 `-lc <script>` 传入登录 shell；夹具 shell 必须透传参数
+# （无参时仍是免 profile 的交互 shell，保持建窗快且与用户 rc 隔离的原意）。
+shell.write_text("#!/bin/sh\nexec /bin/bash --noprofile --norc \"$@\"\n", encoding="utf-8")
 shell.chmod(0o700)
 os.environ["PATH"] = str(root) + ":" + os.environ["PATH"]
 os.environ["SHELL"] = str(shell)

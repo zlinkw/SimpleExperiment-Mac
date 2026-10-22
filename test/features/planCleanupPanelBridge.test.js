@@ -54,7 +54,7 @@ function bridge({ immediateBoot = true, service = {} } = {}) {
 test('fast Webview startup reaches the host and its automatic preview completes without a second click', async () => {
   const f = bridge(); await f.open();
   assert.deepEqual(f.calls, ['list', 'preview']);
-  assert.match(f.element('status').textContent, /只读预览完成/);
+  assert.match(f.element('status').textContent, /审核完成，尚未改动文件/);
   assert.equal(f.element('confirm').disabled, false);
   assert.equal(f.element('execute').disabled, true);
   assert.equal(f.calls.includes('execute'), false);
@@ -74,7 +74,7 @@ test('failed-job panel freezes its job scope in the host, starts only preview an
 test('history response can immediately request a preview while the preceding host response is still being delivered', async () => {
   const f = bridge({ immediateBoot: false }); await f.open();
   assert.deepEqual(f.calls, ['list', 'preview']);
-  assert.match(f.element('status').textContent, /只读预览完成/);
+  assert.match(f.element('status').textContent, /审核完成，尚未改动文件/);
 });
 
 test('slow preflight responds immediately; blocked preview reports its reason and permits a fresh click', async () => {
@@ -122,7 +122,7 @@ test('duplicate host requests return an explicit busy response without starting 
   assert.equal(count, 1);
   assert.equal(f.element('preview').disabled, true);
   release(preview()); await flush();
-  assert.match(f.element('status').textContent, /只读预览完成/);
+  assert.match(f.element('status').textContent, /审核完成，尚未改动文件/);
 });
 
 test('permanent-delete approval requires two separate clicks against identical exact paths, and never executes itself', async () => {
@@ -157,7 +157,7 @@ test('an obsolete reply cannot unlock controls or replace the pending newer prev
   assert.equal(f.element('preview').disabled, true); assert.equal(f.element('confirm').disabled, true);
   release(preview()); await flush();
   assert.equal(f.element('confirm').disabled, false);
-  assert.match(f.element('confirm').textContent, /确认上述精确路径/);
+  assert.match(f.element('confirm').textContent, /确认上述完整路径/);
 });
 
 test('the review page shows live node progress and elapsed time without enabling approval while preflight is pending', async () => {
@@ -181,7 +181,7 @@ test('the review page shows live node progress and elapsed time without enabling
 test('blocked preview explains disabled approval, removes missing-node text and leaves fresh preview available', async () => {
   const p = preview(); p.blockers = [{ code: 'ACTIVE_OPERATION', detail: 'same-plan-operation' }];
   const f = bridge({ service: { async preview() { return p; } } }); await f.open();
-  assert.match(f.element('status').textContent, /预检受阻.*不能确认/s);
+  assert.match(f.element('status').textContent, /审核未通过.*不能确认/s);
   assert.match(f.element('status').textContent, /same-plan-operation/);
   assert.doesNotMatch(f.element('review').innerHTML, /undefined/);
   assert.equal(f.element('confirm').disabled, true); assert.equal(f.element('execute').disabled, true);
@@ -199,12 +199,12 @@ test('report-only config notices do not block other verified targets; protected-
     return p;
   } } }); await f.open();
   assert.equal(f.element('confirm').disabled, false);
-  assert.match(f.element('review').innerHTML, /相关配置保留/);
+  assert.match(f.element('review').innerHTML, /审核说明与保留文件/);
   assert.doesNotMatch(f.element('review').innerHTML, /undefined/);
   protectedOnly = true; f.element('preview').onclick(); await flush();
   assert.equal(f.element('confirm').disabled, true);
-  assert.match(f.element('status').textContent, /没有可确认的独占目标/);
-  assert.match(f.element('confirm').title, /独占目标/);
+  assert.match(f.element('status').textContent, /没有可处理文件/);
+  assert.match(f.element('confirm').title, /保留原因/);
   assert.match(f.element('restore').title, /已有清理操作/);
 });
 

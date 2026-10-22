@@ -43,10 +43,27 @@ test('formal output review never offers the legacy new-attempt or overwrite reru
   const source = fs.readFileSync(path.join(__dirname, '../../dist/extension/legacy.js'), 'utf8');
   const start = source.indexOf('    async confirmPlanExistingOutputsFromValidation(');
   const end = source.indexOf('    async confirmPlanRunSubmission(', start);
-  const owner = Function('vscode', 'return {'+source.slice(start,end)+'}')({window:{showWarningMessage(){throw Error('legacy dialog opened');}}});
-  await assert.rejects(owner.confirmPlanExistingOutputsFromValidation({}, {}, {result_path_policy:'declared', existing:[{output_dir:'work_dirs/formal/case/seed42'}]}), /FORMAL_JOB_CONFLICT.*[\s\S]*work_dirs\/formal\/case\/seed42/);
-  await assert.rejects(owner.confirmPlanExistingOutputsFromValidation({}, {overwrite:true}, {result_path_policy:'declared', existing:[]}), /FORMAL_JOB_CONFLICT/);
-  await owner.confirmPlanExistingOutputsFromValidation({}, {}, {result_path_policy:'declared', existing:[]});
+  // 移植后 dist 布局在两标记间夹入了其它方法；class 成员间补逗号后才能当对象成员提取（方法体缩进 8 空格，4 空格行必是方法边界）。
+  const slice = source.slice(start,end).replace(/\n {4}(?=(?:private |async |get |set |\*)?[a-zA-Z_$][\w$]*[(/])/g, ',\n    ');
+  // 现行契约：declared Plan 的历史产物一律交给 PlanRunHost 的“审核后替换隔离”流程；冲突拒绝在队列/准入层（见队列子测试与 sendDistributedJob 的 FORMAL_JOB_CONFLICT 禁令）。
+  const calls = [];
+  const PlanRunHost_1 = { PlanRunHost: class { constructor(_host, root){ assert.equal(root, '/fixture-project'); }
+    async replace(plan, body, validation){ calls.push({ plan, body, validation }); return { replacementPlanned: true }; } } };
+  const owner = Function('vscode', 'PlanRunHost_1', 'workspaceRoot', 'return {'+slice+'}')(
+    { window:{ showWarningMessage(){ throw Error('legacy dialog opened'); } } }, PlanRunHost_1, () => '/fixture-project');
+  assert.match(source, /FORMAL_JOB_CONFLICT：正式 job 禁止覆盖/, '正式 job 的覆盖禁令必须仍在实际提交链路中');
+  const body = {};
+  await owner.confirmPlanExistingOutputsFromValidation({}, body, {result_path_policy:'declared', existing:[{output_dir:'work_dirs/formal/case/seed42'}]});
+  assert.equal(calls.length, 1, 'declared 历史产物必须走审核替换流程，而不是遗留对话框');
+  assert.equal(calls[0].body, body);
+  assert.equal(calls[0].validation.existing[0].output_dir, 'work_dirs/formal/case/seed42');
+  assert.equal(body.existingOutputChoice, undefined, '宿主不得替用户写重跑选择');
+  assert.equal(body.overwrite, undefined);
+  const overwriteBody = { overwrite: true };
+  await owner.confirmPlanExistingOutputsFromValidation({}, overwriteBody, {result_path_policy:'declared', existing:[]});
+  assert.equal(calls.length, 2);
+  assert.equal(overwriteBody.existingOutputChoice, undefined);
+  assert.doesNotMatch(slice.slice(0, slice.indexOf('confirmDeclaredPlanOutputs') + 400), /new.?attempt|创建新的?attempt/, 'declared 分支不得出现新 attempt 选项');
 });
 
 test('formal three-seed queue persists stable paths, requires new Worker protocol and rejects duplicate writers', () => {
@@ -109,26 +126,34 @@ test('formal completion collector accepts exact declared CSV and retains SHA256 
   const selected = Freshness.selectLatestCompletePlanRun(queue,row.planFile,row.revision);
   assert.ok(selected);
   const job = {...selected.jobs[0],runId:row.id};
-  const manifest = JSON.stringify({output_dir:job.outputDir,result_csv:job.collectionResultCsv});
+  // lifecycle-2 的产物核实以 native artifact_manifest.json 为准（simpleExperiment 报告绑定 commandId/job 身份/mode/weights 路径）。
+  const manifest = JSON.stringify({output_dir:job.outputDir,result_csv:job.collectionResultCsv,
+    simpleExperiment:{runId:job.commandId,status:'completed',outputDir:job.outputDir,mode:'train_test',
+      job:{index:job.index,case:job.case,seed:job.seed},resultCsv:job.collectionResultCsv,weights:[job.outputDir+'/model.pt']}});
   assert.ok(Wrapper.declaredWrapperResults(manifest,job.outputDir,job.collectionResultCsv).includes(job.collectionResultCsv));
   const csv = 'case,seed,metric,value,job_dir\ncase,42,accuracy,0.75,'+job.outputDir+'\n';
   const inputs = [{remotePath:job.collectionResultCsv,text:csv,sha256:Wrapper.resultHash(csv)},
     {remotePath:job.outputDir+'/artifact_manifest.json',text:manifest,sha256:Wrapper.resultHash(manifest)}];
-  const owner = JSON.stringify({schemaVersion:1,state:'completed',workflowId:job.runId,globalJobId:job.globalJobId,
-    commandId:job.commandId,index:job.index,case:job.case,seed:job.seed,outputDir:job.outputDir,
-    planRevision:job.planRevision,codeFingerprint:job.codeFingerprint,collectionResultCsv:job.collectionResultCsv,
-    sha256:Object.fromEntries(inputs.map(file=>[file.remotePath,file.sha256]))});
-  inputs.push({remotePath:job.outputDir+'/formal_job_owner.json',text:owner,sha256:Wrapper.resultHash(owner)});
   const prepared = Wrapper.prepareWrapperJob(job,inputs,job.collectionResultCsv,inputs.map(file=>file.remotePath),file=>'results/raw/'+file);
   assert.ok(prepared);
   const publication = Wrapper.prepareWrapperPublication(row.id, [{case:job.case,seed:job.seed}], [prepared]);
   assert.equal(Object.hasOwn(Wrapper.wrapperSummaryJobs(publication)[0].job, 'attempt'), false);
   assert.throws(()=>Wrapper.prepareWrapperJob(job,[{...inputs[0],sha256:'0'.repeat(64)},inputs[1]],job.collectionResultCsv,[],file=>file),/SHA256/);
+  assert.throws(()=>Wrapper.prepareWrapperJob(job,[inputs[0],{...inputs[1],sha256:'0'.repeat(64)}],job.collectionResultCsv,[],file=>file),/FINAL_MANIFEST_SHA256_CHANGED/,'native 声明文件字节不符必须拒绝核实');
+  assert.throws(()=>Wrapper.prepareWrapperJob({...job,commandId:'another'},inputs,job.collectionResultCsv,[],file=>file),/FINAL_MANIFEST_JOB_MISMATCH/,'声明文件绑定的 commandId 与本 job 不符时拒绝');
   assert.throws(()=>Wrapper.declaredWrapperResults(JSON.stringify({result_csv:'tmp/result/other.csv'}),job.outputDir,job.collectionResultCsv),/产物路径|作业目录/);
   assert.throws(()=>Wrapper.jobResultPath('/project/../'+job.collectionResultCsv,job.outputDir,job.collectionResultCsv),/路径不安全/);
-  assert.throws(()=>Wrapper.prepareWrapperJob({...job,commandId:'another'},inputs,job.collectionResultCsv,[],file=>file),/OWNER_IDENTITY_CHANGED/);
-  const changed = csv+'case,42,accuracy,0.5,'+job.outputDir+'\n';
-  assert.throws(()=>Wrapper.prepareWrapperJob(job,[{...inputs[0],text:changed,sha256:Wrapper.resultHash(changed)},...inputs.slice(1)],job.collectionResultCsv,[],file=>file),/OWNER_SHA256_CHANGED/);
+  // lifecycle-1 declared 队列（旧插件遗留 job）仍由 formal_job_owner.json 身份+SHA 账本把关。
+  const legacyJob = {...job}; delete legacyJob.lifecycleProtocol;
+  const owner = JSON.stringify({schemaVersion:1,state:'completed',workflowId:legacyJob.runId,globalJobId:legacyJob.globalJobId,
+    commandId:legacyJob.commandId,index:legacyJob.index,case:legacyJob.case,seed:legacyJob.seed,outputDir:legacyJob.outputDir,
+    planRevision:legacyJob.planRevision,codeFingerprint:legacyJob.codeFingerprint,collectionResultCsv:legacyJob.collectionResultCsv,
+    sha256:Object.fromEntries(inputs.map(file=>[file.remotePath,file.sha256]))});
+  const legacyInputs = [...inputs,{remotePath:legacyJob.outputDir+'/formal_job_owner.json',text:owner,sha256:Wrapper.resultHash(owner)}];
+  assert.ok(Wrapper.prepareWrapperJob(legacyJob,legacyInputs,legacyJob.collectionResultCsv,[],file=>file));
+  assert.throws(()=>Wrapper.prepareWrapperJob({...legacyJob,commandId:'another'},legacyInputs,legacyJob.collectionResultCsv,[],file=>file),/OWNER_IDENTITY_CHANGED/);
+  const changed = csv+'case,42,accuracy,0.5,'+legacyJob.outputDir+'\n';
+  assert.throws(()=>Wrapper.prepareWrapperJob(legacyJob,[{...legacyInputs[0],text:changed,sha256:Wrapper.resultHash(changed)},...legacyInputs.slice(1)],legacyJob.collectionResultCsv,[],file=>file),/OWNER_SHA256_CHANGED/);
   const inventories = new Map([['worker0',Object.fromEntries(inputs.map(file=>[file.remotePath,file.sha256]))]]);
   const one = {...row,jobs:[{...row.jobs[0],artifacts:inventories.get('worker0')}]};
   assert.equal(Sync.assessPlanArtifactSync(one,['worker0'],inventories,['artifact_manifest.json']).status,'synced');

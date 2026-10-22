@@ -2,6 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript');
 const root = path.resolve(__dirname, '../..');
 const scope = require('../../dist/mac/ResultOperationScope');
+const { compiledModule } = require('../_helpers/compiledModule');
 const plan = 'Plans/ 中文 é A.yaml ', file = 'outputs/ 指标.csv ';
 const plain = value => JSON.parse(JSON.stringify(value));
 function backend(platform = 'darwin') {
@@ -13,6 +14,7 @@ function backend(platform = 'darwin') {
     'planVersionTimestamp', 'normalizeRemoteResultInspectionPath', 'usableSelectionKey'];
   const posix = require('../../dist/mac/PosixPath');
   const context = vm.createContext({ process: { platform }, Buffer, Date, Map, Set,
+    ResultOwnershipScope: compiledModule(path.join(root, 'dist/results/ResultOwnershipScope.js'), platform),
     MacResultOperationScope: scope, PosixPath_1: posix,
     FileTransferTypes_1: require('../../dist/tunnel/FileTransferTypes'),
     WrapperResultBundle: require('../../dist/results/WrapperResultBundle') });
@@ -102,7 +104,8 @@ test('Mac receipt scope bounds malformed trees and preserves read-only behavior'
   const row=receipt(), before=JSON.stringify(row);backend()([row]);assert.equal(JSON.stringify(row),before);
 });
 
-test('non-Mac compiled receipt candidates retain established compatibility behavior', () => {
+test('non-Mac current receipt ownership requires the full Plan path and retains Windows separator compatibility', () => {
   const row=receipt({planFile:'EXPERIMENTS/PLANS/DEMO.yaml',contractReport:{unparseableFiles:['outputs\\value.csv']}});
-  assert.deepEqual(backend('win32')([row],'demo.yaml'),['outputs/value.csv']);
+  assert.deepEqual(backend('win32')([row],'demo.yaml'),[]);
+  assert.deepEqual(backend('win32')([row],'experiments/plans/demo.yaml'),['outputs/value.csv']);
 });

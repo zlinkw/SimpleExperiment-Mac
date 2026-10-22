@@ -3,7 +3,7 @@ import * as crypto from "node:crypto";
 import { planComparisonTables, selectedComparisonCandidates, type ComparisonRun, type RunComparison } from "../results/PlanVersionComparison";
 import type { OutputRetirementCandidate } from "./PlanOutputRetention";
 
-export type ConfirmationPath = { label: string; path: string };
+export type ConfirmationPath = { label: string; path: string; isolation?: string };
 
 function htmlText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -12,7 +12,7 @@ function htmlText(value: string): string {
 export function confirmSyncScopePaths(title: string, note: string, paths: ConfirmationPath[], finalLabel: string): Promise<boolean> {
   const panel = vscode.window.createWebviewPanel("simpleExperimentMac.syncScopeConfirmation", title, vscode.ViewColumn.Active, { enableScripts: true });
   const nonce = crypto.randomBytes(16).toString("base64");
-  const rows = paths.map(({ label, path }) => `<div class="path"><strong>${htmlText(label)}</strong><code>${htmlText(path)}</code></div>`).join("");
+  const rows = paths.map(({ label, path, isolation }) => `<div class="path"><strong>${htmlText(label)}</strong><code>${htmlText(path)}</code>${isolation ? `<code>${htmlText("隔离后实际删除：" + isolation)}</code>` : ""}</div>`).join("");
   panel.webview.html = `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'">
 <style nonce="${nonce}">

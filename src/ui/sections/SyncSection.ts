@@ -28,7 +28,7 @@ export class SyncSection implements Section {
         <span class="toolbarSep" aria-hidden="true">→</span>
         <button type="button" data-command="startAll" class="secondary" title="第 1 步 · 连隧道&#10;启动全部 Xshell 隧道，建立本机到服务器的端口转发">启动全部隧道</button>
         <span class="toolbarSep" aria-hidden="true">→</span>
-        <button type="button" data-command="publishGithub" data-confirm="true" title="第 2 步 · 传代码&#10;先提交推送到 GitHub（未配置会引导登录）&#10;再通过 SimpleSFTP 上传到所有 Worker；无 Hub 模式会跳过 Hub 上传">发布到git并上传worker</button>
+        <button type="button" data-command="publishGithub" data-confirm="true" title="第 2 步 · 传代码&#10;先提交推送到 GitHub（未配置会引导登录）&#10;再通过 SimpleSFTP 上传到所有 Worker">发布到git并上传worker</button>
         <span class="toolbarSep" aria-hidden="true">→</span>
         <button type="button" data-command="testAll" class="secondary" title="第 3 步 · 检测&#10;检测全部服务器隧道、Agent 与调度依赖&#10;失败项会列出原因">检测全部</button>
       </div>

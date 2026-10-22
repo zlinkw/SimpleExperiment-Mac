@@ -2,11 +2,105 @@
  * Included in the Agent; other actions retain their established entry points.
  */
 export const OUTPUT_CONTRACT_FILES_PYTHON = String.raw`
+def result_io_relative_path(value, label):
+    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
+            or value.startswith("/") or ":" in value or chr(92) in value
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise ValueError(label + " 必须是保留真实拼写的项目内规范相对 POSIX 路径")
+    return value
+
+def result_io_path(value, label, allow_absolute=False, allow_empty=False):
+    if value == "" and allow_empty:
+        return value
+    if allow_absolute and isinstance(value, str) and value.startswith("/") and not value.startswith("//"):
+        result_io_relative_path(value[1:], label)
+        return value
+    return result_io_relative_path(value, label)
+
+def result_io_project_path(root, value, require_file=False, directory=False):
+    result_io_path(value, "Worker Plan 路径", allow_absolute=True)
+    root_abs = os.path.abspath(root)
+    real_root = os.path.realpath(root_abs)
+    if not stat.S_ISDIR(os.stat(root_abs).st_mode):
+        raise ValueError("Worker 项目根目录不是现有目录")
+    full = os.path.abspath(os.path.join(root_abs, value))
+    relative = os.path.relpath(full, root_abs)
+    result_io_relative_path(relative, "Worker 项目内路径")
+    if os.path.commonpath([real_root, os.path.realpath(full)]) != real_root:
+        raise ValueError("Worker Plan 路径越出项目")
+    current = root_abs
+    parts = relative.split(os.sep)
+    for index, part in enumerate(parts):
+        names = os.listdir(current)
+        target = os.path.join(current, part)
+        try:
+            info = os.lstat(target)
+        except FileNotFoundError:
+            if require_file:
+                raise
+            return full
+        if part not in names or stat.S_ISLNK(info.st_mode):
+            raise ValueError("Worker Plan 路径条目拼写不一致或包含符号链接")
+        want_directory = directory or index < len(parts) - 1
+        if not (stat.S_ISDIR(info.st_mode) if want_directory else stat.S_ISREG(info.st_mode)):
+            raise ValueError("Worker Plan 路径文件类型不符")
+        current = target
+    return full
+
+def output_contract_request_identity(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("输出契约请求必须是对象")
+    owners = [payload]
+    if payload.get("options") is not None:
+        if not isinstance(payload["options"], dict):
+            raise ValueError("输出契约 options 类型无效")
+        owners.append(payload["options"])
+    fields = {}
+    for keys, target in ((["planFile", "plan_file", "plan", "selectedPlanId", "selected_plan_id"], "planFile"),
+                         (["planRevision", "plan_revision"], "planRevision")):
+        values = [owner[key] for owner in owners for key in keys if key in owner and owner[key] != ""]
+        if any(not isinstance(value, str) or value == "-" or len(value.encode("utf-8")) > 4096
+               or any(ord(char) < 32 or ord(char) == 127 for char in value) for value in values):
+            raise ValueError("输出契约 " + target + " 类型或内容无效")
+        if len(set(values)) > 1:
+            raise ValueError("输出契约 " + target + " 别名不一致")
+        if values:
+            fields[target] = result_io_relative_path(values[0], "输出契约 Plan") if target == "planFile" else values[0]
+    if fields.get("planFile"):
+        fields["selectedPlanId"] = fields["planFile"]
+    return fields
+
+def output_contract_receipt(root, payload, operation_id, op_id):
+    identity = output_contract_request_identity(payload)
+    plan = identity.get("planFile") or ""
+    report = check_output_contract_action(root, plan or None)
+    report_identity = output_contract_request_identity(report)
+    if (report_identity.get("planFile", "") != plan
+            or report_identity.get("planRevision") and identity.get("planRevision")
+            and report_identity["planRevision"] != identity["planRevision"]):
+        raise ValueError("输出契约报告的 Plan 与请求不一致")
+    status = "failed" if report.get("status") == "failed" else "completed"
+    details = {"contractReport": report, "contractReportPath": report.get("path") or "simple_cluster/contracts/contract_check_reports/latest.json",
+               "contractIssueType": report.get("issueType") or "", "missingCount": len(report.get("missing") or []),
+               "missingFiles": report.get("missing") or [], "unparseableCount": len(report.get("unparseableFiles") or []),
+               "unparseableFiles": report.get("unparseableFiles") or [], "unparseable": report.get("unparseable") or [],
+               "parseableResultCount": int(report.get("parseableResultCount") or 0), **identity, "planFile": plan}
+    return terminal_action(root, "check-output-contract", operation_id, op_id, status,
+                           report.get("message") or report.get("status"), details, request=payload)
+
+RESULT_READ_ACTIONS = ("check-output-contract", "run-quality-gate", "run-statistics", "export-paper-table", "check-claim-evidence", "parse-case-level", "run-leakage-check", "run-subgroup-analysis", "export-case-analysis")
+
+def action_receipt_fields(action, request=None):
+    identity = result_parse_request({} if request is None else request)[0] if action in RESULT_PARSE_ACTIONS else output_contract_request_identity({} if request is None else request) if action in RESULT_READ_ACTIONS else {}
+    return {**action_operation_fields(request), **identity}
+
+
 def output_contract_path(root, relative, directory=False):
-    durable_plan_path(relative, "输出契约来源")
+    result_io_relative_path(relative, "输出契约来源")
     if any(part in (".ssh", "id_rsa", "id_ed25519", "known_hosts") or part.endswith(".pem") for part in relative.split("/")):
         raise ValueError("输出契约来源包含受保护路径")
-    return worker_plan_project_path(root, relative, require_file=True, directory=directory)
+    return result_io_project_path(root, relative, require_file=True, directory=directory)
 
 def output_contract_file_identity(info):
     return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns)
@@ -19,6 +113,13 @@ def output_contract_verify_snapshot(root, relative, snapshot):
         info = os.stat(directory)
         if not stat.S_ISDIR(info.st_mode) or (info.st_dev, info.st_ino) != identity:
             raise ValueError("输出契约来源目录身份发生变化")
+    if "sha256" in snapshot:
+        # Same-size writes plus restored mtime can share one filesystem clock
+        # tick. Reopen through the same bounded descriptor checks and bind bytes.
+        current = output_contract_read_snapshot(root, relative, snapshot["identity"][2])
+        if (current["identity"] != snapshot["identity"] or current["sha256"] != snapshot["sha256"]
+                or current["directories"] != snapshot["directories"]):
+            raise ValueError("输出契约来源文件内容或目录身份发生变化")
 
 def output_contract_read_snapshot(root, relative, max_bytes=5 * 1024 * 1024):
     full = output_contract_path(root, relative)
@@ -48,7 +149,9 @@ def output_contract_read_snapshot(root, relative, max_bytes=5 * 1024 * 1024):
         if size != before.st_size or size > max_bytes or output_contract_file_identity(os.fstat(descriptor)) != snapshot["identity"]:
             raise ValueError("输出契约来源在读取期间发生变化或超限")
         output_contract_verify_snapshot(root, relative, snapshot)
-        snapshot["text"] = b"".join(chunks).decode("utf-8-sig", errors="strict")
+        data = b"".join(chunks)
+        snapshot["sha256"] = hashlib.sha256(data).hexdigest()
+        snapshot["text"] = data.decode("utf-8-sig", errors="strict")
         return snapshot
     finally:
         os.close(descriptor)
@@ -58,9 +161,9 @@ def output_contract_read_text(root, relative):
 
 def output_contract_candidate(value, pattern=False):
     try:
-        durable_plan_path(value, "输出契约候选")
+        result_io_relative_path(value, "输出契约候选")
         candidate = re.sub(r"\{[^}]+\}", "*", value) if pattern else value
-        durable_plan_path(candidate, "输出契约候选")
+        result_io_relative_path(candidate, "输出契约候选")
     except (ValueError, UnicodeError):
         return ""
     parts = candidate.split("/")
@@ -78,7 +181,7 @@ def output_contract_candidate(value, pattern=False):
 
 def output_contract_directory(value):
     try:
-        durable_plan_path(value, "输出契约目录")
+        result_io_relative_path(value, "输出契约目录")
         return value
     except (ValueError, UnicodeError):
         return ""

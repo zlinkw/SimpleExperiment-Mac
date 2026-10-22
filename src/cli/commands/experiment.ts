@@ -10,6 +10,7 @@ import { retryExperiment } from "../../features/Lifecycle";
 import { cloneOrReproducePlan } from "../../features/PlanBuilder";
 import { parsePlanSummary } from "../../features/PlanBuilder";
 import { assertProjectPlan, requestWorkflowRun } from "../WorkflowRun";
+import { assertPlanSeedContract } from "../../features/WorkflowWorkspaceBinding";
 import { loadResults } from "./result";
 import type { ResultRow } from "./result";
 
@@ -655,12 +656,12 @@ export async function experimentBatch(planArg: string, flags: CliFlags): Promise
 export async function experimentRun(planArg: string, flags: CliFlags): Promise<number> {
   const planFile = resolvePlanFile(planArg);
   assertProjectPlan(projectRoot(), planFile);
+  assertPlanSeedContract(flags as unknown as Record<string, unknown>);
   const checks = flags.check ? await preflightChecks(planFile) : undefined;
   if (hasApiDiscovery()) {
     const { code, payload } = await requestWorkflowRun(projectRoot(), planFile, flags);
-    const output = { ...payload, checks };
-    if (flags.json) writeJson(output, flags.compactJson);
-    else writeText(block("Experiment run", output));
+    if (flags.json) writeJson({ ...payload, checks }, flags.compactJson);
+    else writeText(block("Experiment run", { ...payload, checks }));
     return code;
   }
   if (flags.dryRun) {
@@ -672,11 +673,8 @@ export async function experimentRun(planArg: string, flags: CliFlags): Promise<n
       runner: "SimpleExperiment Local API",
       submitPath: "workflow.run",
       wouldExecute: `workflow.run ${planFile}`,
-      seedApplied: false,
-      ...(flags.seed !== undefined ? { seedWarning: "正式 workflow 不支持 seed 覆盖；请在保存的 Plan 中配置 seeds。" } : {}),
       workflow: null,
-      validation: "local_only",
-      ready: false,
+      validation: "local_only", ready: false, requested: false,
       checks,
     };
     if (flags.json) writeJson(payload, flags.compactJson);
@@ -688,6 +686,9 @@ export async function experimentRun(planArg: string, flags: CliFlags): Promise<n
     if (flags.json) writeJson(payload, flags.compactJson);
     else writeText(block("Experiment check", payload as unknown as Record<string, unknown>));
     return 0;
+  }
+  if (!hasApiDiscovery()) {
+    throw envError("experiment run requires SimpleExperiment Local API. Open VS Code, or pass --dry-run.");
   }
   throw envError("experiment run requires SimpleExperiment Local API. Open VS Code, or pass --dry-run.");
 }

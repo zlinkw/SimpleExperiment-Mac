@@ -6,6 +6,7 @@ EXISTING_ARTIFACT_MARKERS = (
     "train.log", "test.log", "stdout.log", "stderr.log", "console.log",
     "artifact_manifest.json", "checkpoint_manifest.json",
     "config_snapshot.yaml", "env_snapshot.json",
+    "formal_job_owner.json", "job_config.yaml",
 )
 
 def has_existing_artifacts(output_dir):
@@ -26,5 +27,6 @@ def has_existing_artifacts(output_dir):
                     break
     except (FileNotFoundError, NotADirectoryError):
         pass
-    return {"exists": bool(markers), "markers": sorted(set(markers)), "totalFiles": len(names)}
+    occupied = [name for name in names if name != ".formal_job.lock"]
+    return {"exists": bool(occupied), "markers": sorted(set(markers or occupied[:8])), "totalFiles": len(names)}
 `;

@@ -19,6 +19,7 @@ function loadSourceModule(relativePath) {
   const loaded = new Module(filename, module);
   loaded.filename = filename;
   loaded.paths = Module._nodeModulePaths(path.dirname(filename));
+  loaded.require = Module.createRequire(path.resolve(__dirname, '../..', relativePath.replace(/^src\//, 'dist/').replace(/\.ts$/, '.js')));
   loaded._compile(output, filename);
   return loaded.exports;
 }
@@ -159,6 +160,7 @@ test("manual refresh re-probes Workers and retries artifact sync without waiting
   assert.ok(first >= 0 && last > first);
   const context = { workspaceRoot: () => "C:/project", errorMessage: String,
     vscode: { window: { showInformationMessage: () => undefined } } };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(first, last).replace("async manualSnapshot()", "async function manualSnapshot()")
     + "\nthis.refresh = manualSnapshot;", context);
@@ -190,22 +192,26 @@ test("successful artifact pass clears an old disconnected warning", async () => 
   assert.ok(first >= 0 && last > first);
   const context = { workspaceRoot: () => "C:/project", Date, Set, Map, Object, errorMessage: String,
     PlanOutputRetention: require("../../dist/features/PlanOutputRetention.js") };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(first, last).replace("async syncDistributedJobArtifacts(", "async function syncJobArtifacts(")
     + "\nthis.sync = syncJobArtifacts;", context);
   const job = { index: 0, attempt: 1, status: "completed", workerId: "worker-b", outputDir: "runs/a",
-    artifacts: { "runs/a/formal_job_owner.json": "a".repeat(64) }, fragmentWorkerIds: ["worker-a"], mirroredWorkerIds: ["worker-a"], artifactError: "old disconnect" };
+    artifacts: { "runs/a/formal_job_owner.json": "a".repeat(64), "runs/a/result.csv": "a".repeat(64) }, fragmentWorkerIds: ["worker-a"], mirroredWorkerIds: ["worker-a"], artifactError: "old disconnect" };
   const patched = [];
   const provider = {
     distributedLaunchInFlight: new Set(),
-    distributedProjectContract: () => ({ fragmentPaths: [], requiredPaths: [] }),
+    distributedProjectContract: () => ({ fragmentPaths: ["result.csv"], requiredPaths: ["result.csv"] }),
     planOutputRetentionMode: () => "latest-complete",
     workerCodeSyncTargets: () => [{ id: "worker-a" }],
     lastWorkerProbes: { "worker-a": { status: "ok" } },
     sftpServerOptions: () => ({}),
-    patchDistributedJob: async (_root, _plan, _index, _attempt, fields) => patched.push(fields),
+    verifiedSftpProjectInventory:async()=>({files:Object.fromEntries(Object.entries(job.artifacts).map(([file,sha256])=>[file,{sha256}]))}),
+    distributedOutputHashes:async()=>job.artifacts,
+    patchDistributedJob: async (_root, _plan, _index, _attempt, fields) => {patched.push(fields);Object.assign(job,fields);},
+    recordActionError: error=>assert.fail(error.message),
   };
-  await context.sync.call(provider, "C:/project", { plans: [{ id: "plan-1", resultPathPolicy: "declared", planFile: "plans/p.yaml", jobs: [job] }] }, "bulk");
+  await context.sync.call(provider, "C:/project", { plans: [{ id: "plan-1", revision:"r",fullPlanJobCount:1,enqueuedAt:new Date().toISOString(), resultPathPolicy: "declared", planFile: "plans/p.yaml", jobs: [job] }] }, "bulk");
   assert.equal(job.artifactError, undefined);
   assert.ok(patched.some((row) => Object.hasOwn(row, "artifactError") && row.artifactError === undefined));
 });
@@ -213,9 +219,10 @@ test("successful artifact pass clears an old disconnected warning", async () => 
 test("automatic completion invokes only the Worker mirror, never preview or final rebuilding", async () => {
   const compiled = compiledSource;
   const first = compiled.indexOf("scheduleDistributedPostprocess(root, rerunIfBusy = false) {");
-  const last = compiled.indexOf("async syncCompletedPlanArtifacts(", first);
+  const last = compiled.indexOf("async artifactSyncFromUi(", first);
   assert.ok(first >= 0 && last > first);
   const context = { workspaceRoot: () => "C:/project", errorMessage: String };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(first, last).replace("scheduleDistributedPostprocess(root, rerunIfBusy = false)",
     "function scheduleDistributedPostprocess(root, rerunIfBusy = false)")
@@ -250,6 +257,7 @@ test("formal mirror drift remains blocked rather than overwriting a conflicting 
     mapLimited: async (items, _limit, fn) => Promise.all(items.map((item) => fn(item))),
     DistributedJobArtifacts_1: { collectDistributedJobArtifacts: (_dir, inventory) => Object.fromEntries(Object.entries(inventory || {}).map(([name, row]) => [name, row.sha256])) },
     PlanArtifactTransfer_1: { workerFpsyncTaskLabel: (input) => [input.action, input.sourceId, input.destinationId].filter(Boolean).join(" ") } };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(first, last).replace("async syncDistributedJobArtifacts(",
     "async function syncJobArtifacts(")
@@ -280,10 +288,10 @@ test("formal mirror drift remains blocked rather than overwriting a conflicting 
   assert.deepEqual(Array.from(job.mirroredWorkerIds), ["w2", "w3"]);
 });
 
-test("legacy explicit rebuilding can repair a stale shared preview without automatic invocation", async () => {
+test("retired remote rebuilding cannot repair a stale preview or mutate publication metadata", async () => {
   const compiled = compiledSource;
   const first = compiled.indexOf("async rebuildDistributedResults(");
-  const last = compiled.indexOf("planOutputRetentionMode(root)", first);
+  const last = compiled.indexOf("planOutputRetentionMode(_root)", first);
   const context = {
     PlanOutputRetention: require("../../dist/features/PlanOutputRetention.js"),
     DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
@@ -296,6 +304,7 @@ test("legacy explicit rebuilding can repair a stale shared preview without autom
     crypto: { createHash: () => ({ update: () => ({ digest: () => "signature" }) }) },
     PlanArtifactTransfer_1: { workerFpsyncTaskLabel: (input) => [input.action, input.sourceId, input.destinationId].filter(Boolean).join(" ") },
   };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(first, last).replace("async rebuildDistributedResults(root, queue, previewOnly, verifyAll = false)",
     "async function rebuildDistributedResults(root, queue, previewOnly, verifyAll = false)")
@@ -321,14 +330,14 @@ test("legacy explicit rebuilding can repair a stale shared preview without autom
     recordActionError: (error) => { throw new Error(error.message); },
   };
   await context.rebuild.call(provider, "C:/project", queue, true, true);
-  assert.equal(copied, true);
-  assert.ok(patches.some((fields) => fields.previewWorkerIds && !fields.previewWorkerIds.includes("w2")));
+  assert.equal(copied, false);
+  assert.deepEqual(patches, []);
   assert.deepEqual(Array.from(queue.previewWorkerIds), ["w3", "w2"]);
 });
 
-test("legacy rebuild retries use fresh operation identities and cache only successful manifests", async () => {
+test("retired remote rebuild cannot submit retries or create a successful manifest from old queue rows", async () => {
   const first = compiledSource.indexOf("async rebuildDistributedResults(");
-  const last = compiledSource.indexOf("planOutputRetentionMode(root)", first);
+  const last = compiledSource.indexOf("planOutputRetentionMode(_root)", first);
   let sequence = 0;
   const context = { PlanOutputRetention: require("../../dist/features/PlanOutputRetention.js"),
     DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue.js"),
@@ -336,6 +345,7 @@ test("legacy rebuild retries use fresh operation identities and cache only succe
     crypto: require("node:crypto"), workspaceRoot: () => "C:/project",
     uniqueStrings: values => [...new Set(values)], makeOpId: prefix => `${prefix}-new-${++sequence}`,
     resultStatus: value => value.status, remoteActionPendingStatus: () => false };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiledSource.slice(first, last).replace("async rebuildDistributedResults(root, queue, previewOnly, verifyAll = false)",
     "async function rebuildDistributedResults(root, queue, previewOnly, verifyAll = false)") + "\nthis.rebuild = rebuildDistributedResults;", context);
@@ -348,14 +358,12 @@ test("legacy rebuild retries use fresh operation identities and cache only succe
     patchDistributedPublication: async (_root, fields) => Object.assign(queue, fields), client: { postWorkerAction: async (_worker, _action, body) => {
       submitted.push(body); return submitted.length === 1 ? { status: "failed", message: "old failure" } : { status: "completed", outputPaths: ["result.csv"] };
     } } };
-  await assert.rejects(context.rebuild.call(host, "C:/project", queue, true), /old failure/);
-  assert.equal(queue.previewSignature, undefined);
-  await context.rebuild.call(host, "C:/project", queue, true);
-  await context.rebuild.call(host, "C:/project", queue, true);
-  assert.equal(submitted.length, 2); assert.notEqual(submitted[0].operationId, submitted[1].operationId);
-  assert.equal(submitted[1].operationId, submitted[1].opId);
-  assert.equal(submitted[1].manifest.plans[0].runId, "run-b");
-  assert.ok(queue.previewSignature);
+  const before=JSON.stringify(queue);
+  for(let i=0;i<3;i++) await context.rebuild.call(host,"C:/project",queue,true);
+  assert.deepEqual(submitted,[]);
+  assert.equal(queue.previewSignature,undefined);
+  assert.equal(sequence,0);
+  assert.equal(JSON.stringify(queue),before);
 });
 
 test("durable local admission requires a fresh capable ledger and an explicit idle GPU", () => {
@@ -384,6 +392,7 @@ test("restart fences an unacknowledged legacy dispatch with its original command
     mapLimited: async (items, _limit, fn) => Promise.all(items.map(fn)),
     Object, Set, Date, setInterval, clearInterval, errorMessage: String,
   };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(queueMethod + "\nthis.tickQueue = tickQueue;", context);
   let queue = { schemaVersion: 1, plans: [{
@@ -427,6 +436,7 @@ test("a failed job retains its Agent error in the durable Plan queue", async () 
   const context = { workspaceRoot: () => "C:/project", DistributedPlanQueue,
     mapLimited: async (items, _limit, fn) => Promise.all(items.map(fn)),
     compactSensitiveText: String, Object, Set, Date, setInterval, clearInterval };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(queueMethod + "\nthis.tickQueue = tickQueue;", context);
   let queue = { schemaVersion: 1, plans: [{ id: "plan-1", planFile: "plans/p.yaml", revision: "rev-1", codeFingerprint: "code-1",
@@ -459,6 +469,7 @@ test("idle queue recovery checks are spaced while a newly completed job still ch
   const end = compiled.indexOf("async syncDistributedJobArtifacts(", start);
   const context = { workspaceRoot: () => "C:/project", DistributedPlanQueue: loadSourceModule("src/features/DistributedPlanQueue.ts"),
     mapLimited: async (items, _limit, fn) => Promise.all(items.map(fn)), Object, Set, Date, setInterval, clearInterval };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(start, end).replace(/async tickDistributedQueueCore\(([^)]*)\) \{/, "async function tickQueue($1) { this.readWorkerTaskSnapshotBatch ||= async ids => Promise.all(ids.map(id => this.readWorkerTaskSnapshot(id))); this.queuePlanArtifactSyncStatusCheck ||= () => undefined;")
     + "\nthis.tickQueue = tickQueue;", context);
@@ -498,11 +509,12 @@ function loadTickQueue() {
   const context = {
     workspaceRoot: () => "C:/project", DistributedPlanQueue: loadSourceModule("src/features/DistributedPlanQueue.ts"),
     GpuJobOwnership: require("../../dist/features/GpuJobOwnership.js"),
-    DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"),
+    GpuQuotaScheduling: require("../../dist/features/GpuQuotaScheduling"), PlanCodeScopeHost: require("../../dist/extension/PlanCodeScopeHost"), DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"),
     mapLimited: async (items, _limit, fn) => Promise.all(items.map(fn)),
     Object, Set, Map, Date, JSON, setInterval, clearInterval, errorMessage: String,
     actionErrorSuggestion: (message) => String(message || ""),
   };
+  context.NativeResultManifest_1=require("../../dist/results/NativeResultManifest");
   vm.createContext(context);
   vm.runInContext(compiled.slice(start, end).replace(/async tickDistributedQueueCore\(([^)]*)\) \{/, "async function tickQueue($1) { this.readWorkerTaskSnapshotBatch ||= async ids => Promise.all(ids.map(id => this.readWorkerTaskSnapshot(id))); this.queuePlanArtifactSyncStatusCheck ||= () => undefined;")
     + "\nthis.tickQueue = tickQueue;", context);

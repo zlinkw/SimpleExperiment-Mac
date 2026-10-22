@@ -64,7 +64,8 @@ test('job cleanup indexes only that failed job; successful jobs and the PLAN/syn
   const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'PlanCleanupHost');
   const method = cls.members.find(node => node.name?.getText(ast) === 'updateIndexes').getText(ast);
   const Provider = vm.runInNewContext(ts.transpileModule('class Provider {' + method + '};Provider;', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
-    { cleanupError: require('../../src/features/PlanCleanup.ts').cleanupError });
+    { cleanupError: require('../../src/features/PlanCleanup.ts').cleanupError,
+      replacementLifecycleJob: require('../../src/features/PlanOutputReplacement.ts').replacementLifecycleJob });
   const provider = new Provider(), before = structuredClone(input.queue);
   provider.root = root; provider.assertWorkspace = () => {};
   let stored, ledgerCalls = 0;

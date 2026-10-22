@@ -48,6 +48,8 @@ function loadCache() {
       return { compacted: true, ...value };
     },
   };
+  sandbox.process={platform:"win32"};
+  sandbox.ResultOwnershipScope=require("../_helpers/compiledModule").compiledModule(require.resolve("../../dist/results/ResultOwnershipScope"),"win32");
   vm.createContext(sandbox);
   vm.runInContext(`${extractFunction("compactResultsSummaryForPlanForWebview")}\nthis.compactForPlan = compactResultsSummaryForPlanForWebview;`, sandbox);
   return sandbox;
@@ -67,6 +69,8 @@ function loadActualFilterCache() {
       return value && typeof value === "object" && !Array.isArray(value) ? value : undefined;
     },
   };
+  sandbox.process={platform:"win32"};
+  sandbox.ResultOwnershipScope=require("../_helpers/compiledModule").compiledModule(require.resolve("../../dist/results/ResultOwnershipScope"),"win32");
   vm.createContext(sandbox);
   vm.runInContext([
     extractDeclaration("RESULT_SUMMARY_RECORD_ARRAY_FIELDS"),
@@ -132,6 +136,7 @@ test("non-object summaries preserve uncached fallback behavior", () => {
 test("cached result summaries preserve mixed-Plan isolation and archived counts", () => {
   const sandbox = loadActualFilterCache();
   const summary = {
+    planFile: "experiments/plans/a.yaml",
     lastParsedAt: "2026-07-30T01:00:00Z",
     results: [
       { id: "a", planFile: "experiments/plans/a.yaml", finalEvidenceState: "archived" },
@@ -139,7 +144,7 @@ test("cached result summaries preserve mixed-Plan isolation and archived counts"
       { id: "b", planFile: "experiments/plans/b.yaml", finalEvidenceState: "pending_review" },
     ],
   };
-  const result = sandbox.compactForPlan(summary, "a.yaml", "", "2026-07-30T00:00:00Z");
+  const result = sandbox.compactForPlan(summary, "experiments/plans/a.yaml", "", "2026-07-30T00:00:00Z");
 
   assert.deepEqual(Array.from(result.results, (row) => row.id), ["a", "a-pending"]);
   assert.deepEqual(Array.from(result.finalResults, (row) => row.id), ["a"]);
@@ -147,8 +152,8 @@ test("cached result summaries preserve mixed-Plan isolation and archived counts"
   assert.equal(result.resultCount, 2);
   assert.equal(result.finalResultCount, 1);
   assert.equal(result.pendingReviewCount, 1);
-  assert.equal(result.mixedSummaryAnalysisSuppressed, true);
-  assert.strictEqual(sandbox.compactForPlan(summary, "a.yaml", "", "2026-07-30T00:00:00Z"), result);
+  assert.equal(result.resultScopeSuppressed, true);
+  assert.strictEqual(sandbox.compactForPlan(summary, "experiments/plans/a.yaml", "", "2026-07-30T00:00:00Z"), result);
 
   const source = extractFunction("filterResultsSummaryForSelectedPlan");
   assert.match(source, /for \(const key of RESULT_SUMMARY_RECORD_ARRAY_FIELDS\)/);
@@ -169,4 +174,22 @@ test("cached result summaries still suppress stale Plan revisions", () => {
   assert.equal(result.resultCount, 0);
   assert.equal(result.stalePlanVersionSuppressed, true);
   assert.deepEqual(Array.from(result.results), []);
+});
+
+// An unqualified basename cannot claim records owned by a full Plan identity.
+test("cache never authorizes full Plan records through a basename", () => {
+  const sandbox = loadActualFilterCache();
+  const summary = { results: [{ id: "other", planFile: "experiments/plans/a.yaml" }] };
+  const result = sandbox.compactForPlan(summary, "a.yaml");
+  assert.deepEqual(Array.from(result.results), []);
+  assert.strictEqual(sandbox.compactForPlan(summary, "a.yaml"), result);
+});
+
+test("cache variant fields cannot collide through a separator in a revision", () => {
+  const sandbox = loadCache(), summary = { results: [] };
+  const first = sandbox.compactForPlan(summary, "a.yaml", "r|t", "u");
+  const second = sandbox.compactForPlan(summary, "a.yaml", "r", "t|u");
+  assert.notStrictEqual(first, second);
+  assert.equal(first.revision, "r|t"); assert.equal(second.revision, "r");
+  assert.strictEqual(sandbox.compactForPlan(summary, "a.yaml", "r|t", "u"), first);
 });

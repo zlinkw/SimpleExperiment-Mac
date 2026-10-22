@@ -19,10 +19,11 @@ if os.name == "nt" and not base.startswith("\\\\?\\"):
     base = "\\\\?\\" + base
 os.makedirs(base, exist_ok=True)
 native, virtual = bind_posix_runtime(agent, base)
+agent.open = getattr(agent, "open", open)
 plan, revision = "experiments/Plans 中文 / 计划 É.yaml ", " revision "
 source = "experiments/runs/ 中文 É / metrics_case %20.csv "
 writes, csv_outputs = [], []
-agent.agent_dir = lambda root: "/fixture/state/" + root.rsplit("/", 1)[-1]
+agent.agent_dir = lambda root: os.path.join(root, "simple_cluster/agent_state")
 agent.atomic_write = lambda file, value: writes.append((file, copy.deepcopy(value)))
 
 def capture_file(file, writer):
@@ -65,8 +66,16 @@ def reject(callback):
     assert (len(writes), len(csv_outputs)) == before
 
 def subgroup(root, owner=plan):
-    exported = agent.export_case_analysis_action(root, owner, revision)
-    report = agent.run_subgroup_analysis_action(root, owner, revision)
+    actual = agent.run_subgroup_analysis_action
+    observed = []
+    def capture(*args, **kwargs):
+        value = actual(*args, **kwargs)
+        observed.append(copy.deepcopy(value))
+        return value
+    with patch.object(agent, "run_subgroup_analysis_action", capture):
+        exported = agent.export_case_analysis_action(root, owner, revision)
+    assert len(observed) == 1
+    report = observed[0]
     assert exported["caseCount"] == report["caseCount"] and exported["rows"] == len(report["rows"])
     assert exported["planFile"] == owner and exported["planRevision"] == revision
     assert exported["path"] == "paper/tables/simple_case_analysis__" + agent.result_plan_directory_key(owner) + ".csv"

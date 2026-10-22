@@ -80,5 +80,6 @@ test('hosted allocation gates online/fingerprint independently per Worker', () =
   assert.equal(result.queue.plans[1].jobs[0].workerId, 'b');
   const busy = {...both, plans: both.plans.map(row => ({...row, jobs: row.jobs.map(job => ({...job}))}))};
   Object.assign(busy.plans[0].jobs[0], {status:'running', workerId:'b', commandId:'old'});
+  delete busy.plans[0].jobs[0].lifecycleProtocol; // A persisted shared-code writer, rather than an isolated v2 slot.
   assert.equal(policy.allocateServerPrequeue(busy, [{workerId:'b',online:true,weight:3,codeFingerprint:'b',declaredJobPaths:true}]).dispatches.length, 0);
 });

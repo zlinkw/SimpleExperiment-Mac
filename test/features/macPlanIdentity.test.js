@@ -130,7 +130,7 @@ test('rendered Mac selection order and bounded cache keep case and whitespace se
   assert.ok(ui.planFileEquivalenceCache.size <= 2);
 });
 
-function queueFixture(api) {
+function queueFixture(api, compatibility = false) {
   const now = Date.parse('2026-10-10T08:00:00Z');
   let queue = api.emptyDistributedQueue();
   files.forEach((file, index) => {
@@ -140,10 +140,18 @@ function queueFixture(api) {
     Object.assign(queue.plans[index].jobs[0], { status: 'running', workerId: 'worker', commandId: 'cmd-' + index });
     delete queue.plans[index].automaticRetry;
   });
+  if (compatibility) {
+    queue = { ...queue, plans: queue.plans.map(plan => ({ ...plan, resultPathPolicy: 'declared',
+      jobs: plan.jobs.map(job => {
+        const { lifecycleProtocol, ...legacy } = job;
+        return { ...legacy, resultPathPolicy: 'declared', globalJobId: plan.id + ':' + job.index,
+          attempt: 0, collectionResultCsv: 'outputs/' + plan.id + '/metrics.csv' };
+      }) })) };
+  }
   return { queue, now };
 }
 test('compiled Mac retry latest grouping does not discard a different case or space path', () => {
-  const api = compiledQueue('darwin'), { queue, now } = queueFixture(api);
+  const api = compiledQueue('darwin'), { queue, now } = queueFixture(api, true);
   const next = api.scheduleAutomaticJobRetries(queue, [], 'project', { now: now + 100, makeAttemptId: () => 'new' });
   assert.equal(next.plans.filter(plan => plan.automaticRetry?.enabledAt).length, files.length);
   assert.equal(queue.plans.some(plan => plan.automaticRetry), false);
@@ -169,4 +177,12 @@ test('Windows legacy aliases remain available', () => {
   assert.equal(backend.samePlanSelection('Experiments\\Plans\\A.YAML', 'a'), true);
   assert.equal(queue.sameDistributedPlanFile('C:/project/plans/A.yaml', 'plans/a.yaml'), true);
   assert.equal(ui.samePlanSelection('Experiments\\Plans\\A.YAML', 'a'), true);
+});
+
+test('current protocol-2 jobs never enter the retired automatic retry state machine', () => {
+  const api = compiledQueue('darwin'), { queue, now } = queueFixture(api);
+  assert.ok(queue.plans.every(plan => plan.jobs.every(job => job.lifecycleProtocol === 2)));
+  const next = api.scheduleAutomaticJobRetries(queue, [], 'project', { now: now + 100, makeAttemptId: () => { throw Error('must not schedule a retry'); } });
+  assert.equal(next, queue);
+  assert.ok(next.plans.every(plan => !plan.automaticRetry && plan.jobs.every(job => !job.automaticRetry)));
 });

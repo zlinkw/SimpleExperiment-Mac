@@ -8,6 +8,7 @@ const filename = path.resolve(__dirname, '../../src/features/DistributedPlanQueu
 const loaded = new Module(filename, module);
 loaded.filename = filename;
 loaded.paths = Module._nodeModulePaths(path.dirname(filename));
+loaded.require = Module.createRequire(path.join(__dirname, '../../dist/features/DistributedPlanQueue.js'));
 loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
 }).outputText, filename);
@@ -15,11 +16,13 @@ const api = loaded.exports;
 const initialTime = Date.parse('2026-10-08T08:00:00Z');
 const projectId = 'test-project';
 let serial = 0;
-function fixture(states = ['completed', 'failed', 'pending', 'pending', 'pending', 'pending'], id = 'current-plan') {
+function fixture(states = ['completed', 'failed', 'pending', 'pending', 'pending', 'pending'], id = 'current-plan', compatibility = true) {
   const queue = api.enqueuePlan(api.emptyDistributedQueue(), { projectId, planFile: 'plans/model.yaml', revision: 'rev',
     codeFingerprint: 'code', jobs: states.map((_, index) => ({ index, case: index < 3 ? 'bus' : 'pad', seed: 42 + index % 3,
       outputDir: `work_dirs/job${index}`, collectionResultCsv: `tmp/result/job${index}/metrics.csv` })) }, id, new Date(initialTime).toISOString());
   queue.plans[0].jobs.forEach((job, index) => {
+    // This suite's historical health annotations operate on persisted declared v1 rows.
+    if (compatibility) delete job.lifecycleProtocol;
     job.status = states[index];
     if (states[index] !== 'pending') Object.assign(job, { workerId: 'worker', gpuId: String(index),
       commandId: `command-${index}-${job.attempt}`, runKey: `command-${index}-${job.attempt}` });
@@ -45,6 +48,13 @@ function apply(queue, now = initialTime, evidence = snapshots(queue, now), extra
     makeAttemptId: () => `auto-retry-${++serial}`, ...extra });
 }
 function failed(queue) { return queue.plans[0].jobs[1]; }
+
+test('new protocol-2 jobs keep all health/retry metadata unchanged under historical retry policy', () => {
+  const q = fixture(undefined, 'native-protocol-2', false), before = JSON.stringify(q);
+  assert.ok(q.plans[0].jobs.every(job => job.lifecycleProtocol === 2));
+  assert.equal(apply(q), q); assert.equal(JSON.stringify(q), before);
+  assert.equal(serial, 0); assert.ok(q.plans[0].jobs.every(job => !job.automaticRetry));
+});
 
 test('a successful sibling records health but never authorizes automatic formal execution', () => {
   const original = fixture(), before=JSON.stringify(original);

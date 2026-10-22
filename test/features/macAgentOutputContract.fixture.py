@@ -53,7 +53,7 @@ def reject(callback):
     before = len(events), len(writes)
     try:
         callback()
-    except (ValueError, FileNotFoundError):
+    except (ValueError, OSError):
         pass
     else:
         raise AssertionError("invalid source accepted")
@@ -77,7 +77,7 @@ if scenario == "identity":
         assert receipt["planFile"] == value and receipt["selectedPlanId"] == value
         assert events[-1]["payload"]["planFile"] == value and events[-1]["payload"]["selectedPlanId"] == value
         rows.append({"plan": value, "started": started, "receipt": receipt, "event": events[-1]})
-    legacy = agent.action_receipt_fields("run-quality-gate", request())
+    legacy = agent.action_receipt_fields("validate-plan", request())
     assert legacy == agent.action_operation_fields(request()), "other action entry points retain compatibility"
     out.update(rows=rows, calls=calls)
 elif scenario == "invalid":

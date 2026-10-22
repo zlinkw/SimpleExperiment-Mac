@@ -3,6 +3,7 @@ import * as fs from "fs/promises";
 import * as fsNode from "node:fs";
 import * as path from "path";
 import { ProgressInactivity } from "../core/ProgressInactivity";
+import { postProgressRpc } from "../core/ProgressRpcTransport";
 import { RequestBudget, TunnelRequestPurpose } from "./RequestBudget";
 import { readBoundedResponseText } from "./BoundedResponse";
 import { localBaseUrl } from "./TunnelGateway";
@@ -205,7 +206,7 @@ export class FileTransferClient {
     task.error = undefined;
     task.finishedAt = undefined;
     task.transferredBytes = 0;
-    record.inactivity = new ProgressInactivity(120_000, () => record.abort.abort(new Error("文件步骤 120 秒无真实进展，已取消。")));
+    record.inactivity = this.observeInactivity(record);
     const tmpPath = `${task.localPath}.simple-transfer.pending`;
     const maxBytes = Number(options.maxBytes || 0);
     let checkpointSizeBeforeRange: number | undefined;
@@ -224,8 +225,8 @@ export class FileTransferClient {
         query.set("start", String(start));
         if (rangeEnd !== undefined) query.set("end", String(rangeEnd));
       }
-      const response = await this.budget.run("file_transfer", () => fetch(`${localBaseUrl(this.config)}${apiPath}?${query.toString()}`, {
-        headers: this.headers(),
+      const response = await this.budget.run("file_transfer", () => postProgressRpc(new URL(`${localBaseUrl(this.config)}${apiPath}?${query.toString()}`), {
+        method: "GET", headers: this.headers(),
         signal: record.abort.signal,
       }), { userInitiated: true, signal: record.abort.signal });
       if (!response.ok) {
@@ -287,7 +288,7 @@ export class FileTransferClient {
     task.error = undefined;
     task.finishedAt = undefined;
     task.transferredBytes = 0;
-    record.inactivity = new ProgressInactivity(120_000, () => record.abort.abort(new Error("文件步骤 120 秒无真实进展，已取消。")));
+    record.inactivity = this.observeInactivity(record);
     try {
       record.lease = await this.acquireFileLease(record);
       const sourcePath = task.localPath || "";
@@ -433,16 +434,25 @@ export class FileTransferClient {
     purpose: TunnelRequestPurpose = "file_transfer",
   ): Promise<T> {
     return this.budget.run(purpose, async () => {
-      const response = await fetch(`${localBaseUrl(this.config)}${apiPath}`, {
+      const options = {
         method,
         headers: this.headers(body !== undefined, contentType),
-        body: body === undefined ? undefined : (contentType === "application/json" ? JSON.stringify(body) : body as BodyInit),
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
-      });
+        body: body === undefined ? undefined : (contentType === "application/json" ? JSON.stringify(body) : body as Uint8Array),
+        signal: signal || AbortSignal.timeout(30_000),
+      };
+      const url = new URL(`${localBaseUrl(this.config)}${apiPath}`);
+      const response = signal ? await postProgressRpc(url, options) : await fetch(url, { ...options, body: options.body as BodyInit | undefined });
       const text = await readBoundedResponseText(response, () => undefined, 4 * 1024 * 1024);
       if (!response.ok) throw new Error(`file API ${response.status}: ${text.slice(0, 200)}`);
       return text.trim() ? JSON.parse(text) as T : {} as T;
     }, { userInitiated: true, signal });
+  }
+
+  private observeInactivity(record: TransferRecord): ProgressInactivity {
+    return new ProgressInactivity(120_000, () => {
+      try { this.onProgress({ transferId: record.task.transferId, transferredBytes: record.task.transferredBytes,
+        totalBytes: record.task.size, stalled: true }); } catch { /* Telemetry does not cancel a file operation. */ }
+    }, Date.now, true);
   }
 
   private async confirmRemoteUploadSettlement(record: TransferRecord, timeoutMs = TRANSFER_CANCEL_SETTLEMENT_TIMEOUT_MS): Promise<void> {

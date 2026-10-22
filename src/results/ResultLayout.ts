@@ -68,6 +68,8 @@ def dataset_partitions(values):
 
 def result_plan_directory_key(plan_file):
     import posixpath
+    # Mac-produced runtimes also execute on POSIX Workers: preserve the original
+    # spelling rather than using the build host's platform to trim the identity.
     normalized = plan_file
     if (not isinstance(normalized, str) or not normalized or len(normalized.encode("utf-8")) > 4096
             or normalized.startswith("/") or ":" in normalized or chr(92) in normalized

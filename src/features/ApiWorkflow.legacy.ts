@@ -33,8 +33,9 @@ export interface MissingInventoryOptions {
   workspace?: string;
   setup?: Record<string, unknown>;
   topology?: Record<string, unknown>;
-  simpleSftpMac?: Record<string, unknown>;
   simpleSftp?: Record<string, unknown>;
+  /** Mac historical field name; read-compatible so older readiness payloads keep working. */
+  simpleSftpMac?: Record<string, unknown>;
   project?: Record<string, unknown>;
   plan?: Record<string, unknown>;
   requirePlan?: boolean;
@@ -167,6 +168,8 @@ export function selectWorkflowPlan(
   platform: string = process.platform,
 ): WorkflowPlanSelection {
   const list = Array.isArray(plans) ? plans.filter((item) => item && typeof item === "object") : [];
+  // Platform overlay (released Mac contract): macOS Plan files may legitimately end in a space, so the
+  // selection must be matched byte-exactly there; Windows keeps trimming (one trailing separator form only).
   const requestedFile = platform === "darwin" ? String(selection.planFile || selection.file || "") : String(selection.planFile || selection.file || "").trim();
   const requestedId = platform === "darwin" ? String(selection.planId || "") : String(selection.planId || "").trim();
   let plan: Record<string, unknown> | undefined;
@@ -317,6 +320,7 @@ export function isWorkerServer(server: unknown): boolean {
 export const isNwpu3Server = isWorkerServer;
 
 export function normalizeApiRemotePath(value: unknown): string | undefined {
+  // Mac keeps full POSIX leaf identities (case, Unicode spelling, leading/trailing spaces).
   if (value === undefined || value === null || value === "" || value === "/") return undefined;
   return normalizePosixAbsolutePath(value, "远端路径");
 }
@@ -334,6 +338,7 @@ function normalizedRemoteRootList(value: unknown): string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error("远端根目录规则必须是路径数组。");
   return value.map(item => {
+    // Malformed rules must not silently widen or disable a safety boundary.
     const root = normalizeApiRemotePath(item);
     if (!root) throw new Error("远端根目录规则不能包含空项或根目录。");
     return root;
@@ -341,9 +346,8 @@ function normalizedRemoteRootList(value: unknown): string[] {
 }
 
 function containsRootOrDescendant(root: string, roots: string[]): boolean {
-  return roots.some((item) => {
-    return root === item || root.startsWith(`${item}/`);
-  });
+  // POSIX roots are case-sensitive; Windows case folding must not widen a deny rule.
+  return roots.some((item) => root === item || root.startsWith(`${item}/`));
 }
 
 export function resolveApiRemoteRootWithPolicy(
@@ -395,12 +399,12 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
   const workspace = String(options.workspace || "").trim();
   const setup = options.setup && typeof options.setup === "object" ? options.setup : {};
   const topology = options.topology && typeof options.topology === "object" ? options.topology : {};
-  const simpleSftpMac = options.simpleSftp && typeof options.simpleSftp === "object" ? options.simpleSftp : options.simpleSftpMac && typeof options.simpleSftpMac === "object" ? options.simpleSftpMac : {};
+  // Mac historically reported readiness under simpleSftpMac; keep both spellings readable.
+  const simpleSftp = options.simpleSftp && typeof options.simpleSftp === "object" ? options.simpleSftp
+    : options.simpleSftpMac && typeof options.simpleSftpMac === "object" ? options.simpleSftpMac : {};
   const project = options.project && typeof options.project === "object" ? options.project : {};
   const plan = options.plan && typeof options.plan === "object" ? options.plan : {};
   const workers = Array.isArray(setup.workerTunnels) ? setup.workerTunnels.filter((worker) => worker && typeof worker === "object" && worker.enabled !== false) : [];
-  const manual = setup.manualProvider === "termius";
-  const hubConfigured = Boolean(String(manual ? setup.hubHost || "" : setup.savedSessionPath || "").trim() && String(setup.agentProjectDir || "").trim());
   const requirePlan = options.requirePlan !== false;
 
   if (!workspace) {
@@ -413,14 +417,12 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
   }
 
   const workerCount = new Set(workers.map((worker) => String(worker.id || "").trim()).filter(Boolean)).size;
-  const mode = String(topology.mode || topology.configuredMode || "").trim();
-  if (workerCount < 1 || (String(topology.hubAllowed || topology.mode || "") === "hub_worker" && !hubConfigured)) {
+  const mode = "worker_pool";
+  if (workerCount < 1) {
     missing.push({
       step: "select_servers",
-      reason: hubConfigured
-        ? "需要至少一台启用的 Worker，当前 0 台。"
-        : "需要先配置 Hub 会话和项目父目录，或至少一台启用的 Worker。",
-      options: hubConfigured ? ["server.addWorker"] : ["config.server", "server.addWorker"],
+      reason: "需要至少一台启用的 Worker，当前 0 台。",
+      options: ["server.addWorker"],
       requiredConfirm: ["confirm"],
     });
   }
@@ -429,27 +431,28 @@ export function structuredMissingInventory(options: MissingInventoryOptions): Mi
   if (!valid) {
     const issueText = Array.isArray(topology.issues) && topology.issues.length
       ? topology.issues.join("；")
-      : "需要在单 Worker、仅多 Worker 或 Hub 可用模式中明确选择。";
+      : "请补全 Worker 配置。";
     missing.push({
       step: "select_mode",
       reason: issueText,
-      options: hubConfigured ? ["single_worker", "worker_pool", "hub_worker"] : ["single_worker", "worker_pool"],
+      options: ["worker_pool"],
       requiredConfirm: ["confirm"],
     });
   }
 
-  if (simpleSftpMac.ready !== true) {
+  if (simpleSftp.ready !== true) {
     missing.push({
       step: "prepare_agents",
-      reason: String(simpleSftpMac.message || "配套 SimpleSFTP 未就绪，无法完成正式上传或运行。"),
+      reason: String(simpleSftp.message || "配套 SimpleSFTP 未就绪，无法完成正式上传或运行。"),
       options: ["install_simple_sftp", "reload_vscode"],
       requiredConfirm: ["confirm"],
     });
   } else {
     const setupMissing = [];
-    if (mode === "hub_worker" && !hubConfigured) setupMissing.push(manual ? "Hub 手动端点和项目父目录" : "Hub Xshell 会话和项目父目录");
+    // Mac endpoints carry no editable saved session; the shared managed lifecycle owns Agent startup there.
+    const macManaged = setup.macManagedSessions === true;
     for (const worker of workers) {
-      if (manual ? !String(worker.workerHost || worker.hubHost || "").trim() : !String(worker.savedSessionPath || "").trim()) setupMissing.push(`${String(worker.displayName || worker.id || "Worker")} ${manual ? "手动端点" : "Xshell 会话"}`);
+      if (!macManaged && !String(worker.savedSessionPath || "").trim()) setupMissing.push(`${String(worker.displayName || worker.id || "Worker")} Xshell 会话`);
       if (!String(worker.agentProjectDir || "").trim()) setupMissing.push(`${String(worker.displayName || worker.id || "Worker")} 项目父目录`);
     }
     if (setupMissing.length) {

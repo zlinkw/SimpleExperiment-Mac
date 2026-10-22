@@ -183,10 +183,7 @@ export class LegacyHostOperationLeaseManager {
                     return this.createHandle(inspection.record, fallbackSession);
                 }
             }
-            // A Mac update may already have installed one component. Expiry
-            // alone must not let another window steal that live mixed-version gate.
-            const macUpdate = process.platform === "darwin" && inspection.record?.actionType === "mac-preview-update";
-            if ((macUpdate || inspection.expiresAtMs > this.now()) && !ownerProcessDefinitelyGone(inspection.record, this.now()))
+            if (inspection.expiresAtMs > this.now() && !ownerProcessDefinitelyGone(inspection.record))
                 throw new HostOperationLeaseConflictError(inspection.record || malformedLeaseRecord(this.leasePath, inspection.expiresAtMs));
 
             // This is a single, reusable recovery slot. A random filename here
@@ -252,7 +249,7 @@ export class LegacyHostOperationLeaseManager {
             windowId: this.windowId,
             processId: this.processId,
             workspaceUri: input.workspaceUri.trim(),
-            hostProjectPath: process.platform === "win32" ? path.win32.normalize(input.hostProjectPath.trim()) : path.posix.normalize(input.hostProjectPath),
+            hostProjectPath: require("../platform/Filesystem").hostPathApi.normalize(input.hostProjectPath),
             actionType: input.actionType.trim(),
             actionLabel: String(input.actionLabel || input.actionType).trim(),
             createdAt: timestamp,
@@ -353,7 +350,7 @@ async function writeLeaseTimestamp(handle: import("fs/promises").FileHandle, tex
     await handle.write(bytes, 0, bytes.length, offset);
 }
 
-export function defaultHostOperationLeasePath(localAppData = require("../mac/MacPaths").macComponentDirectory("SimpleLocalMac")): string {
+export function defaultHostOperationLeasePath(localAppData = require("../platform/HostPaths").componentDirectory("shared")): string {
     return path.join(localAppData, HOST_OPERATION_LEASE_DIRECTORY, HOST_OPERATION_LEASE_FILENAME);
 }
 
@@ -415,8 +412,7 @@ function sharedSessions(): Map<string, SharedLeaseSession> {
 }
 
 function sessionKey(leasePath: string): string {
-    const resolved = path.resolve(leasePath);
-    return process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    return path.resolve(leasePath);
 }
 
 function validateLeaseInput(input: HostOperationLeaseInput): void {
@@ -449,19 +445,9 @@ function parseTimestamp(value: string): number {
     return Date.parse(value);
 }
 
-function ownerProcessDefinitelyGone(record: HostOperationLeaseRecord | undefined, now = Date.now()): boolean {
-    if (!record || !Number.isSafeInteger(record.processId) || record.processId <= 0 || record.processId > 2147483647)
+function ownerProcessDefinitelyGone(record: HostOperationLeaseRecord | undefined): boolean {
+    if (!record || record.processId <= 0 || !record.windowId.startsWith(`${os.hostname()}:${record.processId}:`))
         return false;
-    const canonicalOwner = record.windowId.startsWith(`${os.hostname()}:${record.processId}:`);
-    // Early Mac updaters used a private UUID rather than the shared host/PID
-    // identity. Only this precise expired local-update signature is compatible.
-    const legacyMacUpdater = process.platform === "darwin"
-        && record.pluginId === "simple-local.simple-experiment-mac"
-        && record.actionType === "mac-preview-update"
-        && record.workspaceUri === "untitled://mac-preview-update"
-        && /^mac-preview-update:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(record.windowId)
-        && parseTimestamp(record.expiresAt) <= now;
-    if (!canonicalOwner && !legacyMacUpdater) return false;
     try {
         process.kill(record.processId, 0);
         return false;
@@ -485,7 +471,7 @@ async function clearExpiredLeaseRecoverySlot(file: string, now: number, ttlMs: n
     const text = await fs.readFile(file, "utf8");
     const record = parseHostOperationLeaseRecord(text);
     const expiresAt = record ? parseTimestamp(record.expiresAt) : before.mtimeMs + ttlMs;
-    if (!record || !Number.isFinite(expiresAt) || expiresAt > now || !ownerProcessDefinitelyGone(record, now))
+    if (!record || !Number.isFinite(expiresAt) || expiresAt > now || !ownerProcessDefinitelyGone(record))
         return false;
     const current = await fs.lstat(file).catch((error) => hasErrorCode(error, "ENOENT") ? undefined : Promise.reject(error));
     if (!current) return true;

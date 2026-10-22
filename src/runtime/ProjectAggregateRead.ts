@@ -60,13 +60,13 @@ def project_aggregate_verify(root, snapshots, inventories):
 
 def project_aggregate_catalog(root, current_summary, snapshots, inventories):
     current_plan, current_revision = archive_evidence_identity(current_summary)
-    durable_plan_path(current_plan, "项目聚合当前 Plan")
+    result_io_relative_path(current_plan, "项目聚合当前 Plan")
     parent = "simple_cluster/results/by_plan"
     names = project_aggregate_inventory(root, parent, inventories)
     saved_by_plan = {}
     directory_count = 0
     for slug in names:
-        durable_plan_path(slug, "项目聚合目录项")
+        result_io_relative_path(slug, "项目聚合目录项")
         directory = output_contract_path(root, parent, directory=True)
         info = os.lstat(os.path.join(directory, slug))
         if stat.S_ISREG(info.st_mode):
@@ -125,11 +125,11 @@ def project_aggregate_checked_table(root, plan, saved, table, kind, snapshots):
     relative = table.get(field, "")
     if relative == "":
         return None
-    durable_plan_path(relative, "项目聚合表路径")
+    result_io_relative_path(relative, "项目聚合表路径")
     if relative != dataset_plan_artifact_path(plan, dataset, filename):
         raise ValueError("项目聚合表路径与原始 Plan/数据集不一致")
     source = table.get("rawResultCsvPath", saved.get("rawResultCsvPath", ""))
-    durable_plan_path(source, "项目聚合原始 CSV")
+    result_io_relative_path(source, "项目聚合原始 CSV")
     contract = output_contract_plan(root, plan)
     snapshots.append((plan, contract["snapshot"]))
     policy = read_project_metric_policy(root, strict_paths=True, snapshots=snapshots)

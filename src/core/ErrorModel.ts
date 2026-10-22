@@ -38,16 +38,16 @@ export function normalizeSimpleError(error: unknown, fallback = "操作失败"):
   const text = error instanceof Error ? error.message : String(error || fallback);
   const lower = text.toLowerCase();
   if (lower.includes("timeout")) {
-    return simpleError({ code: "TUNNEL_TIMEOUT", message: "本地隧道超时", detail: text, retryable: true, suggestion: "检查 Xshell 本地隧道和 Hub Agent。" });
+    return simpleError({ code: "TUNNEL_TIMEOUT", message: "本地隧道超时", detail: text, retryable: true, suggestion: "检查对应 Worker 的 Xshell 本地隧道和 Agent。" });
   }
   if (lower.includes("unauthorized") || lower.includes("auth")) {
-    return simpleError({ code: "TUNNEL_UNAUTHORIZED", message: "Hub Agent token 校验失败", detail: text, retryable: false, suggestion: "检查 token 配置。" });
+    return simpleError({ code: "TUNNEL_UNAUTHORIZED", message: "Worker Agent token 校验失败", detail: text, retryable: false, suggestion: "检查对应 Worker 的 token 配置。" });
   }
   if (lower.includes("econnrefused") || lower.includes("fetch failed")) {
     return simpleError({ code: "TUNNEL_UNAVAILABLE", message: "本地隧道不可用", detail: text, retryable: true, suggestion: "启动 Xshell 本地隧道或切换 offline_import。" });
   }
   if (lower.includes("agent incompatible")) {
-    return simpleError({ code: "AGENT_INCOMPATIBLE", message: "Agent 协议不兼容", detail: text, retryable: true, suggestion: "更新 Hub Agent。" });
+    return simpleError({ code: "AGENT_INCOMPATIBLE", message: "Agent 协议不兼容", detail: text, retryable: true, suggestion: "更新对应 Worker 的 Agent。" });
   }
   return simpleError({ code: "UNKNOWN", message: fallback, detail: text, retryable: true });
 }

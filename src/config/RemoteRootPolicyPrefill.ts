@@ -97,7 +97,7 @@ export function deriveRemoteRootPolicyPrefill(source: RemoteRootPrefillSource = 
 async function readServerProfiles(): Promise<unknown> {
   try {
     const file = path.join(
-      require("../mac/MacPaths").applicationDataRoot(),
+      require("../platform/HostPaths").applicationDataRoot(),
       "SimpleSFTPMac",
       "server-profiles",
       "servers.json",

@@ -323,7 +323,7 @@ test('cleanup review script parses; opening reads only, and permanent delete nee
   assert.deepEqual(posted.map(row=>row.type),['history']);listeners[0]({data:{type:'history',rows:[]}});assert.equal(posted.at(-1).type,'preview');
   const preview={action:'delete',blockers:[],rows:[{node:{id:'local',root:'C:/fixture'},disposition:'delete',absolutePath:'C:/fixture/p.yaml',type:'file',evidence:['exact'],dependencies:[]}]};
   listeners[0]({data:{type:'preview',preview}});element('confirm').onclick();assert.equal(posted.at(-1).phase,1);
-  listeners[0]({data:{type:'confirmed',operation:{id:'op',preview:{...preview,confirmations:1}}}});assert.equal(element('execute').disabled,true);assert.equal(posted.filter(row=>row.phase===2).length,0);
+  listeners[0]({data:{type:'confirmed',operation:{id:'op',state:'ready',targets:{},preview:{...preview,confirmations:1}}}});assert.equal(element('execute').disabled,true);assert.equal(posted.filter(row=>row.phase===2).length,0);
   element('confirm').onclick();assert.equal(posted.at(-1).phase,2);assert.equal(posted.filter(row=>row.type==='execute').length,0);
   element('partial').onchange();assert.equal(element('resume').disabled,true);assert.equal(element('restore').disabled,true);assert.equal(element('cancel').disabled,true);
 });

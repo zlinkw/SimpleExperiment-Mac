@@ -1,15 +1,12 @@
 import * as crypto from "crypto";
 import * as fs from "fs";
 import * as path from "path";
-import { hasApiDiscovery, optionalApi, tunnelEndpointFromConfig } from "../api";
+import { optionalApi } from "../api";
 import { copyFile, fileExists, listFilesRecursive, projectRoot, readJsonFile, resolveProjectPath } from "../data";
 import { businessError, envError, usageError } from "../errors";
 import { table, writeJson, writeText } from "../format";
 import { CliFlags, requirePositional } from "../parse";
 import { loadExperiments } from "./experiment";
-import { FileTransferClient } from "../../tunnel/FileTransferClient";
-import { RequestBudget } from "../../tunnel/RequestBudget";
-import { isSafeRemotePath } from "../../tunnel/FileTransferTypes";
 
 export async function artifactCommand(action: string, rest: string[], flags: CliFlags): Promise<number> {
   if (action === "list") return artifactList(requirePositional(rest, 0, "experiment id"), flags);
@@ -39,23 +36,7 @@ export async function artifactDownload(id: string, flags: CliFlags): Promise<num
     else writeText(`downloaded ${id} -> ${dest}`);
     return 0;
   }
-  if (!hasApiDiscovery()) throw envError("artifact download requires Local API / tunnel. Open VS Code or copy a local artifact.");
-  const config = await optionalApi("config.list");
-  const endpoint = tunnelEndpointFromConfig(asRecord(asRecord(config).tunnel || asRecord(config).hub || config));
-  if (!endpoint) throw envError("tunnel endpoint missing from config.list; cannot download remotely.");
-  if (!isSafeRemotePath(artifacts.path)) throw businessError(`unsafe remote path: ${artifacts.path}`);
-  const client = new FileTransferClient({ localHost: endpoint.localHost, localPort: endpoint.localPort }, new RequestBudget({
-    maxRequestsPerMinute: 60,
-    maxConcurrentRequests: 1,
-    pauseWhenHidden: false,
-    allowManualOverride: true,
-    minIntervalByPurpose: { file_transfer: 0 },
-  }));
-  const task = await client.download(artifacts.path, dest);
-  const payload = { id, path: dest, transferId: task.transferId, status: task.status, source: "tunnel" };
-  if (flags.json) writeJson(payload, flags.compactJson);
-  else writeText(`downloaded ${id} -> ${dest}`);
-  return 0;
+  throw envError("旧中心节点文件中转已移除。请在插件对应 Worker 的结果行下载，或通过 SimpleSFTP 选择精确来源与目标路径。");
 }
 
 export async function artifactInspect(id: string, flags: CliFlags): Promise<number> {

@@ -69,7 +69,8 @@ class DefaultEndpointRegistry implements EndpointRegistry {
     if (!endpoint || typeof endpoint !== "object" || Array.isArray(endpoint)) throw new Error("Tunnel endpoint must be an object.");
     const id = String(endpoint.id || "").trim();
     if (!id) throw new Error("Endpoint id is required");
-    if (endpoint.role !== "hub" && endpoint.role !== "worker") throw new Error(`Endpoint ${id} has an unsupported role.`);
+    if (endpoint.role === "hub") throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
+    if (endpoint.role !== "worker") throw new Error(`Endpoint ${id} has an unsupported role.`);
     const localHost = String(endpoint.localHost || "").trim();
     const localPort = Number(endpoint.localPort);
     const remoteHost = String(endpoint.remoteHost || "").trim();
@@ -143,7 +144,7 @@ export class DefaultEndpointRegistryFactory implements EndpointRegistryFactory {
       try { saved = store.get("tunnelEndpoints"); }
       catch (error) { throw new Error(`Tunnel endpoint settings could not be read: ${String((error as Error)?.message || error).slice(0, 240)}`); }
       if (saved !== undefined && !Array.isArray(saved)) throw new Error("Saved tunnel endpoint settings are malformed; refusing to use an empty registry.");
-      if (Array.isArray(saved)) persisted = [...persisted, ...(saved as EndpointDescriptor[])];
+      if (Array.isArray(saved)) persisted = [...persisted, ...(saved as EndpointDescriptor[]).filter(endpoint => endpoint.role !== "hub")];
     }
     return this.create(persisted);
   }

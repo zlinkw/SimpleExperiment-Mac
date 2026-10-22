@@ -17,8 +17,8 @@ with open(${JSON.stringify(runtime)}, encoding='utf-8') as f:
 names = {'collect_local_gpu', 'start_job_in_gpu_pane', 'start_simple_tmux_command', 'job_shell_environment_prefix', 'tmux_task_client_env'}
 selected = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in names]
 assert len(selected) == 5
-fields = [n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'JOB_SHELL_ENV_FIELDS' for t in n.targets)]
-assert len(fields) == 1
+fields = [n for n in tree.body if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id in ('JOB_SHELL_ENV_FIELDS', 'TASK_SHELL_ENV_FIELDS') for t in n.targets)]
+assert len(fields) == 2
 selected = fields + selected
 exec(compile(ast.Module(body=selected, type_ignores=[]), 'extracted-functions', 'exec'))
 SYSTEM_GPU_PROCESSES = set()
@@ -47,6 +47,10 @@ def tmux_run(args, **kwargs):
 write_atomic_text = lambda *args: None
 simple_conda_env_name = lambda env: ''
 simple_conda_activation_script = lambda env: 'true'
+# 现行 launch 路径经 simple_conda_wrapped_args/task_shell_args 做登录 shell 重绑（nt 直通）；
+# 该行为由 executionShellEnvironment 专测钉住，这里按直通语义注入，保持身份转发断言不变。
+simple_runtime_python = lambda env: '/fixture/python'
+simple_conda_wrapped_args = lambda args, env: args
 tmux_session_alive = lambda *args: True
 tmux_pane_pid = lambda *args: 123
 _is_main_shell_target = lambda *args: False

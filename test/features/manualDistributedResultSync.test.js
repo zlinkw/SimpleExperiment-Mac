@@ -32,6 +32,7 @@ function fixture({ emptyOriginal = false, cold = false, allMissing = false, retr
   const transfers = [], errors = [], events = [], inventoryCalls = [];
   const sandbox = {
     Buffer,
+    NativeResultManifest_1: require("../../dist/results/NativeResultManifest.js"),
     SafeRequestRetry_1: require("../../dist/core/SafeRequestRetry.js"),
     PlanOutputRetention: retention, PlanRunFreshness: require("../../dist/results/PlanRunFreshness.js"),
     workspaceRoot: () => root, errorMessage: value => value.message,

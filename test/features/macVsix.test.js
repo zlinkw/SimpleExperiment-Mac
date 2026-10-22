@@ -20,7 +20,7 @@ function fixture(platform = "darwin-arm64", name = "simple-experiment-mac") {
   const pkg = { publisher: "simple-local", name, version: "0.1.2", engines: { vscode: "^1.100.0" } };
   return zip({ "extension/package.json": JSON.stringify(pkg), "extension.vsixmanifest": `<Identity Publisher="simple-local" Id="${name}" Version="0.1.2" TargetPlatform="${platform}"/>`, "extension/main.js": "module.exports = {};" });
 }
-function component(bytes) { return { extensionId: "simple-local.simple-experiment-mac", version: "0.1.2", targetPlatform: "darwin-arm64", vscodeEngine: "^1.100.0", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }; }
+function component(bytes) { return { sourceCommit:"fixture-source", downloadUrl:"https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/preview-v0.1.2/simple-experiment-mac-0.1.2-darwin-arm64.vsix", extensionId: "simple-local.simple-experiment-mac", version: "0.1.2", targetPlatform: "darwin-arm64", vscodeEngine: "^1.100.0", size: bytes.length, sha256: createHash("sha256").update(bytes).digest("hex") }; }
 test("verifies real XML platform and package identity without package metadata", () => {
   const bytes = fixture(); assert.equal(verifyVsix(bytes, component(bytes), "1.100.0").targetPlatform, "darwin-arm64");
 });

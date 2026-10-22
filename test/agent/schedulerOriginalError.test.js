@@ -1,3 +1,4 @@
+const { writePythonFixture, isolatePythonRuntime } = require("../_helpers/isolatedPythonFixture");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -16,7 +17,8 @@ spec = importlib.util.spec_from_file_location("scheduler", pathlib.Path(${JSON.s
 scheduler = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = scheduler
 spec.loader.exec_module(scheduler)
-with tempfile.TemporaryDirectory() as tmp:
+tmp = tempfile.mkdtemp(prefix="original-error-evidence-")
+if True:
     base = pathlib.Path(tmp)
     (base / "stderr.log").write_text("torch.OutOfMemoryError: CUDA out of memory\\n", encoding="utf-8")
     (base / "stdout.log").write_text("checkpoint: huge parameter dump\\n", encoding="utf-8")
@@ -32,8 +34,8 @@ assert "secret context-json parameter dump" not in text, text
 assert text.rstrip().endswith("========== end stderr.log =========="), text
 print("ok")
 `;
-  const result = spawnSync("python", ["-X", "utf8", "-c", script], {
-    encoding: "utf8",
+  const result = spawnSync("python", ["-X", "utf8", writePythonFixture(isolatePythonRuntime(script, "scheduler"))], {
+    encoding: "utf8", timeout: 10000, windowsHide: true,
     cwd: root,
     env: { ...process.env, PYTHONIOENCODING: "utf-8" },
   });
@@ -48,7 +50,7 @@ test("handled child failure exits nonzero without re-raising CalledProcessError"
   assert.doesNotMatch(block, /surface_original_error\(job, "(?:train|test)"\)\s+raise\r?\n/);
 });
 
-test("retraining the same output directory reports only the current failed attempt", () => {
+test("error presentation reads only new bytes; formal admission still rejects undeclared replay", () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "scheduler-original-error-"));
   const scriptPath = path.join(tempRoot, "failure-report.py");
   const script = `
@@ -57,12 +59,21 @@ spec = importlib.util.spec_from_file_location("scheduler", pathlib.Path(${JSON.s
 scheduler = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = scheduler
 spec.loader.exec_module(scheduler)
-with tempfile.TemporaryDirectory() as tmp:
+tmp = tempfile.mkdtemp(prefix="original-error-evidence-")
+if True:
     base = pathlib.Path(tmp)
     (base / "stderr.log").write_text("OLD CUDA out of memory\\n", encoding="utf-8")
     (base / "stdout.log").write_text("OLD training output\\n", encoding="utf-8")
     job = scheduler.Job(0, "suite", "case", 1, {}, str(base), str(base / "results.csv"), "train", "", "", False, "", {}, {})
     args = types.SimpleNamespace(resume=False, mode="train", gpu_ids="", worker_id="worker-a", overwrite=False, overwrite_existing=False, debug_mode=False)
+    before = (base / "stderr.log").read_bytes()
+    try:
+        scheduler.run_job(job, args)
+    except ValueError as exc:
+        assert "HISTORICAL_ATTEMPT_READ_ONLY" in str(exc)
+    else:
+        raise AssertionError("undeclared replay bypassed formal admission")
+    assert (base / "stderr.log").read_bytes() == before
     scheduler.render_command = lambda *unused: ["fake"]
     scheduler.wrap_command = lambda command, *unused: command
     def fail_current(command, env, cwd=None):
@@ -73,7 +84,7 @@ with tempfile.TemporaryDirectory() as tmp:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         try:
-            scheduler.run_job(job, args)
+            scheduler.run_job_unlocked(job, args)
         except SystemExit as exc:
             assert exc.code == 1
     text = out.getvalue()
@@ -87,7 +98,7 @@ with tempfile.TemporaryDirectory() as tmp:
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         try:
-            scheduler.run_job(job, args)
+            scheduler.run_job_unlocked(job, args)
         except SystemExit as exc:
             assert exc.code == 1
     text = out.getvalue()
@@ -97,7 +108,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "OLD CUDA out of memory" in (base / "stderr.log").read_text(encoding="utf-8")
 print("ok")
 `;
-  fs.writeFileSync(scriptPath, script, "utf8");
+  fs.writeFileSync(scriptPath, isolatePythonRuntime(script, "scheduler"), "utf8");
   try {
     const result = spawnSync("python", ["-X", "utf8", scriptPath], {
       encoding: "utf8", cwd: root, timeout: 10000, windowsHide: true,
@@ -105,6 +116,6 @@ print("ok")
     });
     assert.equal(result.status, 0, result.stderr || result.stdout || result.error?.message);
   } finally {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    // Retain fixture and byte evidence.
   }
 });

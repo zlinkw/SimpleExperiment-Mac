@@ -23,7 +23,8 @@ function fixture() {
   p.workerActionTargets = () => [{ id: 'worker' }];
   p.refreshDistributedResultSyncProbes = async () => {};
   p.missingWorkerActionCapabilities = () => [];
-  p.lastWorkerProbes = { worker: { capabilities: { endpoints: { executionShellPreflight: 1 } } } };
+  // environmentOnly 现行动作要求 taskShellEnvironment=1（登录 shell 重绑协议），与 executionShellPreflight 各自独立把关。
+  p.lastWorkerProbes = { worker: { capabilities: { endpoints: { executionShellPreflight: 1, taskShellEnvironment: 1 } } } };
   p.readWorkerTaskSnapshot = async () => ({ tasks: [row] });
   return { p, row, calls, signal: new AbortController().signal };
 }
@@ -34,9 +35,12 @@ test('diagnostic API runs the real Worker startup gate without changing the reje
   const { receipt, callbacks } = JSON.parse(proc.stdout);
   assert.equal(receipt.executionStarted, false);
   assert.equal(receipt.queueChanged, false);
-  assert.deepEqual(receipt.report.preflight.assetValidationIndices, [0]);
+  // 资产核实归项目 hook（project_owned）：正式预检只做结构与身份核实，不再逐资产回调或代为执行项目校验。
+  assert.deepEqual(receipt.report.preflight.assetValidationIndices, []);
+  assert.equal(receipt.report.preflight.projectValidationExecuted, false);
   assert.equal(receipt.report.preflight.structuralJobCount, 6);
-  assert.deepEqual(callbacks, [0]);
+  assert.deepEqual(callbacks, []);
+  assert.ok(fs.readFileSync(path.join(root, 'dist/runtime/cluster_scheduler.py'), 'utf8').includes('"assetValidation": "project_owned"'), 'Scheduler 必须显式声明资产核实归属项目 hook');
   assert.ok(receipt.rejections.every(r => /MISMATCH|REQUIRES|size mismatch|hash mismatch/.test(r)), JSON.stringify(receipt));
 });
 test('Host API sends the frozen original identity exclusively to the dedicated no-launch action', async () => {

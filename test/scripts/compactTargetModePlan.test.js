@@ -169,3 +169,25 @@ test("uncompressible or missing active Mac goals fail without overwriting the so
     assert.equal(fs.readFileSync(filePath, "utf8"), source);
   }
 });
+
+test("Mac compaction keeps the newest authorization and archives uncommitted evidence", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-mac-plan-latest-"));
+  const filePath = path.join(dir, "plan.md");
+  const source = "# 目标模式当前计划：Mac\n字符上限 2000\n## 固定边界\n- 原目标 paused\n" +
+    "## 当前批次 mac-075\n- 历史禁止构建\n## 当前授权 mac-079\n- 授权构建测试并发布 preview\n" +
+    "## 历史记录\n" + "尚未提交的证据\n".repeat(300);
+  fs.writeFileSync(filePath, source, "utf8");
+  assert.equal(compactTargetModePlanFile({ rootDir: dir, filePath, dryRun: true }).changed, true);
+  assert.equal(fs.existsSync(path.join(dir, "release-artifacts")), false);
+  assert.equal(fs.readFileSync(filePath, "utf8"), source);
+  assert.equal(compactTargetModePlanFile({ rootDir: dir, filePath }).changed, true);
+  const output = fs.readFileSync(filePath, "utf8");
+  assert.match(output, /mac-079/); assert.match(output, /授权构建测试并发布 preview/);
+  assert.doesNotMatch(output, /mac-075|历史禁止构建|尚未提交的证据/);
+  const history = path.join(dir, "release-artifacts", "plan-history");
+  const snapshots = fs.readdirSync(history);
+  assert.equal(snapshots.length, 1);
+  assert.equal(fs.readFileSync(path.join(history, snapshots[0]), "utf8"), source);
+  assert.equal(compactTargetModePlanFile({ rootDir: dir, filePath }).changed, false);
+  assert.equal(fs.readdirSync(history).length, 1);
+});

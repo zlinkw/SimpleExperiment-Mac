@@ -1,3 +1,4 @@
+const { isolatePythonGlobals } = require("../_helpers/isolatedPythonFixture");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -27,10 +28,10 @@ function fixture(root) {
     "worker_start_claims_path", "read_worker_start_claims", "worker_start_claim", "write_worker_start_claim",
     "_legacy_recall_value", "_legacy_recall_identity", "_legacy_recall_identity_matches", "_legacy_recall_has_execution_marker",
     "_execute_worker_command_unfenced", "execute_worker_command", "action_event_fields", "handle_action", "api_worker_tasks",
-  ].map(pythonDefinition);
+  ];
   const identity = source.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m);
   assert.ok(identity, "missing durable identity contract");
-  return String.raw`
+  return isolatePythonGlobals(path.join(__dirname, "../../dist/runtime/cluster_agent.py"), definitions, String.raw`
 import json, os, threading, time, math
 from types import SimpleNamespace
 ROOT = ${JSON.stringify(root.replace(/\\/g, "/"))}
@@ -89,7 +90,7 @@ GPU_ROWS = [{"gpuId": "0", "utilizationPercent": 1, "memoryUsedMb": 10, "process
 GPU_ERROR = ""
 ${identity[0]}
 LEGACY_WORKER_STOP_IDENTITY_FIELDS = ("workflowId", "planRevision", "planFile", "case", "seed", "attempt", "outputDir", "workerId", "gpuId")
-${definitions.join("\n\n")}
+
 REAL_EXECUTE_WORKER_COMMAND = execute_worker_command
 def execute_worker_command(root, command, worker_id):
     if command.get("action") == "start-worker-task" and command.get("durablePlanQueue") is not True:
@@ -97,12 +98,14 @@ def execute_worker_command(root, command, worker_id):
         return {"status":"running", "commandId":command.get("commandId")}
     return REAL_EXECUTE_WORKER_COMMAND(root, command, worker_id)
 
+def verified_formal_job_command(*args, **kwargs): return {"identity":{}}
 def verified_durable_execution_mode(root, command): return "train_test"
 
 def make_job(command_id, gpu_id="0"):
     return {"projectId":"project-a", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
         "executionMode":"train_test", "mode":"train_test", "planRevision":"rev-a", "codeFingerprint":"sha-a", "experimentIndex":0, "case":"case-a",
-        "seed":44, "attempt":1, "outputDir":"experiments/runs/a/attempts/1", "runKey":command_id,
+        "seed":44, "attempt":0, "resultPathPolicy":"declared", "globalJobId":"workflow-a:0",
+        "collectionResultCsv":"results/"+command_id+".csv", "outputDir":"experiments/runs/"+command_id, "runKey":command_id,
         "commandId":command_id, "workerId":"worker-a", "planJobCount":1, "durablePlanQueue":True,
         "codeSyncProofId":"proof-test", "manifestDigest":"sha-a",
         "requireIdleGpu":True, "gpuId":gpu_id, "action":"start-worker-task"}
@@ -239,6 +242,7 @@ try:
 except ValueError:
     pass
 assert next(item for item in read_durable_plan_queue(ROOT)["jobs"] if item["commandId"] == "queued-release")["status"] == "queued"
+stop.pop("attempt", None)
 released = execute_worker_command(ROOT, stop, "worker-a")
 assert released["durableReleased"] is True and released["durableAccepted"] is True
 assert released["status"] == "cancelled" and released["stopReason"] == "requeue"
@@ -261,8 +265,9 @@ for status in ("dispatching", "running", "unknown"):
     ledger = read_durable_plan_queue(ROOT2)
     ledger["jobs"][0]["status"] = status
     write_durable_plan_queue(ROOT2, ledger)
-    result = execute_worker_command(ROOT2, {**claim, "action":"stop-worker-task", "targetCommandId":claim["commandId"],
-        "commandId":"stop-"+status, "requeueRequested":True}, "worker-a")
+    control = {**claim, "action":"stop-worker-task", "targetCommandId":claim["commandId"], "commandId":"stop-"+status, "requeueRequested":True}
+    control.pop("attempt", None)
+    result = execute_worker_command(ROOT2, control, "worker-a")
     assert result["durableReleased"] is False and result["status"] == status
     assert read_durable_plan_queue(ROOT2)["jobs"][0]["status"] == status
 # Hosted queues retain local policy and capacity while the desktop is offline.
@@ -277,7 +282,7 @@ for index in (0,1):
 assert len(drain_durable_plan_queue_once(ROOT3, "worker-a")) == 1
 assert [row["status"] for row in read_durable_plan_queue(ROOT3)["jobs"]] == ["running","queued"]
 print(json.dumps({"admission":True,"release":True,"fences":True}))
-`;
+`);
 }
 
 test("Agent atomically admits explicit idle GPUs and proves queued-only release", () => {

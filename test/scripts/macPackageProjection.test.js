@@ -2,18 +2,23 @@ const test=require('node:test'),assert=require('node:assert/strict'),fs=require(
 const {spawnSync}=require('node:child_process');
 const {createPackageProjection,assertPackageProjection}=require('../../scripts/mac-package-projection');
 function fixture(ignore=true){
- const root=path.resolve(__dirname,'../../release-artifacts','打包快照测试 '+crypto.randomUUID());fs.mkdirSync(root,{recursive:true});
+ const root=fs.mkdtempSync(path.join(require("node:os").tmpdir(),"打包快照测试 "));
  const write=(relative,bytes)=>{const file=path.join(root,...relative.split('/'));fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,bytes,{flag:'wx'});};
  const trackedFiles=['package.json',...(ignore?['.vscodeignore']:[]),'README.md','docs/中文 guide.md','src/unpackaged.js'];
  write('package.json',JSON.stringify({name:'fixture',publisher:'simple-local',version:'0.1.0',engines:{vscode:'^1.100.0'},main:'./dist/extension.js',activationEvents:['onStartupFinished'],...(!ignore?{files:['dist/**','README.md','docs/**']}:{} )}));
  if(ignore)write('.vscodeignore','src/**\nrelease-artifacts/**\n');write('README.md','Mac 使用说明\n');write('docs/中文 guide.md','中文与空格\n');write('src/unpackaged.js','source');write('dist/extension.js','module.exports={}');
  write('release-artifacts/retained/old.log','evidence');return {root,write,options:{trackedFiles}};
 }
+function readerFiles(directory){
+ const r=spawnSync(process.execPath,[path.resolve(__dirname,'../../scripts/list-vsix-files.js')],{cwd:directory,encoding:'utf8',timeout:8000,windowsHide:true});
+ assert.equal(r.status,0,r.stderr||r.error?.message);return JSON.parse(r.stdout);
+}
 test('real pinned VSCE selects snapshot files using the unchanged source ignore policy',()=>{
  const f=fixture(),p=createPackageProjection(f.root,f.options),r=spawnSync(process.execPath,[require.resolve('@vscode/vsce/vsce'),'ls','--no-dependencies'],{cwd:p.directory,encoding:'utf8',timeout:8000,windowsHide:true});
  assert.equal(r.status,0,r.stderr||r.error?.message);const files=r.stdout.split(/\r?\n/).filter(Boolean);
  for(const file of ['package.json','README.md','docs/中文 guide.md','dist/extension.js'])assert.ok(files.includes(file),file);
  assert.ok(!files.some(file=>file.startsWith('src/')||file.startsWith('release-artifacts/')));
+ assert.deepEqual(readerFiles(p.directory).sort(),files.sort());
  assert.equal(assertPackageProjection(p),true);assert.equal(fs.readFileSync(path.join(f.root,'release-artifacts/retained/old.log'),'utf8'),'evidence');
 });
 test('snapshot binds every source and compiled byte and rejects changes without repairing them',()=>{
@@ -31,6 +36,7 @@ test('real pinned VSCE preserves package files policy when vscodeignore is absen
  assert.equal(r.status,0,r.stderr||r.error?.message);const files=r.stdout.split(/\r?\n/).filter(Boolean);
  for(const file of ['package.json','README.md','docs/中文 guide.md','dist/extension.js'])assert.ok(files.includes(file),file);
  assert.ok(!files.some(file=>file.startsWith('src/')||file.startsWith('release-artifacts/')));assert.equal(assertPackageProjection(p),true);
+ assert.deepEqual(readerFiles(p.directory).sort(),files.sort());
  f.write('.vscodeignore','dist/**\n');assert.throws(()=>assertPackageProjection(p),/ignore policy is not bound/);
 });
 test('an extra snapshot file cannot enter the package without a source binding',()=>{

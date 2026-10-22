@@ -5,10 +5,11 @@ import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as fsNode from "fs";
 import * as path from "path";
+import { projectFileIndex } from "./ProjectFileIndex";
 
 export type LocalCodeManifestEntry = { size: number; sha256: string };
 export type LocalCodeManifest = Record<string, LocalCodeManifestEntry>;
-export type LocalCodeManifestStats = { listed: number; reused: number; hashed: number; pruned: number; cacheWriteSkipped?: number };
+export type LocalCodeManifestStats = { listed: number; reused: number; hashed: number; pruned: number; cacheWriteSkipped?: number; stalled?: boolean };
 
 type CacheIdentity = { dev: string; ino: string; size: number; mtimeMs: number; ctimeMs: number; birthtimeMs: number };
 type CacheRow = CacheIdentity & { sha256: string };
@@ -102,13 +103,15 @@ export async function hashLocalCodeFiles(
   const abort = new AbortController();
   const onAbort = () => abort.abort(signal?.reason);
   if (signal?.aborted) onAbort(); else signal?.addEventListener("abort", onAbort, { once: true });
-  const idle = new ProgressInactivity(120_000, () => abort.abort(new Error("本地哈希 120 秒无真实进展。请检查文件是否可读，再重试。")));
+  const stats: LocalCodeManifestStats = { listed: files.length, reused: 0, hashed: 0, pruned: 0 };
+  const idle = new ProgressInactivity(120_000, () => {
+    try { onProgress?.({ ...stats, stalled: true }); } catch { /* Progress is advisory. */ }
+  }, Date.now, true);
   try {
   abort.signal.throwIfAborted();
   const cache: CacheDocument = cacheFile ? await readCache(cacheFile) : { schemaVersion: CACHE_SCHEMA_VERSION, files: {} };
   const manifest: LocalCodeManifest = {};
   const nextFiles: Record<string, CacheRow> = {};
-  const stats: LocalCodeManifestStats = { listed: files.length, reused: 0, hashed: 0, pruned: 0 };
   const concurrency = 12;
   let nextIndex = 0;
   let completed = 0;
@@ -163,6 +166,11 @@ export async function hashLocalCodeFiles(
         console.warn(`[SimpleExperiment] local code manifest cache write failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
+  }
+  if (cacheFile && path.basename(path.dirname(cacheFile)) === "code-manifest-cache") {
+    const index = projectFileIndex({ workspace: root, endpointId: "local", projectRoot: root, connection: "local:" + process.pid }, path.dirname(path.dirname(cacheFile)));
+    await index.read({ method: "local.code-manifest", paths: files, signal }, async () => ({ files: Object.fromEntries(Object.entries(manifest).map(([name, row]) =>
+      [name, { ...row, modifiedAtMs: nextFiles[name]?.mtimeMs, changedAtMs: nextFiles[name]?.ctimeMs, device: nextFiles[name]?.dev, inode: nextFiles[name]?.ino }])) }));
   }
   return { manifest, stats };
   } finally { idle.dispose(); signal?.removeEventListener("abort", onAbort); }

@@ -3,7 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const test = require("node:test");
-const binding = require("../../dist/mac/WorkflowBinding");
+// The current call chain binds workflows through the shared features module (identifier
+// "WorkflowBinding" in compiled legacy.js); the platform overlay inside it keeps the strict
+// POSIX identity contract on non-Windows hosts, so the fixture exercises production code.
+const binding = require("../../dist/features/WorkflowWorkspaceBinding");
 const workflow = require("../../dist/features/ApiWorkflow");
 const compiled = fs.readFileSync(path.resolve(__dirname, "../../dist/extension/legacy.js"), "utf8");
 
@@ -30,7 +33,9 @@ function fixture(mode = "single_worker") {
     markLocalOperationsDirty() { step("persist"); }, postState() { step("post"); }, async runApiWorkflowOperation() { step("operation"); },
   };
   const globals = {
-    WorkflowBinding_1: guard, ApiWorkflow_1: { ...workflow, structuredMissingInventory: () => [] },
+    // On a real Mac the compiled call passes no platform argument, so selection defaults to process.platform
+    // ("darwin"); the sandbox simulates the Mac host by pinning that same default here.
+    WorkflowBinding: guard, ApiWorkflow_1: { ...workflow, structuredMissingInventory: () => [], selectWorkflowPlan: (plans, selection) => workflow.selectWorkflowPlan(plans, selection, "darwin") },
     workspaceRoot: () => root, assertSingleProjectWorkspace: () => root,
     simpleSftpIntegrationReadiness: () => ({ ready: true }), process,
     errorMessage: error => error.message, uniqueStrings: items => [...new Set(items)], stringArrayField: (params, key) => params[key] || [],
@@ -63,11 +68,21 @@ test("actual workflow methods reject wrong workspace and seed before any prepara
 });
 
 test("actual async workflow preflight stops after workspace or physical identity changes and selects exact spaced Plan", async () => {
-  for (const phase of ["reconcile", "metadata", "validate", "reconcile:replace"]) {
+  for (const phase of ["reconcile", "metadata", "validate"]) {
     const f = fixture(); f.state.changeAt = phase;
     await assert.rejects(f.provider.apiWorkflowPlan({ planFile: "experiments/plans/A.yaml " }), /已变化/);
     assert.ok(!f.calls.includes("prepare")); assert.ok(!f.calls.includes("operation"));
   }
+  // Frozen 0.5.400 guard design (legacy.ts byte-identical to Windows): the async-boundary guard is the cheap
+  // workspace-string check, while the full physical probe sits at every write gate — before project prepare
+  // and again inside apiWorkflowRun before any operation record is created.
+  const prepareSwap = fixture(); prepareSwap.state.changeAt = "reconcile:replace";
+  prepareSwap.globals.ApiWorkflow_1.structuredMissingInventory = () => [{ step: "prepare_agents", reason: "mock-only" }];
+  await assert.rejects(prepareSwap.provider.apiWorkflowPlan({ planFile: "experiments/plans/A.yaml", autoPrepare: true, confirm: true }), /已变化/);
+  assert.ok(!prepareSwap.calls.includes("prepare"));
+  const runSwap = fixture(); runSwap.state.changeAt = "reconcile:replace";
+  await assert.rejects(runSwap.provider.apiWorkflowRun({ planFile: "experiments/plans/A.yaml" }), /已变化/);
+  assert.equal(Object.keys(runSwap.provider.localOperations).length, 0);
   for (const mode of ["single_worker", "worker_pool", "hub_worker"]) {
     const f = fixture(mode), result = await f.provider.apiWorkflowPlan({ planFile: "experiments/plans/A.yaml " });
     assert.equal(result.ready, true); assert.equal(result.plan.planFile, "experiments/plans/A.yaml "); assert.equal(result.calls[0].params.workspace, f.initial);
@@ -89,7 +104,9 @@ test("a changed workspace or active Plan never creates a pending operation; succ
   await assert.rejects(active.provider.apiWorkflowRun({ planFile: "experiments/plans/A.yaml" }), /ACTIVE/);
   assert.equal(Object.keys(active.provider.localOperations).length, 0);
   const good = fixture(), result = await good.provider.apiWorkflowRun({ planFile: "experiments/plans/A.yaml" });
-  assert.equal(result.started, true); assert.equal(result.confirmation, "vscode_modal"); assert.equal(good.calls.at(-1), "operation");
+  // Frozen 0.5.400 success receipt: submission runs detached and output-path confirmation moved to the main panel.
+  assert.equal(result.started, true); assert.equal(result.status, "checking_workers");
+  assert.equal(result.confirmation, "main_panel_if_outputs_exist"); assert.equal(good.calls.at(-1), "operation");
 });
 
 test("late operation completion updates its original receipt without writing another workspace", async () => {
@@ -117,8 +134,9 @@ test("actual Plan core rechecks async choices and never runs the legacy automati
   });
   const method = vm.runInNewContext("({" + core + "})", globals).runActionCommandCore;
   await method.call(f.provider, "runPlan", { workspace: f.initial, planFile: "experiments/plans/A.yaml" });
-  assert.ok(f.calls.includes("remote-submit")); assert.ok(!f.calls.includes("abortSchedulerFromUi")); assert.equal(f.state.activeChecks, 2);
-  f.calls.length = 0; f.state.activeChecks = 0; f.state.activeAt = 2;
+  // Frozen 0.5.400 core path checks plan activity exactly once (the run entry adds its own check upstream).
+  assert.ok(f.calls.includes("remote-submit")); assert.ok(!f.calls.includes("abortSchedulerFromUi")); assert.equal(f.state.activeChecks, 1);
+  f.calls.length = 0; f.state.activeChecks = 0; f.state.activeAt = 1;
   await assert.rejects(method.call(f.provider, "runPlan", { workspace: f.initial, planFile: "experiments/plans/A.yaml" }), /ACTIVE/);
   assert.ok(!f.calls.includes("remote-submit")); assert.ok(!f.calls.includes("abortSchedulerFromUi"));
   f.state.activeAt = 0; f.calls.length = 0; f.provider.ensureCodeReadyForRun = async () => f.setRoot(f.other);
@@ -143,9 +161,21 @@ test("actual evidence polling refuses another project's or replacement directory
       f.provider[name] = vm.runInNewContext("({" + source(name) + "})", f.globals)[name];
     f.provider.runActionCommand = async () => { if (pending) throw Object.assign(Error("operationId=remote"), { pending: true }); return {}; };
     await f.runOperation.call(f.provider, "op", { calls: [{ params: {} }] }, snapshot);
-    assert.equal(sleeps, 1); assert.equal(old.op.status, change === "none" ? "succeeded" : "failed");
-    if (change === "none") assert.equal(old.op.submissionOperationId, "remote");
-    else { assert.equal(old.op.submissionOperationId, undefined); assert.deepEqual(f.calls.filter(c => c === "persist" || c === "post"), ["persist", "post"]); }
+    assert.equal(sleeps, 1);
+    const persisted = f.calls.filter(row => row === "persist" || row === "post");
+    if (change === "none") {
+      assert.equal(old.op.status, "succeeded"); assert.equal(old.op.submissionOperationId, "remote");
+      assert.deepEqual(persisted, ["persist", "post", "persist", "post"]); continue;
+    }
+    // Frozen 0.5.400 finish(): a late receipt after identity or ownership loss never persists or posts —
+    // only the initial running write reaches the workspace, regardless of pending or non-pending submission.
+    assert.deepEqual(persisted, ["persist", "post"]);
+    if (change === "operations") {
+      assert.equal(f.provider.localOperations.op, undefined);
+      assert.equal(old.op.status, pending ? "succeeded" : "failed");
+    }
+    else if (pending) { assert.equal(old.op.status, "succeeded"); assert.equal(old.op.submissionOperationId, "remote"); }
+    else { assert.equal(old.op.status, "failed"); assert.equal(old.op.submissionOperationId, undefined); }
   }
 });
 
@@ -181,18 +211,27 @@ test("actual distributed submission binds code sync, preflight, output choice an
       waitForPlanSubmission: async (_message, work) => { await Promise.resolve(); if (++waits === 2 && phase === "before-sync") f.step("before-sync"); return work(); },
       distributedCodeVersionHold: async () => { f.step("fingerprint"); return undefined; }, localDistributedCodeFingerprint: async () => "fp",
       activeDeferredForSubmission: async () => { f.step("deferred"); return {}; },
-      ensureCodeReadyForRun: async () => f.step("sync"), runPlanPreflight: async () => { f.step("preflight"); return { ok: true }; },
+      ensureCodeReadyForRun: async (_x, _body, _report, ready) => { f.step("sync"); ready("worker-a"); }, runPlanPreflight: async () => { f.step("preflight"); return { ok: true }; },
+      stampWorkerPoolManualTarget() {}, planValidationCacheKey: () => "", planSchedulerWorkerId: () => "worker-a",
       confirmDistributedPlanExistingOutputs: async () => f.step("outputs"), assertExecutionCondaEnvReady() {}, workerActionTargets: () => [],
-      recordPlanSubmissionTiming() {}, recordPlanSubmissionTimingByOperation() {}, reportPlanStage() {}, finishPlanSubmissionProgress: () => f.step("finish"),
+      recordPlanSubmissionTiming() {}, recordPlanSubmissionTimingByOperation() {}, reportPlanStage() {}, finishPlanSubmissionProgress: (_message, status) => f.step("finish:" + status),
       enqueueDistributedPlan: async (...args) => { assert.ok(args[6]?.identity); f.step("enqueue"); return { enqueued: true }; },
+      legacySourceFreezeWorkerNames: () => [],
     });
+    // Any collaborator not explicitly stubbed above must never be silently reached: record and pass.
+    const submissionSource = source("finishDistributedPlanSubmission");
+    for (const name of new Set([...submissionSource.matchAll(/this\.([a-zA-Z0-9_]+)\(/g)].map(match => match[1]))) if (!(name in f.provider)) f.provider[name] = async () => { f.calls.push(name); };
     f.globals.DistributedPlanQueue = { distributedSubmissionProgress: () => ({ status: "succeeded", waiting: false }) };
+    f.globals.PlanRunHost_1 = require("../../dist/extension/PlanRunHost");
+    f.globals.WorkerPreparation_1 = require("../../dist/features/WorkerPreparation");
     f.globals.stringField = (body, key) => body[key] || "";
     f.globals.resultStatus = result => result?.status || "";
-    const method = vm.runInNewContext("({" + source("finishDistributedPlanSubmission") + "})", f.globals).finishDistributedPlanSubmission;
+    const method = vm.runInNewContext("({" + submissionSource + "})", f.globals).finishDistributedPlanSubmission;
     const run = method.call(f.provider, "runPlan", phase === "deferred" ? { deferredPlanId: "old" } : {}, {}, { workspace: f.initial });
-    if (phase === "none") { await run; assert.ok(f.calls.includes("enqueue")); assert.ok(f.calls.includes("finish")); }
-    else { await assert.rejects(run, /已变化/); assert.ok(!f.calls.includes("enqueue")); assert.ok(!f.calls.includes("finish")); }
+    // A rejected submission closes the progress row as failed (never a false success) and never enqueues;
+    // only the untouched workspace reaches the succeeded close (frozen 0.5.400 catch/report ordering).
+    if (phase === "none") { await run; assert.ok(f.calls.includes("enqueue")); assert.ok(f.calls.includes("finish:succeeded")); assert.ok(!f.calls.includes("finish:failed")); }
+    else { await assert.rejects(run, /已变化/); assert.ok(!f.calls.includes("enqueue")); assert.ok(!f.calls.includes("finish:succeeded")); }
   }
 });
 
@@ -205,6 +244,9 @@ test("actual distributed enqueue refuses changed identity after queue load or wr
       PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence"), operationResultPlanFile: body => body.planFile, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy"), DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue") });
     const method = vm.runInNewContext("({" + source("enqueueDistributedPlan") + "})", f.globals).enqueueDistributedPlan;
     await assert.rejects(method.call(f.provider, { workspace: f.initial, planFile: "experiments/plans/A.yaml", planRevision: "r" }, { execution_mode: "train", jobs: [{ index: 0, case: "case-a", seed: 1, output_dir: "work_dirs/A" }] }), /身份已变化/);
-    assert.deepEqual(f.calls, phase.startsWith("load") ? ["load"] : ["load", "save"]);
+    // Frozen 0.5.400 ordering: the output-version review fires right after the queue write, ahead of the next
+    // identity gate; the invariant is that dispatch and any later step never run after the identity was replaced.
+    assert.deepEqual(f.calls, phase.startsWith("load") ? ["load"] : ["load", "save", "review"]);
+    assert.ok(!f.calls.includes("dispatch"));
   }
 });

@@ -1,6 +1,7 @@
 import { jobIsUnavailable, QueuedPlan, QueuedJob } from "./DistributedPlanQueue";
+import { composeLogicalPlans } from "./LogicalPlanProgress";
 
-export type PlanSelectorStatus = "not-started" | "partial" | "running" | "completed" | "failed";
+export type PlanSelectorStatus = "not-started" | "partial" | "unknown" | "submitting" | "queued" | "running" | "completed" | "failed";
 
 export interface PanelPlanStatusSummary {
   planFile: string;
@@ -14,6 +15,12 @@ export interface PanelPlanStatusSummary {
   activeCount: number;
   queuedCount: number;
   updatedAt?: string;
+  /** 本次运行与历史沿用的拆分数据通道（按最新提交实例 runId 拆分）；既有合并计数字段语义不变，UI 呈现另行设计。 */
+  currentRunId?: string;
+  currentRunTotalCount?: number;
+  currentRunCompletedCount?: number;
+  carriedForwardCompletedCount?: number;
+  carriedForwardSourceRunIds?: string[];
 }
 
 export interface PanelPlanStatusSummaryInput {
@@ -97,7 +104,7 @@ export function summarizePlanStatuses(input: PanelPlanStatusSummaryInput = {}): 
     }
   }
 
-  for (const distributedPlan of array(input.distributedPlans)) {
+  for (const distributedPlan of composeLogicalPlans(array(input.distributedPlans))) {
     const file = firstText(distributedPlan.planFile, distributedPlan.plan_file);
     const versionedPlan = {
       ...distributedPlan,
@@ -150,12 +157,16 @@ function mergePlanMetadata(primary: Record<string, any>, fallback: Record<string
 
 function summarizeEntry(entry: PlanEntry): PanelPlanStatusSummary {
   const tasks = latestJobRows(entry.tasks, true);
-  const distributedJobs = latestJobRows(entry.distributedPlans.flatMap((plan) => array(plan.jobs).map((job) => ({
+  const distributedJobRows = entry.distributedPlans.flatMap((plan) => array(plan.jobs).map((job) => ({
     planFile: entry.file,
     planRevision: firstText(plan.planRevision, plan.plan_revision, plan.revision),
     ...record(job),
     unavailable: jobIsUnavailable(plan as QueuedPlan, job as QueuedJob),
-  }))), false);
+    // 作业归属所有权：compose 合并标注行用 sourcePlanId，未标注行归属其所在卡自身 id；
+    // “无标注→本次”的默认归属已移除，旧完整卡的完成行不得冒充新提交实例的本次完成。
+    runOwner: firstText(record(job).sourcePlanId) || firstText(plan.id),
+  })));
+  const distributedJobs = latestJobRows(distributedJobRows, false);
   const countRows = distributedJobs.length ? distributedJobs : tasks;
   const taskCounts = countTaskStatuses(tasks);
   const distributedCounts = countTaskStatuses(distributedJobs);
@@ -176,11 +187,32 @@ function summarizeEntry(entry: PlanEntry): PanelPlanStatusSummary {
   const latestRunStatus = latestRun && (latestRun.status || latestRun.state);
   const latestRunFailed = operationFailureLike(latestRunStatus);
   const allTasksCompleted = countRows.length > 0 && totalCount > 0 && displayedCounts.completedCount >= totalCount;
+  // 本次运行与沿用拆分（仅数据层，上方合并计数语义不变）：以作业所有权推导本次行集，
+  // 相同 enqueuedAt 平局确定取数组后者（最新提交卡），不依赖数组旧先者。
+  // 平局确定性依赖真实队列 append-only 顺序（新提交卡追加在数组末尾）；分布式队列为
+  // append-only 持久队列，反转数组不是真实形态，S1 固化用例钉住“同毫秒取后者”。
+  const latestSource = entry.distributedPlans.reduce<Record<string, any> | null>((latest, row) =>
+    !latest || (dateValue(row.enqueuedAt) || 0) >= (dateValue(latest.enqueuedAt) || 0) ? row : latest, null);
+  const currentRunId = firstText(latestSource?.id);
+  const currentRows = currentRunId ? latestJobRows(distributedJobRows.filter(row => row.runOwner === currentRunId), false) : countRows;
+  // 沿用只计未被本次重跑覆盖的项：剔除与本次行同 (index,case,seed) 逻辑任务的遗留行（本次优先）；
+  // 无法证明同逻辑任务（缺 index）的行保守保留；标准同组形态 compose 已合并，本剔除为恒等操作。
+  const coveredTaskKeys = new Set(currentRows.map(rerunTaskKey).filter(Boolean));
+  const carriedRows = currentRunId
+    ? latestJobRows(distributedJobRows.filter(row => row.runOwner !== currentRunId), false)
+      .filter(row => { const key = rerunTaskKey(row); return !key || !coveredTaskKeys.has(key); })
+    : [];
+  const carriedSourceIds = currentRunId
+    ? [...new Set(carriedRows.map(row => firstText(row.runOwner)).filter(Boolean))].sort().slice(0, 8)
+    : [];
 
   let status: PlanSelectorStatus = "not-started";
   if (displayedCounts.failedCount || failedOperation || latestRunFailed) status = "failed";
-  else if (displayedCounts.activeCount || pendingOperation || displayedCounts.queuedCount && !displayedCounts.completedCount) status = "running";
+  else if (displayedCounts.activeCount) status = "running";
+  else if (pendingOperation) status = "submitting";
+  else if (displayedCounts.queuedCount && !displayedCounts.completedCount) status = "queued";
   else if (allTasksCompleted) status = "completed";
+  else if (countRows.some(row => row.lifecycleProtocol === 2 && (row.status === "unknown" || row.resultState === "unverified"))) status = "unknown";
   else if (countRows.length || runOperations.length) status = "partial";
 
   const updatedAt = firstText(entry.plan.updatedAt);
@@ -195,6 +227,13 @@ function summarizeEntry(entry: PlanEntry): PanelPlanStatusSummary {
     unavailableCount: boundedCount(displayedCounts.unavailableCount),
     activeCount: boundedCount(displayedCounts.activeCount),
     queuedCount: boundedCount(displayedCounts.queuedCount),
+    ...(currentRunId ? {
+      currentRunId: currentRunId.slice(0, 128),
+      currentRunTotalCount: boundedCount(currentRows.length),
+      currentRunCompletedCount: boundedCount(countTaskStatuses(currentRows).completedCount),
+      carriedForwardCompletedCount: boundedCount(countTaskStatuses(carriedRows).completedCount),
+      ...(carriedSourceIds.length ? { carriedForwardSourceRunIds: carriedSourceIds.map(id => id.slice(0, 128)) } : {}),
+    } : {}),
     ...(updatedAt ? { updatedAt: updatedAt.slice(0, 64) } : {}),
   };
 }
@@ -216,6 +255,13 @@ function expectedPlanJobs(plan: Record<string, any>): number {
   const configuredJobs = number(plan.jobCount || plan.job_count);
   const expandedJobs = caseCount > 0 && seedCount > 0 ? caseCount * seedCount : 0;
   return boundedCount(Math.max(0, Math.trunc(expandedJobs || configuredJobs || 0)));
+}
+
+/** 逻辑任务键 (index,case,seed)：用于判定遗留沿用行是否已被本次重跑覆盖；缺 index 无法证明覆盖。 */
+function rerunTaskKey(row: Record<string, any>): string {
+  const raw = firstDefined(row.experimentIndex, row.jobIndex, row.index);
+  if (raw === undefined || raw === null || String(raw).trim() === "" || !Number.isInteger(Number(raw))) return "";
+  return `${Number(raw)}|${firstText(row.case)}|${firstText(row.seed)}`;
 }
 
 function latestJobRows(rows: Record<string, any>[], normalizeSchedulerRow: boolean): Record<string, any>[] {

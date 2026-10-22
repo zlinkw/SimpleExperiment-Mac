@@ -17,6 +17,7 @@ function fixture() {
   const body = host.members.filter(node => node.name && names.has(node.name.getText(ast))).map(node => node.getText(ast)).join('\n');
   const sandbox = {
     Buffer, Date, AbortSignal, PlanArtifactSyncStatus: require('../../dist/features/PlanArtifactSyncStatus.js'),
+    ...require('../../dist/results/NativeResultManifest'),
     PlanArtifactSync: require('../../dist/features/PlanArtifactSync.js'), DistributedPlanQueue: queueApi,
     PlanOutputRetention: require('../../dist/features/PlanOutputRetention.js'),
     collectDistributedJobArtifacts: require('../../dist/features/DistributedJobArtifacts.js').collectDistributedJobArtifacts,

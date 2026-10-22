@@ -36,7 +36,7 @@ def archive_evidence_state(entry):
     return "archived" if archived else "excluded" if excluded else "pending_review"
 
 def read_plan_archive_evidence(root, plan, revision="", snapshots=None):
-    plan = durable_plan_path(plan, "归档证据 Plan")
+    plan = result_io_relative_path(plan, "归档证据 Plan")
     identity = output_contract_request_identity({"planFile": plan, "planRevision": revision})
     plan, revision = identity["planFile"], identity.get("planRevision", "")
     paths = ["simple_cluster/archive_state/by_plan/" + result_plan_directory_key(plan) + ".json",

@@ -8,9 +8,10 @@ export class ProgressInactivity {
   private readonly counts = new Map<string, { bytes: number; files: number }>();
   private pausedAt?: number;
   private ended = false;
+  private notified = false;
   lastProgressAt: number;
   constructor(public readonly idleMs: number, private readonly onIdle: () => void,
-    private readonly now: () => number = Date.now) {
+    private readonly now: () => number = Date.now, private readonly notifyOnly = false) {
     this.lastProgressAt = now();
     this.arm();
   }
@@ -26,7 +27,7 @@ export class ProgressInactivity {
     const changed = bytes > previous.bytes || files > previous.files || phaseChanged || terminal;
     this.counts.set(key, { bytes, files }); this.phase = phase;
     if (phase) this.phases.add(key);
-    if (changed) { this.lastProgressAt = this.now(); this.arm(); }
+    if (changed) { this.notified = false; this.lastProgressAt = this.now(); this.arm(); }
     if (terminal) this.dispose();
     return changed;
   }
@@ -41,13 +42,14 @@ export class ProgressInactivity {
     this.arm();
   }
   check(): boolean {
-    if (this.ended || this.pausedAt !== undefined || this.now() - this.lastProgressAt < this.idleMs) return false;
-    this.dispose(); this.onIdle(); return true;
+    if (this.ended || this.notified || this.pausedAt !== undefined || this.now() - this.lastProgressAt < this.idleMs) return false;
+    if (this.notifyOnly) { clearTimeout(this.timer); this.notified = true; } else this.dispose();
+    this.onIdle(); return true;
   }
   dispose(): void { this.ended = true; clearTimeout(this.timer); }
   private arm(): void {
     clearTimeout(this.timer);
-    if (this.ended || this.pausedAt !== undefined) return;
+    if (this.ended || this.notified || this.pausedAt !== undefined) return;
     this.timer = setTimeout(() => { if (!this.check()) this.arm(); }, Math.max(1, this.idleMs - (this.now() - this.lastProgressAt)));
     this.timer.unref?.();
   }

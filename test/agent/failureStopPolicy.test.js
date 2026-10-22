@@ -1,3 +1,4 @@
+const { writePythonFixture, isolatePythonRuntime } = require("../_helpers/isolatedPythonFixture");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -20,7 +21,7 @@ out = [
   module.scheduler_should_fail_fast([{"experiment_index": 1, "error": "exit_code=1"}], {}, {}),
 ]
 print(json.dumps(out))`;
-  const result = spawnSync("python", ["-c", script, scheduler], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  const result = spawnSync("python", [writePythonFixture(isolatePythonRuntime(script, "module")), scheduler], { encoding: "utf8", timeout: 10000, windowsHide: true, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.deepEqual(JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1)), [false, false, true]);
 });

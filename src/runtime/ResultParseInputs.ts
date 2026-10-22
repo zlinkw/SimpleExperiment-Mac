@@ -8,7 +8,7 @@ def result_parse_selection(value, kind="auto"):
     if kind == "auto":
         kind = "path" if "/" in value or chr(92) in value or output_contract_candidate(value) else "key"
     if kind == "path":
-        durable_plan_path(value, "结果选择路径")
+        result_io_relative_path(value, "结果选择路径")
     return {"kind": kind, "value": value}
 
 def result_parse_request(payload):
@@ -55,7 +55,7 @@ def result_parse_row_identity(row):
     values = [owner[key] for owner in owners for key in ("planFile", "plan_file", "plan", "selectedPlanId", "selected_plan_id") if key in owner and owner[key] != ""]
     if any(not isinstance(value, str) for value in values) or len(set(values)) > 1:
         raise ValueError("结果行 Plan 别名类型或身份冲突")
-    return durable_plan_path(values[0], "结果行 Plan") if values else ""
+    return result_io_relative_path(values[0], "结果行 Plan") if values else ""
 
 def result_parse_row_matches(row, plan, suite="", anonymous=True):
     try:
@@ -141,5 +141,5 @@ def result_parse_inputs(root, plan, selected, policy, snapshots):
 
 def result_summary_plan(summary):
     raw = summary.get("planFile") or ""
-    return durable_plan_path(raw, "结果摘要 Plan") if raw and summary.get("resultPathIdentity") == "posix-v1" else normalize_result_candidate(raw)
+    return result_io_relative_path(raw, "结果摘要 Plan") if raw and summary.get("resultPathIdentity") == "posix-v1" else normalize_result_candidate(raw)
 `;

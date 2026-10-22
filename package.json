@@ -2,7 +2,7 @@
   "name": "simple-experiment-mac",
   "displayName": "SimpleExperiment Mac",
   "description": "面向 Apple Silicon macOS 的科研实验编排面板，用户手动配置 Termius 本地隧道。",
-  "version": "0.5.314",
+  "version": "0.5.315",
   "publisher": "simple-local",
   "extensionKind": [
     "ui"
@@ -31,14 +31,14 @@
     "onCommand:simpleExperimentMac.bootstrapProject",
     "onCommand:simpleExperimentMac.prepareAgents",
     "onCommand:simpleExperimentMac.openSetupGuide",
+    "onCommand:simpleExperimentMac.configureManualEndpoints",
+    "onCommand:simpleExperimentMac.showManualAgentGuide",
     "onCommand:simpleExperimentMac.configureXshellSavedSessions",
     "onCommand:simpleExperimentMac.writeXshellAgentStartupCommands",
     "onCommand:simpleExperimentMac.configureWorkerTunnels",
     "onCommand:simpleExperimentMac.configureTunnelPorts",
     "onCommand:simpleExperimentMac.configureXshellRealtimeTunnel",
-    "onCommand:simpleExperimentMac.startHubTunnel",
     "onCommand:simpleExperimentMac.startWorkerTunnel",
-    "onCommand:simpleExperimentMac.startXshellRealtimeTunnel",
     "onCommand:simpleExperimentMac.startAllXshellRealtimeTunnels",
     "onCommand:simpleExperimentMac.startAllXshellConnections",
     "onCommand:simpleExperimentMac.testAllTunnels",
@@ -60,9 +60,7 @@
     "onCommand:simpleExperimentMac.removeGitBackup",
     "onCommand:simpleExperimentMac.showGitBackupStatus",
     "onCommand:simpleExperimentMac.syncToGitHub",
-    "onCommand:simpleExperimentMac.publishToGitHub",
-    "onCommand:simpleExperimentMac.configureManualEndpoints",
-    "onCommand:simpleExperimentMac.showManualAgentGuide"
+    "onCommand:simpleExperimentMac.publishToGitHub"
   ],
   "main": "./dist/mac/Bootstrap.js",
   "bin": {
@@ -70,6 +68,14 @@
   },
   "contributes": {
     "commands": [
+      {
+        "command": "simpleExperimentMac.checkPluginUpdates",
+        "title": "SimpleExperiment：检查配套插件更新"
+      },
+      {
+        "command": "simpleExperimentMac.installPluginUpdates",
+        "title": "SimpleExperiment：安装或补装配套更新并重载"
+      },
       {
         "command": "simpleExperimentMac.syncToGitHub",
         "title": "SimpleExperiment：同步到 GitHub",
@@ -122,7 +128,7 @@
       },
       {
         "command": "simpleExperimentMac.prepareAgents",
-        "title": "SimpleExperiment Mac：准备项目与 Agent（手动启动）",
+        "title": "SimpleExperiment：准备 Agent 并启动",
         "icon": "$(server-process)"
       },
       {
@@ -132,12 +138,12 @@
       },
       {
         "command": "simpleExperimentMac.configureXshellSavedSessions",
-        "title": "SimpleExperiment：配置 Xshell 会话文件",
+        "title": "SimpleExperiment：配置 Termius 转发端点",
         "icon": "$(bookmark)"
       },
       {
         "command": "simpleExperimentMac.writeXshellAgentStartupCommands",
-        "title": "SimpleExperiment：写入 Agent 自启动 RemoteCommand",
+        "title": "SimpleExperiment：Termius 会话自启动能力说明",
         "icon": "$(edit)"
       },
       {
@@ -156,18 +162,8 @@
         "icon": "$(settings-gear)"
       },
       {
-        "command": "simpleExperimentMac.startHubTunnel",
-        "title": "SimpleExperiment：启动 Hub 隧道",
-        "icon": "$(debug-start)"
-      },
-      {
         "command": "simpleExperimentMac.startWorkerTunnel",
         "title": "SimpleExperiment：启动 Worker 隧道",
-        "icon": "$(debug-start)"
-      },
-      {
-        "command": "simpleExperimentMac.startXshellRealtimeTunnel",
-        "title": "SimpleExperiment：启动 Hub Xshell 会话",
         "icon": "$(debug-start)"
       },
       {
@@ -179,6 +175,11 @@
         "command": "simpleExperimentMac.startAllXshellConnections",
         "title": "SimpleExperiment：启动全部 Xshell 连接",
         "icon": "$(run-all)"
+      },
+      {
+        "command": "simpleExperimentMac.stopMacSystemTunnels",
+        "title": "SimpleExperiment：停止本插件启动的系统隧道",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "simpleExperimentMac.testAllTunnels",
@@ -219,6 +220,14 @@
         "command": "simpleExperimentMac.generateXshellTunnelScript",
         "title": "SimpleExperiment：显示 Termius 隧道与 Agent 指引",
         "icon": "$(file-code)"
+      },
+      {
+        "command": "simpleExperimentMac.configureManualEndpoints",
+        "title": "SimpleExperiment Mac：配置 Termius 手动端点"
+      },
+      {
+        "command": "simpleExperimentMac.showManualAgentGuide",
+        "title": "SimpleExperiment Mac：打开 Agent/tmux 操作指引"
       },
       {
         "command": "simpleExperimentMac.openTunnelStatus",
@@ -266,10 +275,6 @@
         "icon": "$(checklist)"
       },
       {
-        "command": "simpleExperimentMac.showCliEntry",
-        "title": "SimpleExperiment Mac：查看 CLI 入口"
-      },
-      {
         "command": "simpleExperimentMac.checkPreviewUpdates",
         "title": "SimpleExperiment Mac：检查 preview 配套更新"
       },
@@ -278,12 +283,8 @@
         "title": "SimpleExperiment Mac：安装 preview 配套更新"
       },
       {
-        "command": "simpleExperimentMac.configureManualEndpoints",
-        "title": "SimpleExperiment Mac：配置 Termius 手动端点"
-      },
-      {
-        "command": "simpleExperimentMac.showManualAgentGuide",
-        "title": "SimpleExperiment Mac：打开 Agent/tmux 操作指引"
+        "command": "simpleExperimentMac.showCliEntry",
+        "title": "SimpleExperiment Mac：查看 CLI 入口"
       }
     ],
     "menus": {
@@ -297,19 +298,15 @@
           "when": "config.simpleExperimentMac.showAdvancedCommands"
         },
         {
-          "command": "simpleExperimentMac.startHubTunnel",
-          "when": "config.simpleExperimentMac.showAdvancedCommands"
-        },
-        {
           "command": "simpleExperimentMac.startWorkerTunnel",
           "when": "config.simpleExperimentMac.showAdvancedCommands"
         },
         {
-          "command": "simpleExperimentMac.startXshellRealtimeTunnel",
+          "command": "simpleExperimentMac.startAllXshellRealtimeTunnels",
           "when": "config.simpleExperimentMac.showAdvancedCommands"
         },
         {
-          "command": "simpleExperimentMac.startAllXshellRealtimeTunnels",
+          "command": "simpleExperimentMac.stopMacSystemTunnels",
           "when": "config.simpleExperimentMac.showAdvancedCommands"
         },
         {
@@ -402,18 +399,12 @@
         },
         "simpleExperimentMac.topologyMode": {
           "type": "string",
-          "default": "",
+          "default": "worker_pool",
           "enum": [
-            "",
-            "single_worker",
-            "worker_pool",
-            "hub_worker"
+            "worker_pool"
           ],
           "enumDescriptions": [
-            "尚未明确选择；旧 Hub + Worker 项目只读推断为 Hub 可用模式，仅 Worker 项目需要先确认。",
-            "恰好一台 Worker 在本机调度和保存，不使用 Hub 或自动备份。",
-            "两台及以上 Worker 各自调度确定性分片，不使用 Hub 或跨节点备份。",
-            "Hub 全局调度，至少一台 Worker 执行，并由 Hub 汇总状态和结果。"
+            "统一 Worker 流程，支持一台或多台服务器。"
           ],
           "scope": "resource",
           "description": "当前项目的服务器拓扑。模式与启用端点数量不一致时阻止新运行；模式切换不会迁移已有任务或结果。"
@@ -445,12 +436,11 @@
         "simpleExperimentMac.results.planOutputRetention": {
           "type": "string",
           "enum": [
-            "latest-complete",
-            "keep-history"
+            "latest-only"
           ],
-          "default": "latest-complete",
+          "default": "latest-only",
           "scope": "resource",
-          "description": "分布式 Plan 产物保留方式。同代码与相同 Plan 配置的重复运行以最新完整结果替代；不同版本保留，超过5个代码/配置版本时提示前往审核清理。删除旧 attempt 仍须核对完整路径并两次确认；取消、失败、身份未知或仅补跑时保留旧结果。keep-history 不主动建议同版本替换，仍提示版本超限。"
+          "description": "产物只保留每个任务最新一轮，重跑前按两次确认删除精确旧目录；不生成 attempt、历史产物版本或 clean_dir 备份。旧设置值按本策略兼容读取，不自动清扫声明范围外的历史文件。"
         },
         "simpleExperimentMac.codeSync.includePaths": {
           "type": "array",
@@ -478,7 +468,7 @@
             "type": "string"
           },
           "scope": "resource",
-          "description": "Worker 之间同步的项目相对路径；默认整个项目，机器状态目录除外。在面板文件树中勾选。"
+          "description": "Worker 之间的同步范围。默认整个项目，包含完整 work_dirs（兼容 work_dir）；不沿用本机代码同步的产物排除。每个 job 完成后，只同步本任务产物与当前勾选范围的交集到所有已启用 Worker。"
         },
         "simpleExperimentMac.remote.allowedRoots": {
           "type": "array",
@@ -487,7 +477,7 @@
             "type": "string"
           },
           "scope": "resource",
-          "description": "可选的远端项目父目录允许前缀。留空表示不按服务器名限制；配置后每个 Hub/Worker 必须使用列表内根目录或其子目录。"
+          "description": "可选的远端项目父目录允许前缀。留空表示不按服务器名限制；配置后每个 Worker 必须使用列表内根目录或其子目录。"
         },
         "simpleExperimentMac.remote.deniedRoots": {
           "type": "array",
@@ -518,7 +508,7 @@
             "offline_import"
           ],
           "scope": "application",
-          "description": "连接模式兼容字段。Mac 实时模式使用用户配置的 Termius 手动端点，不自动登录或启动隧道。"
+          "description": "连接模式。Xshell 实时隧道模式只访问 127.0.0.1 本地端点。"
         },
         "simpleExperimentMac.tunnel.localForwardPort": {
           "type": "number",
@@ -526,7 +516,7 @@
           "minimum": 1024,
           "maximum": 65535,
           "scope": "application",
-          "description": "旧单端点兼容字段。Mac 各服务器实际地址/端口在 tunnel.manualEndpoints 配置，本字段不替代手动端点。"
+          "description": "Xshell 会话在 127.0.0.1 上监听的本地转发端口。"
         },
         "simpleExperimentMac.tunnel.remoteAgentPort": {
           "type": "number",
@@ -534,19 +524,13 @@
           "minimum": 1024,
           "maximum": 65535,
           "scope": "application",
-          "description": "旧 Hub 端口兼容字段。Mac 各服务器 Agent 端口由 tunnel.manualEndpoints 指定。"
+          "description": "Worker Agent 监听的服务端口；每台服务器的端点配置优先。"
         },
         "simpleExperimentMac.tunnel.agentToken": {
           "type": "string",
           "default": "",
           "scope": "application",
-          "description": "可选 Hub Agent token。诊断信息会自动脱敏。"
-        },
-        "simpleExperimentMac.tunnel.hubDisplayName": {
-          "type": "string",
-          "default": "",
-          "scope": "application",
-          "description": "Hub 在插件面板中的显示名称。为空时使用 Xshell 会话名、SSH 别名或主机名。"
+          "description": "可选的 Worker Agent token。诊断信息会自动脱敏。"
         },
         "simpleExperimentMac.tunnel.remoteTmuxSessionPrefix": {
           "type": "string",
@@ -581,16 +565,6 @@
           "scope": "application",
           "description": "远端 Agent 和计划任务使用的 Conda 环境。必须为绝对路径（精确到环境文件夹，如 /data/<user>/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾，以 / 开头）；留空时不激活 Conda，使用系统 Python。仅环境名（如 <env_name>）已废弃，请填写完整环境路径。"
         },
-        "simpleExperimentMac.tunnel.workerRealtimeMode": {
-          "type": "string",
-          "default": "hub_only",
-          "enum": [
-            "hub_only",
-            "hub_plus_workers"
-          ],
-          "scope": "application",
-          "description": "实时数据来源模式。hub_plus_workers 会同时连接已配置的 Worker 本地隧道。"
-        },
         "simpleExperimentMac.tunnel.workerTunnels": {
           "type": "array",
           "default": [],
@@ -603,15 +577,6 @@
               },
               "displayName": {
                 "type": "string"
-              },
-              "hubHost": {
-                "type": "string"
-              },
-              "hubUser": {
-                "type": "string"
-              },
-              "hubSshPort": {
-                "type": "number"
               },
               "localForwardPort": {
                 "type": "number"
@@ -627,7 +592,8 @@
                   "number",
                   "string"
                 ],
-                "default": "auto"
+                "default": "auto",
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
               },
               "privateKeyPath": {
                 "type": "string"
@@ -646,12 +612,14 @@
               "gpuIdleUtilThreshold": {
                 "type": "number",
                 "minimum": 0,
-                "maximum": 100
+                "maximum": 100,
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
               },
               "gpuIdleMemThresholdMb": {
                 "type": "number",
                 "minimum": 0,
-                "maximum": 8192
+                "maximum": 8192,
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
               },
               "sessionCheckMinSeconds": {
                 "type": "number",
@@ -662,6 +630,99 @@
                 "type": "number",
                 "minimum": 10,
                 "maximum": 7200
+              },
+              "agentLoginPolicy": {
+                "type": "string",
+                "enum": [
+                  "preserve",
+                  "managed"
+                ],
+                "default": "preserve"
+              },
+              "workerHost": {
+                "type": "string"
+              },
+              "workerUser": {
+                "type": "string"
+              },
+              "workerSshPort": {
+                "type": "number"
+              },
+              "gpuMemoryRatioEnabled": {
+                "type": "boolean",
+                "description": "本 Worker 覆盖设置，未设置时跟随全局。按显存比例设置每张卡的自动任务上限。关闭时保持一卡一个自动任务；手动派发不受此上限限制。需要支持该功能的 Worker Agent 和 Scheduler。",
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
+              },
+              "gpuMemoryPerJobGb": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 1024,
+                "description": "这台服务器每个 job 按多少 G 显存计算。不填使用统一设置。例：填 24，96G 显卡最多同时运行 4 个 job；实际显存不足时等待。",
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
+              },
+              "gpuMemoryMaxJobsPerGpu": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1024,
+                "description": "本 Worker 覆盖设置，未设置时跟随全局。单卡自动任务数的额外上限。0 表示仅按显存比例计算；手动派发可超过该值。",
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
+              },
+              "gpuMemoryReserveGb": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1024,
+                "description": "本 Worker 覆盖设置，未设置时跟随全局。启动新自动任务时额外保留的空闲显存，单位 GiB。数值过大可能暂停新任务。",
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
+              },
+              "gpuMemoryTolerancePercent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 5,
+                "description": "本 Worker 覆盖设置，未设置时跟随全局。驱动报告容量与标称容量的容差百分比，默认 3%，最多 5%。用于避免 96 GiB 报告略低时误算为三个任务，也应用于启动显存门槛。",
+                "deprecationMessage": "已弃用：使用自动识别卡数、每卡并行配额和总剩余显存门槛。"
+              },
+              "gpuJobsPerCard": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1024,
+                "description": "每卡最大并行 job 数，未设置跟随全局；旧比例仅作迁移。"
+              },
+              "gpuMinFreeMemoryGb": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1024,
+                "description": "该卡可派发最低总剩余显存 GiB，未设置跟随全局 22。"
+              },
+              "gpuMaxConcurrentCards": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 256,
+                "description": "最高优先级的服务器并发占卡上限，所有 PLAN 合计；留空不限，0 暂停新任务，不停止已有任务。"
+              },
+              "gpuCardOverrides": {
+                "type": "object",
+                "description": "按实际 GPU 编号逐卡覆盖；留空继承服务器默认值。单卡 job 配额 0 暂停后续派发。",
+                "patternProperties": {
+                  "^(0|[1-9][0-9]*)$": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "gpuJobsPerCard": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 1024,
+                        "description": "该卡最大并行 job 数；0 暂停后续派发。"
+                      },
+                      "gpuMinFreeMemoryGb": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1024,
+                        "description": "该卡可派发最低总剩余显存 GiB。"
+                      }
+                    }
+                  }
+                },
+                "additionalProperties": false
               }
             }
           },
@@ -676,9 +737,9 @@
           "default": "local_idle",
           "enumDescriptions": [
             "本机检测空卡后派发，断联时未派发任务等待本机重连。",
-            "按空卡及本人占用卡比例预派发至服务器持久队列，可在全部接收后关机。"
+            "兼容旧设置，不再自动预排队；请使用运行进度中的剩余 job 入服务器队列按钮。"
           ],
-          "description": "新提交 Plan 的调度模式；已提交 Plan 保留原模式。"
+          "description": "默认全部本机调度；旧 server_prequeue 值仅兼容读取，服务器排队必须由用户点击按钮按逐卡 job 配额派发。"
         },
         "simpleExperimentMac.scheduler.pollSeconds": {
           "type": "number",
@@ -700,7 +761,8 @@
           "minimum": 0,
           "maximum": 100,
           "scope": "application",
-          "description": "空卡判据（利用率）：GPU 利用率 < 该阈值（%）且 显存 < 显存阈值 时判为空卡/空闲，默认 5%，范围 0-100。与显存阈值为且关系，任一 ≥ 阈值即判为忙。"
+          "description": "空卡判据（利用率）：GPU 利用率 < 该阈值（%）且 显存 < 显存阈值 时判为空卡/空闲，默认 5%，范围 0-100。与显存阈值为且关系，任一 ≥ 阈值即判为忙。",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
         },
         "simpleExperimentMac.scheduler.gpuIdleMemThresholdMb": {
           "type": "number",
@@ -708,7 +770,8 @@
           "minimum": 0,
           "maximum": 8192,
           "scope": "application",
-          "description": "空卡判据（显存）：GPU 显存占用 < 该阈值（MB）且 利用率 < 利用率阈值 时判为空卡/空闲，默认 200MB，范围 0-8192。与利用率阈值为且关系，任一 ≥ 阈值即判为忙。"
+          "description": "空卡判据（显存）：GPU 显存占用 < 该阈值（MB）且 利用率 < 利用率阈值 时判为空卡/空闲，默认 200MB，范围 0-8192。与利用率阈值为且关系，任一 ≥ 阈值即判为忙。",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
         },
         "simpleExperimentMac.scheduler.sessionCheckMinSeconds": {
           "type": "number",
@@ -823,6 +886,73 @@
           "scope": "application",
           "description": "SimpleExperiment 面板分区的手动顺序。"
         },
+        "simpleExperimentMac.tunnel.agentLoginPolicy": {
+          "type": "string",
+          "enum": [
+            "preserve",
+            "managed"
+          ],
+          "default": "preserve",
+          "scope": "application",
+          "description": "Agent 独立运行。preserve 保留原登录命令；managed 经用户确认维护独立启动段，并保留原登录行为。"
+        },
+        "simpleExperimentMac.scheduler.gpuMemoryRatioEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "按显存比例设置每张卡的自动任务上限。关闭时保持一卡一个自动任务；手动派发不受此上限限制。需要支持该功能的 Worker Agent 和 Scheduler。",
+          "scope": "application",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
+        },
+        "simpleExperimentMac.scheduler.gpuMemoryPerJobGb": {
+          "type": "number",
+          "default": 24,
+          "minimum": 1,
+          "maximum": 1024,
+          "description": "每个 job 按多少 G 显存计算，默认 24。例：24G 显卡一个、48G 两个、96G 四个 job；实际显存不足时等待。单台服务器可以单独设置。",
+          "scope": "application",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
+        },
+        "simpleExperimentMac.scheduler.gpuMemoryMaxJobsPerGpu": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1024,
+          "description": "单卡自动任务数的额外上限。0 表示仅按显存比例计算；手动派发可超过该值。",
+          "scope": "application",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
+        },
+        "simpleExperimentMac.scheduler.gpuMemoryReserveGb": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1024,
+          "description": "启动新自动任务时额外保留的空闲显存，单位 GiB。数值过大可能暂停新任务。",
+          "scope": "application",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
+        },
+        "simpleExperimentMac.scheduler.gpuMemoryTolerancePercent": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "maximum": 5,
+          "description": "驱动报告容量与标称容量的容差百分比，默认 3%，最多 5%。用于避免 96 GiB 报告略低时误算为三个任务，也应用于启动显存门槛。",
+          "scope": "application",
+          "deprecationMessage": "已弃用：新调度仅使用每卡并行 job 配额和总剩余显存门槛。"
+        },
+        "simpleExperimentMac.scheduler.gpuMinFreeMemoryGb": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1024,
+          "default": 22,
+          "description": "可继续派发所需的单卡总剩余显存，单位 GiB；含边界，不按每个 job 预估。"
+        },
+        "simpleExperimentMac.scheduler.gpuJobsPerCard": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 1,
+          "description": "每张实际显卡最多并行的 job 数；服务器可单独覆盖。"
+        },
         "simpleExperimentMac.tunnel.manualEndpoints": {
           "type": "array",
           "default": [],
@@ -849,7 +979,6 @@
               "role": {
                 "type": "string",
                 "enum": [
-                  "hub",
                   "worker"
                 ]
               },

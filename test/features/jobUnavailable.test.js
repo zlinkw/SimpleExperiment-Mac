@@ -170,7 +170,10 @@ test("real Host dispatch reports completion, cancellation and rejected ownership
   const coreStart = source.indexOf("    async handleMessageCore("), statusStart = source.indexOf("    private async withUiCommandStatus(");
   const end = source.indexOf("    uiCommandWatchdogMs(", statusStart);
   assert.ok(coreStart > 0 && statusStart > coreStart && end > statusStart);
-  const code = ts.transpileModule("const subject = {" + source.slice(coreStart, end).replace("private async", "async") + "};", {
+  const ast = ts.createSourceFile('host.ts', source, ts.ScriptTarget.Latest, true);
+  const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'RealtimeTunnelPanelProvider');
+  const capabilityLaunch = cls.members.find(node => node.name?.getText(ast) === 'beginSimpleSftpCapabilityLaunch').getText(ast);
+  const code = ts.transpileModule("const subject = {" + source.slice(coreStart, end).replace("private async", "async") + '\n' + capabilityLaunch + "};", {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   for (const scenario of ["complete", "cancel", "reject"]) {
     const f = hostFixture(), statuses = [], errors = [];

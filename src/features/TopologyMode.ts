@@ -1,4 +1,4 @@
-export const TOPOLOGY_MODES = ["single_worker", "worker_pool", "hub_worker"] as const;
+export const TOPOLOGY_MODES = ["worker_pool"] as const;
 
 const TOPOLOGY_ALIASES: Record<string, TopologyMode> = {
   standalone: "single_worker",
@@ -14,7 +14,8 @@ const TOPOLOGY_ALIASES: Record<string, TopologyMode> = {
   hub: "hub_worker",
 };
 
-export type TopologyMode = typeof TOPOLOGY_MODES[number];
+/** Legacy values remain readable, but no execution path selects them. */
+export type TopologyMode = "worker_pool" | "single_worker" | "hub_worker";
 export type TopologyModeSource = "explicit" | "legacy_hub_worker" | "unconfirmed" | "invalid";
 
 export interface TopologyInventory {
@@ -37,45 +38,29 @@ export interface TopologyAssessment {
 
 export function normalizeTopologyMode(value: unknown): TopologyMode | undefined {
   const mode = String(value || "").trim();
-  if ((TOPOLOGY_MODES as readonly string[]).includes(mode)) return mode as TopologyMode;
-  return TOPOLOGY_ALIASES[mode.toLowerCase()];
+  if (!mode || ["worker_pool", "single_worker", "hub_worker"].includes(mode) || TOPOLOGY_ALIASES[mode.toLowerCase()]) return "worker_pool";
+  return undefined;
 }
 
 export function assessProjectTopology(configuredMode: unknown, inventory: TopologyInventory): TopologyAssessment {
   const rawMode = String(configuredMode || "").trim();
   const explicitMode = normalizeTopologyMode(rawMode);
   const workerCount = topologyWorkerCount(inventory);
-  const hubConfigured = inventory.hubConfigured === true;
+  const hubConfigured = false;
+  if (inventory.enabledWorkerIds && new Set(inventory.enabledWorkerIds.filter(Boolean)).size !== inventory.enabledWorkerIds.filter(Boolean).length)
+    return assessment("worker_pool", "explicit", workerCount, false, ["Worker 标识重复，请为每台服务器设置不同的标识。"]);
 
   if (rawMode && !explicitMode) {
     return assessment(undefined, "invalid", workerCount, false, [`不支持的拓扑模式：${rawMode}`]);
   }
   if (explicitMode) {
-    return assessment(explicitMode, "explicit", workerCount, hubConfigured, topologyIssues(explicitMode, hubConfigured, workerCount));
+    return assessment("worker_pool", "explicit", workerCount, false, topologyIssues("worker_pool", false, workerCount));
   }
-  if (hubConfigured && workerCount >= 1) {
-    return assessment("hub_worker", "legacy_hub_worker", workerCount, true, []);
-  }
-  return assessment(undefined, "unconfirmed", workerCount, hubConfigured, [
-    workerCount > 0
-      ? "仅 Worker 项目需要先明确选择单 Worker或仅多 Worker模式。"
-      : "需要先选择拓扑模式并配置对应的 Worker。",
-  ]);
+  return assessment("worker_pool", "explicit", workerCount, false, topologyIssues("worker_pool", false, workerCount));
 }
 
 export function topologyIssues(mode: TopologyMode, hubConfigured: boolean, workerCount: number): string[] {
-  const issues: string[] = [];
-  if (mode === "single_worker") {
-    if (hubConfigured) issues.push("单 Worker模式不能启用 Hub。");
-    if (workerCount !== 1) issues.push(`单 Worker模式需要恰好一台启用的 Worker，当前为 ${workerCount} 台。`);
-  } else if (mode === "worker_pool") {
-    if (hubConfigured) issues.push("仅多 Worker模式不能启用 Hub。");
-    if (workerCount < 2) issues.push(`仅多 Worker模式需要至少两台启用的 Worker，当前为 ${workerCount} 台。`);
-  } else {
-    if (!hubConfigured) issues.push("Hub 可用模式需要配置 Hub。");
-    if (workerCount < 1) issues.push("Hub 可用模式需要至少一台启用的 Worker。");
-  }
-  return issues;
+  return workerCount < 1 ? ["尚无启用的 Worker；请先配置执行服务器。"] : [];
 }
 
 function topologyWorkerCount(inventory: TopologyInventory): number {
@@ -93,15 +78,9 @@ function assessment(
   hubConfigured: boolean,
   issues: string[],
 ): TopologyAssessment {
-  const hubAllowed = mode === "hub_worker";
-  const schedulerOwner = mode === "single_worker"
-    ? "Worker 本机调度"
-    : mode === "worker_pool"
-      ? "各 Worker 独立分片调度"
-      : mode === "hub_worker"
-        ? "Hub 全局调度"
-        : "尚未确认";
-  const stateOwner = mode === "hub_worker" ? "Hub 汇总索引" : mode ? "Worker 本机项目目录" : "尚未确认";
+  const hubAllowed = false;
+  const schedulerOwner = "各 Worker 独立调度";
+  const stateOwner = "Worker 本机项目目录";
   return {
     mode,
     source,

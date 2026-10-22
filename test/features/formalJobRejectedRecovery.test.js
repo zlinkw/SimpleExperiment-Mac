@@ -16,6 +16,9 @@ function queue() {
   Object.assign(q.plans[0].jobs[0], { status: 'failed', workerId: 'worker', commandId: 'original-command', runKey: 'original-command',
     trustedTerminalStatus: 'failed', error: 'FORMAL_JOB_PREFLIGHT_STALLED', finishedAt: new Date().toISOString(),
     admissionRejection: { code: 'FORMAL_JOB_PREFLIGHT_STALLED', message: 'no progress', rejectedAt: new Date().toISOString() } });
+  // 本测试钉 lifecycle-1 durable 恢复链路（停止核实、产物审核、身份围栏）；
+  // lifecycle-2 job 的恢复入口走 retryPulledJob，其 PulledTaskControl 语义由 idleGpuDispatchLifecycle 等专测覆盖。
+  delete q.plans[0].jobs[0].lifecycleProtocol;
   return q;
 }
 test('rendered panel exposes explicit formal requeue without attempt and keeps running/history tasks protected', () => {
@@ -89,6 +92,7 @@ function host(variant) {
   p.saveDistributedQueue = async (_root, next) => { stored = next; };
   p.tickDistributedQueue = async () => { ticks++; }; // No production training/GPU/network.
   p.workerCodeSyncTargets = () => [{ id: 'worker' }];
+  p.workerActionTargets = () => [{ id: 'worker' }]; // 入口先对动作目标做快照，确认期间判定是否仍为当前。
   p.sftpServerOptions = () => ({ host: 'fixture', user: 'fixture', port: 22, remotePath: '/fixture' });
   p.planCleanupHost = () => ({ openJob: async (...args) => { reviews.push(args); } });
   p.simpleSftpApiCall = async () => ({ files: variant === 'artifacts' ? { 'work_dirs/aoept/bus_seed44/model.pth': 'hash' } : {}, unverifiedFiles: {} });
@@ -134,6 +138,7 @@ test('ownership changing during confirmation blocks requeue and duplicate workfl
   await assert.rejects(h.p.retryDistributedJobFromUi(h.message), /身份.*变化/);
   assert.deepEqual(h.stored(), before);
   assert.equal(h.ticks(), 0);
-  const plan = before.plans[0];
-  assert.throws(() => Q.enqueuePlan(before, plan, 'another-workflow'), /FORMAL_JOB_CONFLICT/);
+  // 现行重复登记围栏保护尚未派发（pending 且无 command）的重复声明；已终态的 job 不再重复占位。
+  const registered = Q.enqueuePlan(Q.emptyDistributedQueue(), before.plans[0], 'original-workflow');
+  assert.throws(() => Q.enqueuePlan(registered, before.plans[0], 'another-workflow'), /FORMAL_JOB_CONFLICT/);
 });

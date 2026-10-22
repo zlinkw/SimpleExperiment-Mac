@@ -1,4 +1,6 @@
 import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
+import { TASK_SHELL_ENVIRONMENT_PYTHON } from "./runtime/TaskShellEnvironment";
+import { RUNTIME_LOG_DIAGNOSTICS_PYTHON } from "./runtime/RuntimeLogDiagnostics";
 export const CLUSTER_SCHEDULER_RUNTIME = String.raw`from __future__ import annotations
 
 import argparse
@@ -15,6 +17,7 @@ import random
 import re
 import shlex
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -43,6 +46,9 @@ PLUGIN_VERSION = "0.4.64"
 FORMAL_JOB_PATH_PROTOCOL = 1
 FORMAL_JOB_IDENTITY_ENV_PROTOCOL = 1
 EXECUTION_SHELL_PREFLIGHT_PROTOCOL = 1
+TASK_SHELL_ENVIRONMENT_PROTOCOL = 1
+FORMAL_JOB_PREFLIGHT_STAGES_PROTOCOL = 1
+PROJECT_MANAGED_VALIDATION_PROTOCOL = 1
 
 TAIL_BYTES = 16 * 1024
 WORKER_AVAILABILITY_REFRESH_TIMEOUT_SECONDS = 5.0
@@ -538,26 +544,6 @@ def text_field(record: dict[str, Any], *keys: str) -> str:
             return str(value).strip()
     return ""
 
-def path_field(record: dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        value = record.get(key)
-        if value is None or value == "":
-            continue
-        if not isinstance(value, str):
-            raise SystemExit(key + " 必须是路径字符串")
-        return value
-    return ""
-
-def posix_plan_relative_path(value: object, label: str, allow_root: bool = False) -> str:
-    if allow_root and value in (".", "./"):
-        return "."
-    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
-            or value.startswith("/") or ":" in value or chr(92) in value
-            or any(ord(char) < 32 or ord(char) == 127 for char in value)
-            or any(part in ("", ".", "..") for part in value.split("/"))):
-        raise SystemExit(label + " 必须是保留真实拼写的项目内相对 POSIX 路径")
-    return value
-
 
 def dict_field(record: dict[str, Any], *keys: str) -> dict[str, Any]:
     for key in keys:
@@ -666,13 +652,26 @@ RESULT_EXACT_PAIRS = {("experiments", "results.csv")}
 
 # 历史产物解耦：用于调度前检测 output_dir 是否已有产物的标记文件（与 RESULT_ROOT_FILES 交叉但聚焦关键产物）
 ${PLAN_EXISTING_ARTIFACTS_PYTHON}
+${TASK_SHELL_ENVIRONMENT_PYTHON}
+${RUNTIME_LOG_DIAGNOSTICS_PYTHON}
+
+NATIVE_RUNTIME_LOG_STATE = None
+
+def runtime_log_phase(phase):
+    state = NATIVE_RUNTIME_LOG_STATE
+    if state is not None:
+        task_log_close(state)
+        state["phase"] = phase
+        if state["logPath"]:
+            task_log_marker(state["commandId"], "phase", phase)
 
 
 def detect_existing_outputs(jobs: list[Job]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for job in jobs:
         info = has_existing_artifacts(job.output_dir)
-        if info["exists"]:
+        result_exists = Path(job.result_csv).is_file()
+        if info["exists"] or result_exists:
             out.append({"index": job.index, "case": job.case, "seed": job.seed, "output_dir": job.output_dir, "markers": info["markers"], "totalFiles": info["totalFiles"]})
     return out
 
@@ -829,6 +828,26 @@ def plan_runner(plan: dict[str, Any]) -> dict[str, Any]:
             runner[key] = next(plan[alias] for alias in aliases if alias in plan)
     return runner
 
+
+def posix_plan_relative_path(value: object, label: str, allow_root: bool = False) -> str:
+    if allow_root and value in (".", "./"):
+        return "."
+    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
+            or value.startswith("/") or ":" in value or chr(92) in value
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+            or any(part in ("", ".", "..") for part in value.split("/"))):
+        raise SystemExit(label + " 必须是保留真实拼写的项目内相对 POSIX 路径")
+    return value
+
+def path_field(record: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = record.get(key)
+        if value is None or value == "":
+            continue
+        if not isinstance(value, str):
+            raise SystemExit(key + " 必须是路径字符串")
+        return value
+    return ""
 
 def declared_path_values(value: Any) -> list[str]:
     if isinstance(value, str):
@@ -1158,6 +1177,8 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
     sweep_dir_tpl = str(naming.get("sweep_dir") or "work_dirs/multirun/{suite}")
     job_name_tpl = str(naming.get("job_name") or "{index}_{case}_seed{seed}")
     plan_paper = plan.get("paper") if isinstance(plan.get("paper"), dict) else {}
+    metadata_file = Path.cwd() / "experiments/simple_project.yaml"
+    metadata = load_yaml_file(metadata_file) if metadata_file.is_file() else {}
 
     def load_config_cached(path: str) -> dict[str, Any]:
         if not str(path or "").strip():
@@ -1172,8 +1193,7 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
         case_name = case_label(case_item, index)
         case_config_value = case_item.get("config")
         case_base_config_value = case_item.get("base_config")
-        case_base_config_tpl = path_field(case_item, "base_config") if isinstance(case_base_config_value, str) else ""
-        case_base_config_tpl = case_base_config_tpl or (case_config_value if isinstance(case_config_value, str) else "") or base_config_path
+        case_base_config_tpl = text_field(case_item, "base_config") or (str(case_config_value) if isinstance(case_config_value, str) else "") or base_config_path
         case_config_patch: dict[str, Any] = {}
         if isinstance(case_base_config_value, dict):
             case_config_patch = deep_merge(case_config_patch, case_base_config_value)
@@ -1205,7 +1225,7 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
             values.update({"job_name": job_name, "experiment_name": experiment_name})
             output_tpl = path_field(case_item, *OUTPUT_DIR_KEYS) or path_field(plan, *OUTPUT_DIR_KEYS)
             output_dir = render_template(output_tpl, values) if output_tpl else (Path(render_template(sweep_dir_tpl, values)) / job_name).as_posix()
-            output_dir = safe_project_relative_path(Path.cwd(), output_dir, "output_dir")
+            output_dir = posix_plan_relative_path(output_dir, "output_dir")
             values.update({"output_dir": output_dir, "outputDir": output_dir})
             for alias_key in OUTPUT_TEMPLATE_ALIAS_KEYS:
                 values[alias_key] = output_dir
@@ -1229,8 +1249,6 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
             runner_expected_results = list(runner_result_alias_values.values())
             result_csv_tpl = direct_result_field(case_item, case_paper, plan_paper, plan) or (case_expected_results + plan_expected_results + runner_expected_results + [f"{normalize_default_result_csv_dir(default_result_csv_dir)}/{suite}.csv"])[0]
             result_csv = render_template(result_csv_tpl, values)
-            metadata_file = Path.cwd() / "experiments/simple_project.yaml"
-            metadata = load_yaml_file(metadata_file) if metadata_file.is_file() else {}
             values["result_path_policy"] = str(case_item.get("result_path_policy") or local_runner.get("result_path_policy")
                                                or plan.get("result_path_policy") or metadata.get("resultPathPolicy") or "declared")
             values["declared_result_csv"] = result_csv
@@ -1333,22 +1351,8 @@ def bind_execution_result_paths(job: Job, output_override: str = "") -> Job:
 
 
 def result_path_preflight(root: Path, jobs: list[Job], include_attempt: bool = True, execution_mode: str = "", validate_indices=None) -> dict[str, Any]:
-    """Read-only project hook; no preview namespace or output creation."""
-    metadata_path = root / "experiments/simple_project.yaml"
-    metadata = load_yaml_file(metadata_path) if metadata_path.is_file() else {}
-    hook_path = str((metadata.get("adapter") or {}).get("resultPathValidator") or "")
-    validator = None
-    if hook_path:
-        relative = safe_project_relative_path(root, hook_path, "adapter.resultPathValidator", require_exists=True)
-        filename = root / relative
-        tracked = globals().get("PLAN_VALIDATION_INPUT_FILES")
-        if isinstance(tracked, set):
-            tracked.add(filename.resolve().as_posix())
-        namespace = {"__file__": str(filename), "__name__": "simple_experiment_result_path_validator"}
-        exec(compile(filename.read_text(encoding="utf-8"), str(filename), "exec"), namespace)
-        validator = namespace.get("validate_result_paths")
-        if not callable(validator):
-            raise ValueError("RESULT_PATH_VALIDATOR_INVALID: " + hook_path + " requires validate_result_paths(config, contract)")
+    """Plugin path/message contract only. Project science callbacks are never imported."""
+    hook_path = "plugin.result_path_contract"
     rows, seen, seen_outputs = [], set(), set()
     for job in jobs:
         candidates = [job]
@@ -1394,20 +1398,7 @@ def result_path_preflight(root: Path, jobs: list[Job], include_attempt: bool = T
                          + "; execution=" + candidate.result_csv
                          + "; check runner.result_path_policy / project validate_result_paths")
             rows.append({"index": job.index, "ok": not error, "contract": contract, "error": error, "projectInterface": hook_path,
-                         "assetValidation": "not_selected" if validate_indices is not None and job.index not in validate_indices else "pending"})
-    # Full-PLAN structural rejection comes before expensive project callbacks.
-    if not any(row["error"] for row in rows):
-        for job, row in zip(jobs, rows):
-            if row["assetValidation"] == "not_selected":
-                continue
-            try:
-                if validator and validator(copy.deepcopy(job.config), {**row["contract"], "project_root": str(root)}) is False:
-                    raise ValueError("project validator refused the execution path")
-                row["assetValidation"] = "checked" if validator else "not_configured"
-            except Exception as exc:
-                row.update({"ok": False, "error": "RESULT_PATH_INCOMPATIBLE: " + hook_path + ": " + str(exc)
-                            + "; declared=" + str(row["contract"].get("declared_result_csv")) + "; execution=" + job.result_csv
-                            + "; check runner.result_path_policy / project validate_result_paths"})
+                         "assetValidation": "project_owned", "projectValidationExecuted": False})
     missing = [row["error"] for row in rows if not row["ok"]]
     return {"ok": not missing, "rows": rows, "missing": missing}
 
@@ -1764,21 +1755,25 @@ def simple_conda_wrapped_args(args: list[str], env: dict[str, str]) -> list[str]
     # 变量化：tmux 人工发送模式仍需在 bash -lc 前拼接 conda activate；不依赖 shutil.which，保持在非交互 shell 也能 activate
     if os.name == "nt":
         return args
-    conda_env = str(env.get("SIMPLE_EXPERIMENT_CONDA_ENV") or "").strip()
-    if not (simple_conda_required(env) or conda_env):
-        return args
-    return shell_command_args(f"{simple_conda_activation_script(env)} && exec {shlex.join(args)}")
+    return task_shell_args(args, env, runtime_python_command(env))
 
 def execution_shell_preflight() -> dict[str, Any]:
-    """Use the real task shell to probe only stdlib/interpreter identity, never a job."""
+    """Probe the login shell, loader and installed torch import; never execute a job or use a GPU."""
     env = simple_runtime_env()
-    code = "import json,os,sys; print(json.dumps(dict(python=sys.executable,prefix=sys.prefix,identity=os.environ.get('SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY','')),ensure_ascii=False))"
+    code = TASK_EXECUTION_PROBE_CODE
     proc = None
     readers = []
+    previous_signal = None
     try:
+        if os.name != "nt" and threading.current_thread() is threading.main_thread():
+            previous_signal = signal.getsignal(signal.SIGTERM)
+            def cancelled(signum, frame):
+                raise InterruptedError("execution shell preflight cancelled")
+            signal.signal(signal.SIGTERM, cancelled)
         python = runtime_python_command(env)
         proc = subprocess.Popen(simple_conda_wrapped_args([python, "-B", "-X", "utf8", "-c", code], env), env=env,
-                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                start_new_session=os.name != "nt")
         buffers = {"stdout": bytearray(), "stderr": bytearray()}
         overflow = [False]
         def drain(name, stream):
@@ -1794,7 +1789,7 @@ def execution_shell_preflight() -> dict[str, Any]:
         readers = [threading.Thread(target=drain, args=(name, stream), daemon=True)
                    for name, stream in (("stdout", proc.stdout), ("stderr", proc.stderr))]
         for reader in readers: reader.start()
-        proc.wait(timeout=8)  # Bounded stdlib probe only; asset verification uses genuine-progress inactivity.
+        proc.wait(timeout=8)  # Bounded import/CPU probe; full assets use genuine-progress inactivity.
         for reader in readers: reader.join(timeout=1)
         if any(reader.is_alive() for reader in readers):
             raise ValueError("execution environment output did not close")
@@ -1818,11 +1813,17 @@ def execution_shell_preflight() -> dict[str, Any]:
         return {"ok": False, "errorCode": "EXECUTION_SHELL_PREFLIGHT_FAILED", "error": str(exc)[-2000:], "executionStarted": False}
     finally:
         if proc is not None:
-            if proc.poll() is None:
-                proc.kill()
-                proc.wait(timeout=2)
+            if proc.poll() is None or any(reader.is_alive() for reader in readers):
+                if os.name != "nt" and isinstance(getattr(proc, "pid", None), int):
+                    try: os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError: pass
+                else:
+                    proc.kill()
+            proc.wait(timeout=2)
             for reader in readers: reader.join(timeout=1)
             for stream in (proc.stdout, proc.stderr): stream.close()
+        if previous_signal is not None:
+            signal.signal(signal.SIGTERM, previous_signal)
 
 
 def _replace_bare_python_prefix(text: str, python_bin: str) -> str:
@@ -1870,7 +1871,21 @@ def run_command(args: list[str], env: dict[str, str], working_directory: str = "
         raise RuntimeError(f"工作目录越出项目目录：{working_directory}") from None
     if not cwd.is_dir():
         raise RuntimeError(f"工作目录不存在：{working_directory}")
-    subprocess.run(simple_conda_wrapped_args(args, env), check=True, env=env, cwd=str(cwd))
+    if NATIVE_RUNTIME_LOG_STATE is None:
+        subprocess.run(simple_conda_wrapped_args(args, env), check=True, env=env, cwd=str(cwd))
+        return
+    # Keep one foreground process tree and the original merged console stream.
+    with subprocess.Popen(simple_conda_wrapped_args(args, env), env=env, cwd=str(cwd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as child:
+        while True:
+            chunk = child.stdout.read1(65536)
+            if not chunk:
+                break
+            task_log_feed(NATIVE_RUNTIME_LOG_STATE, chunk)
+            sys.stdout.buffer.write(chunk)
+            sys.stdout.buffer.flush()
+        code = child.wait()
+    if code:
+        raise subprocess.CalledProcessError(code, args)
 
 
 def path_for_job_command(value: object, job: Job) -> str:
@@ -2189,12 +2204,8 @@ def formal_checkpoint_source(job: Job, identity: dict[str, Any], mode: str = "te
     if mode == "test" and (not configured or (Path.cwd() / configured).resolve() != (Path.cwd() / source["checkpoint_path"]).resolve()):
         raise ValueError("FORMAL_CHECKPOINT_DECLARATION_CHANGED")
     saved = load_yaml_file(Path(source["config_path"]))
-    provenance = saved.get("runtime", {}).get("execution_provenance") or {}
-    same_code = source["code_fingerprint"] == identity.get("codeFingerprint")
-    if not same_code:
-        same_code = (provenance.get("codeFingerprint") == source["code_fingerprint"]
-                     and source.get("source_code_sha256") == provenance.get("sourceCodeHash") == formal_source_fingerprint(Path.cwd()))
-    if formal_training_signature(saved) != formal_training_signature(job.config) or not same_code:
+    # 29：code_fingerprint 只是同步时快照记录，不再作为执行期源码不变门禁；运行中允许用户更新科研源码。
+    if formal_training_signature(saved) != formal_training_signature(job.config):
         raise ValueError("FORMAL_CHECKPOINT_CONFIG_OR_CODE_CHANGED")
     saved_contract = saved.get("runtime", {}).get("result_path_contract") or {}
     if saved_contract.get("plan_file") != source["plan_file"] or saved_contract.get("plan_revision") != source["plan_revision"]:
@@ -2310,6 +2321,26 @@ def formal_job_preflight(job: Job, identity: dict[str, Any], mode: str) -> dict[
     expected = {**{key: identity[key] for key in required}, "index": job.index, "case": job.case, "seed": job.seed,
                 "outputDir": job.output_dir, "collectionResultCsv": job.result_csv, "configHash": formal_job_config_hash(job)}
     formal_job_safe_path(job.result_csv)
+    if os.environ.get("SIMPLE_EXPERIMENT_TASK_LIFECYCLE") == "2":
+        directory = formal_job_safe_path(job.output_dir)
+        if job.config.get("runtime", {}).get("checkpoint_source"):
+            source = formal_checkpoint_source(job, identity, mode)
+            saved = load_yaml_file(Path(source["config_path"]))
+            manifest = directory / "artifact_manifest.json"
+            if manifest.is_file() and manifest.stat().st_size > 1024 * 1024:
+                raise ValueError("ARTIFACT_MANIFEST_TOO_LARGE")
+            report = json.loads(manifest.read_text(encoding="utf-8")).get("simpleExperimentMac", {}) if manifest.is_file() else {}
+            source_run = saved.get("runtime", {}).get("execution_provenance", {}).get("commandId")
+            if report.get("outputDir") == job.output_dir and report.get("runId") == source_run and source_run:
+                if mode == "train" and formal_resume_targets(job) or not Path(job.result_csv).exists():
+                    return {"identity": expected, "checkpointVerified": True}
+        existing = directory.exists() and any(directory.iterdir())
+        if existing or Path(job.result_csv).exists():
+            raise FormalJobConflictError("FORMAL_JOB_CONFLICT: declared output contains artifacts; review exact replacement or declare another job; output="
+                + job.output_dir + "; result=" + job.result_csv, {"outputDir": job.output_dir, "resultCsv": job.result_csv, "lifecycleProtocol": 2})
+        if mode == "test":
+            formal_checkpoint_source(job, identity, mode)
+        return {"identity": expected}
     owner_path = formal_job_safe_path(job.output_dir + "/formal_job_owner.json")
     if owner_path.is_file() and owner_path.stat().st_size > 65536:
         raise ValueError("FORMAL_JOB_OWNER_INVALID: owner metadata exceeds 64 KiB")
@@ -2344,6 +2375,33 @@ def formal_job_preflight(job: Job, identity: dict[str, Any], mode: str) -> dict[
 
 @contextmanager
 def formal_job_writer(job: Job, identity: dict[str, Any], mode: str):
+    global NATIVE_RUNTIME_LOG_STATE
+    if os.environ.get("SIMPLE_EXPERIMENT_TASK_LIFECYCLE") == "2":
+        admission = formal_job_preflight(job, identity, mode)
+        if admission.get("completed"):
+            yield admission
+            return
+        Path(job.output_dir).mkdir(parents=True, exist_ok=True)
+        object.__setattr__(job, "_native_training", {})
+        NATIVE_RUNTIME_LOG_STATE = task_log_new(identity["commandId"], os.environ.get("SIMPLE_EXPERIMENT_RUNTIME_LOG_PATH", ""), True)
+        NATIVE_RUNTIME_LOG_STATE["legacy"] = True
+        NATIVE_RUNTIME_LOG_STATE["phase"] = "prepare"
+        outcome = "failed"
+        try:
+            yield admission
+            outcome = "completed"
+        except BaseException as exc:
+            object.__setattr__(job, "_execution_exit_code", exc.code if isinstance(exc, SystemExit) and isinstance(exc.code, int) else 1)
+            raise
+        finally:
+            task_log_feed(NATIVE_RUNTIME_LOG_STATE, b"", True)
+            task_log_close(NATIVE_RUNTIME_LOG_STATE)
+            if NATIVE_RUNTIME_LOG_STATE["logPath"]:
+                task_log_marker(identity["commandId"], "end", NATIVE_RUNTIME_LOG_STATE["phase"])
+            object.__setattr__(job, "_runtime_diagnostics", task_log_report(NATIVE_RUNTIME_LOG_STATE, True, True))
+            native_job_result(job, identity, mode, outcome)
+            NATIVE_RUNTIME_LOG_STATE = None
+        return
     admission = formal_job_preflight(job, identity, mode)
     directory = Path(job.output_dir)
     directory.mkdir(parents=True, exist_ok=True)
@@ -2402,6 +2460,37 @@ def formal_job_writer(job: Job, identity: dict[str, Any], mode: str):
                 fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
+def native_file_stat(file):
+    info = file.stat()
+    return {"size": info.st_size, "mtimeNs": info.st_mtime_ns, "ctimeNs": info.st_ctime_ns, "inode": info.st_ino, "device": info.st_dev}
+
+def native_job_result(job: Job, identity: dict[str, Any], mode: str, outcome: str):
+    directory = Path(job.output_dir)
+    manifest = formal_job_safe_path(job.output_dir + "/artifact_manifest.json")
+    if manifest.is_file() and manifest.stat().st_size > 1024 * 1024:
+        raise ValueError("ARTIFACT_MANIFEST_TOO_LARGE")
+    document = json.loads(manifest.read_text(encoding="utf-8")) if manifest.is_file() else {}
+    if not isinstance(document, dict):
+        raise ValueError("ARTIFACT_MANIFEST_INVALID")
+    weights = sorted(file.as_posix() for file in directory.rglob("*") if file.is_file() and not file.is_symlink()
+                     and file.suffix in (".pt", ".pth", ".ckpt", ".safetensors"))
+    csv_path = formal_job_safe_path(job.result_csv)
+    file_stats = {file: native_file_stat(Path(file)) for file in weights}
+    file_stats.update(getattr(job, "_native_training", {}).get("checkpointStat", {}))
+    if csv_path.is_file():
+        file_stats[job.result_csv] = native_file_stat(csv_path)
+    # Completion evidence is an output, not a mutable queue/owner snapshot.
+    document["simpleExperimentMac"] = {"schemaVersion": 1, "runId": identity["commandId"], "status": outcome,
+        "planFile": str(job.template_values.get("plan_file") or ""), "job": {"index": job.index, "case": job.case, "seed": job.seed},
+        "mode": mode, "outputDir": job.output_dir, "resultCsv": job.result_csv,
+        "fileStats": file_stats,
+        "sha256": {**getattr(job, "_native_training", {}).get("checkpointSha256", {}),
+                   **getattr(job, "_native_training", {}).get("trainingConfigSha256", {}),
+                   **({job.result_csv: formal_job_file_hash(Path(job.result_csv))} if Path(job.result_csv).is_file() else {})},
+        "weights": weights, "runtimeDiagnostics": getattr(job, "_runtime_diagnostics", None),
+        "exitCode": 0 if outcome == "completed" else getattr(job, "_execution_exit_code", None)}
+    manifest.write_text(json.dumps(document, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
 def run_job(job: Job, args: argparse.Namespace) -> None:
     raw = os.environ.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "")
     if not raw and os.environ.get("SIMPLE_EXPERIMENT_MANAGED_JOB") == "1":
@@ -2419,7 +2508,7 @@ def run_job(job: Job, args: argparse.Namespace) -> None:
     if not raw:
         identity["globalJobId"] = str(identity.get("workflowId", "")) + ":" + str(job.index)
     if getattr(args, "overwrite", False) or getattr(args, "overwrite_existing", False):
-        raise ValueError("FORMAL_JOB_CONFLICT: overwrite is retired; explicitly clean or change the declared job")
+        raise ValueError("CONFIRM_REQUIRED: overwrite requires the exact output-replacement preview and two path confirmations")
     try:
         os.environ["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = json.dumps(identity, ensure_ascii=False)
         with formal_job_writer(job, identity, args.mode) as admission:
@@ -2466,6 +2555,7 @@ def run_job_unlocked(job: Job, args: argparse.Namespace) -> None:
     if args.gpu_ids:
         env["CUDA_VISIBLE_DEVICES"] = str(args.gpu_ids)
     if args.mode in {"train", "train_test"}:
+        runtime_log_phase("train")
         command = render_command(job.train_command, job, config_path, args) if job.train_command else [runtime_python_command(env), "train.py", "--config", str(config_path), "--output-dir", job.output_dir, "--case", job.case, "--seed", str(job.seed), "--worker-id", str(args.worker_id or "local")]
         command = wrap_command(command, job, config_path, args, "train")
         log_offsets = original_log_offsets(job)
@@ -2477,14 +2567,20 @@ def run_job_unlocked(job: Job, args: argparse.Namespace) -> None:
         if args.mode == "train" and job.collect_metrics:
             collect_tensorboard_metrics(job)
         owner_path = Path(job.output_dir) / "formal_job_owner.json"
-        owner = json.loads(owner_path.read_text(encoding="utf-8"))
+        owner = getattr(job, "_native_training", {}) if os.environ.get("SIMPLE_EXPERIMENT_TASK_LIFECYCLE") == "2" else json.loads(owner_path.read_text(encoding="utf-8"))
         checkpoints = [file for file in Path(job.output_dir).rglob("*") if file.is_file()
                        and file.suffix in (".pt", ".pth", ".ckpt", ".safetensors")]
         config_files = [Path(job.output_dir) / name for name in ("config.yaml", "config_snapshot.yaml") if (Path(job.output_dir) / name).is_file()]
         owner.update({"trainingCompleted": True, "checkpointSha256": {file.as_posix(): formal_job_file_hash(file) for file in checkpoints},
                       "trainingConfigSha256": {file.as_posix(): formal_job_file_hash(file) for file in config_files}})
-        owner_path.write_text(json.dumps(owner, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        if os.environ.get("SIMPLE_EXPERIMENT_TASK_LIFECYCLE") == "2":
+            owner["checkpointStat"] = {file.as_posix(): native_file_stat(file) for file in checkpoints}
+        if os.environ.get("SIMPLE_EXPERIMENT_TASK_LIFECYCLE") == "2":
+            job._native_training.update(owner)
+        else:
+            owner_path.write_text(json.dumps(owner, ensure_ascii=False, sort_keys=True), encoding="utf-8")
     if args.mode in {"test", "train_test"}:
+        runtime_log_phase("test")
         command = render_command(job.test_command, job, config_path, args) if job.test_command else [runtime_python_command(env), "test.py", "--config", str(config_path), "--output-dir", job.output_dir, "--case", job.case, "--seed", str(job.seed), "--suite", job.suite, "--result-csv", job.result_csv]
         command = wrap_command(command, job, config_path, args, "test")
         log_offsets = original_log_offsets(job)
@@ -2499,9 +2595,8 @@ def run_job_unlocked(job: Job, args: argparse.Namespace) -> None:
 
 
 def formal_job_preflight_mode(args: argparse.Namespace) -> dict[str, Any]:
-    environment = execution_shell_preflight()
-    if not environment["ok"]:
-        raise ValueError(environment["errorCode"] + ": " + environment["error"])
+    structure_only = getattr(args, "formal_job_structure_only", False) is True
+    environment = {"checked": False, "automatic": False, "reason": "research_environment_owned_by_project"}
     plan = load_plan(args.plan)
     if str(args.plan).replace("\\", "/").startswith("tmp/plan/"):
         raise ValueError("DRAFT_EXECUTION_RETIRED")
@@ -2513,13 +2608,16 @@ def formal_job_preflight_mode(args: argparse.Namespace) -> dict[str, Any]:
     if not selected:
         raise ValueError("FORMAL_JOB_INDEX_INVALID")
     job = bind_execution_result_paths(selected, args.output_dir_override)
-    report = result_path_preflight(Path.cwd(), jobs, execution_mode=mode, validate_indices={job.index})
+    report = result_path_preflight(Path.cwd(), jobs, execution_mode=mode,
+                                   validate_indices=set() if structure_only else {job.index})
     if not report["ok"]:
         raise ValueError(";".join(report["missing"]))
     identity = json.loads(os.environ.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "{}"))
     admission = formal_job_preflight(job, identity, mode)
     return {**admission, "executionEnvironment": environment, "policy": "declared", "outputDir": job.output_dir, "checkpointSource": job.config.get("runtime", {}).get("checkpoint_source"),
-            "preflight": {"onlyIndex": job.index, "structuralJobCount": len(jobs), "assetValidationIndices": [job.index], "executionStarted": False},
+            "preflight": {"onlyIndex": job.index, "structuralJobCount": len(jobs),
+                          "assetValidationIndices": [], "projectValidationExecuted": False,
+                          "assetValidationDeferred": False, "executionStarted": False},
             "collectionResultCsv": job.result_csv, "resultPathContract": job.config["runtime"]["result_path_contract"]}
 
 
@@ -2543,15 +2641,14 @@ def run_job_mode(args: argparse.Namespace) -> None:
     args.mode = plan_execution_mode(plan, args.mode)
     if os.environ.get("SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS") and args.mode != plan_execution_mode(plan):
         if not (args.mode == "test" and os.environ.get("SIMPLE_EXPERIMENT_CHECKPOINT_TEST_ONLY") == "1"
-                and formal_job_preflight_mode(args).get("checkpointVerified") is True):
+                and formal_job_preflight_mode(argparse.Namespace(**{**vars(args), "formal_job_structure_only": True})).get("checkpointVerified") is True):
             raise SystemExit("Distributed execution mode disagrees with the original PLAN; no command was launched")
     jobs = jobs_for_args(plan, args)
     chosen = [job for job in jobs if int(job.index) == int(args.only_index)]
     if not chosen:
         raise SystemExit(f"No job selected for index {args.only_index}.")
-    output_override = getattr(args, "output_dir_override", "")
-    if output_override not in (None, ""):
-        output_override = safe_project_relative_path(Path.cwd(), output_override, "--output-dir-override")
+    raw_override = getattr(args, "output_dir_override", "")
+    output_override = posix_plan_relative_path(raw_override, "--output-dir-override") if raw_override not in (None, "") else ""
     if output_override:
         parts = output_override.split("/")
         if os.path.isabs(output_override) or any(part in ("", ".", "..") for part in parts):
@@ -3852,6 +3949,7 @@ def launch_experiment(worker: dict[str, Any], plan: str, experiment_index: int, 
     prefix = "dbg" if debug_mode else ("tst" if mode == "test" else "run")
     session = f"{prefix}{experiment_index}-{int(time.time() * 1000) % 1000000}-{random.randint(100, 999)}"
     project_dir = str(worker["project_dir"])
+    posix_plan_relative_path(plan, "plan")
     output_dir_text = posix_plan_relative_path(output_dir, "output_dir") if output_dir != "" else ""
     default_result_csv_dir = normalize_default_result_csv_dir(default_result_csv_dir)
     runtime_path = ensure_worker_runtime(worker)
@@ -4043,7 +4141,7 @@ def _scheduler_terminal_emitted(args) -> bool:
 
 def main() -> None:
     global AGENT_STATE_DIR, _SCHEDULER_ARGS_FOR_GUARD
-    parser = argparse.ArgumentParser(description="SimpleExperiment Hub-side scheduler runtime.")
+    parser = argparse.ArgumentParser(description="SimpleExperiment Worker job runtime.")
     parser.add_argument("--plan", default="")
     parser.add_argument("--workers-json", default="")
     parser.add_argument("--poll-seconds", type=float, default=600)
@@ -4053,8 +4151,10 @@ def main() -> None:
     parser.add_argument("--state-path", default="")
     parser.add_argument("--run-job", action="store_true")
     parser.add_argument("--formal-job-preflight", action="store_true")
+    parser.add_argument("--formal-job-structure-only", action="store_true")
     parser.add_argument("--check-execution-shell-json", action="store_true")
     parser.add_argument("--print-job-dir", action="store_true")
+    parser.add_argument("--describe-jobs", action="store_true")
     parser.add_argument("--validate-plan", action="store_true")
     parser.add_argument("--dry-run-plan", action="store_true")
     parser.add_argument("--resume", action="store_true")
@@ -4096,6 +4196,15 @@ def main() -> None:
     parser.add_argument("--default-result-csv-dir", default="experiments/results")
     parser.add_argument("--check-dependencies-json", action="store_true")
     args = parser.parse_args()
+    if args.describe_jobs:
+        plan = load_plan(args.plan)
+        _, jobs = build_jobs(plan, args.default_result_csv_dir)
+        print(json.dumps({"planFile": args.plan, "planHash": plan.get("_revision"), "jobs": [
+            {"index": job.index, "case": job.case, "seed": job.seed, "output_dir": job.output_dir, "result_csv": job.result_csv}
+            for job in jobs]}, ensure_ascii=False))
+        return
+    if args.formal_job_structure_only and not args.formal_job_preflight:
+        raise SystemExit("FORMAL_JOB_STRUCTURE_ONLY_REQUIRES_PREFLIGHT: execution always validates assets")
     _SCHEDULER_ARGS_FOR_GUARD = args
     args.default_result_csv_dir = normalize_default_result_csv_dir(args.default_result_csv_dir)
     if args.check_execution_shell_json:
@@ -4115,28 +4224,6 @@ def main() -> None:
     if args.check_dependencies_json:
         print(json.dumps(scheduler_dependency_status(), ensure_ascii=False))
         return
-    try:
-        require_scheduler_dependencies()
-    except SystemExit as _exc:
-        # Even when startup fails before run_job_mode, publish a terminal failed event so
-        # the operation journal is never left pending waiting for a scheduler terminal that
-        # will never arrive (defense in depth beyond the agent-side wait_scheduler fallback).
-        try:
-            _early_msg = str(_exc).strip().splitlines()[0][:200] if str(_exc).strip() else f"调度器依赖检查未通过：{_exc}"
-            append_scheduler_operation_event(args, "failed", f"调度器依赖检查未通过：{_exc}", {"failureSource": "scheduler_dependency_check", "schedulerStarted": True, "schedulerErrorZh": _early_msg[:200]})
-        except Exception:
-            pass
-        try:
-            _msg = f"[{now()}] scheduler_dependency_check_failed {_exc}"
-            _sched_log = str(getattr(args, "scheduler_log", "") or "").strip()
-            if _sched_log:
-                append_log(Path(_sched_log), _msg)
-            _op = str(getattr(args, "operation_id", "") or getattr(args, "op_id", "") or "").strip()
-            if _op:
-                append_log(Path(f"simple_cluster/tmp/cluster_scheduler/{_op}.log"), _msg)
-        except Exception:
-            pass
-        raise
     if args.print_job_dir:
         if args.only_index is None:
             raise SystemExit("--print-job-dir 必须同时提供 --only-index")
@@ -4157,843 +4244,7 @@ def main() -> None:
             raise SystemExit("--run-job 必须同时提供 --only-index")
         run_job_mode(args)
         return
-    if args.sync_state:
-        if not args.state_path:
-            raise SystemExit("--sync-state 必须同时提供 --state-path")
-        if not args.workers_json:
-            raise SystemExit("--sync-state 必须同时提供 --workers-json")
-        sync_state_once(args)
-        return
-    if not args.plan:
-        raise SystemExit("缺少 --plan。")
-    if not args.workers_json:
-        raise SystemExit("缺少 --workers-json。")
-
-    poll_seconds = scheduler_min_poll_interval(args.poll_seconds)
-    poll_jitter_seconds = 0
-    workers = json.loads(Path(args.workers_json).read_text(encoding="utf-8"))
-    wait_for_plan_queue(args)
-    worker_status_ttl_seconds = max(60, int(args.worker_status_ttl_seconds or 180))
-    session_check_min_seconds = max(0.5, float(args.session_check_min_seconds))
-    passive_interrupt_max_retries = max(0, int(args.passive_interrupt_max_retries or 0))
-    passive_interrupt_base_backoff = max(60, int(args.passive_interrupt_backoff_seconds or poll_seconds))
-    read_availability_cache(args.availability_path, workers, worker_status_ttl_seconds)
-    refresh_missing_worker_availability(workers, args.availability_path)
-    workers_by_id = {str(worker.get("id") or ""): worker for worker in workers}
-    try:
-        plan = load_plan(args.plan)
-    except SystemExit as _exc:
-        try:
-            _early_msg2 = str(_exc).strip().splitlines()[0][:200] if str(_exc).strip() else f"计划加载失败：{_exc}"
-            append_scheduler_operation_event(args, "failed", f"计划加载失败：{_exc}", {"failureSource": "scheduler_load_plan", "planFile": args.plan, "schedulerStarted": True, "schedulerErrorZh": _early_msg2[:200]})
-        except Exception:
-            pass
-        try:
-            _msg = f"[{now()}] scheduler_load_plan_failed {_exc} plan={args.plan}"
-            _sched_log = str(getattr(args, "scheduler_log", "") or "").strip()
-            if _sched_log:
-                append_log(Path(_sched_log), _msg)
-            _op = str(getattr(args, "operation_id", "") or getattr(args, "op_id", "") or "").strip()
-            if _op:
-                append_log(Path(f"simple_cluster/tmp/cluster_scheduler/{_op}.log"), _msg)
-            try:
-                _pk = plan_runtime_key(args.plan)
-                append_log(Path(f"simple_cluster/tmp/cluster_scheduler/{_pk}.log"), _msg)
-            except Exception:
-                pass
-        except Exception:
-            pass
-        raise
-    except Exception as _exc:
-        try:
-            _early_msg3 = str(_exc).strip().splitlines()[0][:200] if str(_exc).strip() else f"计划加载异常：{_exc}"
-            append_scheduler_operation_event(args, "failed", f"计划加载异常：{_exc}", {"failureSource": "scheduler_load_plan", "planFile": args.plan, "schedulerStarted": True, "schedulerErrorZh": _early_msg3[:200]})
-        except Exception:
-            pass
-        try:
-            _msg = f"[{now()}] scheduler_load_plan_exception {_exc} plan={args.plan}"
-            _sched_log = str(getattr(args, "scheduler_log", "") or "").strip()
-            if _sched_log:
-                append_log(Path(_sched_log), _msg)
-            _op = str(getattr(args, "operation_id", "") or getattr(args, "op_id", "") or "").strip()
-            if _op:
-                append_log(Path(f"simple_cluster/tmp/cluster_scheduler/{_op}.log"), _msg)
-            try:
-                _pk = plan_runtime_key(args.plan)
-                append_log(Path(f"simple_cluster/tmp/cluster_scheduler/{_pk}.log"), _msg)
-            except Exception:
-                pass
-        except Exception:
-            pass
-        raise
-    jobs = jobs_for_args(plan, args)
-    execution_mode = plan_execution_mode(plan, args.mode)
-    args.mode = execution_mode
-    jobs_by_index = {int(job.index): job for job in jobs}
-    queue = deque(job.index for job in (jobs[:1] if args.debug_mode else jobs))
-    active: dict[str, dict[str, Any]] = {}
-    testing: dict[str, dict[str, Any]] = {}
-    completed: list[dict[str, Any]] = []
-    failed: list[dict[str, Any]] = []
-    stopped: list[dict[str, Any]] = []
-    not_dispatched: list[int] = []
-    fail_stop_reason = ""
-    dispatch_probe: list[dict[str, Any]] = []
-    scheduler_wait_reason = ""
-    scheduler_terminal = False
-    last_session_check: dict[str, float] = {}
-    passive_retry_counts: dict[int, int] = {}
-    passive_backoff_until = 0.0
-    tmp_dir = Path("simple_cluster/tmp/cluster_scheduler")
-    log_dir = Path(args.debug_output_dir) / "worker_logs" if args.debug_mode else tmp_dir / "logs"
-    plan_key = plan_runtime_key(args.plan)
-    state_key = f"{plan_key}__debug__{slug(args.debug_run_id, 'debug', 64)}" if args.debug_mode else plan_key
-    state_path = tmp_dir / f"{state_key}_state.json"
-    control_path = tmp_dir / f"{state_key}_control.json"
-    _scheduler_log_arg = str(getattr(args, "scheduler_log", "") or "").strip()
-    if _scheduler_log_arg:
-        queue_log = Path(_scheduler_log_arg)
-    elif args.debug_mode:
-        queue_log = Path(args.debug_output_dir) / "scheduler.log"
-    else:
-        queue_log = tmp_dir / f"{plan_key}.log"
-
-    def _append_scheduler_log(text: str) -> None:
-        # 控制台直显：print 到 stdout 并 flush，直显 tmux；备份到 tmp 仅用 logging.FileHandler 追加
-        try:
-            print(text, flush=True)
-            try:
-                sys.stdout.flush()
-            except Exception:
-                pass
-        except Exception:
-            pass
-        try:
-            import logging as _logging
-            def _fh_append(_path: Path, _msg: str) -> None:
-                _path.parent.mkdir(parents=True, exist_ok=True)
-                _h = _logging.FileHandler(str(_path), encoding="utf-8")
-                _h.setLevel(_logging.INFO)
-                _h.setFormatter(_logging.Formatter("%(message)s"))
-                _lg = _logging.getLogger(f"scheduler_backup_{str(_path)}")
-                _lg.addHandler(_h)
-                _lg.setLevel(_logging.INFO)
-                _lg.propagate = False
-                _lg.info(_msg)
-                _h.close()
-                _lg.removeHandler(_h)
-            _fh_append(queue_log, text)
-            if _scheduler_log_arg:
-                _explicit = Path(_scheduler_log_arg)
-                if _explicit != queue_log:
-                    _fh_append(_explicit, text)
-        except Exception:
-            pass
-
-    def state_payload(error: str = "") -> dict[str, Any]:
-        operation_id = str(getattr(args, "operation_id", "") or "").strip()
-        command_id = str(getattr(args, "op_id", "") or operation_id).strip()
-        return {
-            "plan": args.plan,
-            "cleanupOwner": {
-                "schemaVersion": 1,
-                "projectRoot": str(Path.cwd().resolve()),
-                "planFile": str(args.plan or "").replace("\\", "/"),
-                "operationId": operation_id,
-                "runId": operation_id,
-                "commandId": command_id,
-                "purpose": "scheduler-state",
-                "statePath": str(state_path.resolve()).replace("\\", "/"),
-            },
-            "schedulerTerminal": bool(scheduler_terminal),
-            "planRevision": str(getattr(args, "plan_revision", "") or ""),
-            "workerSetRevision": str(args.worker_set_revision or ""),
-            "schedulerOwnerWorkerId": str(args.scheduler_owner_worker_id or ""),
-            "assignedExperimentIndices": only_indices_for_args(args),
-            "debugMode": bool(args.debug_mode),
-            "debugRunId": str(args.debug_run_id or ""),
-            "debugOutputDir": str(args.debug_output_dir or ""),
-            "execution_mode": execution_mode,
-            "total_experiments": len(jobs),
-            "pending_experiments": list(queue),
-            "running_experiments": list(active.values()),
-            "testing_experiments": list(testing.values()),
-            "completed_experiments": completed,
-            "failed_experiments": failed,
-            "stopped_experiments": stopped,
-            "not_dispatched_experiments": not_dispatched,
-            "dispatch_stopped_on_failure": bool(fail_stop_reason),
-            "scheduler_error": error,
-            "scheduler_wait_reason": scheduler_wait_reason,
-            "dispatch_probe": dispatch_probe[-20:],
-            "scheduler_session": args.scheduler_session,
-            "scheduler_log": args.scheduler_log,
-            "control_path": str(control_path),
-        }
-
-    def write_current_state(error: str = "") -> None:
-        write_state(state_path, state_payload(error))
-
-    def record_passive_cleanup_candidate(worker: dict[str, Any], item: dict[str, Any], reason: str) -> None:
-        job = job_for(item, jobs_by_index)
-        output_dir = str(getattr(job, "output_dir", "") if job else item.get("output_dir") or "").replace("\\", "/").strip().strip("/")
-        if not output_dir:
-            return
-        # An automatic retry is not authorization to delete the interrupted
-        # attempt. Keep its exact owner/path as a review candidate; cleanup is
-        # available only through the explicit two-confirmation workflow.
-        item.pop("passive_cleanup_requested", None)
-        item.pop("passive_cleanup_command_id", None)
-        item["passiveCleanupCandidate"] = {
-            "schemaVersion": 1,
-            "projectRoot": str(Path.cwd().resolve()),
-            "planFile": str(args.plan or "").replace("\\", "/"),
-            "runId": str(getattr(args, "op_id", "") or operation_id),
-            "commandId": str(item.get("session") or item.get("command_id") or item.get("commandId") or ""),
-            "workerId": str(worker.get("id") or ""),
-            "experimentIndex": int(item.get("experiment_index", -1)),
-            "outputDir": output_dir,
-            "reason": str(reason or "passive_interruption")[:240],
-            "requiresExplicitConfirmation": True,
-            "recordedAt": now(),
-        }
-        _append_scheduler_log( f"[{now()}] passive_cleanup_candidate experiment={item.get('experiment_index')} worker={worker.get('id')} output_dir={output_dir} retained=true reason={reason}")
-
-    def requeue_passive_interruption(kind: str, item: dict[str, Any], worker: dict[str, Any], reason: str) -> bool:
-        nonlocal passive_backoff_until
-        try:
-            index = int(item.get("experiment_index"))
-        except Exception:
-            return False
-        attempts = passive_retry_counts.get(index, 0) + 1
-        item["status"] = "passive_interrupted_retryable"
-        item["completion_type"] = "passive_interrupted_retryable"
-        item["interruption_kind"] = "passive"
-        item["interruptionKind"] = "passive"
-        item["passiveInterrupted"] = True
-        item["interruptionReason"] = reason
-        item["retryAttempt"] = attempts
-        item["maxRetryAttempts"] = passive_interrupt_max_retries
-        if attempts > passive_interrupt_max_retries:
-            item["status"] = "failed"
-            item["completion_type"] = "failed"
-            item["error"] = f"{reason}; passive retry exhausted"
-            return False
-        passive_retry_counts[index] = attempts
-        if index not in queue:
-            queue.append(index)
-        item["retryQueued"] = True
-        record_passive_cleanup_candidate(worker, item, reason)
-        delay = min(900, passive_interrupt_base_backoff * attempts)
-        passive_backoff_until = max(passive_backoff_until, time.time() + delay)
-        stopped.append(item)
-        _append_scheduler_log( f"[{now()}] passive_interrupt_requeue {kind} experiment={index} server={item.get('worker_name')} gpu={item.get('gpu_id')} attempt={attempts}/{passive_interrupt_max_retries} delay_seconds={delay} reason={reason}")
-        return True
-
-    def finish_item(kind: str, key: str, item: dict[str, Any], worker: dict[str, Any]) -> None:
-        events = command_result_events({str(item.get("session") or "")})
-        event = events.get(str(item.get("session") or "")) or {}
-        payload = event.get("payload") if isinstance(event.get("payload"), dict) else {}
-        exit_code = normalize_exit_code(payload.get("exitCode") if payload.get("exitCode") is not None else (0 if str(payload.get("status") or "") == "completed" else 1))
-        item["finished_at"] = now()
-        item["exit_code"] = exit_code
-        item["console_tail"] = ""
-        item["worker_event_type"] = str(event.get("type") or "")
-        manual_type = manual_interruption_type(event, payload)
-        passive_reason = passive_interruption_reason(event, payload, exit_code)
-        if manual_type:
-            item["status"] = "manual_interrupted_completed"
-            item["completion_type"] = "manual_interrupted_completed"
-            item["interruption_kind"] = "manual"
-            item["interruptionKind"] = "manual"
-            item["manualInterrupted"] = True
-            item["manualStopType"] = manual_type
-            item["stop_reason"] = manual_type
-            item["requiresManualReview"] = True
-            completed.append(item)
-            status = "completed"
-            _append_scheduler_log( f"[{now()}] manual_interrupted {kind} experiment={item['experiment_index']} server={item['worker_name']} gpu={item['gpu_id']} reason={manual_type}")
-        elif exit_code == 0:
-            item["status"] = "normal_completed"
-            item["completion_type"] = "normal_completed"
-            completed.append(item)
-            status = "completed"
-            _append_scheduler_log( f"[{now()}] done {kind} experiment={item['experiment_index']} server={item['worker_name']} gpu={item['gpu_id']} exit_code=0")
-        elif passive_reason and requeue_passive_interruption(kind, item, worker, passive_reason):
-            status = "queued"
-        else:
-            item["error"] = f"exit_code={exit_code if exit_code is not None else 'unknown'}"
-            item["status"] = "failed"
-            item["completion_type"] = "failed"
-            if passive_reason:
-                item["interruption_kind"] = "passive"
-                item["interruptionKind"] = "passive"
-                item["passiveInterrupted"] = True
-                item["interruptionReason"] = passive_reason
-            failed.append(item)
-            status = "failed"
-            _append_scheduler_log( f"[{now()}] failed {kind} experiment={item['experiment_index']} server={item['worker_name']} gpu={item['gpu_id']} {item['error']}")
-        if kind == "test":
-            testing.pop(key, None)
-        else:
-            active.pop(key, None)
-        # 主动探活：任务结束立即刷新可用性，再由上层调度/下次派发消费（无需经 control.json 信号等待轮询，最坏唤醒由 5s 休眠兜底）
-        try:
-            refresh_worker_availability_for_signal(workers, args.availability_path)
-        except Exception:
-            pass
-
-    def reap_finished_items() -> bool:
-        changed = False
-        command_ids = {str(item.get("session") or "") for item in list(testing.values()) + list(active.values()) if str(item.get("session") or "")}
-        finished_events = command_result_events(command_ids)
-        # P1 快速回滚：exec_error 不受 session_check_min_seconds 节流，需立即释放 running 槽位
-        for key, item in list(testing.items()):
-            sess = str(item.get("session") or "")
-            if sess in finished_events:
-                ev = finished_events.get(sess) or {}
-                if str(ev.get("type") or "") == "worker_command_exec_error":
-                    # bypass throttling for exec_error
-                    worker = workers_by_id.get(str(item.get("worker_id") or ""))
-                    if worker:
-                        finish_item("test", key, item, worker)
-                    else:
-                        item["finished_at"] = now()
-                        item["error"] = "worker config missing"
-                        failed.append(item)
-                        testing.pop(key, None)
-                    changed = True
-                    continue
-            if not should_check_finished_session(sess, finished_events, last_session_check.get(key, 0.0), session_check_min_seconds):
-                continue
-            last_session_check[key] = time.time()
-            worker = workers_by_id.get(str(item.get("worker_id") or ""))
-            if not worker:
-                item["finished_at"] = now()
-                item["error"] = "worker config missing"
-                failed.append(item)
-                testing.pop(key, None)
-                changed = True
-                continue
-            if sess in finished_events:
-                finish_item("test", key, item, worker)
-                changed = True
-        for key, item in list(active.items()):
-            sess = str(item.get("session") or "")
-            if sess in finished_events:
-                ev = finished_events.get(sess) or {}
-                if str(ev.get("type") or "") == "worker_command_exec_error":
-                    worker = workers_by_id.get(str(item.get("worker_id") or ""))
-                    if worker:
-                        # 标记为 exec_error 失败并立即释放
-                        item["error"] = str((ev.get("payload") or {}).get("error") or "worker_command_exec_error")
-                        item["finished_at"] = now()
-                        item["status"] = "failed"
-                        item["completion_type"] = "failed"
-                        failed.append(item)
-                        active.pop(key, None)
-                        _append_scheduler_log(f"[{now()}] exec_error_reap experiment={item.get('experiment_index')} session={sess} error={item['error'][:120]}")
-                    else:
-                        item["finished_at"] = now()
-                        item["error"] = "worker config missing"
-                        failed.append(item)
-                        active.pop(key, None)
-                    changed = True
-                    continue
-            if not should_check_finished_session(sess, finished_events, last_session_check.get(key, 0.0), session_check_min_seconds):
-                continue
-            last_session_check[key] = time.time()
-            worker = workers_by_id.get(str(item.get("worker_id") or ""))
-            if not worker:
-                item["finished_at"] = now()
-                item["error"] = "worker config missing"
-                failed.append(item)
-                active.pop(key, None)
-                changed = True
-                continue
-            if sess in finished_events:
-                finish_item("train", key, item, worker)
-                changed = True
-        return changed
-
-    def handle_control() -> bool:
-        control = read_control(control_path)
-        sig = scheduler_signal_from_control(control)
-        # 信号类型区分：first_run / task_end 视为调度信号，区别于轮询 poll_tick
-        if sig in (SCHEDULER_SIGNAL_FIRST_RUN, SCHEDULER_SIGNAL_TASK_END):
-            _append_scheduler_log( f"[{now()}] signal_received type={sig} via_control")
-            try:
-                atomic_write_json(control_path, {"action": "", "signal": "", "handled_at": now(), "previous_signal": sig})
-            except Exception:
-                pass
-            return False
-        # 兼容：control 仅有 poll_tick 时按轮询处理（不中断）
-        if sig == SCHEDULER_SIGNAL_POLL_TICK:
-            return False
-        action = str(control.get("action") or "")
-        if not action:
-            return False
-        if action == "config_updated":
-            # P7热加载：重读 worker 阈值/TTL，不中断调度
-            try:
-                read_availability_cache(str(availability_path) if "availability_path" in dir() else "", workers, 180)
-            except Exception:
-                pass
-            _append_scheduler_log(f"[{now()}] control config_updated reloaded")
-            try:
-                atomic_write_json(control_path, {"action": "", "signal": "", "handled_at": now(), "previous_action": action})
-            except Exception:
-                pass
-            return False
-        if action == "abort_cleanup":
-            _append_scheduler_log( f"[{now()}] control abort_cleanup")
-            manual_type = manual_interruption_type({"type": "scheduler_control"}, control) or "manual_stop_bad_code_or_no_effect"
-            for item in list(active.values()) + list(testing.values()):
-                worker = workers_by_id.get(str(item.get("worker_id") or ""))
-                if worker:
-                    kill_session(worker, str(item.get("session") or ""), manual_type, "user")
-                item["finished_at"] = now()
-                item["status"] = "manual_interrupted_completed"
-                item["completion_type"] = "manual_interrupted_completed"
-                item["interruption_kind"] = "manual"
-                item["interruptionKind"] = "manual"
-                item["manualInterrupted"] = True
-                item["manualStopType"] = manual_type
-                item["stop_reason"] = manual_type
-                item["requiresManualReview"] = True
-                completed.append(item)
-            for index in queue:
-                completed.append({"experiment_index": index, "finished_at": now(), "status": "manual_interrupted_completed", "completion_type": "manual_interrupted_completed", "interruption_kind": "manual", "interruptionKind": "manual", "manualInterrupted": True, "manualStopType": manual_type, "stop_reason": manual_type, "requiresManualReview": True})
-            queue.clear()
-            active.clear()
-            testing.clear()
-            write_current_state()
-            return True
-        if action == "stop_and_test":
-            _append_scheduler_log( f"[{now()}] control stop_and_test")
-            if execution_mode != "train_test":
-                control["action"] = "abort_cleanup"
-                control["manualStopType"] = "manual_stop_converged"
-                atomic_write_json(control_path, control)
-                return handle_control()
-            for index in queue:
-                completed.append({"experiment_index": index, "finished_at": now(), "status": "manual_interrupted_completed", "completion_type": "manual_interrupted_completed", "interruption_kind": "manual", "interruptionKind": "manual", "manualInterrupted": True, "manualStopType": "manual_stop_converged", "stop_reason": "manual_stop_converged", "requiresManualReview": True})
-            queue.clear()
-            for key, item in list(active.items()):
-                worker = workers_by_id.get(str(item.get("worker_id") or ""))
-                if not worker:
-                    item["finished_at"] = now()
-                    item["error"] = "worker config missing"
-                    failed.append(item)
-                    active.pop(key, None)
-                    continue
-                kill_session(worker, str(item.get("session") or ""), "manual_stop_converged", "user")
-                try:
-                    overwrite_existing = bool(getattr(args, "overwrite", False) or getattr(args, "overwrite_existing", False))
-                    _test_job = jobs_by_index.get(int(item["experiment_index"]))
-                    session = launch_experiment(worker, args.plan, int(item["experiment_index"]), str(item["gpu_id"]), log_dir, "test", args.debug_mode, args.debug_run_id, args.debug_output_dir, args.default_result_csv_dir, overwrite_existing, _test_job.case if _test_job else "", _test_job.seed if _test_job else None, str(getattr(args, "operation_id", "") or getattr(args, "op_id", "") or ""), str(_test_job.output_dir) if _test_job else "")
-                    item["train_session"] = item.get("session", "")
-                    item["session"] = session
-                    item["testing_started_at"] = now()
-                    job = job_for(item, jobs_by_index)
-                    if job:
-                        item["output_dir"] = str(job.output_dir)
-                    item["gpu_process_pids"] = gpu_process_pids(worker, str(item.get("gpu_id") or ""))
-                    testing[key] = item
-                    _append_scheduler_log( f"[{now()}] test_dispatch experiment={item['experiment_index']} server={worker['name']} gpu={item['gpu_id']} session={session}")
-                except Exception as exc:
-                    item["finished_at"] = now()
-                    item["error"] = str(exc)
-                    failed.append(item)
-                active.pop(key, None)
-            write_current_state()
-            return False
-        if action == "retry_failed":
-            retry_indexes = []
-            active_indexes = {int(item.get("experiment_index")) for item in list(active.values()) + list(testing.values()) if str(item.get("experiment_index") or "").isdigit()}
-            queued_indexes = {int(index) for index in queue}
-            for item in list(failed):
-                try:
-                    index = int(item.get("experiment_index"))
-                except Exception:
-                    continue
-                if index in active_indexes or index in queued_indexes:
-                    continue
-                queue.append(index)
-                queued_indexes.add(index)
-                retry_indexes.append(index)
-                failed.remove(item)
-            _append_scheduler_log( f"[{now()}] control retry_failed queued={retry_indexes}")
-            atomic_write_json(control_path, {"action": "", "handled_at": now(), "previous_action": action, "retry_indexes": retry_indexes})
-            write_current_state()
-            return False
-        if action == "reproduce_missing":
-            active_indexes = {int(item.get("experiment_index")) for item in list(active.values()) + list(testing.values()) if str(item.get("experiment_index") or "").isdigit()}
-            completed_indexes = {int(item.get("experiment_index")) for item in completed if str(item.get("experiment_index") or "").isdigit()}
-            queued_indexes = {int(index) for index in queue}
-            queued_now = []
-            for job in jobs:
-                index = int(job.index)
-                if index in active_indexes or index in queued_indexes or index in completed_indexes:
-                    continue
-                queue.append(index)
-                queued_indexes.add(index)
-                queued_now.append(index)
-            queued_now_set = set(queued_now)
-            def not_requeued(item: dict[str, Any]) -> bool:
-                try:
-                    return int(item.get("experiment_index")) not in queued_now_set
-                except Exception:
-                    return True
-            failed[:] = [item for item in failed if not_requeued(item)]
-            stopped[:] = [item for item in stopped if not_requeued(item)]
-            _append_scheduler_log( f"[{now()}] control reproduce_missing queued={queued_now}")
-            atomic_write_json(control_path, {"action": "", "handled_at": now(), "previous_action": action, "queued_indexes": queued_now})
-            write_current_state()
-            return False
-        if action == "error":
-            _append_scheduler_log( f"[{now()}] control_error {control.get('error')}")
-        return False
-
-    _append_scheduler_log( f"[{now()}] scheduler_start mode={execution_mode} experiments={len(queue)} workers={len(workers)} poll_seconds={poll_seconds}")
-    write_current_state()
-    # 首跑主动探活：强制直连全量 workers（忽略 fresh），超时 5s/10s，确保首批 4 任务 60s 内派发而非等待下一轮 poll
-    try:
-        refresh_worker_availability_for_signal(workers, args.availability_path, force=True)
-        _append_scheduler_log( f"[{now()}] availability_first_run_probe active poll_seconds={poll_seconds} jitter={poll_jitter_seconds} force=True")
-    except Exception as _e:
-        _append_scheduler_log( f"[{now()}] availability_first_run_fallback error={_e}")
-        try:
-            read_availability_cache(args.availability_path, workers, worker_status_ttl_seconds)
-        except Exception:
-            pass
-    # 首轮已强制刷新内存，首轮 dispatch 走信号路径避免被 read_availability_cache 覆盖为过期文件内容
-    _pending_signal_type = SCHEDULER_SIGNAL_FIRST_RUN
-    no_dispatch_error_cycles = 0
-    _scheduler_abort = {"sig": None}
-    def _handle_scheduler_signal(signum, _frame):
-        _scheduler_abort["sig"] = signum
-    try:
-        import signal as _signal_module
-        _signal_module.signal(_signal_module.SIGTERM, _handle_scheduler_signal)
-        _signal_module.signal(_signal_module.SIGINT, _handle_scheduler_signal)
-    except Exception:
-        pass
-    scheduler_abort_message = ""
-    try:
-        while queue or active or testing:
-            if _scheduler_abort["sig"] is not None:
-                scheduler_abort_message = f"调度器收到终止信号 {_scheduler_abort['sig']}，已安全结束并写入终态"
-                _append_scheduler_log( f"[{now()}] scheduler_abort signal={_scheduler_abort['sig']}")
-                write_current_state(scheduler_abort_message)
-                break
-            scheduler_wait_reason = ""
-            if handle_control():
-                break
-            if reap_finished_items():
-                write_current_state()
-                _pending_signal_type = SCHEDULER_SIGNAL_TASK_END
-            if not fail_stop_reason and scheduler_should_fail_fast(failed, active, testing):
-                fail_stop_reason = str(failed[-1].get("error") or "任务明确失败，已停止派发新任务")[:200]
-                not_dispatched.extend(queue)
-                queue.clear()
-                _append_scheduler_log(f"[{now()}] dispatch_stopped_on_failure held={len(not_dispatched)} active={len(active) + len(testing)} reason={fail_stop_reason}")
-                write_current_state(fail_stop_reason)
-            if fail_stop_reason and not active and not testing:
-                break
-            # 信号类型枚举与直连 vs 缓存分流：信号路径尽可能不利用缓存发信号（B路径 stale才直连 + C piggyback）
-            _is_signal_dispatch = scheduler_signal_requires_refresh(_pending_signal_type)
-            if _is_signal_dispatch:
-                try:
-                    _force_refresh = _pending_signal_type in (SCHEDULER_SIGNAL_FIRST_RUN, SCHEDULER_SIGNAL_TASK_END)
-                    refresh_worker_availability_for_signal(workers, args.availability_path, force=_force_refresh)
-                    _append_scheduler_log( f"[{now()}] availability_signal_path type={_pending_signal_type} force={_force_refresh}")
-                except Exception as _e:
-                    _append_scheduler_log( f"[{now()}] availability_signal_fallback error={_e}")
-                    read_availability_cache(args.availability_path, workers, worker_status_ttl_seconds)
-                    refresh_missing_worker_availability(workers, args.availability_path)
-            else:
-                read_availability_cache(args.availability_path, workers, worker_status_ttl_seconds)
-                refresh_missing_worker_availability(workers, args.availability_path)
-            _pending_signal_type = SCHEDULER_SIGNAL_POLL_TICK
-            for worker in ordered_workers_for_dispatch(workers):
-                if failed:
-                    break
-                # 严格单发：每次 probe 仅取1个空闲GPU派1个job，派完立即重探，避免批量透支空卡规则
-                while queue:
-                    if failed:
-                        break
-                    busy_slots = {**active, **testing}
-                    try:
-                        probe = probe_idle_gpus(worker, busy_slots)
-                    except Exception as exc:
-                        _record_probe(dispatch_probe, {"worker_id": worker["id"], "worker_name": worker.get("name"), "status": "probe_error", "checked_at": now(), "error": str(exc)})
-                        _append_scheduler_log( f"[{now()}] dispatch_probe worker={worker.get('name')} error={exc} will_try_next_worker")
-                        break
-                    _record_probe(dispatch_probe, probe)
-                    if probe.get("error"):
-                        _append_scheduler_log( f"[{now()}] dispatch_probe worker={worker.get('name')} error={probe.get('error')} will_try_next_worker")
-                        break
-                    idle_ids = list(probe.get("idle_gpu_ids") or [])
-                    if not idle_ids:
-                        _append_scheduler_log( f"[{now()}] dispatch_probe worker={worker.get('name')} idle=0 rejected={len(probe.get('rejected') or [])}")
-                        break
-                    gpu_id = idle_ids[0]
-                    if not queue:
-                        break
-                    experiment_index = queue.popleft()
-                    try:
-                        overwrite_existing = bool(getattr(args, "overwrite", False) or getattr(args, "overwrite_existing", False))
-                        _dispatch_job = jobs_by_index.get(experiment_index)
-                        session = launch_experiment(worker, args.plan, experiment_index, gpu_id, log_dir, execution_mode, args.debug_mode, args.debug_run_id, args.debug_output_dir, args.default_result_csv_dir, overwrite_existing, _dispatch_job.case if _dispatch_job else "", _dispatch_job.seed if _dispatch_job else None, str(getattr(args, "operation_id", "") or getattr(args, "op_id", "") or ""), str(_dispatch_job.output_dir) if _dispatch_job else "")
-                        item = {
-                            "experiment_index": experiment_index,
-                            "worker_id": worker["id"],
-                            "worker_name": worker["name"],
-                            "gpu_id": gpu_id,
-                            "session": session,
-                            "mode": execution_mode,
-                            "log_path": str(log_dir / f"{slug(worker['id'], 'worker')}_{experiment_index}_{gpu_id}_{slug(session, 'session')}.log"),
-                            "started_at": now(),
-                            "debugMode": bool(args.debug_mode),
-                            "debugRunId": str(args.debug_run_id or ""),
-                            "debugOutputDir": str(args.debug_output_dir or ""),
-                        }
-                        job = jobs_by_index.get(experiment_index)
-                        if job:
-                            item["output_dir"] = str(job.output_dir)
-                        item["gpu_process_pids"] = gpu_process_pids(worker, gpu_id)
-                        initial_status = "testing" if execution_mode == "test" else "running"
-                        set_console_fields(args.plan, item, worker, jobs_by_index.get(experiment_index), initial_status)
-                        if execution_mode == "test":
-                            item["testing_started_at"] = item["started_at"]
-                            key = f"{worker['id']}:{gpu_id}"
-                            if key in testing:
-                                _append_scheduler_log(f"[{now()}] skip overwrite active_slot {key} experiment={experiment_index} already running {testing[key].get('experiment_index')}")
-                                try:
-                                    queue.appendleft(experiment_index)
-                                except Exception:
-                                    queue.append(experiment_index)
-                                continue
-                            testing[key] = item
-                        else:
-                            key = f"{worker['id']}:{gpu_id}"
-                            if key in active:
-                                _append_scheduler_log(f"[{now()}] skip overwrite active_slot {key} experiment={experiment_index} already running {active[key].get('experiment_index')}")
-                                try:
-                                    queue.appendleft(experiment_index)
-                                except Exception:
-                                    queue.append(experiment_index)
-                                continue
-                            active[key] = item
-                        _record_probe(dispatch_probe, {"worker_id": worker["id"], "worker_name": worker["name"], "gpu_id": gpu_id, "experiment_index": experiment_index, "status": "dispatched", "checked_at": now(), "session": session})
-                        _append_scheduler_log( f"[{now()}] dispatch experiment={experiment_index} server={worker['name']} gpu={gpu_id} session={session}")
-                    except Exception as exc:
-                        err_text = str(exc)
-                        # tmux/会话阻塞降级：单 worker 跳过（重排队头实验换下个 worker），不直接判失败
-                        if "tmux" in err_text.lower() or "session" in err_text.lower():
-                            _record_probe(dispatch_probe, {"worker_id": worker["id"], "worker_name": worker["name"], "gpu_id": gpu_id, "experiment_index": experiment_index, "status": "launch_skipped_tmux", "checked_at": now(), "error": err_text})
-                            _append_scheduler_log( f"[{now()}] dispatch_skip_tmux worker={worker['name']} experiment={experiment_index} error={err_text[:160]} requeued")
-                            try:
-                                queue.appendleft(experiment_index)
-                            except Exception:
-                                queue.append(experiment_index)
-                            try:
-                                write_current_state()
-                            except Exception:
-                                pass
-                            break
-                        _record_probe(dispatch_probe, {"worker_id": worker["id"], "worker_name": worker["name"], "gpu_id": gpu_id, "experiment_index": experiment_index, "status": "launch_failed", "checked_at": now(), "error": str(exc)})
-                        failed.append({
-                            "experiment_index": experiment_index,
-                            "worker_id": worker["id"],
-                            "worker_name": worker["name"],
-                            "gpu_id": gpu_id,
-                            "session": "",
-                            "started_at": now(),
-                            "finished_at": now(),
-                            "error": str(exc),
-                        })
-                    write_current_state()
-                    try:
-                        time.sleep(2)
-                    except InterruptedError:
-                        pass
-            write_current_state()
-            if queue or active or testing:
-                if queue and not active and not testing:
-                    latest = dispatch_probe[-len(workers):] if workers else []
-                    # P4熔断：仅 GPU_QUERY_FAILED / probe_error 硬错计数；TTL/stale/无空卡仅换人不失败
-                    hard = [item for item in latest if (str((item.get("structuredError") or {}).get("kind") or "") == "GPU_QUERY_FAILED") or str(item.get("status") or "") == "probe_error" or "GPU查询失败" in str(item.get("error") or "")]
-                    errors = [str(item.get("error") or "") for item in hard if item.get("error")]
-                    scheduler_wait_reason = "; ".join(errors[:3]) if errors else "no_idle_gpu_from_hub_probe"
-                    if latest and hard and len(hard) == len(latest):
-                        no_dispatch_error_cycles += 1
-                        # 全员硬错连续2轮才fail，否则清零
-                        if no_dispatch_error_cycles >= 2:
-                            reason = scheduler_wait_reason or "all worker dispatch probes failed"
-                            _append_scheduler_log( f"[{now()}] fail_pending reason={reason} fail_fast_cycles={no_dispatch_error_cycles}")
-                            scheduler_fail_pending_queue(queue, failed, reason)
-                            write_current_state(reason)
-                            break
-                    else:
-                        no_dispatch_error_cycles = 0
-                # 60s阻塞修复：动态 sleep_target + 5s 快探 idle（有 pending 且有 idle 时不等 60s）
-                _has_idle_for_pending = False
-                if queue:
-                    try:
-                        _probe_busy = {**active, **testing}
-                        for _w in workers:
-                            _pp = probe_idle_gpus(_w, _probe_busy)
-                            if _pp.get("idle_gpu_ids"):
-                                _has_idle_for_pending = True
-                                break
-                    except Exception:
-                        _has_idle_for_pending = False
-                if queue and _has_idle_for_pending:
-                    _base_poll = poll_seconds + (random.uniform(0, poll_jitter_seconds) if poll_jitter_seconds else 0)
-                    sleep_target = min(5.0, float(_base_poll))
-                    if passive_backoff_until > time.time():
-                        _rem = passive_backoff_until - time.time()
-                        sleep_target = max(sleep_target, min(_rem, 5.0))
-                    _append_scheduler_log( f"[{now()}] wait pending={len(queue)} running={len(active)} poll_seconds={poll_seconds} jitter_seconds={poll_jitter_seconds} sleep_seconds={sleep_target:.1f} has_idle=True short_sleep")
-                    if sleep_target <= 0:
-                        continue
-                else:
-                    sleep_target = poll_seconds + (random.uniform(0, poll_jitter_seconds) if poll_jitter_seconds else 0)
-                    if passive_backoff_until > time.time():
-                        sleep_target = max(sleep_target, passive_backoff_until - time.time())
-                    _append_scheduler_log( f"[{now()}] wait pending={len(queue)} running={len(active)} poll_seconds={poll_seconds} jitter_seconds={poll_jitter_seconds} sleep_seconds={sleep_target:.1f}")
-                if not queue and not active and not testing:
-                    break
-                slept = 0.0
-                while slept < sleep_target:
-                    # 每次读取一个控制信号，后续到达的信号留给下一轮处理。
-                    _ctrl = read_control(control_path)
-                    _sig = scheduler_signal_from_control(_ctrl)
-                    if _sig or _ctrl.get("action"):
-                        _handled_signal = _sig or str(_ctrl.get("action") or "unknown")
-                        try:
-                            atomic_write_json(control_path, {"action": "", "signal": "", "handled_at": now(), "previous_signal": _handled_signal})
-                        except Exception:
-                            pass
-                        if scheduler_signal_requires_refresh(_sig):
-                            _pending_signal_type = _sig
-                            _append_scheduler_log( f"[{now()}] signal_wake type={_sig} slept={slept:.1f}/{sleep_target:.1f} prioritize_signal")
-                            # 首跑和任务结束都直连刷新，避免刚释放的 GPU 被旧快照遮住。
-                            try:
-                                refresh_worker_availability_for_signal(workers, args.availability_path, force=True)
-                            except Exception:
-                                try:
-                                    read_availability_cache(args.availability_path, workers, worker_status_ttl_seconds)
-                                except Exception:
-                                    pass
-                        else:
-                            # 通用 action 信号也优先唤醒
-                            _pending_signal_type = _sig or str(_ctrl.get("action") or "unknown")
-                            _append_scheduler_log( f"[{now()}] control_wake action={_pending_signal_type} slept={slept:.1f}")
-                        break
-                    if _scheduler_abort["sig"] is not None:
-                        break
-                    if reap_finished_items():
-                        write_current_state()
-                        # 任务结束 piggyback：reap 产生新完成即视为 task_end 信号，触发立即 dispatch
-                        if scheduler_should_fail_fast(failed, active, testing):
-                            _append_scheduler_log(f"[{now()}] failure_detected_in_sleep pending={len(queue)}")
-                            break
-                        # 风暴合并：多个 finish 在去抖窗口内合并为一次 dispatch
-                        _pending_signal_type = SCHEDULER_SIGNAL_TASK_END
-                        if not queue and not active and not testing:
-                            break
-                        # 收到 reap 信号立即 break 去 dispatch，无需等待剩余 sleep_target
-                        break
-                    # 60s阻塞修复：每次 5s 唤醒前快探 idle，若 queue 非空且有 idle 立即 break 去 dispatch（不等 60s 耗尽）
-                    if queue:
-                        try:
-                            # Worker 在运行中每几秒写一次 GPU 快照；睡眠期间也要读取，
-                            # 否则 fast probe 一直使用派发时的旧占用列表直到 60 秒轮询。
-                            read_availability_cache(args.availability_path, workers, worker_status_ttl_seconds)
-                            _busy_for_probe = {**active, **testing}
-                            _any_idle = False
-                            for _w in workers:
-                                _pp2 = probe_idle_gpus(_w, _busy_for_probe)
-                                if _pp2.get("idle_gpu_ids"):
-                                    _any_idle = True
-                                    break
-                            if _any_idle:
-                                _append_scheduler_log( f"[{now()}] idle_wake pending={len(queue)} running={len(active)} slept={slept:.1f}/{sleep_target:.1f} has_idle=True")
-                                break
-                        except Exception:
-                            pass
-                    # 信号检查使用短切片，总休眠仍遵循配置的 poll interval。
-                    try:
-                        sleep_slice = min(0.5, sleep_target - slept)
-                        time.sleep(sleep_slice)
-                    except InterruptedError:
-                        break
-                    slept += sleep_slice
-    except Exception as exc:
-        scheduler_terminal = True
-        _append_scheduler_log( f"[{now()}] scheduler_error {exc}")
-        write_current_state(str(exc))
-        # Surface the failure: include a tail of the scheduler log and the
-        # traceback so the Operations panel can render the root cause instead of
-        # staying on "waiting for scheduler terminal".
-        _tail = ""
-        try:
-            _log_path = Path(str(args.scheduler_log or queue_log))
-            if _log_path.is_file():
-                with _log_path.open("rb") as _h:
-                    _h.seek(max(0, _log_path.stat().st_size - 8 * 1024))
-                    _tail = _h.read().decode("utf-8", "replace")[-2000:]
-        except Exception:
-            _tail = ""
-        _sched_zh = str(exc).strip().splitlines()[0][:200] if str(exc).strip() else f"调度器异常：{exc}"
-        append_scheduler_operation_event_robust(args, "failed", f"调度器异常：{exc}", {
-            "statePath": str(state_path).replace("\\", "/"),
-            "schedulerLog": str(args.scheduler_log or queue_log).replace("\\", "/"),
-            "logTail": _tail,
-            "error": traceback.format_exc(),
-            "schedulerErrorZh": _sched_zh[:200],
-            "totalExperiments": len(jobs),
-            "pendingCount": len(queue),
-            "runningCount": len(active),
-            "testingCount": len(testing),
-            "completedCount": len(completed),
-            "failedCount": len(failed),
-            "stoppedCount": len(stopped),
-        })
-        raise
-    _append_scheduler_log( f"[{now()}] scheduler_finish")
-    final_error = scheduler_abort_message or fail_stop_reason
-    if queue and not active and not testing and not completed and not failed and not stopped:
-        final_error = "Hub 调度器仍有排队实验但没有任何派发。请检查 dispatch_probe、availability cache 和 Worker command queue 运行细节。"
-    scheduler_terminal = True
-    write_current_state(final_error)
-    failed_count = len(failed)
-    stopped_count = len(stopped)
-    completed_count = len(completed)
-    terminal_status = "failed" if final_error or failed_count else "completed"
-    if final_error:
-        terminal_message = final_error
-    elif failed_count:
-        terminal_message = f"调度结束：完成 {completed_count}，失败 {failed_count}，停止 {stopped_count}。"
-    else:
-        terminal_message = f"调度完成：完成 {completed_count}，停止 {stopped_count}。"
-    append_scheduler_operation_event(args, terminal_status, terminal_message, {
-        "statePath": str(state_path).replace("\\", "/"),
-        "schedulerLog": str(args.scheduler_log or queue_log).replace("\\", "/"),
-        "totalExperiments": len(jobs),
-        "pendingCount": len(queue),
-        "notDispatchedCount": len(not_dispatched),
-        "runningCount": len(active),
-        "testingCount": len(testing),
-        "completedCount": completed_count,
-        "failedCount": failed_count,
-        "dispatchStoppedOnFailure": bool(fail_stop_reason),
-        "stoppedCount": stopped_count,
-        "schedulerError": final_error,
-    })
+    raise SystemExit("GLOBAL_SCHEDULER_REMOVED: use the Worker native tmux task queue")
 
 
 if __name__ == "__main__":

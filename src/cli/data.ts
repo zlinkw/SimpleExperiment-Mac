@@ -11,8 +11,10 @@ export const RUNS_DIR = path.join("experiments", "runs");
 let projectRootOverride = "";
 
 export function validProjectRoot(candidate: unknown): string {
-  if (typeof candidate !== "string" || !candidate.trim() || !path.isAbsolute(candidate.trim())) return "";
-  const root = path.resolve(candidate.trim());
+  if (typeof candidate !== "string" || !candidate) return "";
+  const spelling = process.platform === "win32" ? candidate.trim() : candidate;
+  if (!path.isAbsolute(spelling)) return "";
+  const root = path.resolve(spelling);
   try {
     return fs.statSync(root).isDirectory() ? root : "";
   } catch {

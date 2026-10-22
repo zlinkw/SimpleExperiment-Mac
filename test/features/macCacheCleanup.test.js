@@ -3,8 +3,14 @@ const crypto = require("node:crypto"), vm = require("node:vm"), { EventEmitter }
 const helperModule = { exports: {} }, helperFile = require.resolve("../../dist/mac/CacheDelete"), helperRequire = createRequire(helperFile);
 // Windows lacks O_NOFOLLOW; inject the native constant leaf, retaining the compiled helper.
 const noFollow = 0x100;
+let proofFailure=false;const proofCalls=[];
+const proofPort={assertDarwinCleanupHandles(file,full,identity){
+  assert.equal(file,'/fixture/sftp/mac_cleanup_handles.py');assert.ok(full.startsWith('/Users/test/研究 项目/Model/tmp/'));
+  assert.equal(identity.dev,1n);assert.equal(identity.ino,44n);proofCalls.push({file,full});
+  if(proofFailure)throw Error('HANDLE_CHECK_UNAVAILABLE: isolated proof unavailable');
+}};
 vm.runInNewContext(fs.readFileSync(helperFile, "utf8"), { module: helperModule, exports: helperModule.exports, Buffer, process,
-  require: name => name === "node:fs" ? { ...fs, constants: { ...fs.constants, O_NOFOLLOW: noFollow } } : helperRequire(name) });
+  require: name => name === "../platform/CleanupHandles" ? proofPort : name === "node:fs" ? { ...fs, constants: { ...fs.constants, O_NOFOLLOW: noFollow } } : helperRequire(name) });
 const helper = helperModule.exports;
 
 function fixture() {
@@ -28,7 +34,7 @@ function fixture() {
   const host = { chdir(value) { events.push(["cd", value]); cwd = value; }, cwd: () => cwd };
   const token = crypto.createHash("sha256").update(`${relative}|${stat.dev}|${stat.ino}|${stat.size}|${stat.mtimeNs}|${stat.nlink}`).digest("hex");
   const approval = { root, relative, fullPath: full, token, sha256: crypto.createHash("sha256").update(content).digest("hex"),
-    confirm: true, secondConfirmation: true, confirmedAbsolutePath: full };
+    confirm: true, secondConfirmation: true, confirmedAbsolutePath: full,handleProbe:"/fixture/sftp/mac_cleanup_handles.py" };
   return { root, relative, full, parent, stat, directory, disk, host, events, approval };
 }
 
@@ -36,7 +42,7 @@ test("actual Mac cache consumer launches the packaged Node helper in the verifie
   const f = fixture(), calls = [], file = path.resolve(__dirname, "../../dist/extension/CacheCleanupPanel.js"), localRequire = createRequire(file);
   const module = { exports: {} }, promises = { lstat: async (...args) => f.disk.lstatSync(...args), realpath: async value => f.disk.realpathSync(value) };
   const customRequire = name => {
-    if (name === "vscode") return {};
+    if (name === "vscode") return {extensions:{getExtension:id=>{assert.equal(id,"simple-local.simple-sftp-mac");return {extensionPath:"/fixture/sftp"};}}};
     if (name === "node:path") return { ...path.posix, posix: path.posix };
     if (name === "node:fs/promises") return promises;
     if (name === "../mac/CacheDelete") return { ...helper, fingerprintCacheFile: (full, relative) => helper.fingerprintCacheFile(full, relative, f.disk) };
@@ -106,3 +112,9 @@ test("a zero-effect child cannot report completion while the target still exists
   const f = fixture(); f.disk.unlinkSync = value => f.events.push(["attempt", value]);
   assert.throws(() => helper.deleteApprovedCacheFile(f.approval, f.disk, f.host), /TARGET_STILL_PRESENT/);
 });
+
+ test('unavailable native handle proof blocks the child before unlink',()=>{
+   const f=fixture();proofFailure=true;
+   try{assert.throws(()=>helper.deleteApprovedCacheFile(f.approval,f.disk,f.host),/HANDLE_CHECK_UNAVAILABLE/);}finally{proofFailure=false;}
+   assert.equal(f.events.some(row=>row[0]==='unlink'),false);assert.ok(proofCalls.some(row=>row.full===f.full));
+ });

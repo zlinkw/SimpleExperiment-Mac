@@ -18,10 +18,15 @@ test("resolved choice persists SHA without blocking future reconciliation", () =
 });
 
 test("local deletion script enters exact parent before shortest literal child deletion", () => {
-  const script = localDeleteScript("D:\\project", "results/a.bin");
-  assert.match(script, /Set-Location -LiteralPath 'D:\\project\\results'/);
+  const script = localDeleteScript("/data/project", "results/a.bin");
+  assert.match(script, /Set-Location -LiteralPath '\/data\/project\/results'/);
   assert.match(script, /PARENT_CD_FAILED/);
   assert.ok(script.includes("Remove-Item -LiteralPath './a.bin'"));
-  assert.doesNotMatch(script, /Remove-Item -LiteralPath 'D:\\project/);
+  assert.doesNotMatch(script, /Remove-Item -LiteralPath '\/data/);
+  const guarded = localDeleteScript("/data/project", "results/a.bin", { type: "file", size: "7", modifiedTicks: "631234567890000000" });
+  assert.match(guarded, /TARGET_CHANGED/);
+  assert.match(guarded, /\$item\.Length -ne '7'/);
+  assert.match(guarded, /LastWriteTimeUtc\.Ticks -ne '631234567890000000'/);
+  assert.throws(() => localDeleteScript("/data/project", ".git/config"), /PROTECTED_PATH/);
   assert.throws(() => safeSyncPath("../escape"), /不安全/);
 });

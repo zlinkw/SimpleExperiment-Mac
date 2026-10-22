@@ -1,52 +1,64 @@
-const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const path = require("node:path");
 const os = require("node:os");
-const { HostOperationLeaseManager, defaultHostOperationLeasePath } = require("../../dist/core/HostOperationLease");
-const { beginUpdateGate, endUpdateGate, assertBusinessAllowed, waitForLocalOperations, assertCompatibleSftpForUpdate } = require("../../dist/mac/UpdateGate");
+const path = require("node:path");
+const test = require("node:test");
 
-test("shared update gate blocks new resource work while existing local operations drain", async () => {
-  const old = process.env.APPDATA, root = fs.mkdtempSync(path.join(os.tmpdir(), "mac-update-gate-"));
-  process.env.APPDATA = root;
-  let lease;
+// Mac companion-update gate (current lease-protocol chain, aligned to the frozen Windows
+// pairedUpdateGate contract): transfers run on the resource lease manager while the UpdateGate
+// closes admission through the shared host-operation lease file; existing Mac transfers keep
+// ownership via the legacyGuard exemption and drain. The SFTP floor lives in updates/Bootstrap.
+const { HostOperationLeaseManager } = require("../../dist/core/HostOperationLease");
+const { UpdateGate } = require("../../dist/updates/UpdateGate");
+
+test("update closes admission while existing Mac transfers retain ownership and drain", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mac-update-gate-")), leasePath = path.join(root, "lease.json");
+  const manager = new HostOperationLeaseManager({ leasePath, windowId: os.hostname() + ":" + process.pid + ":business-test", ownerAlive: () => true });
+  const input = { pluginId: "simple-local.simple-sftp-mac", workspaceUri: "file://" + root, hostProjectPath: root, actionType: "upload", actionLabel: "existing transfer", resources: [{ server: "local", project: root, target: root }] };
+  const existing = await manager.acquire(input), gate = new UpdateGate(leasePath, () => true);
   try {
-    const manager = new HostOperationLeaseManager({ leasePath: defaultHostOperationLeasePath(), windowId: "business-test" });
-    const input = { pluginId: "simple-local.simple-sftp-mac", workspaceUri: "file://" + root, hostProjectPath: root, actionType: "upload", actionLabel: "existing transfer", resources: [{ server: "local", project: root, target: root }] };
-    lease = await manager.acquire(input);
-    await beginUpdateGate(root);
-    await lease.assertHeld(); // Existing transfer retains ownership after admission closes.
-    assert.throws(assertBusinessAllowed, /正在更新|更新尚未完成/);
-    await assert.rejects(new HostOperationLeaseManager({ leasePath: defaultHostOperationLeasePath(), windowId: "new-test" }).acquire(input));
-    let finished = false; const drain = waitForLocalOperations().then(() => { finished = true; });
-    await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(finished, false);
-    await lease.release(); lease = undefined;
-    await drain; assert.equal(finished, true);
-    await endUpdateGate(); assert.doesNotThrow(assertBusinessAllowed);
-  } finally { await lease?.release(); await endUpdateGate(); if (old === undefined) delete process.env.APPDATA; else process.env.APPDATA = old; }
+    await gate.begin(root);
+    await existing.assertHeld(); // Existing transfer retains ownership after admission closes.
+    await assert.rejects(new HostOperationLeaseManager({ leasePath, windowId: "new-test", ownerAlive: () => true }).acquire(input), /全局锁/);
+    let drained = false;
+    const drain = gate.wait().then(() => { drained = true; });
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal(drained, false);
+    await existing.release();
+    await drain;
+    assert.equal(drained, true);
+    await gate.end();
+    const next = await new HostOperationLeaseManager({ leasePath, windowId: "after-update", ownerAlive: () => true }).acquire(input);
+    await next.release();
+  } finally { await existing.release(); await gate.end(); }
 });
 
-test("cancellable wait protects a live admission ticket and never rewrites its registry", async () => {
-  const old = process.env.APPDATA, root = fs.mkdtempSync(path.join(os.tmpdir(), "mac-update-admission-"));
-  process.env.APPDATA = root;
+test("cancelling update wait leaves transfers untouched and corrupt or live receipts block", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mac-update-wait-")), leasePath = path.join(root, "lease.json"), directory = leasePath + ".resources-v2";
+  fs.mkdirSync(directory);
+  const file = path.join(directory, "c".repeat(64) + ".json");
+  const live = JSON.stringify({ schemaVersion: 2, processId: process.pid, leases: [], choosing: true, ticket: 1 });
+  fs.writeFileSync(file, live, "utf8");
+  const gate = new UpdateGate(leasePath, () => true), cancel = new AbortController();
+  await gate.begin(root);
   try {
-    const directory = defaultHostOperationLeasePath() + ".resources-v2";
-    fs.mkdirSync(directory, { recursive: true });
-    const file = path.join(directory, "c".repeat(64) + ".json");
-    const bytes = JSON.stringify({ schemaVersion: 2, windowId: "fixture", processId: process.pid, leases: [], choosing: true, ticket: 1 });
-    fs.writeFileSync(file, bytes, "utf8");
-    const controller = new AbortController(); let finished = false;
-    const waiting = waitForLocalOperations(controller.signal).then(() => { finished = true; });
-    await new Promise(resolve => setTimeout(resolve, 20)); assert.equal(finished, false);
-    controller.abort(Error("cancel only update wait")); await assert.rejects(waiting, /cancel only update wait/);
-    assert.equal(fs.readFileSync(file, "utf8"), bytes);
+    let finished = false;
+    const waiting = gate.wait(cancel.signal).then(() => { finished = true; });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(finished, false);
+    cancel.abort(Error("cancel only update wait"));
+    await assert.rejects(waiting, /cancel only update wait/);
+    // The wait never rewrites another window's registry file.
+    assert.equal(fs.readFileSync(file, "utf8"), live);
+    // A corrupt registry blocks installation instead of silently draining.
     fs.writeFileSync(file, JSON.stringify({ schemaVersion: 2, processId: 0, leases: [], choosing: true }), "utf8");
-    await assert.rejects(waitForLocalOperations(), /租约损坏/);
-  } finally { if (old === undefined) delete process.env.APPDATA; else process.env.APPDATA = old; }
+    await assert.rejects(gate.wait(), /租约损坏/);
+  } finally { await gate.end(); }
 });
 
-test("Mac updater rejects old or unknown SFTP drain protocol before closing admission", () => {
-  for (const version of ["", "0.0.0", "0.2.100", "invalid"])
-    assert.throws(() => assertCompatibleSftpForUpdate(version), /SimpleSFTP Mac 0.2.101/);
-  for (const version of ["0.2.101", "0.2.102", "1.0.0"]) assert.doesNotThrow(() => assertCompatibleSftpForUpdate(version));
+test("Mac updater requires the shared-wait-protocol SFTP before closing admission", () => {
+  const bootstrap = fs.readFileSync(path.join(__dirname, "../../src/updates/Bootstrap.ts"), "utf8");
+  // Released floor: acquiring the gate first requires SimpleSFTP Mac 0.2.102 or newer.
+  assert.match(bootstrap, /compareSemanticVersions\(current\(SFTP_EXTENSION_ID\), "0\.2\.102"\) < 0/);
+  assert.match(bootstrap, /SimpleSFTP Mac 0\.2\.102 或以上/);
 });

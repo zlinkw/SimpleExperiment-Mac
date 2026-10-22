@@ -1,12 +1,18 @@
-import { RESULT_LAYOUT_PYTHON } from "./results/ResultLayout";
-import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
-import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
-import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
+import { CASE_ANALYSIS_READ_PYTHON } from "./runtime/CaseAnalysisRead";
+import { PLAN_ANALYSIS_READ_PYTHON } from "./runtime/PlanAnalysisRead";
+import { CLAIM_EVIDENCE_READ_PYTHON } from "./runtime/ClaimEvidenceRead";
 import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
 import { PROJECT_AGGREGATE_READ_PYTHON } from "./runtime/ProjectAggregateRead";
-import { CLAIM_EVIDENCE_READ_PYTHON } from "./runtime/ClaimEvidenceRead";
-import { PLAN_ANALYSIS_READ_PYTHON } from "./runtime/PlanAnalysisRead";
-import { CASE_ANALYSIS_READ_PYTHON } from "./runtime/CaseAnalysisRead";
+import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
+import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
+import { RESULT_LAYOUT_PYTHON } from "./results/ResultLayout";
+import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
+import { TASK_SHELL_ENVIRONMENT_PYTHON } from "./runtime/TaskShellEnvironment";
+import { AGENT_LIFECYCLE_PYTHON } from "./runtime/AgentLifecycle";
+import { TMUX_TASK_LIFECYCLE_PYTHON } from "./runtime/TmuxTaskLifecycle";
+import { RUNTIME_LOG_DIAGNOSTICS_PYTHON } from "./runtime/RuntimeLogDiagnostics";
+import { PLAN_CODE_SCOPE_PYTHON } from "./runtime/PlanCodeScope";
+import { SYNC_SCOPE_INDEX_PYTHON } from "./runtime/SyncScopeIndex";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, copy, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -20,15 +26,19 @@ ${OUTPUT_CONTRACT_FILES_PYTHON}
 ${RESULT_PARSE_INPUTS_PYTHON}
 ${ARCHIVE_EVIDENCE_READ_PYTHON}
 ${PROJECT_AGGREGATE_READ_PYTHON}
-${CLAIM_EVIDENCE_READ_PYTHON}
-${PLAN_ANALYSIS_READ_PYTHON}
 ${CASE_ANALYSIS_READ_PYTHON}
+${PLAN_ANALYSIS_READ_PYTHON}
+${CLAIM_EVIDENCE_READ_PYTHON}
+${SYNC_SCOPE_INDEX_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
 AGENT_VERSION = "0.4.64"
 RUNTIME_VERSION = "0.4.64"
 PLUGIN_VERSION = "0.4.64"
+${AGENT_LIFECYCLE_PYTHON}
+AGENT_LIFECYCLE_IDENTITY = {}
+AGENT_LIFECYCLE_LOCK = None
 API_VERSION = "1"
 MAX_EVENTS = 5000
 MAX_JOURNAL_BYTES = 32 * 1024 * 1024
@@ -254,6 +264,7 @@ ACTION_PATHS = [
     "/api/actions/preflight-worker-task",
     "/api/actions/register-code-sync-proof",
     "/api/actions/rebuild-distributed-results",
+    "/api/actions/configure-gpu-quota",
     "/api/actions/retry-worker-task",
     "/api/actions/stop-worker-task",
     "/api/actions/delete-worker-artifacts",
@@ -285,6 +296,14 @@ DISTRIBUTED_GPU_RESERVATIONS = {}
 OPERATION_JOURNAL_CACHE = {}
 OPERATION_JOURNAL_CACHE_LOCK = threading.Lock()
 RUNTIME_JSON_CACHE = {}
+WORKER_GPU_SAMPLE_LOCK = threading.Lock()
+WORKER_GPU_SAMPLE_CACHE = {}
+# Every collected sample carries a process-lifetime sequence and a boot-fixed
+# epoch (monotonic clock at import plus pid), so the host can drop duplicates
+# and detect an Agent restart without re-timestamping anything the Worker
+# already measured.
+WORKER_GPU_SAMPLE_EPOCH = "%d-%d" % (int(time.monotonic() * 1000), os.getpid())
+WORKER_GPU_SAMPLE_SEQ = 0
 RUNTIME_JSON_CACHE_LOCK = threading.Lock()
 RUNTIME_FILE_INDEX_CACHE = {}
 RUNTIME_FILE_INDEX_CACHE_LOCK = threading.Lock()
@@ -790,13 +809,13 @@ def replace_with_retry(src, dst, attempts=ATOMIC_REPLACE_ATTEMPTS):
     raise last_error
 
 def atomic_write_file(path, writer):
-    """Write through one reusable sibling slot, serialized with bounded striped locks."""
+    """Keep each process/thread's staging slot private before atomic replacement."""
     path = os.fspath(path)
     parent = os.path.dirname(path) or "."
     os.makedirs(parent, exist_ok=True)
     normalized = os.path.normcase(os.path.abspath(path))
     stripe = int.from_bytes(hashlib.sha256(normalized.encode("utf-8", errors="surrogatepass")).digest()[:4], "big") % ATOMIC_WRITE_SLOT_COUNT
-    temporary = path + ".writing"
+    temporary = path + ".writing." + str(os.getpid()) + "." + str(threading.get_ident())
     with ATOMIC_WRITE_LOCKS[stripe]:
         try:
             previous = os.lstat(temporary)
@@ -1231,10 +1250,14 @@ def compact_terminal_event(event, original_bytes):
             # An incomplete output list must never be advertised as a publishable completion.
             body.update(status="failed", message="终态输出清单超过回执上限，未确认发布；请检查操作详情")
     body.update(compacted=True, omittedBytes=original_bytes)
-    return {**{key: event[key] for key in ("schemaVersion", "seq", "generatedAt", "source", "hubId", "operationId") if key in event},
+    return {**{key: event[key] for key in ("schemaVersion", "seq", "generatedAt", "source", "workerId", "operationId") if key in event},
             "type": "operation_failed" if body.get("status") == "failed" else event["type"], "payload": body}
 
 def append_event(root, event):
+    if globals().get("NATIVE_TASK_RUNNER_CONTEXT"):
+        # Native task windows and final manifests are queried directly. A task
+        # process must never touch the Agent's obsolete shared event journal.
+        return {"schemaVersion": SCHEMA_VERSION, "generatedAt": now_iso(), **event}
     prune_runtime_memory_state()
     os.makedirs(agent_dir(root), exist_ok=True)
     # ThreadingHTTPServer serves concurrent actions, so allocating seq, appending the line and
@@ -1244,12 +1267,12 @@ def append_event(root, event):
     original_event = event
     with EVENT_APPEND_LOCK:
         seq = read_seq(root) + 1
-        event = {"schemaVersion": SCHEMA_VERSION, "seq": seq, "generatedAt": now_iso(), "source": "hub_agent", "hubId": event.get("hubId", "hub"), **event}
+        event = {"schemaVersion": SCHEMA_VERSION, "seq": seq, "generatedAt": now_iso(), "source": "worker_telemetry", "workerId": event.get("workerId") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID", ""), **event}
         encoded = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
         encoded_bytes = len(encoded.encode("utf-8"))
         if encoded_bytes > MAX_AGENT_EVENT_RECORD_BYTES:
             terminal = compact_terminal_event(event, encoded_bytes)
-            event = terminal or {"schemaVersion": SCHEMA_VERSION, "seq": seq, "generatedAt": now_iso(), "source": "hub_agent", "hubId": event.get("hubId", "hub"),
+            event = terminal or {"schemaVersion": SCHEMA_VERSION, "seq": seq, "generatedAt": now_iso(), "source": "worker_telemetry", "workerId": event.get("workerId") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID", ""),
                      "type": "diagnostics_updated", "payload": {"code": "journal_gap", "reason": "event_record_exceeds_limit", "omittedType": str(event.get("type") or "event")[:96], "omittedBytes": encoded_bytes}}
             operation_id = str(original_event.get("operationId") or "").strip()[:160] if isinstance(original_event, dict) else ""
             if operation_id:
@@ -1499,6 +1522,7 @@ def prune_agent_state(root, force=False):
         protected = {
             "agent.pid", "agent.lock", "agent.started_at", "agent.version", "agent.config.json",
             "agent.session.json", "seq.txt", "stop", "distributed_plan_queue.json",
+            "agent.owner.json", "agent.process.json", "agent.owner.lock",
             "worker_recall_tombstones.json", "worker_start_claims.json",
         }
         try:
@@ -1679,7 +1703,7 @@ def collect_scheduler(root):
         if isinstance(source, dict):
             data = dict(source)
             data.setdefault("file", p)
-            data["source"] = "hub_agent"
+            data["source"] = "worker_telemetry"
             data["generatedAt"] = now_iso()
             states.append(data)
     return states
@@ -1805,7 +1829,7 @@ def collect_traces(root, scheduler=None):
     data = enrich_trace_review_state(root, data)
     for row in data:
         if isinstance(row, dict):
-            row.setdefault("source", "hub_agent")
+            row.setdefault("source", "worker_telemetry")
             row.setdefault("generatedAt", now_iso())
     return data
 
@@ -2352,18 +2376,21 @@ def query_gpu_history(root, server_id="", gpu_id="", start=None, end=None, max_p
     }
 
 def api_worker_gpu(root):
-    cached = read_runtime_json_cached(path_for(root, "gpu_snapshot.json"), {})
-    if cached:
-        return cached
-    return {
-        "schemaVersion": SCHEMA_VERSION,
-        "generatedAt": now_iso(),
-        "source": "worker_telemetry",
-        "gpu": [],
-        "gpus": [],
-        "status": "pending",
-        "message": "Worker GPU telemetry sampler has not produced a snapshot yet.",
-    }
+    # One device sample per second, shared by HTTP and the stream sampler.
+    # Disk snapshots and old PLAN/task registrations never determine freshness.
+    with WORKER_GPU_SAMPLE_LOCK:
+        cached = WORKER_GPU_SAMPLE_CACHE.get("sample")
+        if cached and 0 <= time.monotonic() - cached[0] < 1.0:
+            return copy.deepcopy(cached[1])
+        gpus, err = collect_local_gpu()
+        global WORKER_GPU_SAMPLE_SEQ
+        WORKER_GPU_SAMPLE_SEQ += 1
+        payload = {"schemaVersion": SCHEMA_VERSION, "generatedAt": now_iso(),
+                   "source": "worker_telemetry", "gpu": gpus, "gpus": gpus,
+                   "status": "ok" if not err else "degraded", "error": err,
+                   "seq": WORKER_GPU_SAMPLE_SEQ, "epoch": WORKER_GPU_SAMPLE_EPOCH}
+        WORKER_GPU_SAMPLE_CACHE["sample"] = (time.monotonic(), payload)
+        return copy.deepcopy(payload)
 
 def gpu_row_id(row):
     # 修复 index==0 时因 Python falsy 被 or 跳过取到 uuid：显式判 None 且优先 index 数字 0-3 返回 "0"；UUID 仅作后缀忽略，规范化为数字 0..63
@@ -2622,32 +2649,7 @@ def write_availability_batch(root, payload):
     return {"schemaVersion": SCHEMA_VERSION, "accepted": True, "updated": len(rows), "generatedAt": now}
 
 def write_worker_uplink_batch(root, payload):
-    events = payload.get("events") if isinstance(payload.get("events"), list) else []
-    availability = payload.get("availability") if isinstance(payload.get("availability"), dict) else None
-    worker_id = str(payload.get("workerId") or "").strip()
-    accepted_events = 0
-    if availability:
-        write_availability_batch(root, {
-            "schemaVersion": SCHEMA_VERSION,
-            "source": availability.get("source") or "worker_uplink",
-            "generatedAt": availability.get("updatedAt") or now_iso(),
-            "workers": [availability],
-        })
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        append_event(root, {
-            "type": str(event.get("type") or "worker_uplink_event"),
-            "source": event.get("source") or "worker_telemetry",
-            "workerId": event.get("workerId") or worker_id,
-            "operationId": event.get("operationId") or "",
-            "payload": event.get("payload") if isinstance(event.get("payload"), dict) else event,
-        })
-        accepted_events += 1
-    accepted_events += record_worker_command_results(root, worker_id, payload) if worker_id else 0
-    commands_since = int(payload.get("commandsSince") or 0)
-    commands = read_worker_commands(root, worker_id, commands_since, payload.get("commandsLimit") or 20) if worker_id else []
-    return {"schemaVersion": SCHEMA_VERSION, "accepted": True, "events": accepted_events, "availability": bool(availability), "commands": commands, "generatedAt": now_iso()}
+    raise ValueError("HUB_REMOVED: use Worker direct queries")
 
 def worker_task_snapshot_key(task):
     key = str(task.get("commandId") or task.get("operationId") or task.get("runKey") or "")
@@ -2668,6 +2670,8 @@ def append_worker_task(root, task):
         task = dict(task)
         task.pop("attempt", None)
     with WORKER_TASK_SNAPSHOT_LOCK:
+        if any(row.get("commandId") == task.get("commandId") and row.get("stateRetiredAt") for row in read_worker_recall_tombstones(root)):
+            return
         data = read_json(path_for(root, "worker_task_snapshot.json"), {})
         tasks = data.get("tasks") if isinstance(data, dict) and isinstance(data.get("tasks"), list) else []
         key = worker_task_snapshot_key(task)
@@ -2701,6 +2705,8 @@ def read_durable_plan_queue(root):
 def write_durable_plan_queue(root, data):
     path = durable_plan_queue_path(root)
     saved = copy.deepcopy(data)
+    retired = {row.get("commandId") for row in read_worker_recall_tombstones(root) if row.get("stateRetiredAt")}
+    saved["jobs"] = [row for row in saved.get("jobs", []) if row.get("commandId") not in retired]
     for row in saved.get("jobs", []):
         if row.get("resultPathPolicy") == "declared":
             row.pop("attempt", None)
@@ -2714,31 +2720,6 @@ DURABLE_PLAN_IDENTITY_FIELDS = (
     "commandId", "workerId",
 )
 
-def durable_plan_value(command, key):
-    if key == "attempt" and command.get("resultPathPolicy") == "declared" and command.get(key) in (None, ""):
-        return 0 # schema-1 compatibility only; formal jobs have no attempt version
-    value = command.get(key)
-    if value in (None, ""):
-        options = command.get("options") if isinstance(command.get("options"), dict) else {}
-        value = options.get(key)
-    aliases = {"planFile": ("plan",), "case": ("experimentCase",), "commandId": ("operationId",)}
-    if value in (None, ""):
-        options = command.get("options") if isinstance(command.get("options"), dict) else {}
-        for alias in aliases.get(key, ()):
-            value = command.get(alias) or options.get(alias)
-            if value not in (None, ""):
-                break
-    if key in ("experimentIndex", "seed", "attempt", "planJobCount", "fullPlanJobCount") and value not in (None, ""):
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return value
-    # Filesystem identity includes real whitespace, case and Unicode spelling.
-    # Preserve invalid types too: admission must reject them, never stringify them.
-    if key in ("planFile", "outputDir"):
-        return value if value is not None else ""
-    return str(value).strip() if value is not None else ""
-
 def durable_plan_path(value, label):
     if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
             or value.startswith("/") or ":" in value or chr(92) in value
@@ -2746,6 +2727,7 @@ def durable_plan_path(value, label):
             or any(part in ("", ".", "..") for part in value.split("/"))):
         raise ValueError(label + " 必须是保留真实拼写的项目内规范相对 POSIX 路径")
     return value
+
 
 def worker_path_value(command, options, keys, default=""):
     values = [record[key] for record in (command, options) for key in keys
@@ -2756,13 +2738,6 @@ def worker_path_value(command, options, keys, default=""):
         raise ValueError(keys[0] + " 路径类型无效或别名不一致")
     return values[0]
 
-def worker_plan_path(value, label, allow_absolute=False, allow_empty=False):
-    if value == "" and allow_empty:
-        return value
-    if allow_absolute and isinstance(value, str) and value.startswith("/") and not value.startswith("//"):
-        durable_plan_path(value[1:], label)
-        return value
-    return durable_plan_path(value, label)
 
 def worker_plan_project_path(root, value, require_file=False, directory=False):
     worker_plan_path(value, "Worker Plan 路径", allow_absolute=True)
@@ -2794,6 +2769,39 @@ def worker_plan_project_path(root, value, require_file=False, directory=False):
         current = target
     return full
 
+
+def worker_plan_path(value, label, allow_absolute=False, allow_empty=False):
+    if value == "" and allow_empty:
+        return value
+    if allow_absolute and isinstance(value, str) and value.startswith("/") and not value.startswith("//"):
+        durable_plan_path(value[1:], label)
+        return value
+    return durable_plan_path(value, label)
+
+
+def durable_plan_value(command, key):
+    if key == "attempt" and command.get("resultPathPolicy") == "declared" and command.get(key) in (None, ""):
+        return 0 # schema-1 compatibility only; formal jobs have no attempt version
+    value = command.get(key)
+    if value in (None, ""):
+        options = command.get("options") if isinstance(command.get("options"), dict) else {}
+        value = options.get(key)
+    aliases = {"planFile": ("plan",), "case": ("experimentCase",), "commandId": ("operationId",)}
+    if value in (None, ""):
+        options = command.get("options") if isinstance(command.get("options"), dict) else {}
+        for alias in aliases.get(key, ()):
+            value = command.get(alias) or options.get(alias)
+            if value not in (None, ""):
+                break
+    if key in ("experimentIndex", "seed", "attempt", "planJobCount", "fullPlanJobCount") and value not in (None, ""):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return value
+    if key in ("planFile", "outputDir"):
+        return value if value is not None else ""
+    return str(value).strip() if value is not None else ""
+
 def durable_plan_identity(command):
     return {key: durable_plan_value(command, key) for key in DURABLE_PLAN_IDENTITY_FIELDS}
 
@@ -2811,7 +2819,7 @@ def durable_plan_public_task(row):
               "enqueuedAt": row.get("enqueuedAt"), "status": str(row.get("status") or "unknown").lower(),
               "durableAccepted": row.get("durableAccepted") is not False, "acceptedAt": row.get("acceptedAt"), "gpuId": row.get("gpuId") or "",
               "schedulingMode": row.get("schedulingMode") or "local_idle"}
-    for key in ("mode", "executionMode", "executionModeSource", "resultPathPolicy", "globalJobId", "collectionResultCsv", "checkpointSource"):
+    for key in ("mode", "executionMode", "executionModeSource", "resultPathPolicy", "globalJobId", "collectionResultCsv", "checkpointSource", "startupPreflight"):
         if row.get(key) is not None:
             public[key] = row.get(key)
     for key in ("finishedAt", "cancelledAt", "stopReason", "error", "exitCode", "identityConflict", "lastDispatchResult", "trainingRecovery", "originalExecution", "failureDiagnostic",
@@ -2892,9 +2900,9 @@ def _code_sync_stat_record(root, relative, expected, verify_content=False):
     after_mtime = int(getattr(after, "st_mtime_ns", after.st_mtime * 1_000_000_000))
     if int(before.st_size) != int(after.st_size) or before_mtime != after_mtime:
         raise ValueError("mounted code changed during proof verification: " + relative)
-    return {"path": relative, "size": int(after.st_size), "mtime_ns": after_mtime}
+    return {"path": relative, "size": int(after.st_size), "mtime_ns": after_mtime, "sha256": expected_sha}
 
-def verify_code_sync_proof_record(root, proof, row, runtime_generation=None):
+def verify_code_sync_proof_record(root, proof, row, runtime_generation=None, verify_content=False):
     if not isinstance(proof, dict):
         raise ValueError("code-sync proof missing")
     expected_project = str(row.get("projectId") or "")
@@ -2916,7 +2924,16 @@ def verify_code_sync_proof_record(root, proof, row, runtime_generation=None):
     files = proof.get("files") if isinstance(proof.get("files"), list) else []
     if not files or int(proof.get("fileCount") or -1) != len(files):
         raise ValueError("code-sync proof file inventory is invalid")
-    for item in files:
+    if verify_content:
+        manifest = row.get("codeManifest")
+        if not isinstance(manifest, dict):
+            manifest = {str(item.get("path") or ""): {"size": item.get("size"), "sha256": item.get("sha256")}
+                        for item in files if isinstance(item, dict)}
+        if (len(manifest) != len(files) or durable_code_manifest_digest(manifest) != expected_digest
+                or set(manifest) != {str(item.get("path") or "") for item in files if isinstance(item, dict)}):
+            raise ValueError("CODE_SYNC_ORIGINAL_HASH_UNAVAILABLE: cannot verify the original manifest; no proof was renewed")
+    entry = getattr(globals().get("INACTIVITY_ACTION_CONTEXT"), "entry", None)
+    for position, item in enumerate(files):
         if not isinstance(item, dict):
             raise ValueError("code-sync proof file inventory is invalid")
         relative = str(item.get("path") or "").replace("\\", "/")
@@ -2941,8 +2958,16 @@ def verify_code_sync_proof_record(root, proof, row, runtime_generation=None):
             raise ValueError("code-sync proof stale; file missing: " + relative)
         stat = os.stat(full, follow_symlinks=False)
         actual_mtime = int(getattr(stat, "st_mtime_ns", stat.st_mtime * 1_000_000_000))
+        if verify_content:
+            _code_sync_stat_record(root, relative, manifest[relative], verify_content=True)
+            continue  # Diagnostics accept changed metadata only after the original SHA matches.
         if int(stat.st_size) != int(item.get("size", -1)) or actual_mtime != int(item.get("mtime_ns", -1)):
             raise ValueError("code-sync proof stale; stat changed: " + relative)
+        if entry and entry.get("action") in ("validate-plan", "dry-run-plan") and ((position + 1) % 64 == 0 or position + 1 == len(files)):
+            count = min(64, (position % 64) + 1)
+            entry["verifiedSourceEntries"] = int(entry.get("verifiedSourceEntries") or 0) + count
+            progress_action(root, entry["action"], entry["operationId"], entry["opId"], "running", "正在核对源码元数据", {
+                "phase": "source-metadata", "processedFiles": entry["verifiedSourceEntries"]}, request=entry["payload"])
     return proof
 
 def _store_code_sync_proof(root, proof):
@@ -2955,7 +2980,7 @@ def _store_code_sync_proof(root, proof):
             proofs = dict(keep)
         atomic_write(path_for(root, "code_sync_proofs.json"), {"schemaVersion": 1, "proofs": proofs}, compact=True)
 
-def register_code_sync_proof(root, payload, worker_id):
+def register_code_sync_proof(root, payload, worker_id, on_progress=None):
     if not isinstance(payload, dict):
         raise ValueError("invalid code-sync proof request")
     project_id = str(payload.get("projectId") or "").strip()
@@ -2977,7 +3002,7 @@ def register_code_sync_proof(root, payload, worker_id):
     identity = {"projectId": project_id, "codeFingerprint": fingerprint, "manifestDigest": manifest_digest,
                 "codeSyncProofId": proof_id}
     existing = code_sync_proof_document(root).get("proofs", {}).get(proof_id)
-    if isinstance(existing, dict):
+    if isinstance(existing, dict) and on_progress is None:
         try:
             verify_code_sync_proof_record(root, existing, identity)
             return {"ok": True, "proofId": proof_id, "manifestDigest": manifest_digest,
@@ -2986,8 +3011,12 @@ def register_code_sync_proof(root, payload, worker_id):
         except Exception:
             pass
     files = []
+    processed_bytes = 0
     for relative, expected in manifest.items():
         files.append(_code_sync_stat_record(root, relative, expected, verify_content=False))
+        processed_bytes += int(expected.get("size") or 0)
+        if on_progress is not None:
+            on_progress(len(files), processed_bytes)
     if not files:
         raise ValueError("code-sync proof file inventory is empty")
     proof = {"schemaVersion": 1, "proofId": proof_id, **identity, "scopeSignature": scope_signature,
@@ -2998,6 +3027,57 @@ def register_code_sync_proof(root, payload, worker_id):
     return {"ok": True, "proofId": proof_id, "manifestDigest": manifest_digest,
             "fileCount": len(files), "scopeSignature": scope_signature,
             "verifiedAt": proof["verifiedAt"], "runtimeGeneration": runtime_generation, "reused": False}
+
+CODE_SYNC_REQUEST_LOCK = threading.RLock()
+CODE_SYNC_REQUESTS = {}
+
+def code_sync_request_state(root, worker_id, operation_id):
+    key = (os.path.abspath(root), str(worker_id), str(operation_id))
+    with CODE_SYNC_REQUEST_LOCK:
+        row = CODE_SYNC_REQUESTS.get(key)
+        return copy.deepcopy({name: value for name, value in row.items() if name != "requestDigest"}) if row else None
+
+def register_code_sync_proof_request(root, payload, worker_id):
+    operation_id = str(payload.get("opId") or "")
+    if not re.fullmatch(r"[a-zA-Z0-9._:-]{1,128}", operation_id):
+        raise ValueError("code-sync operationId is invalid")
+    if str(payload.get("workerId") or "") != str(worker_id):
+        raise ValueError("code-sync Worker owner mismatch")
+    manifest = payload.get("codeManifest")
+    if not isinstance(manifest, dict) or not manifest or len(manifest) > 100000:
+        raise ValueError("code-sync manifest is invalid")
+    request_digest = hashlib.sha256(json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")).hexdigest()
+    key = (os.path.abspath(root), str(worker_id), operation_id)
+    with CODE_SYNC_REQUEST_LOCK:
+        existing = CODE_SYNC_REQUESTS.get(key)
+        if existing:
+            if existing["requestDigest"] != request_digest:
+                raise ValueError("code-sync operationId already belongs to different input")
+            return code_sync_request_state(root, worker_id, operation_id)
+        for old_key in list(CODE_SYNC_REQUESTS):
+            if len(CODE_SYNC_REQUESTS) < 128:
+                break
+            if CODE_SYNC_REQUESTS[old_key]["status"] in ("completed", "failed"):
+                del CODE_SYNC_REQUESTS[old_key]
+        if len(CODE_SYNC_REQUESTS) >= 128:
+            raise ValueError("too many active code-sync registrations")
+        CODE_SYNC_REQUESTS[key] = {"operationId": operation_id, "workerId": worker_id, "status": "running",
+            "manifestDigest": payload.get("manifestDigest"), "scopeSignature": payload.get("scopeSignature"),
+            "processedFiles": 0, "processedBytes": 0, "totalFiles": len(manifest), "requestDigest": request_digest}
+    frozen = copy.deepcopy(payload)
+    def progress(files, byte_count):
+        with CODE_SYNC_REQUEST_LOCK:
+            CODE_SYNC_REQUESTS[key].update(processedFiles=files, processedBytes=byte_count)
+    def run():
+        try:
+            result = register_code_sync_proof(root, frozen, worker_id, progress)
+            with CODE_SYNC_REQUEST_LOCK:
+                CODE_SYNC_REQUESTS[key].update(status="completed", result=result)
+        except Exception as exc:
+            with CODE_SYNC_REQUEST_LOCK:
+                CODE_SYNC_REQUESTS[key].update(status="failed", error=str(exc), traceback=traceback.format_exc()[-8000:])
+    threading.Thread(target=run, name="code-sync-proof", daemon=True).start()
+    return code_sync_request_state(root, worker_id, operation_id)
 
 def _legacy_durable_code_sync_proof(root, row, manifest):
     project_id = str(row.get("projectId") or "")
@@ -3052,6 +3132,12 @@ def renew_code_sync_proof_runtime(root, proof, row):
         return renewed
 
 def resolve_durable_code_sync_proof(root, row):
+    if row.get("executionSource"):
+        return verify_plan_execution_source(root, row, row["executionSource"])
+    if row.get("lifecycleProtocol") == 2 and row.get("planFile") and row.get("planRevision"):
+        source = inspect_plan_code_scope(root, row)["executionSource"]
+        row["executionSource"] = source
+        return verify_plan_execution_source(root, row, source)
     proof_id = str(row.get("codeSyncProofId") or "")
     if proof_id:
         proof = code_sync_proof_document(root).get("proofs", {}).get(proof_id)
@@ -3185,15 +3271,16 @@ def accept_durable_plan_job(root, command, worker_id):
         full_count = count
     if not isinstance(full_count, int) or full_count < count:
         raise ValueError("fullPlanJobCount 不能少于本次提交任务数")
-    plan_file = durable_plan_path(identity["planFile"], "planFile")
-    output_dir = durable_plan_path(identity["outputDir"], "outputDir")
+    options = command.get("options") if isinstance(command.get("options"), dict) else {}
+    plan_file = durable_plan_path(worker_path_value(command, options, ("planFile", "plan")), "planFile")
+    output_dir = durable_plan_path(worker_path_value(command, options, ("outputDir", "output_dir")), "outputDir")
     if "attempts" in output_dir.split("/"):
         raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
     identity["planFile"] = plan_file
     identity["outputDir"] = output_dir
     options = command.get("options") if isinstance(command.get("options"), dict) else {}
     if any(action_bool(value) for value in (command.get("overwriteExisting"), command.get("overwrite"), options.get("overwriteExisting"), options.get("overwrite"))):
-        raise ValueError("FORMAL_JOB_CONFLICT: overwrite is retired; explicitly clean or change the declared job")
+        raise ValueError("CONFIRM_REQUIRED: overwrite requires the exact output-replacement preview and two path confirmations")
     require_idle_gpu = command.get("requireIdleGpu") is True or options.get("requireIdleGpu") is True
     requested_gpu = str(command.get("gpuId") or options.get("gpuId") or "").strip()
     if require_idle_gpu and not requested_gpu:
@@ -3236,7 +3323,9 @@ def accept_durable_plan_job(root, command, worker_id):
             if any(item.get("collectionResultCsv") == command.get("collectionResultCsv") and item.get("commandId") != identity["commandId"]
                    and item.get("status") in ("queued", "dispatching", "running", "unknown") for item in data["jobs"]):
                 raise ValueError("FORMAL_JOB_ACTIVE_WRITER: declared CSV already queued")
-            verified_formal_job_command(root, command)
+            # Admission proves identity, declarations and writer conflicts; expensive
+            # assets and the actual task shell are checked afresh before tmux start.
+            verified_formal_job_command(root, command, structure_only=True)
             mode = verified_durable_execution_mode(root, command)
         except Exception as exc:
             # Persist a terminal audit before returning, so a lost response/reload is recoverable.
@@ -3265,7 +3354,7 @@ def accept_durable_plan_job(root, command, worker_id):
         row.update(identity)
         row.update({"schemaVersion": 1, "planJobCount": count, "fullPlanJobCount": full_count, "enqueuedAt": enqueued_at,
                     "workerId": str(worker_id), "status": "queued", "acceptedAt": now_iso(),
-                    "requireIdleGpu": require_idle_gpu, "gpuId": requested_gpu if require_idle_gpu else ""})
+                    "requireIdleGpu": require_idle_gpu, "gpuId": requested_gpu if require_idle_gpu else "", "startupPreflight": "pending"})
         requested_mode = "test" if command.get("checkpointTestOnly") is True and mode == "train_test" else mode
         row.update({"mode": requested_mode, "executionMode": mode, "executionModeSource": "matching_plan_revision"})
         row["options"] = {**options, "mode": requested_mode, "executionMode": mode}
@@ -3285,7 +3374,7 @@ def accept_durable_plan_job(root, command, worker_id):
         pass
     return {**durable_plan_public_identity(command), "planJobCount": count, "enqueuedAt": enqueued_at,
             "gpuId": requested_gpu if require_idle_gpu else "", "status": "queued",
-            "durableAccepted": True, "message": "Agent 已持久接收该 job"}
+            "durableAccepted": True, "startupPreflight": "pending", "message": "已持久入队；分配 GPU 后核验资产和任务环境，尚未启动训练"}
 
 def cancel_durable_plan_job(root, command):
     target = str(command.get("targetCommandId") or command.get("commandIdTarget") or "").strip()
@@ -3495,6 +3584,8 @@ def write_worker_start_claim(root, command):
     command_id = str(command.get("commandId") or command.get("operationId") or "").strip()
     if not command_id:
         raise ValueError("worker start claim requires commandId")
+    if any(row.get("commandId") == command_id and row.get("stateRetiredAt") for row in read_worker_recall_tombstones(root)):
+        return False
     data = read_json(worker_start_claims_path(root), {})
     rows = data.get("rows") if isinstance(data, dict) and isinstance(data.get("rows"), list) else []
     if any(isinstance(row, dict) and str(row.get("commandId") or "") == command_id for row in rows):
@@ -3626,9 +3717,8 @@ def worker_task_stop_identity_mismatches(command, task):
                     differences.append(field)
             except (TypeError, ValueError):
                 differences.append(field)
-        elif field in ("planFile", "outputDir"):
-            if not isinstance(actual, str) or not isinstance(expected, str) or actual != expected:
-                differences.append(field)
+        elif field in ("planFile", "outputDir") and (not isinstance(actual, str) or not isinstance(expected, str) or actual != expected):
+            differences.append(field)
         elif str(actual) != str(expected) or (formal and field != "gpuId" and not str(expected)):
             differences.append(field)
     return differences
@@ -3721,6 +3811,7 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
     reconcile_worker_task_exit_codes(root)
     data = sync_durable_plan_task_rows(root)
     dispatched = []
+    busy_gpu_hint = None
     for row in data["jobs"]:
         if not isinstance(row, dict):
             continue
@@ -3731,8 +3822,8 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
         if row.get("resultPathPolicy") != "declared" or "attempts" in str(row.get("outputDir") or "").split("/"):
             continue
         try:
-            durable_plan_path(durable_plan_value(row, "planFile"), "planFile")
-            durable_plan_path(durable_plan_value(row, "outputDir"), "outputDir")
+            durable_plan_path(row.get("planFile"), "planFile")
+            durable_plan_path(row.get("outputDir"), "outputDir")
             proof = resolve_durable_code_sync_proof(root, row)
             execution_mode = verified_durable_execution_mode(root, row)
         except Exception as exc:
@@ -3747,7 +3838,32 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
                                         "operationId": row.get("commandId"), "payload": {"error": message}})
             continue
         try:
-            admission = verified_formal_job_command(root, row)
+            # A shared hint can defer idle, untouched directories without starting
+            # one Scheduler (and nvidia-smi) per queued job. It NEVER authorizes a
+            # launch: the fresh probe and final reservation below remain mandatory.
+            # Existing output/owner/completion evidence must still be checked even
+            # when telemetry is unavailable, so it cannot remain hidden in a queue.
+            existing = (os.path.lexists(safe_project_path(root, row.get("outputDir")))
+                        or os.path.lexists(safe_project_path(root, row.get("collectionResultCsv"))))
+            if not existing:
+                if busy_gpu_hint is None:
+                    try:
+                        busy_gpu_hint = gpu_probe()
+                    except Exception as exc:
+                        busy_gpu_hint = ([], str(exc))
+                hint_gpus, hint_error = busy_gpu_hint
+                hint_options = row.get("options") if isinstance(row.get("options"), dict) else {}
+                pinned = str(row.get("gpuId") or "") if row.get("requireIdleGpu") is True else ""
+                hint_free = not hint_error and any((not pinned or gpu_row_id(gpu) == pinned)
+                    and not _durable_gpu_busy_reason(root, gpu_row_id(gpu), str(row.get("commandId") or ""), hint_gpus,
+                        util_threshold=row.get("gpuIdleUtilThreshold", hint_options.get("gpuIdleUtilThreshold", hint_options.get("gpu_idle_util_threshold"))),
+                        mem_threshold=row.get("gpuIdleMemThresholdMb", hint_options.get("gpuIdleMemThresholdMb", hint_options.get("gpu_idle_mem_threshold"))),
+                        max_concurrent_gpus=row.get("maxConcurrentGpus", hint_options.get("maxConcurrentGpus"))) for gpu in hint_gpus)
+                if not hint_free:
+                    if pinned:
+                        fence_queued_idle_gpu_admission(root, row, "Requested GPU unavailable before startup verification; reconciliation required")
+                    continue
+            admission = verified_formal_job_command(root, row, structure_only=True)
         except Exception as exc:
             with WORKER_TASK_SNAPSHOT_LOCK:
                 latest = read_durable_plan_queue(root)
@@ -3865,6 +3981,9 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
                 "已被待启动任务占用", "已有插件任务运行", "当前非空闲", "GPU 实时检测失败", "GPU 不存在或尚无实时状态"))
             result = {"status": "queued" if waiting else "unknown", "message": message}
             new_status = "unknown" if row.get("requireIdleGpu") is True and waiting else "queued" if waiting else "unknown"
+            if getattr(exc, "formalPreflightRejected", False) is True:
+                result = durable_plan_preflight_failure(row, exc, accepted=True)
+                new_status = "failed"
         with WORKER_TASK_SNAPSHOT_LOCK:
             latest = read_durable_plan_queue(root)
             current = next((item for item in latest["jobs"] if isinstance(item, dict)
@@ -3872,6 +3991,11 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
             if current and current.get("status") == "dispatching":
                 current["status"] = new_status
                 current["lastDispatchResult"] = result
+                if result.get("neverStarted") is True:
+                    current.update({key: result[key] for key in ("neverStarted", "neverStartedEvidence", "error", "errorCode", "reason", "message", "formalConflictEvidence") if key in result})
+                    current["startupPreflight"] = "rejected"
+                elif new_status in ("running", "completed"):
+                    current["startupPreflight"] = "checked"
                 for field in ("logPath", "tmuxPane", "tmuxWindowId", "tmuxSession"):
                     if result.get(field):
                         current[field] = result[field]
@@ -3955,6 +4079,8 @@ def reserve_distributed_gpu(root, gpu_id, command_id, util_threshold=None, mem_t
                             require_idle_gpu=False, max_concurrent_gpus=None):
     """Reserve one physical GPU before starting a distributed job; never infer ownership from username."""
     with WORKER_TASK_SNAPSHOT_LOCK:
+        if any(row.get("commandId") == command_id and row.get("stateRetiredAt") for row in read_worker_recall_tombstones(root)):
+            raise RuntimeError("WORKER_COMMAND_RETIRED")
         data = read_json(path_for(root, "worker_task_snapshot.json"), {})
         tasks = data.get("tasks") if isinstance(data, dict) and isinstance(data.get("tasks"), list) else []
         existing = next((row for row in tasks if isinstance(row, dict) and str(row.get("commandId") or "") == command_id), None)
@@ -3988,6 +4114,8 @@ def release_distributed_gpu_reservation(gpu_id, command_id):
     with WORKER_TASK_SNAPSHOT_LOCK:
         if DISTRIBUTED_GPU_RESERVATIONS.get(str(gpu_id)) == command_id:
             DISTRIBUTED_GPU_RESERVATIONS.pop(str(gpu_id), None)
+
+${TASK_SHELL_ENVIRONMENT_PYTHON}
 
 def simple_runtime_env(base=None):
     env = dict(os.environ if base is None else base)
@@ -4100,15 +4228,7 @@ def simple_conda_wrapped_args(args, env):
     source = simple_runtime_env(env)
     if os.name == "nt":
         return args
-    conda_env = str(source.get("SIMPLE_EXPERIMENT_CONDA_ENV") or "").strip()
-    require = str(source.get("SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV") or "").strip().lower() in ("1", "true", "yes", "on")
-    if not (require and conda_env):
-        return args
-    # 变量化双保险：conda activate 与绝对 python 共存；不在此因 which 失败而跳过 wrapping，activation 脚本自行 source conda.sh
-    shell = os.environ.get("SHELL") or ("/bin/bash" if os.path.isfile("/bin/bash") else "/bin/sh")
-    # Keep the portable activation pattern expected by runtime tests (empty-arg call)
-    # simple_conda_activation_script()} && exec
-    return [shell, "-lc", f"{simple_conda_activation_script(env)} && exec {shlex.join([str(item) for item in args])}"]
+    return task_shell_args(args, source, simple_runtime_python(source))
 
 def _normalize_gpu_id_for_window(value):
     s = str(value or "0").strip()
@@ -4185,13 +4305,6 @@ def tmux_available():
 def tmux_session_alive(session, cwd=None, env=None):
     if not session:
         return False
-    if str(session).startswith("%"):
-        if not re.fullmatch(r"%[0-9]+", str(session)):
-            return False
-        found = subprocess.run(["tmux", "display-message", "-p", "-t", str(session), "#{pane_id}|#{session_name}"], cwd=cwd or None, capture_output=True, text=True, timeout=3, env=env)
-        parts = (found.stdout or "").strip().split("|")
-        prefix = _resolve_tmux_prefix(None, None, env)
-        return found.returncode == 0 and len(parts) == 2 and parts[0] == session and (parts[1] == prefix + "-control" or re.fullmatch(re.escape(prefix) + r"-gpu-[0-9]+", parts[1]) is not None)
     return subprocess.run(["tmux", "has-session", "-t", session], cwd=cwd or None, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env).returncode == 0
 
 def tmux_task_pane_alive(pane, session, cwd=None, env=None):
@@ -4721,12 +4834,7 @@ def _send_tmux_line(session, line, env, retries=3):
         time.sleep(0.3 * attempt)
     return last_rc
 
-JOB_SHELL_ENV_FIELDS = (
-    "SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", "SIMPLE_EXPERIMENT_JOB_COMMAND_ID", "SIMPLE_EXPERIMENT_JOB_PROJECT_ID",
-    "SIMPLE_EXPERIMENT_MANAGED_JOB", "SIMPLE_EXPERIMENT_CHECKPOINT_TEST_ONLY", "SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS",
-    "SIMPLE_EXPERIMENT_TMUX_SESSION", "SIMPLE_EXPERIMENT_TMUX_LOG_DIR", "SIMPLE_EXPERIMENT_EXIT_CODE_PATH",
-    "SIMPLE_EXPERIMENT_CONDA_ENV", "SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV", "CUDA_VISIBLE_DEVICES", "PYTHONUNBUFFERED",
-)
+JOB_SHELL_ENV_FIELDS = TASK_SHELL_ENV_FIELDS
 
 def fresh_task_runtime_env():
     env = simple_runtime_env(os.environ.copy())
@@ -4822,10 +4930,7 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
             os.makedirs(os.path.dirname(str(log_path)) or ".", exist_ok=True)
         except Exception:
             pass
-    conda_env = simple_conda_env_name(env)
     lines = []
-    if conda_env:
-        lines.append("conda activate " + shlex.quote(conda_env))
     if cwd:
         lines.append("cd " + shlex.quote(str(cwd)))
     # The command below appends its rc via '; printf "%s" "$?" > exit_code_path'. That redirect
@@ -4839,7 +4944,7 @@ def start_simple_tmux_command(session, args, cwd, log_path, env, exit_code_path=
                 os.makedirs(_ec_dir, exist_ok=True)
         except Exception:
             pass
-    command = task_environment + " " + shlex.join([str(item) for item in args])
+    command = task_environment + " " + shlex.join(simple_conda_wrapped_args(args, env))
     if exit_code_path:
         command = command + "; printf '%s' \"$?\" > " + shlex.quote(str(exit_code_path))
     lines.append(command)
@@ -4974,65 +5079,16 @@ def start_job_in_gpu_pane(gpu_window, args, cwd, env, log_path, exit_code_path):
         # new-session 已同步创建 tmux 会话。任务由独立 split-window pane 运行，
         # 无须等待基础 shell 的 bashrc，也不向该 shell 发送训练命令。
     try:
-        # 修复 GPU pane 无 conda：若 SIMPLE_EXPERIMENT_CONDA_ENV 是绝对路径且 $CONDA_ENV/bin/python 存在，则直接用该 python 和 PATH 包含 $CONDA_ENV/bin，不走 conda activate（兜底 conda 已清洗 PATH 的情况）
-        _conda_env_name = simple_conda_env_name(env) if isinstance(env, dict) else ""
-        _args_list = [str(x) for x in args]
-        _conda_env_is_abs = bool(str(_conda_env_name or "").strip().startswith("/"))
-        _direct_python = ""
-        _direct_bin = ""
-        _activation = "true"
-        if _conda_env_is_abs:
-            try:
-                _ep = simple_conda_env_python(_conda_env_name)
-                if _ep:
-                    _direct_python = str(_ep).strip()
-                    if _direct_python.endswith("/bin/python"):
-                        _direct_bin = _direct_python[:-7]
-                    else:
-                        _clean_tmp = str(_conda_env_name).strip().rstrip("/\\")
-                        if _clean_tmp.endswith("/bin/python"):
-                            _direct_bin = __import__("os").path.dirname(_clean_tmp)
-                            _direct_python = _clean_tmp
-                        elif _clean_tmp.endswith("/bin"):
-                            _direct_bin = _clean_tmp
-                        else:
-                            _direct_bin = _clean_tmp.rstrip("/") + "/bin"
-                    if __import__("os").path.isfile(_direct_python) and __import__("os").access(_direct_python, __import__("os").X_OK):
-                        if _args_list and _args_list[0] == "python":
-                            _args_list[0] = _direct_python
-                        _activation = f'export PATH={__import__("shlex").quote(_direct_bin)}:$PATH'
-                    else:
-                        if _args_list and _args_list[0] == "python" and _direct_python:
-                            _args_list[0] = _direct_python
-                        _direct_bin_q = __import__("shlex").quote(_direct_bin)
-                        _direct_py_q = __import__("shlex").quote(_direct_python)
-                        _orig_act = simple_conda_activation_script(env)
-                        _activation = f'if [ -x {_direct_py_q} ]; then export PATH={_direct_bin_q}:$PATH; else {_orig_act}; fi'
-                else:
-                    _activation = simple_conda_activation_script(env)
-            except Exception:
-                _activation = simple_conda_activation_script(env) if _conda_env_name else "true"
-        else:
-            _activation = simple_conda_activation_script(env) if isinstance(env, dict) and _conda_env_name else "true"
-            if _args_list and _args_list[0] == "python" and _conda_env_name:
-                try:
-                    _ep = simple_conda_env_python(_conda_env_name)
-                    if _ep:
-                        _args_list[0] = _ep
-                except Exception:
-                    pass
-        _joined = __import__("shlex").join(_args_list)
-        if _activation and _activation != "true":
-            _inner = f"{_activation} && {_joined}"
-        else:
-            _inner = _joined
+        _args_list = [str(item) for item in args]
+        if _args_list and _args_list[0] in ("python", "python3"):
+            _args_list[0] = simple_runtime_python(env)
         # 实时日志 tee：stdout/stderr 同时输出到 TMUX pane（可见）与文件备份（log_path），exit_code 用 pipefail 保留
         _tee_log = __import__("shlex").quote(str(log_path))
         try:
             os.makedirs(os.path.dirname(str(log_path)) or ".", exist_ok=True)
         except Exception:
             pass
-        _task_command = task_environment + " bash -c " + shlex.quote(_inner)
+        _task_command = task_environment + " " + shlex.join(simple_conda_wrapped_args(_args_list, env))
         _cmd = f"set -o pipefail; {{ {_task_command}; }} 2>&1 | tee -a {_tee_log}; printf '%s' \"$?\" > {__import__('shlex').quote(str(exit_code_path))}; exec bash"
         # Each task gets a separate window in the GPU session. A failed window
         # remains visible; later plans can launch another window on this GPU.
@@ -5060,38 +5116,6 @@ def start_job_in_gpu_pane(gpu_window, args, cwd, env, log_path, exit_code_path):
     except Exception as exc:
         ctx_exc = _build_tmux_error_context(gpu_window, None, str(exc), "", cwd, 1, env)
         raise RuntimeError(f"split-window failed for {gpu_window!r}: {exc!r}; cwd={str(cwd)!r}; {ctx_exc}; blocking task dispatch")
-
-def start_scheduler_in_gpu_tab(root, args, env, log_path, exit_code_path):
-    """New schedulers use one stable pane, never a per-Plan session or main shell."""
-    prefix = _resolve_tmux_prefix(None, None, env)
-    if env.get("SIMPLE_EXPERIMENT_TOPOLOGY_MODE") == "hub_worker":
-        # A CPU-only Hub has no physical GPU: use one shared control container.
-        container = prefix + "-control"
-    else:
-        probe = subprocess.run(["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"], cwd=root, capture_output=True, text=True, timeout=5, env=env)
-        ids = [line.strip() for line in (probe.stdout or "").splitlines() if line.strip()]
-        if probe.returncode != 0 or not ids or any(not re.fullmatch(r"[0-9]+", item) for item in ids):
-            raise RuntimeError("cannot prove local physical GPU index; scheduler tab was not started")
-        container = fixed_gpu_window_name(prefix, min(ids, key=int))
-    pane = start_job_in_gpu_pane(container, args, root, env, log_path, exit_code_path)
-    if not re.fullmatch(r"%[0-9]+", str(pane)):
-        raise RuntimeError("scheduler tab has no stable pane identity")
-    identity = subprocess.run(["tmux", "display-message", "-p", "-t", pane, "#{pane_id}|#{session_name}|#{pane_pid}"], cwd=root, capture_output=True, text=True, timeout=3, env=env)
-    parts = (identity.stdout or "").strip().split("|")
-    if identity.returncode != 0 or len(parts) != 3 or parts[:2] != [pane, container] or not re.fullmatch(r"[1-9][0-9]*", parts[2]):
-        raise RuntimeError("scheduler tab identity could not be verified")
-    return int(parts[2]), pane
-
-
-def scheduler_tmux_stop_command(root, target, pid, start_identity):
-    if str(target).startswith("%"):
-        if not re.fullmatch(r"%[0-9]+", str(target)) or not tmux_session_alive(target, root) or not start_identity or tmux_pane_pid(target, root) != pid or process_start_identity(pid) != start_identity:
-            raise ValueError("scheduler tab identity changed; GPU container and other tasks were preserved")
-        return ["tmux", "kill-pane", "-t", target]
-    if not str(target).startswith(_tmux_prefix() + "-sch-"):
-        raise ValueError("scheduler session ownership could not be verified")
-    return ["tmux", "kill-session", "-t", target]
-
 
 def _resolve_dynamic_gpu_ids(root):
     # 动态解析 worker 配置的 gpu_ids：优先 options/env/availableGpuIds，其次遍历 MANAGED GPU 窗口
@@ -5211,6 +5235,11 @@ def worker_task_tmux_location(pane, session, cwd, env):
     fields = result.stdout.strip().split("\t")
     if result.returncode or len(fields) != 3 or not re.fullmatch(r"%[0-9]+", fields[0]) or not re.fullmatch(r"@[0-9]+", fields[2]):
         raise RuntimeError("TMUX_TASK_LOCATION_UNVERIFIED: command started but its exact pane/window receipt is missing")
+    for option, value in (("@simple_experiment_command", env.get("SIMPLE_EXPERIMENT_JOB_COMMAND_ID")),
+                          ("@simple_experiment_project", env.get("SIMPLE_EXPERIMENT_JOB_PROJECT_ID") or os.path.realpath(cwd))):
+        if value:
+            subprocess.run(["tmux", "set-window-option", "-t", fields[2], option, str(value)],
+                           cwd=cwd, env=env, capture_output=True, text=True, timeout=3)
     return {"tmuxPane": fields[0], "tmuxSession": fields[1], "tmuxWindowId": fields[2]}
 
 def read_task_exit_code(exit_code_path):
@@ -5382,10 +5411,213 @@ def close_worker_task_pane(root, task):
     except Exception as exc:
         return {"paneClosed": False, "paneCloseError": str(exc)[-500:]}
 
+def local_stop_tmux_inventory(root):
+    listed = subprocess.run(["tmux", "list-panes", "-a", "-F", "#{pane_id}\t#{session_name}\t#{window_id}\t#{window_name}\t#{@simple_experiment_command}\t#{@simple_experiment_project}\t#{pane_dead}\t#{pane_dead_status}"],
+                            capture_output=True, text=True, timeout=3, cwd=root)
+    if listed.returncode:
+        error = str(listed.stderr or "").strip()
+        if error.lower().startswith("no server running on ") or error.lower() == "no sessions":
+            return []
+        raise RuntimeError("TMUX_UNREACHABLE: " + error[-500:])
+    rows = []
+    for line in str(listed.stdout or "").splitlines():
+        fields = line.split("\t")
+        if len(fields) != 8 or not re.fullmatch(r"%[0-9]+", fields[0]) or not re.fullmatch(r"@[0-9]+", fields[2]) or not fields[1]:
+            raise ValueError("TMUX_INVENTORY_INVALID")
+        rows.append(dict(zip(("pane", "session", "window", "name", "command", "project", "dead", "exitCode"), fields)))
+    return rows
+
+def retirement_plan_file(value):
+    value = str(value or "").replace("\\", "/")
+    return value[2:] if value.startswith("./") else value
+
+
+def retired_operation_ids(root):
+    data = read_json(path_for(root, "retired_operation_ids.json"), {})
+    return set(str(value) for value in data.get("ids", []) if isinstance(value, str)) if isinstance(data, dict) else set()
+
+
+def retire_worker_state(root, payload, worker_id, closed=False):
+    """Remove exact inactive control rows, keep compact ownership/cancellation evidence."""
+    project = str(payload.get("projectId") or "")
+    commands = set(str(value) for value in payload.get("targetCommandIds", []) if isinstance(value, str) and value)
+    plan_file = retirement_plan_file(payload.get("planFile"))
+    if not project or not commands or str(payload.get("workerId") or "") != worker_id:
+        raise ValueError("STATE_RETIREMENT_TARGET_REQUIRED")
+    with WORKER_TASK_SNAPSHOT_LOCK:
+        data = read_json(path_for(root, "worker_task_snapshot.json"), {})
+        tasks = data.get("tasks", []) if isinstance(data, dict) else []
+        queue = read_durable_plan_queue(root)
+        audit = read_json(worker_recall_tombstones_path(root), {})
+        audits = audit.get("rows", []) if isinstance(audit, dict) else []
+        owned = [row for row in tasks + queue["jobs"] if isinstance(row, dict) and row.get("commandId") in commands]
+        terminal = ("completed", "failed", "cancelled", "stopped")
+        for row in [item for item in audits if isinstance(item, dict) and item.get("commandId") in commands]:
+            if row.get("projectId") not in (None, "", project) or row.get("workerId") not in (None, "", worker_id):
+                raise ValueError("STATE_RETIREMENT_OWNER_MISMATCH")
+        for row in owned:
+            if row.get("projectId") not in (None, "", project) or row.get("workerId") not in (None, "", worker_id):
+                raise ValueError("STATE_RETIREMENT_OWNER_MISMATCH")
+            if payload.get("workflowId") and row.get("workflowId") not in (None, "", payload["workflowId"]):
+                raise ValueError("STATE_RETIREMENT_OWNER_MISMATCH")
+            if not closed and str(row.get("status") or "").lower() not in terminal:
+                raise ValueError("STATE_RETIREMENT_ACTIVE_TASK")
+        live = active_cleanup_operations(root)
+        if not closed and any(row.get("payload", {}).get("commandId") in commands or row.get("payload", {}).get("targetCommandId") in commands
+               for row in live if row.get("operationId") != payload.get("operationId")):
+            raise ValueError("STATE_RETIREMENT_ACTIVE_OPERATION")
+        now = now_iso()
+        fields = ("commandId", "workerId", "projectId", "workflowId", "planFile", "planRevision", "codeFingerprint", "globalJobId",
+                  "experimentIndex", "index", "case", "seed", "outputDir", "collectionResultCsv", "resultPathPolicy", "planJobCount",
+                  "fullPlanJobCount", "enqueuedAt", "finishedAt", "exitCode", "actualExecutionMode", "executionMode", "mode", "runKey", "checkpointSource", "attempt", "gpuId")
+        for command in commands:
+            rows = [row for row in owned if row.get("commandId") == command]
+            old = next((row for row in audits if isinstance(row, dict) and row.get("commandId") == command), None)
+            source = {}
+            # Same command's durable launch fills sparse legacy snapshot fields;
+            # the current snapshot supplies its actual terminal status/exit data.
+            for row in reversed(rows):
+                source.update({key: row[key] for key in fields + ("status", "gpuId") if key in row and row[key] is not None and row[key] != ""})
+            if old is None:
+                old = {"commandId": command, "projectId": project, "workerId": worker_id, "status": "cancelled", "stopBoundary": "local_command"}
+                audits.append(old)
+            compact = {key: old[key] for key in fields + ("status", "stopBoundary", "stopCommandId", "stopReason", "retiredTask") if key in old}
+            audits = [compact if row is old else row for row in audits]
+            old = compact
+            if source:
+                old["retiredTask"] = {key: source[key] for key in fields if key in source}
+                old["retiredTask"].update({"status": source.get("status") if source.get("status") in terminal else "cancelled", "finishedAt": source.get("finishedAt") or now,
+                                           "controlRetiredAt": now, "readOnly": True})
+                release_distributed_gpu_reservation(str(source.get("gpuId") or ""), command)
+            old["stateRetiredAt"] = now
+        # Fence first. Never delete cancellation or ownership evidence with activity rows.
+        atomic_write(worker_recall_tombstones_path(root), {"schemaVersion": SCHEMA_VERSION, "rows": audits, "updatedAt": now})
+        atomic_write(path_for(root, "worker_task_snapshot.json"), {**data, "tasks": [row for row in tasks if not isinstance(row, dict) or row.get("commandId") not in commands], "generatedAt": now})
+        write_durable_plan_queue(root, {**queue, "jobs": [row for row in queue["jobs"] if not isinstance(row, dict) or row.get("commandId") not in commands]})
+        claims = read_json(worker_start_claims_path(root), {})
+        if isinstance(claims, dict) and isinstance(claims.get("rows"), list):
+            atomic_write(worker_start_claims_path(root), {**claims, "rows": [row for row in claims["rows"] if not isinstance(row, dict) or row.get("commandId") not in commands]})
+        active_ids = {row.get("operationId") for row in live}
+        active_same_plan = any(isinstance(row, dict) and str(row.get("status") or "").lower() not in terminal
+                              and retirement_plan_file(row.get("planFile")) == plan_file
+                              and row.get("commandId") not in commands for row in tasks + queue["jobs"])
+        ids = retired_operation_ids(root)
+        selected_ids = set(commands)
+        if payload.get("operationId"):
+            selected_ids.add(str(payload["operationId"]))
+        ids.update(commands)
+        for row in operation_journal_index(root)["rows"]:
+            op = str(row.get("operationId") or "")
+            if not op or op in active_ids or op == payload.get("operationId"):
+                continue
+            body = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+            file = retirement_plan_file(row.get("planFile") or body.get("planFile"))
+            if body.get("commandId") in commands or body.get("targetCommandId") in commands or (plan_file and file == plan_file and not active_same_plan):
+                ids.add(op)
+                selected_ids.add(op)
+        ids.update(selected_ids)
+        atomic_write(path_for(root, "retired_operation_ids.json"), {"schemaVersion": 1, "ids": sorted(ids), "updatedAt": now})
+        return {"stateRetired": True, "retiredCommandIds": sorted(commands), "retiredOperationIds": sorted(selected_ids), "retiredAt": now}
+
+
+def stop_local_worker_task(root, command, worker_id):
+    """Local stop intent uses stable command/window binding, never scientific revisions or PID gates."""
+    target = str(command.get("targetCommandId") or "").strip()
+    project = str(command.get("projectId") or "").strip()
+    workflow = str(command.get("workflowId") or "").strip()
+    stop_id = str(command.get("operationId") or command.get("opId") or "").strip()
+    receipt = {"commandId": target, "targetCommandId": target, "workerId": worker_id, "projectId": project,
+               "workflowId": workflow, "stopBoundary": "local_command", "stopCommandId": stop_id}
+    def failed(code, detail):
+        return {"status": "failed", "errorCode": code, "message": detail, "stoppedTasks": [], "stoppedPids": []}
+    if not target or not project or not stop_id or stop_id == target or str(command.get("workerId") or "") != worker_id:
+        return failed("LOCAL_STOP_TARGET_REQUIRED", "停止需要本机明确的 Worker、项目和 commandId")
+    with WORKER_TASK_SNAPSHOT_LOCK:
+        data = read_json(path_for(root, "worker_task_snapshot.json"), {})
+        tasks = data.get("tasks") if isinstance(data, dict) and isinstance(data.get("tasks"), list) else []
+        queue = read_durable_plan_queue(root)
+        records = [row for row in tasks + queue["jobs"] if isinstance(row, dict) and str(row.get("commandId") or "") == target]
+        for row in records:
+            if (row.get("workerId") and str(row["workerId"]) != worker_id or row.get("projectId") and str(row["projectId"]) != project
+                    or workflow and row.get("workflowId") and str(row["workflowId"]) != workflow):
+                return failed("LOCAL_STOP_OWNER_MISMATCH", "commandId 属于其他 Worker、项目或工作流，未关闭标签页")
+        try:
+            inventory = local_stop_tmux_inventory(root)
+        except Exception as exc:
+            return failed("TMUX_UNREACHABLE", str(exc))
+        bound = [row for row in inventory if row["command"] == target and row["project"] in (project, os.path.realpath(root))]
+        for task in records:
+            pane = str(task.get("tmuxPane") or (task.get("pid") if str(task.get("pid") or "").startswith("%") else "") or "")
+            window = str(task.get("tmuxWindowId") or "")
+            session = str(task.get("tmuxSession") or "")
+            if pane or window:
+                locations = [row for row in inventory if (pane and row["pane"] == pane or window and row["window"] == window)]
+                if any(session and row["session"] != session or row["command"] and row["command"] != target
+                       or row["project"] and row["project"] not in (project, os.path.realpath(root)) for row in locations):
+                    return failed("LOCAL_STOP_WINDOW_REUSED", "原标签页已属于其他任务，未关闭")
+                bound.extend(locations)
+            elif session:
+                locations = [row for row in inventory if row["session"] == session]
+                windows = set(row["window"] for row in locations)
+                if len(windows) > 1:
+                    return failed("LOCAL_STOP_WINDOW_UNLOCATED", "旧记录只有共享会话，不能关闭其他标签页")
+                bound.extend(locations)
+        windows = {row["window"] for row in bound}
+        if any(row["name"] == "agent" or row["session"].endswith("-agent") for row in bound):
+            return failed("LOCAL_STOP_PROTECTED_WINDOW", "该目标是辅助 Agent 窗口，未关闭")
+        # Fence a delayed start before touching tmux. Preserve the original source/identity as audit.
+        tombstones = read_json(worker_recall_tombstones_path(root), {})
+        audit = tombstones.get("rows") if isinstance(tombstones, dict) and isinstance(tombstones.get("rows"), list) else []
+        old = next((row for row in audit if isinstance(row, dict) and row.get("commandId") == target), None)
+        if not old:
+            audit.append({**(records[0] if records else receipt), "commandId": target, "status": "cancelled", "stopReason": "user_stop_clear",
+                          "stopBoundary": "local_command", "stopCommandId": stop_id, "finishedAt": now_iso()})
+        atomic_write(worker_recall_tombstones_path(root), {"schemaVersion": SCHEMA_VERSION, "rows": audit, "updatedAt": now_iso()})
+        for row in queue["jobs"]:
+            if isinstance(row, dict) and row.get("commandId") == target and str(row.get("status") or "").lower() not in ("completed", "failed", "cancelled"):
+                row.update({"status": "cancelled", "finishedAt": now_iso(), "stopReason": "user_stop_clear"})
+        if records:
+            write_durable_plan_queue(root, queue)
+        try:
+            for window in sorted(windows):
+                fresh = local_stop_tmux_inventory(root)
+                actual = [row for row in fresh if row["window"] == window]
+                if any(row["command"] and row["command"] != target or row["project"] and row["project"] not in (project, os.path.realpath(root)) for row in actual):
+                    return failed("LOCAL_STOP_WINDOW_REUSED", "停止前标签页已被替换")
+                if actual:
+                    subprocess.run(["tmux", "kill-window", "-t", window], capture_output=True, text=True, timeout=5, cwd=root)
+                if any(row["window"] == window for row in local_stop_tmux_inventory(root)):
+                    return failed("TMUX_CLOSE_FAILED", "目标标签页仍存在，保留本机停止意图以便重试")
+        except Exception as exc:
+            return failed("TMUX_CLOSE_FAILED", str(exc))
+        now = now_iso()
+        for row in tasks + queue["jobs"]:
+            if not isinstance(row, dict) or row.get("commandId") != target:
+                continue
+            if str(row.get("status") or "").lower() not in ("completed", "failed", "cancelled", "stopped"):
+                row.update({"status": "cancelled", "finishedAt": now})
+            row.update({"controlClearedAt": now, "manualStopType": "scheduler_aborted", "stopReason": "user_stop_clear", "stopSource": "user"})
+            release_distributed_gpu_reservation(str(row.get("gpuId") or ""), target)
+        if records:
+            atomic_write(path_for(root, "worker_task_snapshot.json"), {**data, "schemaVersion": SCHEMA_VERSION, "tasks": tasks, "generatedAt": now})
+            write_durable_plan_queue(root, queue)
+        claims = read_json(worker_start_claims_path(root), {})
+        claim_rows = claims.get("rows") if isinstance(claims, dict) and isinstance(claims.get("rows"), list) else []
+        if any(isinstance(row, dict) and row.get("commandId") == target for row in claim_rows):
+            atomic_write(worker_start_claims_path(root), {**claims, "rows": [row for row in claim_rows if not isinstance(row, dict) or row.get("commandId") != target]})
+        retirement = retire_worker_state(root, {**command, "targetCommandIds": [target]}, worker_id, closed=True)
+        result = {"status": "completed", "message": "已关闭对应任务标签页并移除旧活动状态；原日志、产物和归属审计保留", **retirement,
+                  "stoppedTasks": [{**receipt, "paneClosed": True, "closedWindowIds": sorted(windows), "alreadyAbsent": not windows,
+                                    "cacheRetired": True, "finishedAt": now}], "stoppedPids": []}
+        append_event(root, {"type": "worker_task_stopped", "workerId": worker_id, "operationId": target, "payload": result})
+        return result
+
 def _execute_worker_command_unfenced(root, command, worker_id):
     action = str(command.get("action") or "").strip()
     command_id = str(command.get("commandId") or command.get("operationId") or f"cmd-{int(time.time() * 1000)}")
     append_event(root, {"type": "worker_command_started", "workerId": worker_id, "operationId": command_id, "payload": command})
+    if action == "stop-worker-task" and command.get("stopBoundary") == "local_command":
+        return stop_local_worker_task(root, command, worker_id)
     if action == "stop-worker-task" and command.get("resultPathPolicy") == "declared" and "attempt" in command:
         result = {"commandId": command_id, "targetCommandId": command.get("targetCommandId"), "status": "failed",
                   "errorCode": "FORMAL_ATTEMPT_RETIRED", "identityMismatchFields": ["attempt"],
@@ -5538,37 +5770,45 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         except Exception as exc:
             return {"commandId": command_id, "status": "failed", "durableAccepted": False, "message": str(exc)}
     options = command.get("options") if isinstance(command.get("options"), dict) else {}
-    project_dir = worker_plan_path(worker_path_value(command, options, ("projectDir",), str(root)), "projectDir", allow_absolute=True)
-    scheduler_path = worker_plan_path(worker_path_value(command, options, ("schedulerPath",), os.path.join(agent_install_dir(root), "simple_cluster", "runtime", "cluster_scheduler.py")), "schedulerPath", allow_absolute=True)
+    project_dir = worker_path_value(command, options, ("projectDir",), root)
+    worker_plan_path(project_dir, "projectDir", allow_absolute=True)
+    scheduler_path = str(command.get("schedulerPath") or options.get("schedulerPath") or os.path.join(agent_install_dir(root), "simple_cluster", "runtime", "cluster_scheduler.py"))
     plan = worker_path_value(command, options, ("planFile", "plan"))
     if not plan:
         result = {"commandId": command_id, "status": "failed", "message": "启动或重试 Worker 任务时必须提供 plan。"}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
         return result
-    worker_plan_project_path(project_dir, plan, require_file=True)
     experiment_index = int(command.get("experimentIndex") if command.get("experimentIndex") is not None else options.get("experimentIndex") or 0)
     gpu_id = str(command.get("gpuId") or options.get("gpuId") or "")
     case_name = str(command.get("case") or options.get("case") or "").strip()
     seed = command.get("seed") if command.get("seed") is not None else options.get("seed")
-    output_dir = worker_plan_path(worker_path_value(command, options, ("outputDir", "output_dir")), "outputDir", allow_empty=True)
-    config_path = worker_plan_path(worker_path_value(command, options, ("configPath", "config_path")), "configPath", allow_absolute=True, allow_empty=True)
-    if output_dir:
-        worker_plan_project_path(project_dir, output_dir, directory=True)
-    if config_path:
-        worker_plan_project_path(project_dir, config_path)
+    output_dir = worker_path_value(command, options, ('outputDir', 'output_dir'))
+    worker_plan_path(output_dir, "outputDir", allow_empty=True)
+    config_path = worker_path_value(command, options, ('configPath', 'config_path'))
+    worker_plan_path(config_path, "configPath", allow_empty=True)
     debug_mode = any(action_bool(value) for value in (command.get("debugMode"), command.get("debug_mode"), options.get("debugMode"), options.get("debug_mode")))
     if debug_mode:
         result = {"commandId": command_id, "status": "failed", "message": "Debug 运行模式已移除，请使用正式 Plan 运行。"}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
         return result
     debug_run_id = str(command.get("debugRunId") or command.get("debug_run_id") or options.get("debugRunId") or options.get("debug_run_id") or "").strip()
-    debug_output_dir = worker_plan_path(worker_path_value(command, options, ("debugOutputDir", "debug_output_dir")), "debugOutputDir", allow_empty=True)
-    default_result_csv_dir = worker_plan_path(worker_path_value(command, options, ("defaultResultCsvDir", "default_result_csv_dir"), "experiments/results"), "defaultResultCsvDir")
+    debug_output_dir = str(command.get("debugOutputDir") or command.get("debug_output_dir") or options.get("debugOutputDir") or options.get("debug_output_dir") or "").strip()
+    default_result_csv_dir = worker_path_value(command, options, ("defaultResultCsvDir", "default_result_csv_dir"), "experiments/results")
+    durable_plan_path(default_result_csv_dir, "defaultResultCsvDir")
+    requested_log = worker_path_value(command, options, ("logPath",))
+    if requested_log:
+        worker_plan_project_path(project_dir, requested_log)
+    worker_plan_project_path(project_dir, plan, require_file=True)
+    for value in (output_dir, config_path):
+        if value:
+            worker_plan_project_path(project_dir, value)
     manual_reassignment = any(action_bool(value) for value in (command.get("manualReassignment"), command.get("manual_reassignment"), options.get("manualReassignment"), options.get("manual_reassignment")))
     source_worker_id = str(command.get("sourceWorkerId") or command.get("source_worker_id") or options.get("sourceWorkerId") or options.get("source_worker_id") or "").strip()
     original_run_key = str(command.get("originalRunKey") or command.get("original_run_key") or options.get("originalRunKey") or options.get("original_run_key") or "").strip()
     reassignment_run_key = str(command.get("runKey") or options.get("reassignmentRunKey") or options.get("reassignment_run_key") or "").strip()
     mode = verified_durable_execution_mode(project_dir, command) if command.get("projectId") and command.get("planRevision") else worker_command_plan_mode(project_dir, plan, command.get("mode") or options.get("mode"))
+    # Recheck after mode/Plan verification before creating any launch directories.
+    worker_plan_project_path(project_dir, plan, require_file=True)
     # per-GPU单tmux(1C)：抽出 worker_tmux_session_name 纯函数，直传值仍经 simple_tmux_name 归一
     if command.get("checkpointTestOnly") is True:
         mode = "test"
@@ -5576,18 +5816,17 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         session = str(command.get("session"))
     else:
         session = worker_tmux_session_name(worker_id, gpu_id, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID"))
-    supplied_log = worker_plan_path(worker_path_value(command, options, ("logPath",), f"tmp/tmux_logs/{session}.log"), "logPath", allow_absolute=True)
-    # A formal task uses its bound console, but invalid caller paths must still fail closed.
-    worker_plan_project_path(project_dir, supplied_log)
-    _raw_log = worker_plan_path(worker_task_console_log(command_id) if command.get("resultPathPolicy") == "declared" else supplied_log, "logPath", allow_absolute=True)
+    _raw_log = worker_task_console_log(command_id) if command.get("resultPathPolicy") == "declared" else str(command.get("logPath") or f"tmp/tmux_logs/{session}.log")
     if os.path.isabs(_raw_log):
-        rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir))
+        rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir)).replace("\\", "/")
     else:
-        rel_log = _raw_log
+        rel_log = _raw_log.replace("\\", "/").lstrip("/")
     log_path = worker_plan_project_path(project_dir, rel_log)
-    if log_path != safe_project_path(project_dir, rel_log):
-        raise ValueError("Worker 日志路径身份不一致")
+    safe_project_path(project_dir, rel_log)  # Keep the common log-root/credential deny policy.
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     env = formal_job_command_env(command)
+    if command.get("_lifecycleRunner") is True:
+        resolve_durable_code_sync_proof(project_dir, command)
     env["SIMPLE_EXPERIMENT_MANAGED_JOB"] = "1"
     env["SIMPLE_EXPERIMENT_JOB_COMMAND_ID"] = str(command_id)
     env["SIMPLE_EXPERIMENT_JOB_PROJECT_ID"] = str(command.get("projectId") or "")
@@ -5599,8 +5838,18 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             raise ValueError("分布式任务输出路径不安全")
         worker_plan_project_path(project_dir, output_dir, directory=True)
         env["SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS"] = "1"
-    formal = verified_formal_job_command(project_dir, command)
+    try:
+        formal = verified_formal_job_command(project_dir, command)
+    except Exception as exc:
+        # Only a rejection at this read-only gate proves the task never started.
+        # Later launch/receipt failures retain unknown status and their resource fence.
+        exc.formalPreflightRejected = True
+        raise
+    if formal.get("completed") is True:
+        return {"commandId": command_id, "status": "completed", "exitCode": 0,
+                "message": "Matching completion and output hashes verified; no process launched"}
     env["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = json.dumps(formal["identity"], ensure_ascii=False)
+    env.pop("SIMPLE_EXPERIMENT_NVJITLINK_PROOF", None)
     if command.get("checkpointTestOnly") is True:
         if formal.get("checkpointVerified") is not True:
             raise ValueError("FORMAL_CHECKPOINT_PROOF_REQUIRED")
@@ -5626,22 +5875,6 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         result = {"commandId": command_id, "status": "failed", "message": "Worker 上缺少 cluster_scheduler.py，请先部署最新版 Agent。"}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
         return result
-    try:
-        require_scheduler_dependencies(project_dir, scheduler_path, env)
-    except Exception as exc:
-        result = {"commandId": command_id, "status": "failed", "message": str(exc)}
-        append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
-        return result
-    # Dependency probing may take time; reject changed path entries before launch.
-    worker_plan_project_path(project_dir, plan, require_file=True)
-    if command.get("projectId") and command.get("planRevision") and verified_durable_execution_mode(project_dir, command) != mode:
-        raise ValueError("Worker Plan 模式在依赖检查期间变化")
-    if output_dir:
-        worker_plan_project_path(project_dir, output_dir, directory=True)
-    if config_path:
-        worker_plan_project_path(project_dir, config_path)
-    worker_plan_project_path(project_dir, rel_log)
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
     overwrite_existing = any(action_bool(value) for value in (command.get("overwriteExisting"), command.get("overwrite_existing"), command.get("overwrite"), options.get("overwriteExisting"), options.get("overwrite_existing"), options.get("overwrite")))
     args = [
         simple_runtime_python(env),
@@ -5661,6 +5894,24 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         args.append("--overwrite")
     if debug_mode:
         args.extend(["--debug-mode", "--debug-run-id", debug_run_id or command_id, "--debug-output-dir", debug_output_dir])
+    if command.get("_lifecycleRunner") is True:
+        env["SIMPLE_EXPERIMENT_TASK_LIFECYCLE"] = "2"
+        env["SIMPLE_EXPERIMENT_RUNTIME_LOG_PATH"] = rel_log
+        # The original console log is command-bound; no diagnostics state file.
+        with open(log_path, "ab") as log_stream:
+            log_stream.write(("[simple-experiment-runtime-log] " + json.dumps({"commandId": command_id, "event": "begin", "phase": "prepare"}) + "\n").encode("utf-8"))
+        env.pop("SIMPLE_EXPERIMENT_EXIT_CODE_PATH", None)
+        pane = os.environ.get("TMUX_PANE")
+        if not pane:
+            raise RuntimeError("TASK_WINDOW_REQUIRED")
+        task_option(pane, "log", rel_log)
+        # One foreground command tree, real shell exit status, no shell left alive afterwards.
+        prefix = job_shell_environment_prefix(env, args)
+        shell = "set -o pipefail; " + prefix + " " + shlex.join(simple_conda_wrapped_args(args, env)) + " 2>&1 | tee -a " + shlex.quote(str(log_path)) + "; exit \"\u0024{PIPESTATUS[0]}\""
+        child_env = {key: value for key, value in os.environ.items() if key in (
+            "PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TERM", "SHELL", "TMUX", "TMUX_PANE", "CONDA_EXE")}
+        result = subprocess.run(["bash", "-c", shell], cwd=project_dir, env=child_env)
+        return {"commandId": command_id, "status": "completed" if result.returncode == 0 else "failed", "exitCode": result.returncode}
     # per-GPU固定窗口(1C)：主路径为 simple-gpu-{gpu_id} 复用 + split-window，log_path 仍按 session 归一，保证 tmux ls 仅 simple-gpu-0..3
     _tmux_prefix = str(os.environ.get("SIMPLE_EXPERIMENT_REMOTE_TMUX_SESSION_PREFIX") or "").strip()
     try:
@@ -5678,6 +5929,10 @@ def _execute_worker_command_unfenced(root, command, worker_id):
     # Exit evidence belongs to the command identity, independent of which launch path
     # (GPU pane or fallback session) succeeds. This also reuses the same marker on fallback.
     exit_code_path = safe_project_path(project_dir, f"simple_cluster/tmux_logs/{command_id}.exit_code")
+    if recalled_worker_command(root, {"commandId": command_id}):
+        if reserved_gpu:
+            release_distributed_gpu_reservation(gpu_id, command_id)
+        return {"commandId": command_id, "status": "cancelled", "recalled": True, "message": "本机停止意图已确认，未启动任务"}
     try:
         env["SIMPLE_EXPERIMENT_EXIT_CODE_PATH"] = str(exit_code_path)
     except Exception:
@@ -5701,14 +5956,27 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             pid = start_job_in_gpu_pane(gpu_window, args, project_dir, env, log_path, exit_code_path)
             used_tmux = True
         except Exception as exc:
-            if reserved_gpu:
-                release_distributed_gpu_reservation(gpu_id, command_id)
-            raise RuntimeError(f"GPU task tab launch failed: {exc}; no standalone task session was created")
+            try:
+                _fallback_session = simple_tmux_name(session)
+                tmux_session = _fallback_session
+                env["SIMPLE_EXPERIMENT_TMUX_SESSION"] = tmux_session
+                pid = start_simple_tmux_command(tmux_session, args, project_dir, log_path, env, exit_code_path)
+                used_tmux = True
+            except Exception as exc2:
+                if reserved_gpu:
+                    release_distributed_gpu_reservation(gpu_id, command_id)
+                raise RuntimeError(f"tmux launch failed: {exc} / fallback:{exc2}; refusing silent bash fallback")
     if not used_tmux:
         if reserved_gpu:
             release_distributed_gpu_reservation(gpu_id, command_id)
         raise RuntimeError("tmux available but launch failed and ALLOW_POPEN_FALLBACK not enabled; refusing silent bash fallback\uff1b\u8bf7\u5b89\u88c5 tmux \u6216\u542f\u7528 ALLOW_POPEN_FALLBACK")
     location = worker_task_tmux_location(pid, tmux_session, project_dir, env) if used_tmux else {}
+    if recalled_worker_command(root, {"commandId": command_id}):
+        proof = close_worker_task_pane(root, location) if used_tmux else {"paneClosed": False}
+        if reserved_gpu:
+            release_distributed_gpu_reservation(gpu_id, command_id)
+        return {"commandId": command_id, "status": "cancelled" if proof.get("paneClosed") else "unknown", "recalled": True,
+                "message": "已按本机停止意图关闭晚到任务", **location, **proof}
     task = {
         "schemaVersion": SCHEMA_VERSION,
         "commandId": command_id,
@@ -5823,6 +6091,17 @@ def _execute_worker_command_unfenced(root, command, worker_id):
 
 def execute_worker_command(root, command, worker_id):
     action = str(command.get("action") or "").strip()
+    if globals().get("TASK_LIFECYCLE_PROTOCOL") == 2 and command.get("resultPathPolicy") == "declared" and action in ("start-worker-task", "retry-worker-task", "stop-worker-task"):
+        command = {**command, "lifecycleProtocol": 2}
+    if command.get("lifecycleProtocol") == 2:
+        if action == "stop-worker-task":
+            return task_stop(root, command, worker_id)
+        if action in ("start-worker-task", "retry-worker-task"):
+            if command.get("_lifecycleRunner") is True:
+                if globals().get("NATIVE_TASK_RUNNER_CONTEXT") != (command.get("commandId"), os.environ.get("TMUX_PANE"), os.path.realpath(root)):
+                    raise ValueError("TASK_RUNNER_CONTEXT_REQUIRED: cannot execute a job in the Agent window")
+                return _execute_worker_command_unfenced(root, command, worker_id)
+            return task_queue_rpc(root, worker_id, "accept", command, ensure=True)
     if action == "retry-worker-task" and command.get("recoverTrainingOnly") is True:
         return recover_train_only_completion(root, command, worker_id)
     if action in ("start-worker-task", "retry-worker-task"):
@@ -5879,7 +6158,7 @@ def verified_durable_execution_mode(project_dir, command):
     """Bind intended mode to the original PLAN revision, never a legacy hardcoded mode."""
     plan_path = worker_plan_project_path(project_dir, durable_plan_value(command, "planFile"), require_file=True)
     raw = pathlib.Path(plan_path).read_bytes()
-    if hashlib.sha256(raw).hexdigest() != durable_plan_value(command, "planRevision"):
+    if len(raw) > 1048576 or hashlib.sha256(raw).hexdigest() != durable_plan_value(command, "planRevision"):
         raise ValueError("Original Plan revision unavailable; execution mode cannot be recovered safely")
     scheduler = scalar_scheduler_module()
     plan = scheduler.load_plan(plan_path)
@@ -5908,18 +6187,20 @@ def formal_job_command_env(command):
     identity = {key: command.get(key) for key in ("workflowId", "globalJobId", "commandId", "planRevision", "codeFingerprint")}
     env["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = json.dumps(identity, ensure_ascii=False)
     env["SIMPLE_EXPERIMENT_JOB_COMMAND_ID"] = str(identity.get("commandId") or "")
+    if command.get("lifecycleProtocol") == 2:
+        env["SIMPLE_EXPERIMENT_TASK_LIFECYCLE"] = "2"
     return env
 
 def verified_worker_execution_shell(project_dir, command):
     """Only probe the task shell; occupied output directories remain untouched and unadmitted."""
-    if not execution_shell_preflight_capable(project_dir):
+    if not task_shell_environment_capable(project_dir):
         raise ValueError("WORKER_PROTOCOL_INCOMPATIBLE: execution shell preflight requires matching Agent/Scheduler")
     if command.get("resultPathPolicy") != "declared" or "attempts" in str(command.get("outputDir") or "").split("/"):
         raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
     env = formal_job_command_env(command)
     args = [simple_runtime_python(env), "-B", "-X", "utf8", cluster_scheduler_path(project_dir), "--check-execution-shell-json"]
     job_shell_environment_prefix(env, args)
-    proc = subprocess_inactivity_run(args, cwd=project_dir, env=env, progress_stream="stderr")
+    proc = subprocess_inactivity_run(simple_conda_wrapped_args(args, env), cwd=project_dir, env=env, progress_stream="stderr")
     if proc.returncode:
         raise ValueError((proc.stderr or proc.stdout or "EXECUTION_SHELL_PREFLIGHT_FAILED")[-4000:])
     report = json.loads(proc.stdout)
@@ -5929,21 +6210,23 @@ def verified_worker_execution_shell(project_dir, command):
         raise ValueError("FORMAL_JOB_PREFLIGHT_IDENTITY_MISMATCH: task shell")
     return {**report, "environmentOnly": True, "formalJobAdmissionChecked": False}
 
-def verified_formal_job_command(project_dir, command):
+def verified_formal_job_command(project_dir, command, structure_only=False):
     """Check the real Scheduler message contract before queue admission or tmux creation."""
     if command.get("resultPathPolicy") != "declared" or "attempts" in str(command.get("outputDir") or "").split("/"):
         raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
     scheduler_path = cluster_scheduler_path(project_dir)
-    if not scheduler_path or not formal_job_path_capable(project_dir):
+    if not scheduler_path or not formal_job_path_capable(project_dir) or not task_shell_environment_capable(project_dir):
         raise ValueError("WORKER_PROTOCOL_INCOMPATIBLE: deploy matching formal-path Scheduler and Agent")
     env = formal_job_command_env(command)
     requested_mode = "test" if command.get("checkpointTestOnly") is True else str(command.get("mode") or "")
     args = [simple_runtime_python(env), "-B", "-X", "utf8", scheduler_path, "--formal-job-preflight", "--plan", durable_plan_value(command, "planFile"),
             "--only-index", str(command.get("experimentIndex")), "--mode", requested_mode,
             "--plan-revision", str(command.get("planRevision") or ""), "--output-dir-override", str(command.get("outputDir") or "")]
+    if structure_only:
+        args.append("--formal-job-structure-only")
     job_shell_environment_prefix(env, args)  # Validate the supplied identity; never fabricate a missing globalJobId.
     try:
-        proc = subprocess_inactivity_run(args, cwd=project_dir, env=env, progress_stream="stderr")
+        proc = subprocess_inactivity_run(args if structure_only else simple_conda_wrapped_args(args, env), cwd=project_dir, env=env, progress_stream="stderr")
     except RuntimeError as exc:
         code = "FORMAL_JOB_PREFLIGHT_CANCELLED" if "操作已取消" in str(exc) else "FORMAL_JOB_PREFLIGHT_STALLED" if "无真实进展" in str(exc) else "FORMAL_JOB_PREFLIGHT_PROCESS_FAILED"
         raise ValueError(code + ": " + " | ".join(str(exc).splitlines())[:3500]) from exc
@@ -5971,20 +6254,36 @@ def preflight_existing_worker_task(root, payload, worker_id):
     expected = payload.get("expectedIdentity")
     if not target or not isinstance(expected, dict):
         raise ValueError("FORMAL_JOB_PREFLIGHT_IDENTITY_REQUIRED")
-    with WORKER_TASK_SNAPSHOT_LOCK:
-        row = next((item for item in read_durable_plan_queue(root)["jobs"]
-                    if isinstance(item, dict) and item.get("commandId") == target), None)
-        if not row:
-            raise ValueError("FORMAL_JOB_PREFLIGHT_TARGET_UNAVAILABLE")
-        row = dict(row)
+    native = expected.get("lifecycleProtocol") == 2 and globals().get("TASK_LIFECYCLE_PROTOCOL") == 2
+    if native:
+        current = next((item for item in task_inventory(root) if item.get("commandId") == target), None)
+        row = dict(current or expected)
+        for name in ("planFile", "outputDir", "collectionResultCsv"):
+            task_safe_path(root, row.get(name))
+        if not row.get("codeSyncProofId") and not row.get("codeManifest"):
+            proof = next((item for item in code_sync_proof_document(root).get("proofs", {}).values()
+                if item.get("projectId") == row.get("projectId") and item.get("codeFingerprint") == row.get("codeFingerprint")), None)
+            if proof:
+                row.update(codeSyncProofId=proof["proofId"], manifestDigest=proof["manifestDigest"])
+    else:
+        with WORKER_TASK_SNAPSHOT_LOCK:
+            row = next((item for item in read_durable_plan_queue(root)["jobs"]
+                        if isinstance(item, dict) and item.get("commandId") == target), None)
+            if not row:
+                raise ValueError("FORMAL_JOB_PREFLIGHT_TARGET_UNAVAILABLE")
+            row = dict(row)
     if (row.get("workerId") != worker_id or expected.get("commandId") != target
             or not durable_plan_same_identity(row, expected)
             or any(row.get(key) != expected.get(key) for key in
                    ("resultPathPolicy", "globalJobId", "collectionResultCsv", "checkpointSource", "executionMode", "mode"))):
         raise ValueError("FORMAL_JOB_PREFLIGHT_IDENTITY_MISMATCH")
     environment_only = payload.get("environmentOnly") is True
-    if (row.get("status") != "failed" or not environment_only and (row.get("neverStarted") is not True
-            or row.get("neverStartedEvidence") != "formal_preflight_rejected")):
+    completed_verify = payload.get("completedOutputVerify") is True
+    if completed_verify and environment_only:
+        raise ValueError("FORMAL_JOB_PREFLIGHT_INVALID_MODE")
+    if not native and ((completed_verify and row.get("status") != "completed") or (not completed_verify and
+        (row.get("status") != "failed" or not environment_only and (row.get("neverStarted") is not True
+            or row.get("neverStartedEvidence") != "formal_preflight_rejected")))):
         raise ValueError("FORMAL_JOB_PREFLIGHT_REQUIRES_NEVER_STARTED_REJECTION")
     # Read the original proof without renewing it or writing a new admission record.
     proof_id = str(row.get("codeSyncProofId") or "")
@@ -5992,7 +6291,7 @@ def preflight_existing_worker_task(root, payload, worker_id):
         proof = code_sync_proof_document(root).get("proofs", {}).get(proof_id)
         if not isinstance(proof, dict):
             raise ValueError("code-sync proof missing; original source cannot be verified")
-        verify_code_sync_proof_record(root, proof, row, runtime_generation=proof.get("runtimeGeneration"))
+        verify_code_sync_proof_record(root, proof, row, runtime_generation=proof.get("runtimeGeneration"), verify_content=True)
     elif isinstance(row.get("codeManifest"), dict):
         manifest = row["codeManifest"]
         if durable_code_manifest_digest(manifest) != row.get("codeFingerprint"):
@@ -6002,9 +6301,17 @@ def preflight_existing_worker_task(root, payload, worker_id):
     else:
         raise ValueError("code-sync proof missing; original source cannot be verified")
     verified_durable_execution_mode(root, row)
+    if native and completed_verify:
+        observed = task_public_observation(root, row, current)
+        if observed.get("status") != "completed":
+            raise ValueError("FORMAL_JOB_COMPLETION_CHANGED")
+        return {"schemaVersion": 1, "targetCommandId": target, "workerId": worker_id, "executionStarted": False,
+                "queueChanged": False, "sourceContentVerified": True, "proofRenewed": False, "report": {"completed": True, "observation": observed["observation"]}}
     report = verified_worker_execution_shell(root, row) if environment_only else verified_formal_job_command(root, row)
+    if completed_verify and report.get("completed") is not True:
+        raise ValueError("FORMAL_JOB_COMPLETION_CHANGED")
     return {"schemaVersion": 1, "targetCommandId": target, "workerId": worker_id,
-            "executionStarted": False, "queueChanged": False, "report": report}
+            "executionStarted": False, "queueChanged": False, "sourceContentVerified": True, "proofRenewed": False, "report": report}
 
 def recover_train_only_completion(root, command, worker_id):
     """Review/adopt existing validation-only adapter evidence; never execute training or test."""
@@ -6172,7 +6479,7 @@ def read_events_after_seq(root, since, limit=100, cursor_id=""):
     if omitted_oversized:
         if len(events) >= requested_limit:
             events.popleft()
-        events.append({"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "reason": "oversized_journal_record", "resetSince": 0}})
+        events.append({"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "reason": "oversized_journal_record", "resetSince": 0}})
     with EVENT_CURSOR_LOCK:
         EVENT_CURSOR_CACHE[cache_key] = {
             "seq": current_seq,
@@ -6192,55 +6499,7 @@ def post_json(url, payload, timeout=5):
         return json.loads(body or "{}")
 
 def start_worker_hub_uplink(root, hub_uplink_url="", worker_id="", availability_seconds=60, jitter_seconds=30, event_delay_ms=1000):
-    url = str(hub_uplink_url or os.environ.get("SIMPLE_EXPERIMENT_HUB_UPLINK_URL") or "").strip()
-    if not url:
-        return
-    worker_id = str(worker_id or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip() or "worker"
-    availability_base = 0.5
-    jitter = 0.0
-    event_delay = 0.5
-    def loop():
-        last_seq = read_seq(root)
-        last_command_seq = 0
-        next_availability = time.time()
-        backoff = 1.0
-        while True:
-            try:
-                now_ts = time.time()
-                events = read_events_after_seq(root, last_seq, 100, "worker-uplink")
-                availability = None
-                if now_ts >= next_availability:
-                    availability = availability_from_gpu(worker_id, api_worker_gpu(root), "worker_uplink", 180)
-                    availability.update({"declaredJobPaths": formal_job_path_capable(root), "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0, "runtimeVersion": RUNTIME_VERSION})
-                    next_availability = now_ts + availability_base + (random.random() * jitter if jitter else 0)
-                if events or availability:
-                    payload = {
-                        "schemaVersion": SCHEMA_VERSION,
-                        "workerId": worker_id,
-                        "generatedAt": now_iso(),
-                        "events": events,
-                        "availability": availability,
-                        "commandsSince": last_command_seq,
-                    }
-                    response = post_json(url, payload, timeout=5)
-                    if events:
-                        last_seq = max(int(event.get("seq") or last_seq) for event in events)
-                    command_results = []
-                    for command in response.get("commands") or []:
-                        if not isinstance(command, dict):
-                            continue
-                        last_command_seq = max(last_command_seq, int(command.get("queueSeq") or last_command_seq))
-                        command_results.append(execute_worker_command(root, command, worker_id))
-                    if command_results:
-                        post_json(url, {"schemaVersion": SCHEMA_VERSION, "workerId": worker_id, "generatedAt": now_iso(), "commandResults": command_results, "commandsSince": last_command_seq}, timeout=5)
-                    backoff = 1.0
-                time.sleep(event_delay)
-            except Exception as exc:
-                append_event(root, {"type": "worker_uplink_error", "source": "worker_telemetry", "payload": {"error": str(exc), "hubUplinkUrl": url}})
-                time.sleep(backoff + random.random() * min(backoff, 30.0))
-                backoff = min(backoff * 2, 60.0)
-    thread = threading.Thread(target=loop, daemon=True, name="worker-hub-uplink")
-    thread.start()
+    raise ValueError("HUB_REMOVED: use Worker direct queries")
 
 def start_worker_local_command_processor(root, worker_id, poll_seconds=5, jitter_seconds=2):
     """Single-worker (no-hub) command executor.
@@ -6289,19 +6548,13 @@ def start_worker_local_command_processor(root, worker_id, poll_seconds=5, jitter
     threading.Thread(target=loop, daemon=True, name="worker-local-command-processor").start()
 
 def write_worker_gpu_snapshot(root):
-    gpus, err = collect_local_gpu()
-    payload = {
-        "schemaVersion": SCHEMA_VERSION,
-        "generatedAt": now_iso(),
-        "source": "worker_telemetry",
-        "gpu": gpus,
-        "gpus": gpus,
-        "status": "ok" if not err else "degraded",
-        "error": err,
-    }
+    payload = api_worker_gpu(root)
+    gpus = payload["gpus"]
     worker_id = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip() or "worker"
     try:
-        record_gpu_history(root, {worker_id: gpus}, payload["generatedAt"])
+        if time.monotonic() - WORKER_GPU_SAMPLE_CACHE.get("historyAt", -60.0) >= 60.0:
+            record_gpu_history(root, {worker_id: gpus}, payload["generatedAt"])
+            WORKER_GPU_SAMPLE_CACHE["historyAt"] = time.monotonic()
     except Exception as exc:
         payload["historyError"] = str(exc)
     atomic_write(path_for(root, "gpu_snapshot.json"), payload)
@@ -6315,24 +6568,10 @@ def sampler_sleep_seconds(interval, jitter_seconds=30.0):
     return interval + (random.random() * jitter if jitter else 0.0)
 
 def worker_gpu_sample_delay(interval, jitter_seconds, has_plan):
-    if has_plan:
-        return min(5.0, sampler_interval_seconds(interval, 5.0))
-    return sampler_sleep_seconds(interval, jitter_seconds)
+    return min(1.0, sampler_interval_seconds(interval, 1.0))
 
 def wait_for_worker_gpu_sample(root, interval, jitter_seconds, has_plan):
-    delay = worker_gpu_sample_delay(interval, jitter_seconds, has_plan)
-    if has_plan:
-        time.sleep(delay)
-        return
-    # Check local task state every five seconds, but avoid GPU queries and snapshot writes
-    # while idle. A newly-started plan wakes the next loop immediately.
-    remaining = delay
-    while remaining > 0:
-        sleep_for = min(5.0, remaining)
-        time.sleep(sleep_for)
-        remaining -= sleep_for
-        if has_running_plan(root):
-            return
+    time.sleep(worker_gpu_sample_delay(interval, jitter_seconds, has_plan))
 
 def has_running_plan(root):
     # 计划未接入时返回 False，调用方应 30s 休眠且不探活；有运行中任务/调度态时返回 True
@@ -6380,15 +6619,14 @@ def payload_cache_changed(cache, key, payload):
     cache[key] = payload
     return True
 
-def start_worker_telemetry_sampler(root, poll_seconds=1, jitter_seconds=30):
-    interval = sampler_interval_seconds(poll_seconds, 60.0)
+def start_worker_telemetry_sampler(root, poll_seconds=1, jitter_seconds=0):
+    interval = worker_gpu_sample_delay(poll_seconds, 0, False)
     heartbeat_interval = max(60.0, interval)
     worker_id_local = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip() or "worker"
     def loop():
         last_payloads = {}
         last_heartbeat = 0.0
         while True:
-            has_plan = has_running_plan(root)
             try:
                 payload = write_worker_gpu_snapshot(root)
                 # 单机 worker_telemetry 模式自刷新 worker_availability.json 避免调度停滞
@@ -6397,15 +6635,12 @@ def start_worker_telemetry_sampler(root, poll_seconds=1, jitter_seconds=30):
                     write_availability_batch(root, {"schemaVersion": SCHEMA_VERSION, "source": "worker_agent_direct", "generatedAt": avail.get("updatedAt"), "workers": [avail]})
                 except Exception:
                     pass
-                gpu_event = {"gpus": payload.get("gpus") or [], "status": payload.get("status"), "error": payload.get("error") or ""}
+                gpu_event = {"gpus": payload.get("gpus") or [], "status": payload.get("status"), "error": payload.get("error") or "", "generatedAt": payload.get("generatedAt")}
                 if payload_cache_changed(last_payloads, "gpu", gpu_event):
                     append_event(root, {"type": "gpu_snapshot", "source": "worker_telemetry", "payload": gpu_event})
                 health_payload = {"status": payload.get("status"), "lastError": payload.get("error") or "", "generatedAt": payload.get("generatedAt"), "gpuCount": len(payload.get("gpus") or [])}
                 if payload_cache_changed(last_payloads, "health", health_payload):
                     append_event(root, {"type": "worker_health", "source": "worker_telemetry", "payload": health_payload})
-                tasks_payload = api_worker_tasks(root)
-                if payload_cache_changed(last_payloads, "tasks", tasks_payload):
-                    append_event(root, {"type": "worker_task_snapshot", "source": "worker_telemetry", "payload": tasks_payload})
                 if time.time() - last_heartbeat >= heartbeat_interval:
                     append_event(root, {"type": "agent_heartbeat", "source": "worker_telemetry", "payload": {"status": payload.get("status"), "gpuPollSeconds": interval, "agentVersion": AGENT_VERSION}})
                     last_heartbeat = time.time()
@@ -6414,131 +6649,29 @@ def start_worker_telemetry_sampler(root, poll_seconds=1, jitter_seconds=30):
                     append_event(root, {"type": "worker_health", "source": "worker_telemetry", "payload": {"status": "degraded", "lastError": str(exc), "generatedAt": now_iso()}})
                 except Exception:
                     pass
-            wait_for_worker_gpu_sample(root, interval, jitter_seconds, has_plan)
+            wait_for_worker_gpu_sample(root, interval, 0, False)
+    def task_loop():
+        last_payloads = {}
+        while True:
+            try:
+                # Push is telemetry only. Never repeatedly inspect historical
+                # manifests, logs or multipart launch payloads in the sampler.
+                tasks_payload = task_execution_inventory(root)
+                if payload_cache_changed(last_payloads, "tasks", tasks_payload):
+                    append_event(root, {"type": "worker_task_snapshot", "source": "worker_telemetry", "payload": tasks_payload})
+            except Exception:
+                pass
+            time.sleep(5.0)
+    threading.Thread(target=task_loop, name="simple-worker-task-telemetry-sampler", daemon=True).start()
     thread = threading.Thread(target=loop, name="simple-worker-telemetry-sampler", daemon=True)
     thread.start()
     return thread
 
 def start_hub_control_sampler(root, poll_seconds=60, jitter_seconds=30):
-    interval = sampler_interval_seconds(poll_seconds, 60.0)
-    heartbeat_interval = max(60.0, interval)
-    def loop():
-        last_payloads = {}
-        last_heartbeat = 0.0
-        while True:
-            try:
-                scheduler = collect_scheduler(root)
-                traces = collect_traces(root, scheduler)
-                payloads = {
-                    "scheduler_snapshot": {"schedulerStates": scheduler},
-                    "experiment_trace": {"experimentTraces": traces},
-                }
-                for item in collect_live_output(scheduler, 120, root):
-                    payloads[f"log_tail:{item.get('runKey') or item.get('key')}"] = item
-                for name, payload in payloads.items():
-                    if payload_cache_changed(last_payloads, name, payload):
-                        typ = name.split(":", 1)[0]
-                        event = {"type": typ, "payload": payload}
-                        if typ == "log_tail":
-                            event["runKey"] = payload.get("runKey") or payload.get("key") or ""
-                        append_event(root, event)
-                if time.time() - last_heartbeat >= heartbeat_interval:
-                    append_event(root, {"type": "agent_heartbeat", "payload": {"status": "ok", "pollSeconds": interval, "agentVersion": AGENT_VERSION}})
-                    last_heartbeat = time.time()
-            except Exception as exc:
-                try:
-                    append_event(root, {"type": "diagnostics_updated", "payload": {"status": "degraded", "lastError": str(exc), "generatedAt": now_iso()}})
-                except Exception:
-                    pass
-            time.sleep(interval)
-    thread = threading.Thread(target=loop, name="simple-hub-control-sampler", daemon=True)
-    thread.start()
-    return thread
-
-def write_snapshots(root, hub_id, workers, scheduler, traces, gpu, health, errors, ttl):
-    generated = now_iso()
-    expires = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() + ttl))
-    base = {
-        "schemaVersion": SCHEMA_VERSION,
-        "generatedAt": generated,
-        "expiresAt": expires,
-        "ttlSeconds": ttl,
-        "hubId": hub_id,
-        "workers": workers,
-        "errors": errors,
-        "partialFailure": bool(errors),
-        "source": "hub_agent_snapshot",
-        "agentVersion": AGENT_VERSION,
-    }
-    # TB健康入快照(2B)：供面板免轮询展示，端口默认6006，配置由扩展侧覆盖
-    tb_info = {}
-    try:
-        tb_prefix = _resolve_tmux_prefix(None, None, None)
-        tb_sess = tb_tmux_session_name(tb_prefix)
-        tb_port = 6006
-        tb_running = tmux_session_alive(tb_sess)
-        tb_listening = tb_port_listening(tb_port) if tb_running else False
-        tb_info = {"session": tb_sess, "port": tb_port, "running": tb_running, "listening": tb_listening, "checkedAt": generated}
-    except Exception:
-        tb_info = {}
-    gpu_payload = {**base, "gpu": gpu, "health": health}
-    try:
-        record_gpu_history(root, gpu, generated)
-    except Exception as exc:
-        gpu_payload["historyError"] = str(exc)
-    atomic_write(path_for(root, "cluster_snapshot.json"), {**base, "schedulerStates": scheduler, "tb": tb_info})
-    atomic_write(path_for(root, "gpu_snapshot.json"), gpu_payload)
-    atomic_write(path_for(root, "experiment_traces_snapshot.json"), {**base, "experimentTraces": traces})
-    atomic_write(path_for(root, "health_snapshot.json"), {**base, "health": health})
+    raise ValueError("HUB_REMOVED: use Worker direct queries")
 
 def run_agent(args):
-    global MAX_EVENTS
-    MAX_EVENTS = max(100, int(getattr(args, "journal_max_events", MAX_EVENTS) or MAX_EVENTS))
-    run_id = uuid.uuid4().hex
-    if not acquire_pid(args.project_dir, run_id):
-        return 0
-    stop_path = path_for(args.project_dir, "stop")
-    workers = json.loads(args.workers_json or "[]")
-    poll_seconds = max(60, int(args.poll_seconds or 60))
-    ttl_seconds = max(60, int(args.ttl_seconds or 180))
-    atomic_write(path_for(args.project_dir, "agent.config.json"), {"hubId": args.hub_id, "workers": workers, "pollSeconds": poll_seconds, "ttlSeconds": ttl_seconds, "journalMaxEvents": MAX_EVENTS, "journalMaxBytes": MAX_JOURNAL_BYTES, "stateRetentionSeconds": STATE_RETENTION_SECONDS, "maxAgentStateBytes": MAX_AGENT_STATE_BYTES, "pid": os.getpid(), "runId": run_id, "agentVersion": AGENT_VERSION})
-    error_counts = {}
-    last_payloads = {}
-    while not agent_stop_requested(stop_path, os.getpid(), run_id):
-        errors, gpu, health = [], {}, {}
-        scheduler = collect_scheduler(args.project_dir)
-        traces = collect_traces(args.project_dir, scheduler)
-        for worker in workers:
-            wid = str(worker.get("id") or worker.get("name") or worker.get("target") or "")
-            gpus, err = collect_worker_gpu(worker)
-            if err:
-                error_counts[wid] = error_counts.get(wid, 0) + 1
-                errors.append(f"{wid}: {err}")
-                health[wid] = {"status": "degraded", "lastError": err, "errorCount": error_counts[wid], "generatedAt": now_iso()}
-            else:
-                error_counts[wid] = 0
-                gpu[wid] = gpus
-                health[wid] = {"status": "ok", "lastOkAt": now_iso(), "errorCount": 0, "generatedAt": now_iso()}
-        write_snapshots(args.project_dir, args.hub_id, workers, scheduler, traces, gpu, health, errors, ttl_seconds)
-        payloads = {
-            "scheduler_snapshot": {"schedulerStates": scheduler},
-            "experiment_trace": {"experimentTraces": traces},
-            "worker_health": {"health": health, "errors": errors},
-        }
-        for wid, gpus in gpu.items():
-            payloads[f"gpu_snapshot:{wid}"] = {"workerId": wid, "gpus": gpus}
-        for item in collect_live_output(scheduler):
-            payloads[f"log_tail:{item.get('key')}"] = item
-        for name, payload in payloads.items():
-            text = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-            if last_payloads.get(name) != text or name == "health":
-                typ = name.split(":", 1)[0]
-                append_event(args.project_dir, {"type": typ, "workerId": payload.get("workerId", ""), "payload": payload, "partialFailure": bool(errors), "hubId": args.hub_id})
-                last_payloads[name] = text
-        append_event(args.project_dir, {"type": "agent_heartbeat", "payload": {"errors": errors, "partialFailure": bool(errors), "agentVersion": AGENT_VERSION}, "errors": [{"code": "worker_error", "message": e, "retryable": True} for e in errors], "partialFailure": bool(errors), "hubId": args.hub_id})
-        time.sleep(sampler_sleep_seconds(poll_seconds, getattr(args, "jitter_seconds", 30.0)))
-    append_event(args.project_dir, {"type": "worker_health", "payload": {"status": "stopped"}})
-    return 0
+    raise ValueError("HUB_REMOVED: use Worker Agent serve")
 
 def read_stream_event_batch(root, since, pos=0, journal_identity=None, warned_gap=False):
     journal = path_for(root, "events.jsonl")
@@ -6558,7 +6691,7 @@ def read_stream_event_batch(root, since, pos=0, journal_identity=None, warned_ga
                     try:
                         first = int(json.loads(first_line).get("seq", 0))
                         if since and since < first - 1:
-                            warning = {"schemaVersion": SCHEMA_VERSION, "seq": first, "type": "agent_warning", "generatedAt": now_iso(), "source": "hub_agent", "hubId": "hub", "payload": {"code": "journal_gap", "message": "journal gap; read snapshot"}}
+                            warning = {"schemaVersion": SCHEMA_VERSION, "seq": first, "type": "agent_warning", "generatedAt": now_iso(), "source": "worker_telemetry", "workerId": os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID", ""), "payload": {"code": "journal_gap", "message": "journal gap; read snapshot"}}
                     except Exception:
                         pass
                     warned_gap = True
@@ -6619,7 +6752,7 @@ def api_snapshot(root):
     }
 
 def api_health(root, mode="realtime"):
-    serving = mode in ("worker_telemetry", "hub_control")
+    serving = mode == "worker_telemetry"
     snapshot_name = "gpu_snapshot.json" if mode == "worker_telemetry" else "cluster_snapshot.json"
     snapshot = read_runtime_json_cached(path_for(root, snapshot_name), {})
     health = inspect_agent(root)
@@ -6640,12 +6773,16 @@ def api_health(root, mode="realtime"):
         "serverTime": now_iso(),
         "uptimeSeconds": uptime if uptime is not None else 0,
         "projectRoot": os.path.abspath(root),
+        "agentIdentity": AGENT_LIFECYCLE_IDENTITY,
+        "agentLifecycleProtocol": 1,
+        "schedulerRuntime": task_scheduler_runtime_report(root, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker"),
+        "schedulerUpdateError": TASK_SCHEDULER_UPDATE_ERROR,
         "agentInstallDir": agent_install_dir(root),
         "agentStateDir": agent_dir(root),
         "status": "ok" if serving or health.get("running") is not False else "degraded",
         "snapshotAge": age if age is not None else 999999,
         "workerCount": (1 if snapshot.get("gpu") or snapshot.get("gpus") else 0) if mode == "worker_telemetry" else len(snapshot.get("workers") or []),
-        "schedulerDependencies": scheduler_dependency_health(root),
+        "schedulerDependencies": {"checked": False, "automatic": False, "scope": "agent", "reason": "research_environment_owned_by_project"},
         "checkedAt": now_iso(),
     }
 
@@ -6679,8 +6816,29 @@ def execution_shell_preflight_capable(root):
     except (OSError, TypeError):
         return False
 
+def task_shell_environment_capable(root):
+    try:
+        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
+            return execution_shell_preflight_capable(root) and "TASK_SHELL_ENVIRONMENT_PROTOCOL = 1" in stream.read(8192)
+    except (OSError, TypeError):
+        return False
 
-def api_capabilities(root, token_required=False, mode="hub_control"):
+
+def staged_job_preflight_capable(root):
+    try:
+        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
+            return task_shell_environment_capable(root) and "FORMAL_JOB_PREFLIGHT_STAGES_PROTOCOL = 1" in stream.read(8192)
+    except (OSError, TypeError):
+        return False
+
+def project_managed_validation_capable(root):
+    try:
+        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
+            return formal_job_path_capable(root) and "PROJECT_MANAGED_VALIDATION_PROTOCOL = 1" in stream.read(8192)
+    except (OSError, TypeError):
+        return False
+
+def api_capabilities(root, token_required=False, mode="worker_telemetry"):
     if mode == "worker_telemetry":
         return {
             "schemaVersion": SCHEMA_VERSION,
@@ -6699,14 +6857,29 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
                 "gpu": True,
                 "gpuHistory": True,
                 "workerAvailability": True,
-                "workerHubUplink": True,
                 "workerTasks": True,
+                "taskLifecycle": 2,
+                "sourceDecouple": 1,
+                "runtimeDiagnostics": 1,
                 "declaredJobPaths": formal_job_path_capable(root),
                 "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0,
                 "executionShellPreflight": 1 if execution_shell_preflight_capable(root) else 0,
+                "taskShellEnvironment": 1 if task_shell_environment_capable(root) else 0,
+                "stagedJobPreflight": 1 if staged_job_preflight_capable(root) else 0,
+                "originalSourceHashDiagnostic": 1,
+                "projectManagedValidation": 1 if project_managed_validation_capable(root) else 0,
+                "completedOutputPreflight": 1 if project_managed_validation_capable(root) else 0,
                 "durablePlanQueue": True,
                 "codeSyncProof": True,
+                "codeSyncProofAsync": True,
+                "planCodeScope": 1,
+                "syncScopeIndex": 1,
                 "idleGpuAdmission": True,
+                "manualDispatch": 1,
+                "gpuMemoryRatioScheduling": 1,
+                "gpuQuotaScheduling": 1,
+                "gpuCardQuotaScheduling": 1, "gpuCardLimitScheduling": 1,
+                "schedulerRuntimeUpdate": 1,
                 "queuedJobRecall": True,
                 "liveOutput": True,
                 "diagnostics": True,
@@ -6720,6 +6893,7 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
             },
             "actionEndpoints": {
                 "start-worker-task": True,
+                "configure-gpu-quota": True,
                 "preflight-worker-task": True,
                 "register-code-sync-proof": True,
                 "rebuild-distributed-results": True,
@@ -6728,8 +6902,10 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
                 "stop-worker-task-exact-pane": True,
                 "stop-worker-task-formal-identity": True,
                 "stop-worker-task-formal-no-attempt": True,
+                "stop-worker-task-local-command": True,
                 "delete-worker-artifacts": True,
                 "archive-worker-artifacts": True,
+                "finalize-worker-operation": True,
                 "validate-plan": True,
                 "dry-run-plan": True,
                 "run-plan": True,
@@ -6740,60 +6916,7 @@ def api_capabilities(root, token_required=False, mode="hub_control"):
                 **{name: True for name in WORKER_ENV_ACTIONS},
             },
         }
-    return {
-        "schemaVersion": SCHEMA_VERSION,
-        "apiVersion": API_VERSION,
-        "agentVersion": AGENT_VERSION,
-        "runtimeVersion": RUNTIME_VERSION,
-        "pluginVersion": PLUGIN_VERSION,
-        "schedulerVersion": RUNTIME_VERSION,
-        "mode": "hub_control",
-        "actionApiVersion": 2,
-        "realActionRuntime": True,
-        "endpoints": {
-            "health": True,
-            "version": True,
-            "snapshot": True,
-            "gpu": True,
-            "gpuHistory": True,
-            "workerAvailability": True,
-            "workerHubUplink": True,
-            "scheduler": True,
-            "declaredJobPaths": formal_job_path_capable(root),
-            "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0,
-            "executionShellPreflight": 1 if execution_shell_preflight_capable(root) else 0,
-            "traces": True,
-            "liveOutput": True,
-            "diagnostics": True,
-            "auditTail": True,
-            "resultsSummary": True,
-            "openapi": True,
-            "websocketEvents": False,
-            "sseEvents": True,
-            "logsTail": True,
-            "fileList": True,
-            "fileStat": True,
-            "fileDownload": True,
-            "fileRangeDownload": True,
-            "fileUploadInit": True,
-            "fileUploadChunk": True,
-            "fileUploadComplete": True,
-            "fileUploadCancel": True,
-            "fileTransferStatus": True,
-            "actions": True,
-        },
-        "actionEndpoints": {name: True for name in ACTION_NAMES},
-        "limits": {
-            "maxUploadChunkBytes": 1024 * 1024,
-            "maxDownloadChunkBytes": 8 * 1024 * 1024,
-            "maxConcurrentTransfers": 1,
-            "maxPathLength": 4096,
-        },
-        "auth": {
-            "required": bool(token_required),
-            "scheme": "bearer" if token_required else "none",
-        },
-    }
+    raise ValueError("HUB_REMOVED: use Worker mode")
 
 def api_file_capabilities():
     return {
@@ -7443,12 +7566,12 @@ def discover_result_files(root, limit=240, max_dirs=4000, max_depth=8, deadline_
 
 def plan_suite_value(root, plan, strict_plan=False):
     if strict_plan:
-        return output_contract_plan(root, durable_plan_path(plan, "输出契约 Plan"))["suite"]
-    plan_norm = durable_plan_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
+        return output_contract_plan(root, result_io_relative_path(plan, "输出契约 Plan"))["suite"]
+    plan_norm = result_io_relative_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
     if not plan_norm:
         return ""
     try:
-        plan_path = worker_plan_project_path(root, plan_norm, require_file=True) if strict_plan else safe_project_path(root, plan_norm)
+        plan_path = result_io_project_path(root, plan_norm, require_file=True) if strict_plan else safe_project_path(root, plan_norm)
         plan_text = open(plan_path, "r", encoding="utf-8", errors="replace").read()
         return str(yaml_scalar(uncommented_yaml_text(plan_text), "suite", "") or "").strip()
     except Exception:
@@ -7460,7 +7583,7 @@ def job_result_candidates(root, limit=240, plan=None, strict_plan=False, snapsho
     if not strict_plan and not safe_small_file(path):
         return []
     out = []
-    plan_norm = durable_plan_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
+    plan_norm = result_io_relative_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
     plan_suite = "" if strict_plan else plan_suite_value(root, plan_norm)
     try:
         snapshot = output_contract_read_snapshot(root, "experiments/results/jobs.csv") if strict_plan else None
@@ -8083,6 +8206,42 @@ def result_column_mapping_preview(root, source, policy):
         sample_values[header] = values
     return {"source": source, "headers": headers[:120], "mapping": mapping, "metricColumns": metrics[:120], "configured": configured, "sampleValues": sample_values}
 
+def project_dataset_table_outputs_from_groups(root, groups, kind, before_publish=None):
+    source_field = "aggregateCsvPath" if kind == "seed" else "finalCsvPath"
+    partitions = dataset_partitions(list(groups))
+    outputs, tables = [], []
+    for partition in partitions:
+        group = groups[partition["dataset"]]
+        headers, rows = group["headers"], group["rows"]
+        base = f"simple_cluster/results/by_dataset/{partition['datasetKey']}"
+        csv_rel = base + ("/project_seed_mean_std.csv" if kind == "seed" else "/project_final.csv")
+        outputs.append(("csv", csv_rel, headers, [[row.get(header, "") for header in headers] for row in rows]))
+        table = {**partition, source_field: csv_rel, "rowCount": len(rows)}
+        if kind == "final":
+            md_rel = base + "/project_final.md"
+            markdown_headers = [header[:-5] if header.endswith("_mean") and header[:-5] + "_sd" in headers else header for header in headers if not header.endswith("_sd")]
+            markdown_rows = []
+            for row in rows:
+                cells = []
+                for header in headers:
+                    if header.endswith("_sd"):
+                        continue
+                    value = row.get(header, "")
+                    if header.endswith("_mean") and header[:-5] + "_sd" in headers:
+                        try:
+                            value = f"{float(value):.4f} ± {float(row[header[:-5] + '_sd']):.4f}" if row.get(header[:-5] + "_sd") else f"{float(value):.4f}"
+                        except (TypeError, ValueError):
+                            value = "—" if not value else str(value)
+                    cells.append(value)
+                markdown_rows.append(cells)
+            outputs.append(("text", md_rel, result_markdown_table(markdown_headers, markdown_rows, (partition["dataset"] or "Unassigned") + " project results")))
+            table["finalMarkdownPath"] = md_rel
+        tables.append(table)
+    if before_publish is not None:
+        before_publish()
+    publish_dataset_outputs(root, outputs)
+    return tables
+
 def project_dataset_table_outputs(root, current_summary, kind):
     if isinstance(current_summary, dict) and current_summary.get("resultPathIdentity") == "posix-v1":
         return checked_project_dataset_table_outputs(root, current_summary, kind)
@@ -8137,42 +8296,6 @@ def project_dataset_table_outputs(root, current_summary, kind):
                     group["rows"].append({**row, "plan_file": plan, "dataset": dataset})
                     total += 1
     return project_dataset_table_outputs_from_groups(root, groups, kind)
-
-def project_dataset_table_outputs_from_groups(root, groups, kind, before_publish=None):
-    source_field = "aggregateCsvPath" if kind == "seed" else "finalCsvPath"
-    partitions = dataset_partitions(list(groups))
-    outputs, tables = [], []
-    for partition in partitions:
-        group = groups[partition["dataset"]]
-        headers, rows = group["headers"], group["rows"]
-        base = f"simple_cluster/results/by_dataset/{partition['datasetKey']}"
-        csv_rel = base + ("/project_seed_mean_std.csv" if kind == "seed" else "/project_final.csv")
-        outputs.append(("csv", csv_rel, headers, [[row.get(header, "") for header in headers] for row in rows]))
-        table = {**partition, source_field: csv_rel, "rowCount": len(rows)}
-        if kind == "final":
-            md_rel = base + "/project_final.md"
-            markdown_headers = [header[:-5] if header.endswith("_mean") and header[:-5] + "_sd" in headers else header for header in headers if not header.endswith("_sd")]
-            markdown_rows = []
-            for row in rows:
-                cells = []
-                for header in headers:
-                    if header.endswith("_sd"):
-                        continue
-                    value = row.get(header, "")
-                    if header.endswith("_mean") and header[:-5] + "_sd" in headers:
-                        try:
-                            value = f"{float(value):.4f} ± {float(row[header[:-5] + '_sd']):.4f}" if row.get(header[:-5] + "_sd") else f"{float(value):.4f}"
-                        except (TypeError, ValueError):
-                            value = "—" if not value else str(value)
-                    cells.append(value)
-                markdown_rows.append(cells)
-            outputs.append(("text", md_rel, result_markdown_table(markdown_headers, markdown_rows, (partition["dataset"] or "Unassigned") + " project results")))
-            table["finalMarkdownPath"] = md_rel
-        tables.append(table)
-    if before_publish is not None:
-        before_publish()
-    publish_dataset_outputs(root, outputs)
-    return tables
 
 def write_project_seed_aggregate(root, current_summary=None):
     return project_dataset_table_outputs(root, current_summary, "seed")
@@ -8615,7 +8738,7 @@ def result_csv_rows(records):
     return rows
 
 def write_result_csv_views(root, summary, plan, strict_plan=False):
-    plan_norm = durable_plan_path(plan, "结果视图 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
+    plan_norm = result_io_relative_path(plan, "结果视图 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
     preview_rel = plan_results_artifact_relpath(plan_norm, "results_preview_all.csv", strict_plan=strict_plan)
     effective_rel = plan_results_artifact_relpath(plan_norm, "results_effective_archived.csv", strict_plan=strict_plan)
     records = [record for record in (summary.get("results") or []) if isinstance(record, dict)]
@@ -9475,7 +9598,7 @@ def discover_plan_files(root, plan_dir=None, limit=500):
 
 def plan_declared_result_candidates(root, plan=None, limit=240, strict_plan=False):
     if strict_plan:
-        return output_contract_plan(root, durable_plan_path(plan, "输出契约 Plan"), limit)["candidates"]
+        return output_contract_plan(root, result_io_relative_path(plan, "输出契约 Plan"), limit)["candidates"]
     plans = []
     if plan:
         plans.append(plan)
@@ -9484,7 +9607,7 @@ def plan_declared_result_candidates(root, plan=None, limit=240, strict_plan=Fals
     out = []
     for item in plans:
         try:
-            plan_path = worker_plan_project_path(root, item, require_file=True) if strict_plan else safe_project_path(root, item)
+            plan_path = result_io_project_path(root, item, require_file=True) if strict_plan else safe_project_path(root, item)
             text = open(plan_path, "r", encoding="utf-8", errors="replace").read()
             cleaned = uncommented_yaml_text(text)
         except Exception:
@@ -9837,8 +9960,7 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         for relative, snapshot in snapshots:
             output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     write_plan_seed_aggregate(root, summary, policy)
-    claim_report = evaluate_claim_evidence(root, summary)
-    apply_claim_evidence_summary(summary, claim_report)
+    summary["projectScientificValidation"] = {"executed": False, "responsibility": "project"}
     target = write_results_summary_v2(root, summary)
     append_event(root, {"type": "result_parsed", "payload": {"resultCount": len(records), "parseFailed": len(failures), "summaryPath": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or "", **({"planRevision": summary["planRevision"]} if strict_plan and summary["planRevision"] else {})}})
     return summary
@@ -9893,7 +10015,7 @@ def run_quality_gate_action(root, plan=None, plan_revision=""):
     plan_norm = plan if context else normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
     report = {"schemaVersion": 1, "status": "failed" if severity_counts["critical"] else "warning" if issues else "passed", "taskType": policy.get("taskType"), "primaryMetric": primary, "classificationMetrics": policy.get("classificationMetrics"), "segmentationMetrics": policy.get("segmentationMetrics"), "source": "archived_only", "resultCount": len(records), "parsedResultCount": len(summary.get("results") or []), "pendingReviewCount": summary.get("pendingReviewCount", 0), "issues": issues, "checkedAt": now_iso(), "planFile": plan_norm or ""}
     rel_target = plan_results_artifact_relpath(plan_norm, "quality_gate.json", strict_plan=bool(context))
-    target = worker_plan_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
+    target = result_io_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
     if context:
         report.update(planRevision=summary.get("planRevision", ""), resultPathIdentity="posix-v1", path=rel_target)
         plan_analysis_verify(root, context)
@@ -10051,7 +10173,7 @@ def compute_statistics_action(root, plan=None, plan_revision="", _analysis=None,
     if plan_norm:
         report = {**report, "planFile": plan_norm}
     rel_target = plan_results_artifact_relpath(plan_norm, "statistics.json", strict_plan=bool(context))
-    target = worker_plan_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
+    target = result_io_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
     summary["statisticsUpdatedAt"] = report["generatedAt"]
     summary["statisticsPath"] = relpath(root, target)
     summary["statisticsResultCount"] = report["resultCount"]
@@ -10459,13 +10581,13 @@ def paper_dataset_output(root, stats, policy, dataset, plan):
                 "",
             ])
     strict_plan = stats.get("resultPathIdentity") == "posix-v1"
-    plan_norm = durable_plan_path(plan, "论文表 Plan") if strict_plan else normalize_result_candidate(plan) if plan else ""
+    plan_norm = result_io_relative_path(plan, "论文表 Plan") if strict_plan else normalize_result_candidate(plan) if plan else ""
     if strict_plan and archive_evidence_identity(stats)[0] != plan_norm:
         raise ValueError("论文表统计与原始 Plan 不一致")
     slug = result_plan_directory_key(plan_norm) if plan_norm else "project"
     md = "# SimpleExperiment results\n\n" + "\n".join(lines) + "\n"
     relative_dir = "paper/tables/" + dataset_path_key(dataset)
-    out_dir = worker_plan_project_path(root, relative_dir) if strict_plan else safe_project_path(root, relative_dir)
+    out_dir = result_io_project_path(root, relative_dir) if strict_plan else safe_project_path(root, relative_dir)
     md_name = f"simple_results_table__{slug}.md" if slug else "simple_results_table.md"
     csv_name = f"simple_results_table__{slug}.csv" if slug else "simple_results_table.csv"
     md_path = os.path.join(out_dir, md_name)
@@ -10497,15 +10619,13 @@ def export_paper_table_action(root, plan=None, plan_revision=""):
         summary["paperTableCsvPath"] = tables[0]["paperTableCsvPath"]
         summary["exportPath"] = tables[0]["paperTablePath"]
     summary["paperTableResultCount"] = stats.get("resultCount", 0)
-    claim_report = checked_claim_evidence(root, summary, _publish=False) if context else evaluate_claim_evidence(root, summary)
-    apply_claim_evidence_summary(summary, claim_report)
+    summary["projectScientificValidation"] = {"executed": False, "responsibility": "project"}
     if context:
         for _, relative, _ in outputs:
-            worker_plan_project_path(root, relative)
+            result_io_project_path(root, relative)
         plan_analysis_verify(root, context)
         plan_analysis_publish_report(root, stats, "statistics.json")
         publish_dataset_outputs(root, outputs)
-        plan_analysis_publish_report(root, claim_report, "claim_evidence.json")
         append_event(root, {"type": "statistics_updated", "payload": {"rows": len(stats["rows"]), "path": stats["path"], "planFile": plan}})
     write_results_summary_v2(root, summary)
     append_event(root, {"type": "paper_table_updated", "payload": {"datasetTables": tables, "planFile": plan or ""}})
@@ -11552,51 +11672,10 @@ def output_contract_unparseable_error(value):
         return "未解析到数值指标；请检查 JSON 指标结构、指标名称或数值格式。"
     return "未解析到数值指标；请检查 metricRegex、指标名称或文本数值格式。"
 
-def output_contract_request_identity(payload):
-    if not isinstance(payload, dict):
-        raise ValueError("输出契约请求必须是对象")
-    owners = [payload]
-    if payload.get("options") is not None:
-        if not isinstance(payload["options"], dict):
-            raise ValueError("输出契约 options 类型无效")
-        owners.append(payload["options"])
-    fields = {}
-    for keys, target in ((["planFile", "plan_file", "plan", "selectedPlanId", "selected_plan_id"], "planFile"),
-                         (["planRevision", "plan_revision"], "planRevision")):
-        values = [owner[key] for owner in owners for key in keys if key in owner and owner[key] != ""]
-        if any(not isinstance(value, str) or value == "-" or len(value.encode("utf-8")) > 4096
-               or any(ord(char) < 32 or ord(char) == 127 for char in value) for value in values):
-            raise ValueError("输出契约 " + target + " 类型或内容无效")
-        if len(set(values)) > 1:
-            raise ValueError("输出契约 " + target + " 别名不一致")
-        if values:
-            fields[target] = durable_plan_path(values[0], "输出契约 Plan") if target == "planFile" else values[0]
-    if fields.get("planFile"):
-        fields["selectedPlanId"] = fields["planFile"]
-    return fields
-
-def output_contract_receipt(root, payload, operation_id, op_id):
-    identity = output_contract_request_identity(payload)
-    plan = identity.get("planFile") or ""
-    report = check_output_contract_action(root, plan or None)
-    report_identity = output_contract_request_identity(report)
-    if (report_identity.get("planFile", "") != plan
-            or report_identity.get("planRevision") and identity.get("planRevision")
-            and report_identity["planRevision"] != identity["planRevision"]):
-        raise ValueError("输出契约报告的 Plan 与请求不一致")
-    status = "failed" if report.get("status") == "failed" else "completed"
-    details = {"contractReport": report, "contractReportPath": report.get("path") or "simple_cluster/contracts/contract_check_reports/latest.json",
-               "contractIssueType": report.get("issueType") or "", "missingCount": len(report.get("missing") or []),
-               "missingFiles": report.get("missing") or [], "unparseableCount": len(report.get("unparseableFiles") or []),
-               "unparseableFiles": report.get("unparseableFiles") or [], "unparseable": report.get("unparseable") or [],
-               "parseableResultCount": int(report.get("parseableResultCount") or 0), **identity, "planFile": plan}
-    return terminal_action(root, "check-output-contract", operation_id, op_id, status,
-                           report.get("message") or report.get("status"), details, request=payload)
-
 def check_output_contract_action(root, plan=None):
-    plan_norm = "" if plan is None or plan == "" else durable_plan_path(plan, "输出契约 Plan")
+    plan_norm = "" if plan is None or plan == "" else result_io_relative_path(plan, "输出契约 Plan")
     if plan_norm:
-        worker_plan_project_path(root, plan_norm, require_file=True)
+        result_io_project_path(root, plan_norm, require_file=True)
     required = list(OUTPUT_CONTRACT_SNAPSHOT_FILES)
     snapshots = []
     contract = None
@@ -11718,8 +11797,8 @@ def create_debug_bundle_action(root, include_results=False, plan=None):
     statistics_path = plan_results_artifact_relpath(plan_norm, "statistics.json") if plan_norm else "simple_cluster/results/statistics.json"
     items = {
         "diagnostics.json": api_diagnostics(root),
-        "capabilities.json": api_capabilities(root, False, "hub_control"),
-        "health.json": api_health(root, "hub_control"),
+        "capabilities.json": api_capabilities(root, False, "worker_telemetry"),
+        "health.json": api_health(root, "worker_telemetry"),
         "results_summary.json": summary,
         "claim_evidence.json": read_json(safe_project_path(root, claim_path), {}),
         "quality_gate.json": read_json(safe_project_path(root, quality_path), {}),
@@ -11763,6 +11842,7 @@ def create_debug_bundle_action(root, include_results=False, plan=None):
     }
 
 INACTIVITY_ACTIONS = {}
+LIVE_CLEANUP_ACTIONS = {}
 INACTIVITY_ACTIONS_LOCK = threading.Lock()
 INACTIVITY_ACTION_CONTEXT = threading.local()
 
@@ -11995,7 +12075,7 @@ def start_inactivity_action(root, action, payload, operation_id, op_id, worker_i
                 completed = [record_key for record_key, value in INACTIVITY_ACTIONS.items() if value.get("result")]
                 for record_key in completed[:-200]:
                     INACTIVITY_ACTIONS.pop(record_key, None)
-    append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_operation_fields(payload)}})
+    append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_receipt_fields(action, payload)}})
     threading.Thread(target=execute, name="simple-action-" + str(operation_id), daemon=True).start()
     return {"schemaVersion": SCHEMA_VERSION, "operationId": operation_id, "opId": op_id, "status": "accepted", "action": action}
 
@@ -12139,7 +12219,8 @@ def plan_validation_with_current_outputs(root, structural):
         output_dir = str(job.get("output_dir") or "").strip()
         output_path = plan_preflight_project_path(root, output_dir)
         info = has_existing_artifacts(output_path)
-        if info["exists"]:
+        result_exists = bool(job.get("result_csv")) and os.path.isfile(plan_preflight_project_path(root, job["result_csv"]))
+        if info["exists"] or result_exists:
             existing.append({"index": job["index"], "case": job.get("case"), "seed": job.get("seed"),
                              "output_dir": output_dir, "markers": info["markers"], "totalFiles": info["totalFiles"]})
     validation.update({"existing": existing, "existingCount": len(existing), "structuralValidationReused": True})
@@ -12182,7 +12263,6 @@ def scheduler_validate_json(root, scheduler, plan, default_result_csv_dir="exper
     if cached is not None:
         return cached
     base_key = plan_structural_validation_key(root, scheduler, plan, default_result_csv_dir, options, env)
-    require_scheduler_dependencies(root, scheduler, env)
     result = scheduler_capture(root, scheduler, ["--validate-plan", "--plan", plan, "--default-result-csv-dir", default_result_csv_dir], env=env)
     if result.returncode != 0:
         raise RuntimeError((result.stderr or result.stdout or "计划校验失败").strip()[-1000:])
@@ -12205,7 +12285,6 @@ def dry_run_preview_action(root, plan, workers, assigned_indices=None, default_r
     scheduler = cluster_scheduler_path(root)
     if not scheduler:
         raise RuntimeError("Hub 上缺少 cluster_scheduler.py，请先部署最新版 Agent。")
-    require_scheduler_dependencies(root, scheduler)
     owner = str(operation_id or "").strip()
     if not owner:
         raise ValueError("Dry-run 缺少稳定 operationId，拒绝创建无归属暂存文件。")
@@ -12344,17 +12423,13 @@ def action_event_fields(extra=None, request=None):
         fields.update(extra)
     return fields
 
-def action_receipt_fields(action, request=None):
-    identity = result_parse_request({} if request is None else request)[0] if action in RESULT_PARSE_ACTIONS else output_contract_request_identity({} if request is None else request) if action == "check-output-contract" else {}
-    return {**action_operation_fields(request), **identity}
-
 def terminal_action(root, action, operation_id, op_id, status, message, extra=None, request=None):
     entry = getattr(INACTIVITY_ACTION_CONTEXT, "entry", None)
     if entry and entry["cancel"].is_set():
         status, message = "cancelled", "操作已取消；晚到完成回执已忽略"
     event_type = "operation_cancelled" if status == "cancelled" else "operation_completed" if status == "completed" else "operation_failed"
     body = {"action": action, "opId": op_id, "status": status, "message": message}
-    details = action_receipt_fields(action, request)
+    details = {**action_event_fields(extra, request), **action_receipt_fields(action, request)}
     if isinstance(extra, dict):
         details.update(extra)
     body.update(details)
@@ -13839,18 +13914,86 @@ def handle_action(root, action, payload, operation_id, op_id):
         overwrite_existing = any(action_bool(value) for value in (payload.get("overwriteExisting"), payload.get("overwrite_existing"), payload.get("overwrite"), options.get("overwriteExisting"), options.get("overwrite_existing"), options.get("overwrite"), action_operation_fields(payload).get("overwriteExisting"), action_operation_fields(payload).get("overwrite")))
         if overwrite_existing:
             scheduler_args.append("--overwrite")
-        tmux_session = ""
+        tmux_session = simple_tmux_name(f"sch-{op_id}")
         pid = 0
         used_tmux = False
-        scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
-        try:
-            if not tmux_available():
-                raise RuntimeError("tmux unavailable; scheduler tab was not started")
-            pid, tmux_session = start_scheduler_in_gpu_tab(root, scheduler_args, env, log_path, scheduler_exit_code_path)
-            used_tmux = True
-        except Exception as exc:
-            deregister_active_run_plan(root, op_id)
-            return terminal_action(root, action, operation_id, op_id, "failed", f"scheduler GPU tab launch failed: {exc}", {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch", "error": str(exc)}, request=payload)
+        scheduler_exit_code_path = ""
+        scheduler_launch_error = ""
+        if tmux_available():
+            try:
+                scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
+                pid = start_simple_tmux_command(tmux_session, scheduler_args, root, log_path, env, scheduler_exit_code_path)
+                used_tmux = True
+            except Exception as exc:
+                scheduler_launch_error = f"scheduler tmux launch failed: {exc}; attempting fallback (main shell bootstrap + Popen)"
+                print(f"[warn] {scheduler_launch_error}", file=sys.stderr, flush=True)
+                try:
+                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                    with open(log_path, "a", encoding="utf-8") as _lf:
+                        _lf.write(f"[{now_iso()}] SCHEDULER LAUNCH FAILED: {exc}\n")
+                        _lf.write(f"session={tmux_session!r} op_id={op_id!r} cwd={str(root)!r}\n")
+                        _lf.write(f"scheduler_args={_truncate_text(' '.join(str(x) for x in scheduler_args), 2000)}\n")
+                        _lf.write(f"[fallback] attempting bootstrap via zlk1:0.0 and Popen fallback\n")
+                        try:
+                            _lf.write(f"tmux_ls={_tmux_ls_snapshot(env)}\n")
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                # 宽松建窗：tmux 建窗失败不直接阻断，尝试 Popen 兜底（同时记录 fallback 路径）
+                try:
+                    if not scheduler_exit_code_path:
+                        scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
+                    _popen_pid = _popen_fallback_launch(scheduler_args, root, env, log_path, scheduler_exit_code_path)
+                    if _popen_pid:
+                        pid = _popen_pid
+                        used_tmux = False
+                        scheduler_launch_error = ""
+                        print(f"[info] scheduler Popen fallback succeeded pid={pid} for {tmux_session!r}", file=sys.stderr, flush=True)
+                        try:
+                            with open(log_path, "a", encoding="utf-8") as _lf:
+                                _lf.write(f"[{now_iso()}] FALLBACK Popen scheduler launch pid={pid} (tmux failed, non-blocking)\n")
+                        except Exception:
+                            pass
+                    else:
+                        raise exc
+                except Exception as _fb_exc:
+                    deregister_active_run_plan(root, op_id)
+                    return terminal_action(root, action, operation_id, op_id, "failed", f"scheduler tmux launch failed: {exc}; Popen fallback also failed: {_fb_exc}", {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch", "error": str(exc), "logTail": _truncate_text(str(exc), 4000)}, request=payload)
+        if not used_tmux and not pid:
+            msg = scheduler_launch_error or "tmux available but scheduler launch failed and Popen fallback attempted"
+            # 最后再尝试一次 Popen 兜底（tmux 不可用场景）
+            try:
+                if not scheduler_exit_code_path:
+                    scheduler_exit_code_path = safe_project_path(root, f"simple_cluster/tmp/cluster_scheduler/{op_id}.exit_code")
+                _popen_pid2 = _popen_fallback_launch(scheduler_args, root, env, log_path, scheduler_exit_code_path)
+                if _popen_pid2:
+                    pid = _popen_pid2
+                    print(f"[info] scheduler Popen fallback (no tmux) succeeded pid={pid} for {tmux_session!r}", file=sys.stderr, flush=True)
+                    try:
+                        with open(log_path, "a", encoding="utf-8") as _lf2:
+                            _lf2.write(f"[{now_iso()}] FALLBACK Popen scheduler launch pid={pid} (no tmux, non-blocking)\n")
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                        with open(log_path, "a", encoding="utf-8") as _lf2:
+                            _lf2.write(f"[{now_iso()}] SCHEDULER LAUNCH FAILED: {msg}\n")
+                            _lf2.write(f"session={tmux_session!r} op_id={op_id!r} cwd={str(root)!r}\n")
+                    except Exception:
+                        pass
+                    deregister_active_run_plan(root, op_id)
+                    return terminal_action(root, action, operation_id, op_id, "failed", msg, {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch_no_fallback", "error": msg, "logTail": _truncate_text(msg, 4000)}, request=payload)
+            except Exception as _exc2:
+                try:
+                    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+                    with open(log_path, "a", encoding="utf-8") as _lf2:
+                        _lf2.write(f"[{now_iso()}] SCHEDULER LAUNCH FAILED: {msg} fallback_exc={_exc2!r}\n")
+                except Exception:
+                    pass
+                deregister_active_run_plan(root, op_id)
+                return terminal_action(root, action, operation_id, op_id, "failed", msg, {"schedulerStarted": False, "tmuxSession": tmux_session, "logPath": log_rel, "planFile": plan, "failureSource": "scheduler_tmux_launch_no_fallback", "error": msg, "logTail": _truncate_text(str(_exc2), 4000)}, request=payload)
         # Register the scheduler as a tracked task so it shows up in the task cards and can be
         # stopped from the panel even though it is launched by run-plan (not a worker task). This
         # closes the gap where a stuck scheduler process was invisible to the task UI.
@@ -13868,7 +14011,6 @@ def handle_action(root, action, payload, operation_id, op_id):
             "pid": pid,
             "session": op_id,
             "tmuxSession": tmux_session if used_tmux else "",
-            "tmuxPane": tmux_session if used_tmux else "",
             "exitCodePath": os.path.relpath(scheduler_exit_code_path, root).replace("\\", "/") if used_tmux else "",
             "logPath": log_rel,
             "plan": plan,
@@ -14175,26 +14317,29 @@ def handle_action(root, action, payload, operation_id, op_id):
             message = f"删除未完全完成：成功 {len(deleted)} 项，跳过 {len(skipped)} 项，残留 {len(residues)} 项"
         return terminal_action(root, action, operation_id, op_id, status, message, summary)
     if action == "finalize-worker-operation":
+        if payload.get("retireAbandonedState") is True:
+            summary = retire_worker_state(root, payload, selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker")
+            return terminal_action(root, action, operation_id, op_id, "completed", "已移除对应旧活动状态", summary, request=payload)
         return terminal_action(root, action, operation_id, op_id, "completed", "Worker 操作终态已确认")
     if action == "run-quality-gate":
-        report = run_quality_gate_action(root, action_plan_file(payload), action_operation_fields(payload).get("planRevision") or "")
-        return terminal_action(root, action, operation_id, op_id, "completed", f"质量门禁完成：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"qualityGate": report, "qualityGatePath": report.get("path") or report.get("qualityGatePath") or "simple_cluster/results/quality_gate.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        report = run_quality_gate_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision") or "")
+        return terminal_action(root, action, operation_id, op_id, "completed", f"质量门禁完成：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"qualityGate": report, "qualityGatePath": report.get("path") or report.get("qualityGatePath") or "simple_cluster/results/quality_gate.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "run-statistics":
-        report = compute_statistics_action(root, action_plan_file(payload), action_operation_fields(payload).get("planRevision") or "")
-        return terminal_action(root, action, operation_id, op_id, "completed", f"统计完成：{len(report.get('rows') or [])} 组", {"statistics": report, "statisticsPath": report.get("path") or report.get("statisticsPath") or "simple_cluster/results/statistics.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        report = compute_statistics_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision") or "")
+        return terminal_action(root, action, operation_id, op_id, "completed", f"统计完成：{len(report.get('rows') or [])} 组", {"statistics": report, "statisticsPath": report.get("path") or report.get("statisticsPath") or "simple_cluster/results/statistics.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "export-paper-table":
-        report = export_paper_table_action(root, action_plan_file(payload), action_operation_fields(payload).get("planRevision") or "")
+        report = export_paper_table_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision") or "")
         return terminal_action(root, action, operation_id, op_id, "completed", f"论文表格已导出：{report.get('path')}", {"paperTable": report, "paperTablePath": report.get("path"), "exportPath": report.get("path")}, request=payload)
     if action == "check-claim-evidence":
-        plan = action_plan_file(payload)
-        plan_revision = action_operation_fields(payload).get("planRevision") or ""
+        plan = output_contract_request_identity(payload).get("planFile")
+        plan_revision = output_contract_request_identity(payload).get("planRevision") or ""
         summary = read_current_results_summary(root, plan or None, plan_revision)
         apply_final_evidence_summary(root, summary)
         report = evaluate_claim_evidence(root, summary)
         apply_claim_evidence_summary(summary, report)
         write_results_summary_v2(root, summary)
         status = "completed" if report.get("status") == "passed" else "failed"
-        return terminal_action(root, action, operation_id, op_id, status, f"论文证据检查：{report.get('status')}，unsupported {report.get('unsupportedCount', 0)}，needs experiment {report.get('needsExperimentCount', 0)}", {"claimEvidence": report, "claimEvidencePath": report.get("path") or "simple_cluster/results/claim_evidence.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        return terminal_action(root, action, operation_id, op_id, status, f"论文证据检查：{report.get('status')}，unsupported {report.get('unsupportedCount', 0)}，needs experiment {report.get('needsExperimentCount', 0)}", {"claimEvidence": report, "claimEvidencePath": report.get("path") or "simple_cluster/results/claim_evidence.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "create-debug-bundle":
         plan = action_plan_file(payload)
         bundle = create_debug_bundle_action(root, False, plan)
@@ -14206,22 +14351,18 @@ def handle_action(root, action, payload, operation_id, op_id):
     if action == "check-output-contract":
         return output_contract_receipt(root, payload, operation_id, op_id)
     if action == "parse-case-level":
-        identity = output_contract_request_identity(payload)
-        report = parse_case_level_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
-        return terminal_action(root, action, operation_id, op_id, "completed", f"Case-level 解析完成：{report.get('caseCount', 0)} 条", {"caseLevel": report, "caseLevelPath": report.get("path") or "simple_cluster/results/case_level_index.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        report = parse_case_level_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
+        return terminal_action(root, action, operation_id, op_id, "completed", f"Case-level 解析完成：{report.get('caseCount', 0)} 条", {"caseLevel": report, "caseLevelPath": report.get("path") or "simple_cluster/results/case_level_index.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "run-leakage-check":
-        identity = output_contract_request_identity(payload)
-        report = run_leakage_check_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
+        report = run_leakage_check_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
         status = "failed" if report.get("status") == "failed" else "completed"
-        return terminal_action(root, action, operation_id, op_id, status, f"泄漏检查：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"leakageCheck": report, "leakageCheckPath": report.get("path") or "simple_cluster/results/leakage_check.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        return terminal_action(root, action, operation_id, op_id, status, f"泄漏检查：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"leakageCheck": report, "leakageCheckPath": report.get("path") or "simple_cluster/results/leakage_check.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "run-subgroup-analysis":
-        identity = output_contract_request_identity(payload)
-        report = run_subgroup_analysis_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
-        return terminal_action(root, action, operation_id, op_id, "completed", f"亚组分析完成：{len(report.get('rows') or [])} 组", {"subgroupAnalysis": report, "subgroupAnalysisPath": report.get("path") or "simple_cluster/results/subgroup_analysis.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        report = run_subgroup_analysis_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
+        return terminal_action(root, action, operation_id, op_id, "completed", f"亚组分析完成：{len(report.get('rows') or [])} 组", {"subgroupAnalysis": report, "subgroupAnalysisPath": report.get("path") or "simple_cluster/results/subgroup_analysis.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "export-case-analysis":
-        identity = output_contract_request_identity(payload)
-        report = export_case_analysis_action(root, identity.get("planFile") or None, identity.get("planRevision", ""))
-        return terminal_action(root, action, operation_id, op_id, "completed", f"Case 分析已导出：{report.get('path')}", {"caseAnalysis": report, "caseAnalysisPath": report.get("path"), "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+        report = export_case_analysis_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
+        return terminal_action(root, action, operation_id, op_id, "completed", f"Case 分析已导出：{report.get('path')}", {"caseAnalysis": report, "caseAnalysisPath": report.get("path"), "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
     if action == "plan-checkpoint-retention":
         report = checkpoint_retention_action(root, payload)
         return terminal_action(root, action, operation_id, op_id, "completed", f"Checkpoint dry-run 完成：计划删除 {report.get('deleteCount', 0)}，保留 {report.get('keepCount', 0)}，跳过 {report.get('skipCount', 0)}", {"checkpointPlan": report, "planFile": report.get("planFile") or action_plan_file(payload) or "", "deletePlanPath": report.get("deletePlanPath") or "simple_cluster/checkpoints/delete_plan.json", "retentionReportPath": report.get("retentionReportPath") or "simple_cluster/checkpoints/retention_report.md"}, request=payload)
@@ -14431,7 +14572,43 @@ def worker_task_failure_message(root, task, use_cache=True):
     except (OSError, ValueError):
         return ""
 
-def api_worker_tasks(root):
+def tracked_cleanup_action(root, action, payload, operation_id, op_id):
+    key = (os.path.abspath(root), str(operation_id))
+    entry = {"operationId": operation_id, "action": action, "payload": payload}
+    with INACTIVITY_ACTIONS_LOCK:
+        LIVE_CLEANUP_ACTIONS[key] = entry
+    try:
+        return handle_action(root, action, payload, operation_id, op_id)
+    finally:
+        with INACTIVITY_ACTIONS_LOCK:
+            if LIVE_CLEANUP_ACTIONS.get(key) is entry:
+                LIVE_CLEANUP_ACTIONS.pop(key, None)
+
+
+def active_cleanup_operations(root):
+    # Only this Agent's live executions, never persisted journal status. A restart
+    # leaves history intact without resurrecting old cleanup as an active writer.
+    with INACTIVITY_ACTIONS_LOCK:
+        entries = [dict(entry) for (directory, _), entry in INACTIVITY_ACTIONS.items()
+                   if directory == os.path.abspath(root) and not entry.get("result")]
+        entries += [dict(entry) for (directory, _), entry in LIVE_CLEANUP_ACTIONS.items()
+                    if directory == os.path.abspath(root)]
+    fields = ("planFile", "plan_file", "workflowId", "commandId", "targetCommandId",
+              "outputDir", "output_dir", "relativePath", "targetPath", "sourcePath", "destinationPath")
+    return [{"operationId": entry["operationId"], "status": "running", "type": entry["action"],
+             "payload": {key: value for key, value in entry.get("payload", {}).items()
+                         if key in fields and isinstance(value, str)}} for entry in entries
+            if entry["action"] not in ("validate-plan", "dry-run-plan", "preflight-worker-task")]
+
+
+def api_worker_tasks(root, retired_commands=(), queries=None):
+    if queries is not None or globals().get("TASK_LIFECYCLE_PROTOCOL") == 2:
+        return task_query(root, queries or [])
+    wanted = set(retired_commands)
+    if len(wanted) > 500 or any(not re.match(r"^[A-Za-z0-9._:-]{1,128}$", value) for value in wanted):
+        raise ValueError("INVALID_RETIRED_COMMAND_SELECTION")
+    retired_tasks = [row["retiredTask"] for row in read_worker_recall_tombstones(root)
+                     if row.get("commandId") in wanted and isinstance(row.get("retiredTask"), dict)] if wanted else []
     try:
         reconcile_worker_task_exit_codes(root)
         sync_durable_plan_task_rows(root)
@@ -14490,8 +14667,10 @@ def api_worker_tasks(root):
                         entry["status"] = "unknown"
                     enriched[index] = entry
         _out["tasks"] = enriched
+        _out["retiredTasks"] = retired_tasks
+        _out["activeOperations"] = active_cleanup_operations(root)
         _out["generatedAt"] = now_iso()
-        _out["capabilities"] = {"durablePlanQueue": True, "codeSyncProof": True, "idleGpuAdmission": True, "queuedJobRecall": True, "failedAttemptQuarantine": True, "declaredJobPaths": formal_job_path_capable(root), "schemaVersion": 1}
+        _out["capabilities"] = {"controlStateRetirement": 1, "durablePlanQueue": True, "codeSyncProof": True, "idleGpuAdmission": True, "queuedJobRecall": True, "failedAttemptQuarantine": True, "declaredJobPaths": formal_job_path_capable(root), "sourceDecouple": 1, "schemaVersion": 1}
         return _out
     tasks = []
     for row in read_durable_plan_queue(root).get("jobs", []):
@@ -14500,10 +14679,11 @@ def api_worker_tasks(root):
         status = str(row.get("status") or "unknown").lower()
         if status in ("queued", "dispatching", "running", "unknown", "completed", "failed", "cancelled"):
             tasks.append(durable_plan_public_task(row))
-    return {"schemaVersion": SCHEMA_VERSION, "tasks": tasks,
-            "capabilities": {"durablePlanQueue": True, "codeSyncProof": True, "idleGpuAdmission": True, "queuedJobRecall": True, "failedAttemptQuarantine": True, "declaredJobPaths": formal_job_path_capable(root), "schemaVersion": 1}, "generatedAt": now_iso()}
+    return {"schemaVersion": SCHEMA_VERSION, "tasks": tasks, "activeOperations": active_cleanup_operations(root),
+            "retiredTasks": retired_tasks,
+            "capabilities": {"controlStateRetirement": 1, "durablePlanQueue": True, "codeSyncProof": True, "idleGpuAdmission": True, "queuedJobRecall": True, "failedAttemptQuarantine": True, "declaredJobPaths": formal_job_path_capable(root), "sourceDecouple": 1, "schemaVersion": 1}, "generatedAt": now_iso()}
 
-def api_openapi(root, token_required=False, mode="hub_control"):
+def api_openapi(root, token_required=False, mode="worker_telemetry"):
     if mode == "worker_telemetry":
         paths = [
             "/api/health",
@@ -14513,6 +14693,7 @@ def api_openapi(root, token_required=False, mode="hub_control"):
             "/api/gpu/history",
             "/api/worker/availability",
             "/api/worker/tasks",
+            "/api/sync-scope/index",
             "/api/worker/commands",
             "/api/workers/uplink/commands/sse",
             "/api/live-output",
@@ -14546,45 +14727,7 @@ def api_openapi(root, token_required=False, mode="hub_control"):
             "paths": {path: {} for path in paths},
             "x-simple-capabilities": api_capabilities(root, token_required, mode),
         }
-    return {
-        "openapi": "3.0.0",
-        "info": {"title": "SimpleExperiment Hub Agent Realtime Gateway", "version": API_VERSION},
-        "paths": {path: {} for path in [
-            "/api/health",
-            "/api/version",
-            "/api/capabilities",
-            "/api/files/capabilities",
-            "/api/code-sync/inspect",
-            "/api/openapi.json",
-            "/api/snapshot",
-            "/api/gpu",
-            "/api/gpu/history",
-            "/api/scheduler",
-            "/api/traces",
-            "/api/live-output",
-            "/api/results/summary",
-            "/api/diagnostics",
-            "/api/audit/tail",
-            "/api/events",
-            "/api/events/sse",
-            "/api/operations/{id}",
-            "/api/logs/tail",
-            "/api/logs/stream",
-            "/api/files/list",
-            "/api/files/stat",
-            "/api/files/download",
-            "/api/files/download-range",
-            "/api/files/upload-init",
-            "/api/files/upload-chunk",
-            "/api/files/upload-complete",
-            "/api/files/upload-cancel",
-            "/api/files/transfer-status",
-            "/api/workers/uplink/events",
-            "/api/tensorboard/proxy",
-            "/api/tensorboard/ui/{path}",
-        ] + ACTION_PATHS},
-        "x-simple-capabilities": api_capabilities(root, token_required, mode),
-    }
+    raise ValueError("HUB_REMOVED: use Worker mode")
 
 def api_diagnostics(root, include_token=False):
     health = inspect_agent(root)
@@ -14602,7 +14745,7 @@ def api_diagnostics(root, include_token=False):
         "maxAgentStateBytes": MAX_AGENT_STATE_BYTES,
         "agentStatePrune": dict(AGENT_STATE_PRUNE_DIAGNOSTICS),
         "tokenConfigured": bool((read_runtime_json_cached(path_for(root, "agent.session.json"), {}) or {}).get("tokenConfigured")),
-        "schedulerDependencies": scheduler_dependency_health(root),
+        "schedulerDependencies": {"checked": False, "automatic": False, "scope": "agent", "reason": "research_environment_owned_by_project"},
     }
     return result
 
@@ -14634,7 +14777,7 @@ def read_audit_tail(root, lines=100):
 
 def read_results_summary(root, plan=None, cached=False):
     if plan is not None and plan != "":
-        raw_plan = durable_plan_path(plan, "结果摘要 Plan")
+        raw_plan = result_io_relative_path(plan, "结果摘要 Plan")
         relative = plan_results_summary_relpath(raw_plan, strict_plan=True)
         try:
             snapshot = output_contract_read_snapshot(root, relative)
@@ -14763,7 +14906,7 @@ def full_scan_events_after(journal, since, limit=200):
     if omitted_oversized:
         if len(events) >= bounded_limit:
             events.popleft()
-        events.append({"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "reason": "oversized_journal_record", "resetSince": 0}})
+        events.append({"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "reason": "oversized_journal_record", "resetSince": 0}})
     return list(events)
 
 def read_events_since(root, since, limit=200, cursor_id=""):
@@ -14771,14 +14914,14 @@ def read_events_since(root, since, limit=200, cursor_id=""):
     limit = max(1, int(limit or 200))
     effective_since = int(since or 0)
     if not os.path.isfile(journal):
-        return [{"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "message": "journal missing; pull snapshot", "resetSince": 0}}] if since else []
+        return [{"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "message": "journal missing; pull snapshot", "resetSince": 0}}] if since else []
     first = first_journal_seq(journal)
     last = last_journal_seq(root, journal)
     if since and first and since < first - 1:
-        return [{"schemaVersion": SCHEMA_VERSION, "seq": first, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "message": "journal gap; pull snapshot"}}]
+        return [{"schemaVersion": SCHEMA_VERSION, "seq": first, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "message": "journal gap; pull snapshot"}}]
     if since and last and since > last:
         effective_since = 0
-        gap = {"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "message": "journal reset; pull snapshot", "resetSince": 0}}
+        gap = {"schemaVersion": SCHEMA_VERSION, "seq": 0, "type": "diagnostics_updated", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "message": "journal reset; pull snapshot", "resetSince": 0}}
         return [gap]
     if cursor_id:
         return read_events_after_seq(root, effective_since, limit, cursor_id)
@@ -14876,22 +15019,44 @@ def operation_journal_index(root):
         if cached and cached.get("signature") == signature:
             cached["lastUsedAt"] = now_value
             return cached
-    groups = {}
-    with open(journal, "r", encoding="utf-8") as f:
-        for line in f:
-            event = parse_event_line(line)
-            if not event:
-                continue
-            keys = event_operation_keys(event)
-            if keys:
-                groups.setdefault(keys[0], []).append(event)
-    rows = [operation_summary_from_events(key, events) for key, events in groups.items()]
-    rows.sort(key=lambda row: row.get("updatedAt") or "", reverse=True)
-    entry = {"signature": signature, "groups": groups, "rows": rows, "lastUsedAt": now_value}
-    with OPERATION_JOURNAL_CACHE_LOCK:
+        # One reader consumes append deltas. Other HTTP requests must not each
+        # parse the whole journal whenever unrelated telemetry appends a line.
+        with open(journal, "rb") as f:
+            info = os.fstat(f.fileno())
+            signature = (info.st_dev, info.st_ino, info.st_size, getattr(info, "st_mtime_ns", int(info.st_mtime * 1000000000)))
+            offset = int((cached or {}).get("offset") or 0)
+            prior = (cached or {}).get("signature")
+            incremental = bool(cached and prior and prior[:2] == signature[:2] and 0 < offset <= signature[2])
+            if incremental:
+                f.seek(max(0, offset - 64))
+                incremental = f.read(min(offset, 64)) == cached.get("guard")
+            if not incremental:
+                offset = 0
+            groups = cached["groups"] if incremental else {}
+            summaries = dict(cached.get("summaries") or {}) if incremental else {}
+            f.seek(offset)
+            data = f.read(max(0, signature[2] - offset))
+            end = data.rfind(b"\n") + 1
+            changed = set()
+            for line in data[:end].splitlines():
+                event = parse_event_line(line.decode("utf-8", errors="replace"))
+                if not event:
+                    continue
+                keys = event_operation_keys(event)
+                if keys:
+                    groups.setdefault(keys[0], []).append(event)
+                    changed.add(keys[0])
+            offset += end
+            f.seek(max(0, offset - 64))
+            guard = f.read(min(offset, 64))
+        for key in changed:
+            summaries[key] = operation_summary_from_events(key, groups[key])
+        rows = sorted(summaries.values(), key=lambda row: row.get("updatedAt") or "", reverse=True)
+        entry = {"signature": signature, "groups": groups, "rows": rows, "summaries": summaries,
+                 "offset": offset, "guard": guard, "lastUsedAt": now_value}
         OPERATION_JOURNAL_CACHE[journal] = entry
         prune_operation_journal_cache(now_value, journal)
-    return entry
+        return entry
 
 def read_operation_events(root, operation_id, limit=200):
     wanted = str(operation_id or "").strip()
@@ -14931,6 +15096,8 @@ def operation_summary_from_events(operation_id, events):
     }
 
 def api_operation(root, operation_id):
+    if str(operation_id) in retired_operation_ids(root):
+        return {"operationId": str(operation_id), "status": "retired", "terminal": True, "eventCount": 1, "events": [], "stateRetired": True}
     events = read_operation_events(root, operation_id, 200)
     result = operation_summary_from_events(operation_id, events)
     result["events"] = events[-50:]
@@ -15467,6 +15634,18 @@ def scheduler_stop_record_identity(wanted, requested_plan, event):
 def stop_scheduler_operation(root, payload):
     wanted = str(payload.get("targetOperationId") or payload.get("remoteOperationId") or payload.get("operationId") or payload.get("opId") or "").strip()
     plan = action_plan_file(payload)
+    if payload.get("stopBoundary") == "local_command":
+        worker = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or payload.get("workerId") or "")
+        result = stop_local_worker_task(root, {**payload, "targetCommandId": wanted,
+            "projectId": payload.get("projectId") or os.path.realpath(root), "workerId": worker}, worker)
+        ok = result.get("status") == "completed"
+        if ok:
+            cancel_inactivity_action(root, wanted, plan)
+            deregister_active_run_plan(root, wanted)
+        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""),
+            "completed" if ok else "failed", result.get("message") or "停止未完成", {"matchedOperations": [wanted] if ok else [],
+            "planFile": plan, "stopBoundary": "local_command", "terminatedWindowIds": [window for row in result.get("stoppedTasks", []) for window in row.get("closedWindowIds", [])],
+            "cacheRetired": ok, "stateRetired": result.get("stateRetired", False), "retiredOperationIds": result.get("retiredOperationIds", []), "remainingActiveEvidence": [] if ok else [result.get("errorCode")]}, request=payload)
     if wanted and plan and cancel_inactivity_action(root, wanted, plan):
         return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "completed", "已取消处理中操作", {"matchedOperations": [wanted], "planFile": plan}, request=payload)
     if not wanted or not plan:
@@ -15505,11 +15684,7 @@ def stop_scheduler_operation(root, payload):
     # 用原始会话存活（tmuxShellAlive）决定 kill：即便 pane 内只是空 shell（无 python 进程），
     # 也应 kill 掉，避免中止后 tmux 仍残留把面板判活。
     if before["tmuxShellAlive"]:
-        try:
-            stop_command = scheduler_tmux_stop_command(root, before["checkedTmuxSession"], pid_candidate, expected_pid_start)
-        except ValueError as exc:
-            return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", str(exc), {"matchedOperations": [], "planFile": plan}, request=payload)
-        result = subprocess.run(stop_command, cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5, check=False)
+        result = subprocess.run(["tmux", "kill-session", "-t", str(before["checkedTmuxSession"])], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5, check=False)
         if result.returncode == 0:
             terminated_sessions.append(before["checkedTmuxSession"])
         else:
@@ -15652,7 +15827,8 @@ def stop_scheduler_operation(root, payload):
 
 def recent_operations(root, limit=100):
     rows = operation_journal_index(root)["rows"]
-    return rows[:max(1, int(limit or 100))]
+    retired = retired_operation_ids(root)
+    return [row for row in rows if str(row.get("operationId") or "") not in retired][:max(1, int(limit or 100))]
 
 def list_files(root, path_value):
     target = safe_project_path(root, path_value)
@@ -15745,6 +15921,8 @@ def require_op_id(handler, payload):
     return op_id
 
 def kill_tmux_window_response(payload, mode, mgmt_env=""):
+    if (payload or {}).get("sessionAction"):
+        return manage_tmux_session_response(payload)
     target = str((payload or {}).get("target") or (payload or {}).get("window") or "").strip()
     if not target:
         return {"error": "target required"}, 400
@@ -15770,19 +15948,11 @@ def kill_tmux_window_response(payload, mode, mgmt_env=""):
             if not _pfx:
                 _pfx = str(os.environ.get("SIMPLE_EXPERIMENT_REMOTE_TMUX_SESSION_PREFIX") or "simple").strip().lower() or "simple"
             _pfx = re.sub(r"[^a-z0-9._-]+", "-", _pfx.lower()).strip("-")[:32] or "simple"
-            if mode == "hub_control":
-                mgmt_target = _pfx + "-hub-agent"
-            else:
-                try:
-                    _wid = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip().lower() or "worker"
-                except Exception:
-                    _wid = "worker"
-                _wid = re.sub(r"[^a-z0-9._-]+", "-", _wid).strip("-") or "worker"
-                mgmt_target = _pfx + "-worker-" + _wid + "-agent"
+            _worker = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "").strip()
+            if re.fullmatch(r"[A-Za-z0-9._-]+", _worker):
+                mgmt_target = _pfx + "-worker-" + _worker + "-agent"
         except Exception:
             mgmt_target = ""
-    if not mgmt_target:
-        return {"schemaVersion": SCHEMA_VERSION, "target": target, "ok": False, "error": "agent mgmt session unknown"}, 500
     if sess_name == mgmt_target:
         if not confirmed:
             return {"schemaVersion": SCHEMA_VERSION, "target": target, "ok": False, "error": "current Agent window requires confirmation"}, 403
@@ -15803,6 +15973,8 @@ def kill_tmux_window_response(payload, mode, mgmt_env=""):
             err = (before.stderr or "").strip()[-500:]
             return {"schemaVersion": SCHEMA_VERSION, "target": target, "ok": False, "error": err or "target window not found"}, 200
         resolved_id = found[2]
+        if found[3].lower() == "agent" or sess_name.endswith("-agent"):
+            return {"ok": False, "error": "Agent window is protected; use Agent controls"}, 403
         if not re.fullmatch(r"@\d+", resolved_id) or expected_name is not None and str(expected_name) != found[3]:
             return {"schemaVersion": SCHEMA_VERSION, "target": target, "ok": False, "error": "window identity changed; not closed"}, 200
         if expected_panes is not None:
@@ -15827,7 +15999,74 @@ def kill_tmux_window_response(payload, mode, mgmt_env=""):
     except Exception as exc:
         return {"error": str(exc)}, 500
 
+def manage_tmux_session_response(payload):
+    """Explicit session controls; runtime evidence only, no task history or PID gates."""
+    action, session = payload.get("sessionAction"), str(payload.get("session") or "")
+    if action not in ("close", "clear") or not re.fullmatch(r"[A-Za-z0-9._-]+", session):
+        return {"ok": False, "error": "invalid session action"}, 400
+    if payload.get("confirm") is not True:
+        return {"ok": False, "error": "session action requires confirm"}, 403
+    if session.endswith("-agent") or session == os.environ.get("SIMPLE_EXPERIMENT_TMUX_SESSION"):
+        return {"ok": False, "error": "Agent session is protected"}, 403
+    expected = payload.get("identities")
+    if not isinstance(expected, list) or not expected:
+        return {"ok": False, "error": "complete window identities required"}, 400
+    def run(args):
+        result = subprocess.run(["tmux"] + args, capture_output=True, text=True, timeout=5)
+        if result.returncode:
+            raise ValueError((result.stderr or "tmux query failed").strip()[-400:])
+        return (result.stdout or "").strip()
+    def inventory(target):
+        rows = [line.split("|", 2) for line in run(["list-windows", "-t", target, "-F", "#{session_id}|#{window_id}|#{window_name}"]).splitlines()]
+        if not rows or any(len(row) != 3 or not re.fullmatch(r"\$\d+", row[0]) or not re.fullmatch(r"@\d+", row[1]) for row in rows):
+            raise ValueError("invalid session inventory")
+        return rows
+    try:
+        rows = inventory("=" + session)
+        session_id = rows[0][0]
+        if any(row[0] != session_id or row[2].lower() == "agent" for row in rows):
+            raise ValueError("protected or ambiguous session")
+        if len(expected) != len(rows) or len({row.get("windowId") for row in expected}) != len(rows):
+            raise ValueError("window set changed; refresh before confirming")
+        closed = set()
+        for row in rows:
+            item = next((item for item in expected if item.get("windowId") == row[1]), None)
+            if not item or item.get("session") != session or item.get("windowName") != row[2]:
+                raise ValueError("window identity changed")
+            panes = run(["list-panes", "-t", row[1], "-F", "#{pane_id}"]).splitlines()
+            if sorted(item.get("paneIds") or []) != sorted(panes):
+                raise ValueError("pane identities changed")
+        # Recheck the whole set after pane inspection. A recreated name must not be targeted.
+        if inventory("=" + session) != rows:
+            raise ValueError("session changed during inspection")
+        if action == "close":
+            run(["kill-session", "-t", session_id])
+            after = subprocess.run(["tmux", "has-session", "-t", session_id], capture_output=True, text=True, timeout=5)
+            if after.returncode == 0:
+                raise ValueError("session still present")
+            if not any(text in (after.stderr or "").lower() for text in ("can't find session", "no such session", "no server", "no sessions")):
+                raise ValueError("could not verify session absence")
+            return {"ok": True, "verified": True, "sessionAction": action, "session": session, "closed": len(rows)}, 200
+        # tmux cannot retain an empty session. Create one idle terminal before removing the frozen tabs.
+        idle = run(["new-window", "-d", "-P", "-F", "#{window_id}", "-t", session_id, "-n", "bash"])
+        if not re.fullmatch(r"@\d+", idle):
+            raise ValueError("could not create idle terminal")
+        for row in rows:
+            live = inventory(session_id)
+            if {entry[1] for entry in live} != {idle} | {entry[1] for entry in rows if entry[1] not in closed}:
+                raise ValueError("window set changed during clearing")
+            run(["kill-window", "-t", row[1]])
+            closed.add(row[1])
+        if [row[1] for row in inventory(session_id)] != [idle]:
+            raise ValueError("tabs not fully cleared")
+        return {"ok": True, "verified": True, "sessionAction": action, "session": session, "closed": len(closed), "idleWindowId": idle}, 200
+    except Exception as exc:
+        return {"ok": False, "session": session, "error": str(exc)}, 200
+
+
 def serve_http(args):
+    global AGENT_LIFECYCLE_LOCK, AGENT_LIFECYCLE_IDENTITY, TASK_SCHEDULER_UPDATE_ERROR
+    AGENT_LIFECYCLE_LOCK, AGENT_LIFECYCLE_IDENTITY = lifecycle_service_guard(args, RUNTIME_VERSION)
     bind_host = str(getattr(args, "host", "") or "127.0.0.1").strip()
     if bind_host.startswith("[") and bind_host.endswith("]"):
         bind_host = bind_host[1:-1]
@@ -15839,8 +16078,10 @@ def serve_http(args):
         except ValueError as exc:
             raise RuntimeError("Agent --host IPv6 address is invalid") from exc
     root = args.project_dir
-    token = args.token or ""
-    mode = args.mode or "hub_control"
+    token = args.token or os.environ.get("SIMPLE_EXPERIMENT_AGENT_TOKEN", "")
+    mode = args.mode or "worker_telemetry"
+    if mode != "worker_telemetry":
+        raise ValueError("HUB_REMOVED: use Worker mode")
     # Keep the worker id used for availability reporting and the worker command queue path
     # consistent with the serve --worker-id. The scheduler dispatches to and matches
     # availability by this id (e.g. "worker-id"); without this the agent would default to the
@@ -15848,47 +16089,29 @@ def serve_http(args):
     # rejected) and enqueued start-worker-task commands were written to a queue the agent
     # never reads.
     os.environ["SIMPLE_EXPERIMENT_WORKER_ID"] = str(getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker")
-    prune_agent_state(root, force=True)
-    if mode == "worker_telemetry":
-        reconcile_worker_tasks_after_restart(root)
+    try:
+        task_update_scheduler_runtime(root, os.environ["SIMPLE_EXPERIMENT_WORKER_ID"])
+    except Exception as exc:
+        # Keep the Agent available for diagnosis; deployment must not report Scheduler success.
+        TASK_SCHEDULER_UPDATE_ERROR = str(exc)
+        print("[scheduler-update] " + str(exc), file=sys.stderr, flush=True)
+    # HTTP readiness must not scan/prune historical machine files or reconcile
+    # legacy task queues. Protocol 2 execution is owned by the independent tmux
+    # Scheduler, which rebuilds from actual windows rather than replaying history.
     atomic_write(path_for(root, "agent.session.json"), {"tokenConfigured": bool(token), "startedAt": now_iso(), "agentVersion": AGENT_VERSION, "agentInstallDir": agent_install_dir(root), "agentStateDir": agent_dir(root), "stateRetentionSeconds": STATE_RETENTION_SECONDS, "maxAgentStateBytes": MAX_AGENT_STATE_BYTES})
     if mode == "worker_telemetry":
-        start_worker_telemetry_sampler(root, getattr(args, "gpu_poll_seconds", 60), getattr(args, "jitter_seconds", 30))
+        start_worker_telemetry_sampler(root, getattr(args, "gpu_poll_seconds", 1), 0)
         # P0: worker_telemetry 与 hub_control 均启动 gpu_log_tail 采样，与 GPU 采样同频 60s，写入 live_output/{gid}.json + append_event log_tail
         try:
             start_gpu_log_tail_sampler(root, getattr(args, "gpu_poll_seconds", 60) or 60, getattr(args, "jitter_seconds", 30))
         except Exception:
             pass
-        hub_uplink_url = getattr(args, "hub_uplink_url", "") or os.environ.get("SIMPLE_EXPERIMENT_HUB_UPLINK_URL", "")
-        start_worker_hub_uplink(
-            root,
-            hub_uplink_url,
-            getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID", ""),
-            getattr(args, "worker_availability_push_seconds", 60),
-            getattr(args, "jitter_seconds", 30),
-            getattr(args, "operation_event_max_delay_ms", 1000),
-        )
         # Single-worker (no hub) mode has no uplink driving command execution, so start a
         # local processor that polls the worker command queue and runs start-worker-task
         # commands (otherwise run-plan tasks would never launch).
-        if not hub_uplink_url:
-            start_worker_local_command_processor(
-                root,
-                getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID", ""),
-                getattr(args, "worker_command_poll_seconds", 5),
-                getattr(args, "jitter_seconds", 2),
-            )
-        start_durable_plan_queue_processor(
-            root,
-            getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID", ""),
-            getattr(args, "worker_command_poll_seconds", 5),
-        )
-    elif mode == "hub_control":
-        start_hub_control_sampler(root, getattr(args, "poll_seconds", 60), getattr(args, "jitter_seconds", 30))
-        try:
-            start_gpu_log_tail_sampler(root, getattr(args, "poll_seconds", 60) or 60, getattr(args, "jitter_seconds", 30))
-        except Exception:
-            pass
+        # Historical file queues are evidence only. New submissions are owned by
+        # the independent tmux Scheduler and must not be replayed on Agent restart.
+    pass
 
     class BoundedThreadingHTTPServer(ThreadingHTTPServer):
         address_family = socket.AF_INET6 if ":" in bind_host else socket.AF_INET
@@ -15916,6 +16139,8 @@ def serve_http(args):
             self._request_slots = threading.BoundedSemaphore(self.max_request_threads)
             self._class_slots = {name: threading.BoundedSemaphore(limit) for name, limit in self.request_class_limits.items()}
             self._capacity_lock = threading.Lock()
+            self.sync_scope_index = None  # Only the sync-scope view starts metadata work.
+            self.sync_scope_index_guard = threading.Lock()
             self._active_requests = 0
             self._active_by_class = {name: 0 for name in self.request_class_limits}
             self._rejected_requests = 0
@@ -15954,6 +16179,10 @@ def serve_http(args):
                 self._request_slots.release()
 
         def classify_request(self, method, route):
+            if route == "/api/sync-scope/index":
+                return "read"  # Only short tickets/deltas; filesystem work has its own thread/lock.
+            if route == "/api/worker/tasks/diagnostics":
+                return "read"  # Log I/O cannot occupy task-control/probe slots.
             if method == "GET" and route in (
                 "/api/health", "/health", "/api/version", "/version",
                 "/api/capabilities", "/api/openapi.json",
@@ -16248,14 +16477,14 @@ def serve_http(args):
                         data = ("data: " + json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8")
                         if len(data) > MAX_AGENT_SSE_EVENT_BYTES:
                             if not gap_sent:
-                                gap = {"schemaVersion": SCHEMA_VERSION, "seq": last, "type": "journal_gap", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "reason": "event_exceeds_sse_limit", "maxBytes": MAX_AGENT_SSE_EVENT_BYTES}}
+                                gap = {"schemaVersion": SCHEMA_VERSION, "seq": last, "type": "journal_gap", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "reason": "event_exceeds_sse_limit", "maxBytes": MAX_AGENT_SSE_EVENT_BYTES}}
                                 self.wfile.write(("data: " + json.dumps(gap, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8"))
                                 self.wfile.flush()
                                 gap_sent = True
                             continue
                         if batch_bytes + len(data) > MAX_AGENT_SSE_BATCH_BYTES:
                             if not gap_sent:
-                                gap = {"schemaVersion": SCHEMA_VERSION, "seq": last, "type": "journal_gap", "generatedAt": now_iso(), "source": "hub_agent", "payload": {"code": "journal_gap", "reason": "sse_batch_limit", "maxBytes": MAX_AGENT_SSE_BATCH_BYTES}}
+                                gap = {"schemaVersion": SCHEMA_VERSION, "seq": last, "type": "journal_gap", "generatedAt": now_iso(), "source": "worker_telemetry", "payload": {"code": "journal_gap", "reason": "sse_batch_limit", "maxBytes": MAX_AGENT_SSE_BATCH_BYTES}}
                                 self.wfile.write(("data: " + json.dumps(gap, ensure_ascii=False, separators=(",", ":")) + "\n\n").encode("utf-8"))
                                 self.wfile.flush()
                             last = read_seq(root)
@@ -16322,6 +16551,10 @@ def serve_http(args):
                     return self.send_json({"error": str(exc)}, status=500)
             if operation_route:
                 operation_id = unquote(route[len("/api/operations/"):]).strip()
+                proof_worker = str(getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip()
+                proof_request = code_sync_request_state(root, proof_worker, operation_id)
+                if proof_request is not None:
+                    return self.send_json(proof_request)
                 result = api_operation(root, operation_id)
                 return self.send_json(result, status=200 if result.get("eventCount") else 404)
             if route == "/api/files/capabilities":
@@ -16351,7 +16584,15 @@ def serve_http(args):
                     return self.send_json(api_worker_availability(root))
                 return self.send_json(read_availability_cache(root, True))
             if route == "/api/worker/tasks":
-                return self.send_json(api_worker_tasks(root))
+                wanted = (parse_qs(parsed.query).get("retiredCommandIds") or [""])[0]
+                selection = (parse_qs(parsed.query).get("queries") or ["[]"])[0]
+                if len(selection) > 128 * 1024:
+                    raise ValueError("TASK_QUERY_LIMIT")
+                value = api_worker_tasks(root, wanted.split(",") if wanted else [], json.loads(selection))
+                discovery = (parse_qs(parsed.query).get("discovery") or [""])[0]
+                if discovery:
+                    value["declaredJobs"] = task_describe_plan(root, json.loads(discovery))
+                return self.send_json(value)
             if route == "/api/worker/commands":
                 params = parse_qs(parsed.query)
                 worker_id = (params.get("workerId") or [os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker"])[0]
@@ -16421,7 +16662,7 @@ def serve_http(args):
                 params = parse_qs(parsed.query)
                 run_key = (params.get("runKey") or [""])[0]
                 since = int((params.get("since") or ["0"])[0] or 0)
-                payload = {"schemaVersion": SCHEMA_VERSION, "seq": read_seq(root) + 1, "type": "log_tail", "generatedAt": now_iso(), "source": "hub_agent", "runKey": run_key, "payload": {"offset": since, "text": ""}}
+                payload = {"schemaVersion": SCHEMA_VERSION, "seq": read_seq(root) + 1, "type": "log_tail", "generatedAt": now_iso(), "source": "worker_telemetry", "runKey": run_key, "payload": {"offset": since, "text": ""}}
                 return self.send_sse([payload])
             if route == "/api/files/list":
                 try:
@@ -16455,8 +16696,8 @@ def serve_http(args):
                 window = (params.get("window") or params.get("session") or params.get("name") or [""])[0].strip()
                 if not window:
                     return self.send_json({"error": "window required"}, status=400)
-                # allow alnum, ._-:, %, dot and slash for pane target (pane id like %0, window like session:1, pane like session:1.2)
-                if not re.match(r"^[A-Za-z0-9._\-:./%]+$", window):
+                # Native window IDs survive moves and renames; names remain compatible.
+                if not (re.fullmatch(r"@\d+", window) or re.fullmatch(r"[A-Za-z0-9._\-:./%]+", window)):
                     return self.send_json({"error": "invalid window name"}, status=400)
                 try:
                     requested_lines = (params.get("lines") or ["all"])[0].strip().lower()
@@ -16490,8 +16731,13 @@ def serve_http(args):
                         if sess_proc2.returncode != 0 and ("no server" in (sess_proc2.stderr or "").lower() or "no sessions" in (sess_proc2.stderr or "").lower()):
                             return self.send_json({"schemaVersion": SCHEMA_VERSION, "ok": True, "available": True, "sessions": [], "message": "no tmux server"})
                         return self.send_json({"schemaVersion": SCHEMA_VERSION, "ok": False, "available": True, "sessions": [], "error": (sess_proc.stderr or sess_proc2.stderr or "list-sessions failed").strip()[-500:]}, status=200)
-                    task_snapshot = read_runtime_json_cached(path_for(root, "worker_task_snapshot.json"), {})
-                    task_rows = task_snapshot.get("tasks") if isinstance(task_snapshot, dict) and isinstance(task_snapshot.get("tasks"), list) else []
+                    task_rows = []
+                    for live in task_inventory(root):
+                        if live.get("workerId") != (os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker"):
+                            continue
+                        phase = live.get("phase")
+                        status = ("failed" if isinstance(live.get("exitCode"), int) and live["exitCode"] != 0 else "exited") if live.get("dead") else ("running" if phase == "running" else "queued")
+                        task_rows.append({**live, "status": status})
                     tasks_by_pane = {}
                     for task_row in task_rows:
                         if not isinstance(task_row, dict):
@@ -16512,6 +16758,7 @@ def serve_http(args):
                             gpu_ids.append(gpu_value)
                     sessions = []
                     list_errors = []
+                    scheduler_control = task_scheduler_runtime_report(root, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker")
                     for line in (sess_proc.stdout or "").splitlines():
                         if not line.strip():
                             continue
@@ -16582,7 +16829,7 @@ def serve_http(args):
                                             "planFile": matched_task.get("planFile") or matched_task.get("plan") or "",
                                             "startedAt": matched_task.get("startedAt") or matched_task.get("started_at") or "",
                                             "finishedAt": matched_task.get("finishedAt") or matched_task.get("finished_at") or "",
-                                            "logUpdatedAt": worker_task_log_updated_at(root, matched_task),
+                                            "logUpdatedAt": "",
                                             "outputDir": matched_task.get("outputDir") or matched_task.get("output_dir") or "",
                                             "configPath": matched_task.get("configPath") or matched_task.get("config_path") or "",
                                         }
@@ -16591,8 +16838,10 @@ def serve_http(args):
                                 list_errors.append(sess_name + ": " + (win_proc.stderr or "list-windows failed").strip()[-300:])
                         except Exception as exc:
                             list_errors.append(sess_name + ": " + str(exc)[-300:])
-                        sessions.append({"name": sess_name, "windowCount": sess_windows, "windows": windows})
-                    return self.send_json({"schemaVersion": SCHEMA_VERSION, "ok": not list_errors, "available": True, "workerId": os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker", "gpuIds": gpu_ids, "sessions": sessions, "error": "; ".join(list_errors)})
+                        owned_scheduler = scheduler_control.get("status") in ("current", "update_required") and any(win["windowId"] == scheduler_control.get("windowId") for win in windows)
+                        sessions.append({"name": sess_name, "windowCount": sess_windows, "windows": windows,
+                            **({"ownership": "project", "role": "scheduler"} if owned_scheduler else {})})
+                    return self.send_json({"schemaVersion": SCHEMA_VERSION, "ok": not list_errors, "available": True, "sessionActions": ["close", "clear"], "workerId": os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker", "gpuIds": gpu_ids, "sessions": sessions, "error": "; ".join(list_errors)})
                 except Exception as exc:
                     return self.send_json({"error": str(exc)}, status=500)
             return self.send_json({"error": "not found"}, status=404)
@@ -16601,9 +16850,90 @@ def serve_http(args):
             if self.reject_if_needed():
                 return
             route = urlparse(self.path).path
+            if route == "/api/sync-scope/index":
+                raw = self.read_request_body(route)
+                if raw is None:
+                    return
+                try:
+                    if len(raw) > 4096:
+                        raise ValueError("SCOPE_INDEX_REQUEST_LIMIT")
+                    payload = json.loads(raw.decode("utf-8"))
+                    # The view marker is validated before creating any index or scanning.
+                    if payload.get("feature") != "project-sync-scope":
+                        raise ValueError("SCOPE_INDEX_VIEW_REQUIRED")
+                    with self.server.sync_scope_index_guard:
+                        if self.server.sync_scope_index is None:
+                            self.server.sync_scope_index = SyncScopeIndex(root)
+                    return self.send_json(self.server.sync_scope_index.query(payload))
+                except Exception as exc:
+                    return self.send_json({"ok": False, "status": "unknown", "error": str(exc)}, status=400)
+            if route == "/api/code-sync/plan-scope":
+                raw = self.read_request_body(route)
+                if raw is None:
+                    return
+                try:
+                    if len(raw) > 1024 * 1024:
+                        raise ValueError("PLAN_SOURCE_QUERY_LIMIT")
+                    return self.send_json(inspect_plan_code_scope(root, json.loads(raw.decode("utf-8"))))
+                except Exception as exc:
+                    return self.send_json({"ok": False, "compatible": False, "readOnly": True, "error": str(exc)}, status=400)
+            if route == "/api/actions/configure-gpu-quota":
+                raw = self.read_request_body(route)
+                if raw is None:
+                    return
+                try:
+                    if len(raw) > 65536:
+                        raise ValueError("GPU_QUOTA_SETTINGS_INVALID")
+                    policy = json.loads(raw.decode("utf-8"))
+                    value = task_queue_rpc(root, policy["workerId"], "configure", task_gpu_quota_policy(policy, []), ensure=False)
+                    return self.send_json({"ok": True, "policy": value})
+                except Exception as exc:
+                    return self.send_json({"error": str(exc)}, status=400)
+            if route == "/api/worker/tasks/diagnostics":
+                raw = self.read_request_body(route)
+                if raw is None:
+                    return
+                try:
+                    if len(raw) > 1024 * 1024:
+                        raise ValueError("TASK_QUERY_LIMIT")
+                    payload = json.loads(raw.decode("utf-8"))
+                    return self.send_json(task_result_query(root, payload.get("queries") or [], diagnostics_only=True, compact=payload.get("compact") is True))
+                except Exception as exc:
+                    return self.send_json({"error": str(exc)}, status=400)
+            if route == "/api/worker/tasks/query":
+                raw = self.read_request_body(route)
+                if raw is None:
+                    return
+                try:
+                    if len(raw) > 1024 * 1024:
+                        raise ValueError("TASK_QUERY_LIMIT")
+                    payload = json.loads(raw.decode("utf-8"))
+                    collection = bool((payload.get("discovery") or {}).get("collect")) or any(isinstance(item, dict) and item.get("collect") is True for item in payload.get("declarations") or [])
+                    if payload.get("declarationOnly") is True:
+                        if payload.get("executionOnly") or payload.get("selectedOnly") or payload.get("observationOnly") or payload.get("discovery") or collection:
+                            raise ValueError("TASK_DECLARATION_SELECTION_INVALID")
+                        return self.send_json(task_declaration_query(root, payload.get("declarations") or []))
+                    if payload.get("executionOnly") is True:
+                        if payload.get("declarations") is not None or payload.get("discovery"):
+                            raise ValueError("EXECUTION_INVENTORY_SELECTION_INVALID")
+                        return self.send_json(task_execution_inventory(root, payload.get("queries") or []))
+                    if payload.get("selectedOnly") is True:
+                        if payload.get("executionOnly") or payload.get("declarations") is not None or payload.get("discovery"):
+                            raise ValueError("TASK_QUERY_SELECTION_INVALID")
+                        if payload.get("observationOnly") is True:
+                            return self.send_json(task_result_query(root, payload.get("queries") or [], diagnostics_only=payload.get("diagnosticsOnly") is True, compact=payload.get("compact") is True))
+                        return self.send_json(task_query(root, payload.get("queries") or [], selected_only=True))
+                    value = task_collection_query(root, payload.get("declarations") or []) if collection else task_query(root, payload.get("queries") or [])
+                    if payload.get("declarations") is not None and not collection:
+                        value["declaredResults"] = task_declared_results(root, payload["declarations"], value["tasks"])
+                    if payload.get("discovery"):
+                        value["declaredJobs"] = task_describe_plan(root, payload["discovery"])
+                    return self.send_json(value)
+                except Exception as exc:
+                    return self.send_json({"error": str(exc)}, status=400)
             if mode == "worker_telemetry":
                 worker_action = route.rsplit("/", 1)[-1] if route.startswith("/api/actions/") else ""
-                if route not in ("/api/actions/save-result-policy", "/api/actions/start-worker-task", "/api/actions/preflight-worker-task", "/api/actions/register-code-sync-proof", "/api/actions/rebuild-distributed-results", "/api/actions/retry-worker-task", "/api/actions/stop-worker-task", "/api/actions/delete-worker-artifacts", "/api/actions/archive-worker-artifacts", "/api/actions/validate-plan", "/api/actions/dry-run-plan", "/api/actions/run-plan", "/api/actions/reproduce-plan", "/api/actions/stop-scheduler-operation", "/api/actions/clear-cache", "/api/actions/clearCache", "/api/actions/preview-cache-cleanup", "/api/actions/delete-cache-candidates", "/api/tmux/kill-window", "/api/tensorboard/proxy", "/api/tensorboard/scalars/query") and not route.startswith(TENSORBOARD_BROWSER_PREFIX + "/") and route != TENSORBOARD_BROWSER_PREFIX and worker_action not in WORKER_RESULT_ACTIONS and worker_action not in WORKER_TENSORBOARD_ACTIONS and worker_action not in WORKER_ENV_ACTIONS:
+                if route not in ("/api/actions/save-result-policy", "/api/actions/finalize-worker-operation", "/api/actions/start-worker-task", "/api/actions/preflight-worker-task", "/api/actions/register-code-sync-proof", "/api/actions/rebuild-distributed-results", "/api/actions/retry-worker-task", "/api/actions/stop-worker-task", "/api/actions/delete-worker-artifacts", "/api/actions/archive-worker-artifacts", "/api/actions/validate-plan", "/api/actions/dry-run-plan", "/api/actions/run-plan", "/api/actions/reproduce-plan", "/api/actions/stop-scheduler-operation", "/api/actions/clear-cache", "/api/actions/clearCache", "/api/actions/preview-cache-cleanup", "/api/actions/delete-cache-candidates", "/api/tmux/kill-window", "/api/tensorboard/proxy", "/api/tensorboard/scalars/query") and not route.startswith(TENSORBOARD_BROWSER_PREFIX + "/") and route != TENSORBOARD_BROWSER_PREFIX and worker_action not in WORKER_RESULT_ACTIONS and worker_action not in WORKER_TENSORBOARD_ACTIONS and worker_action not in WORKER_ENV_ACTIONS:
                     return self.send_json({"error": "worker telemetry only accepts local worker actions"}, status=404)
             if route == "/api/tensorboard/proxy" or route == TENSORBOARD_BROWSER_PREFIX or route.startswith(TENSORBOARD_BROWSER_PREFIX + "/"):
                 return self.proxy_tensorboard(urlparse(self.path))
@@ -16925,7 +17255,7 @@ def serve_http(args):
             if route == "/api/actions/register-code-sync-proof":
                 try:
                     worker_id = str(getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip()
-                    result = register_code_sync_proof(root, payload, worker_id)
+                    result = register_code_sync_proof_request(root, payload, worker_id) if payload.get("async") is True else register_code_sync_proof(root, payload, worker_id)
                     return self.send_json(result)
                 except Exception as exc:
                     return self.send_json({"ok": False, "error": str(exc)}, status=409)
@@ -16964,35 +17294,18 @@ def serve_http(args):
                 current_worker = str(getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip()
                 if topology_mode not in ("single_worker", "worker_pool") or not owner or owner != current_worker or options.get("automaticBackup") is not False:
                     return self.send_json({"error": "worker result ownership mismatch"}, status=403)
-            if action == "validate-plan" and not action_debug_mode(payload):
-                # A warm, verified template only needs fresh artifact stats, so no background action/poll wait.
-                try:
-                    plan = action_plan_file(payload)
-                    scheduler = cluster_scheduler_path(root)
-                    options = action_options(payload)
-                    result_dir = str(options.get("defaultResultCsvDir") or options.get("default_result_csv_dir") or "experiments/results")
-                    validation = cached_scheduler_validation(root, scheduler, plan, result_dir, options) if plan and scheduler else None
-                    if validation is not None:
-                        return self.send_json(terminal_action(root, action, operation_id, op_id, "completed",
-                            f"配置检查已复用，已有产物已刷新：{validation.get('existingCount', 0)}/{len(validation.get('jobs') or [])}",
-                            {"validation": validation, "jobCount": len(validation.get("jobs") or []),
-                             "executionMode": validation.get("execution_mode") or "train_test"}, request=payload))
-                except Exception as exc:
-                    return self.send_json(terminal_action(root, action, operation_id, op_id, "failed", str(exc), request=payload))
+            # Warm structural reuse still runs in the original asynchronous
+            # operation: NFS source/output stats must not hold the HTTP accept.
             if action in ("validate-plan", "dry-run-plan", "preflight-worker-task", "rebuild-distributed-results") or (action == "preview-cache-cleanup" and "planOutputPaths" in payload) or (action == "archive-worker-artifacts" and payload.get("quarantineFailedAttempt") is True):
                 worker = (selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker") if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan", "preflight-worker-task") else ""
                 return self.send_json(start_inactivity_action(root, action, payload, operation_id, op_id, worker), status=202)
             if action not in ("preview-cache-cleanup", "delete-cache-candidates"):
-                try:
-                    started_fields = action_receipt_fields(action, payload)
-                except ValueError as exc:
-                    return self.send_json({"error": str(exc)}, status=400)
-                append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **started_fields}})
+                append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_receipt_fields(action, payload)}})
             release_worker_action = None
             try:
                 if mode == "worker_telemetry" and action in ("retry-worker-task", "stop-worker-task", "delete-worker-artifacts", "archive-worker-artifacts", "validate-plan", "dry-run-plan", "run-plan", "reproduce-plan"):
                     release_worker_action = acquire_worker_action_slot(root, selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker", payload)
-                return self.send_json(handle_action(root, action, payload, operation_id, op_id))
+                return self.send_json(tracked_cleanup_action(root, action, payload, operation_id, op_id))
             except Exception as exc:
                 message = f"action failed: {exc}"
                 return self.send_json(terminal_action(root, action, operation_id, op_id, "failed", message, request=payload), status=500)
@@ -17014,6 +17327,15 @@ def add_state_args(parser):
 
 def main():
     global AGENT_STATE_DIR, MAX_EVENTS, MAX_JOURNAL_BYTES, STATE_RETENTION_SECONDS, TMP_RETENTION_SECONDS, MAX_AGENT_STATE_BYTES
+    if len(sys.argv) > 1 and sys.argv[1] in ("task-queue", "task-runner"):
+        parser = argparse.ArgumentParser()
+        parser.add_argument("cmd")
+        parser.add_argument("--project-dir", required=True)
+        parser.add_argument("--worker-id", required=True)
+        parser.add_argument("--state-dir", default="")
+        args = parser.parse_args()
+        AGENT_STATE_DIR = args.state_dir
+        return task_queue_serve(args.project_dir, args.worker_id) if args.cmd == "task-queue" else task_runner(args.project_dir, args.worker_id)
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name in ("run", "snapshot", "health", "inspect", "stop"):
@@ -17034,15 +17356,24 @@ def main():
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=18765)
     p.add_argument("--token", default="")
-    p.add_argument("--mode", default="realtime")
-    p.add_argument("--gpu-poll-seconds", type=float, default=60.0)
+    p.add_argument("--mode", choices=("worker_telemetry",), default="worker_telemetry")
+    p.add_argument("--gpu-poll-seconds", type=float, default=1.0)
     p.add_argument("--worker-id", default="")
-    p.add_argument("--hub-uplink-url", default="")
     p.add_argument("--worker-availability-push-seconds", type=float, default=60.0)
     p.add_argument("--jitter-seconds", type=float, default=30.0)
     p.add_argument("--operation-event-max-delay-ms", type=float, default=1000.0)
     add_state_args(p)
+    p = sub.add_parser("lifecycle")
+    p.add_argument("--config", required=True)
+    p.add_argument("--action", choices=("inspect", "ensure", "stop", "restart", "migrate"), default="ensure")
     args = parser.parse_args()
+    if args.cmd == "lifecycle":
+        params = json.loads(args.config)
+        params["action"] = args.action
+        params["expectedVersion"] = RUNTIME_VERSION
+        manifest_path = os.path.join(params["installDir"], "simple_cluster", "runtime", "runtime_manifest.json")
+        params["files"] = lifecycle_json(manifest_path).get("files", {})
+        return lifecycle_main(params)
     AGENT_STATE_DIR = os.path.abspath(args.state_dir) if getattr(args, "state_dir", "") else ""
     MAX_EVENTS = max(100, int(getattr(args, "journal_max_events", MAX_EVENTS) or MAX_EVENTS))
     MAX_JOURNAL_BYTES = max(1024 * 1024, int(float(getattr(args, "journal_max_mb", 32.0) or 32.0) * 1024 * 1024))
@@ -17068,6 +17399,10 @@ def main():
     if args.cmd == "health" or args.cmd == "inspect":
         print(json.dumps(inspect_agent(args.project_dir), ensure_ascii=False))
         return 0
+
+${RUNTIME_LOG_DIAGNOSTICS_PYTHON}
+${PLAN_CODE_SCOPE_PYTHON}
+${TMUX_TASK_LIFECYCLE_PYTHON}
 
 if __name__ == "__main__":
     try:

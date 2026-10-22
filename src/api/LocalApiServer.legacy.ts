@@ -440,6 +440,11 @@ export class LocalApiServer {
     response.once("close", onResponseClosed);
     try {
       const handler = this.methods[payload.method];
+      const requested = (payload.params || {}) as Record<string, unknown>;
+      if ([requested.topologyMode, requested.mode].some(value => ["hub_worker", "hub_control", "hub", "hub_available"].includes(String(value || "")))
+          || requested.hub || requested.hubConfig || Array.isArray(requested.serverIds) && requested.serverIds.includes("hub")
+          || payload.method === "config.set" && String(requested.key || "").endsWith("topologyMode") && String(requested.value || "").startsWith("hub"))
+        throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
       if (typeof handler !== "function") {
         sendJson(response, 200, rpcError(id, -32601, "Method not found"));
         return;
@@ -650,22 +655,48 @@ export class LocalApiServer {
       version: this.version,
       transport: ["http", "cli"],
       rpc: "json-rpc-2.0",
-      execution: { resultPathPolicy: "declared", formalJobPathProtocol: 1, formalJobIdentityEnvProtocol: 1, formalJobStopIdentityProtocol: 2, formalJobStopUsesAttempts: false, historicalAttempts: "readOnly", draftPromotion: "retired" },
+      execution: { resultPathPolicy: "declared", formalJobPathProtocol: 1, formalJobIdentityEnvProtocol: 1, formalJobStopIdentityProtocol: 2, formalJobStopUsesAttempts: false, historicalAttempts: "readOnly", draftPromotion: "retired",
+        stagedJobPreflightProtocol: 1, admissionAssetValidation: "deferred_until_start", executionAssetValidation: "fresh" },
       retiredMethods: { "drafts.promote": "DRAFT_PROMOTION_RETIRED" },
       methods: Object.keys(this.methods).sort(),
       methodOptions: {
+        ...(Object.keys(this.methods).includes("agents.lifecycle") ? {
+          "agents.lifecycle": { actions: ["inspect", "ensure", "stop", "restart", "migrate"], requiredParams: ["serverIds"],
+            inspectZeroWrites: true, independentServiceProtocol: 1, noTaskCancellation: true, controlStrategy: "assigned_tmux_window", noPidSignals: true,
+            researchEnvironmentManagement: "external", agentResearchEnvironmentValidation: false,
+            mutationConfirmation: "exact configured target", requiresSimpleSftp: "0.2.78", activeTasksBlockRestart: false, restartPreservesTasks: true, legacyMigration: { migrationDigests: true, explicitConfirmation: true, activeJobsBlocked: false, preservesStateBytes: true } },
+          "project.prepare": { healthyAgentReuse: true, inspectBeforeRuntimeWrite: true, preservesUnmanagedLogin: true,
+            agentLoginPolicy: ["preserve", "managed"], actualRunningVersionRequired: true },
+        } : {}),
+        ...(Object.keys(this.methods).includes("workflow.run") ? {
+          "workflow.plan": { requiresCurrentWorkspace: true, workspaceIdentityRechecked: true, seedOverride: false, startsTraining: false },
+          "workflow.run": { requiresCurrentWorkspace: true, workspaceIdentityRechecked: true, seedOverride: false,
+            receipt: "checking_workers", requiresUserApproval: "two main-panel path confirmations only when replacing outputs", receiptProvesSubmission: false,
+            optionalParams: { operationId: "Resume this original submission; preserves cleanup confirmations and command identities" } },
+        } : {}),
         ...(Object.keys(this.methods).includes("tasks.preflight") ? {
           "tasks.preflight": { params: ["workerId", "commandId"], researchFilesReadOnly: true, launchesTraining: false, changesQueue: false,
-            optionalParams: { environmentOnly: { type: "boolean", default: false, description: "Only verify the real task shell for a frozen failed job; does not validate assets, checkpoint or output admission", requiresWorkerEndpoint: "executionShellPreflight=1" } },
+            optionalParams: { environmentOnly: { type: "boolean", default: false, description: "Verify original source SHA256 and the real task shell for a frozen failed job; does not validate data assets, checkpoint or output admission", requiresWorkerEndpoint: "taskShellEnvironment=1" },
+              completedOutputVerify: { type: "boolean", default: false, requiresWorkerEndpoint: "completedOutputPreflight=1", description: "Read-only verification of original completed job identity, source and completed artifact hashes; incompatible with environmentOnly" } },
+            originalSourceContentVerification: true, renewsOriginalProof: false,
             originalRejectedIdentity: true, inactivitySeconds: 30, progressStream: "stderr", requiresMatchingWorkerAction: "preflight-worker-task" },
           "tasks.preflight.status": { params: ["workerId", "operationId"], readOnly: true },
           "tasks.preflight.cancel": { params: ["workerId", "operationId"], cancelsDiagnosticOnly: true },
         } : {}),
         ...(Object.keys(this.methods).includes("plans.cleanup.preview") ? {
-        "plans.cleanup.preview": { readOnly: true, zeroWrites: true, modes: ["move", "delete"], default: "move", historicalNodes: true,
-          optionalJob: { fields: ["workflowId", "index", "commandId"], failedFormalJobOnly: true, excludesPlanAndConfig: true, neverRequeues: true } },
+        "tasks.dispatch": { params: ["workflowId", "indices", "workerId", "gpuId", "confirm"], manualDispatch: 1,
+          sameGpuConcurrent: true, idleGpuRequired: false, pluginCapacityOverride: true, optionalParams: ["expectedCommands", "stopRunning", "distribution", "workflowIds", "all"], distributions: ["explicit_gpu", "quota_remaining"], defaultAutomaticDispatch: "local_idle", startsTraining: true },
+        "tasks.list": { readOnly: true, lifecycleProtocol: 2, activeQueries: ["scheduler", "tmux", "final_manifest"],
+          pushRequired: false, receiptRequired: false, executionAndResultSeparate: true, runtimeDiagnostics: 1,
+          completionState: ["verified", "review_required", "unverified"], legacyCompletedIsCleanSuccess: false },
+        "tasks.analyze": { readOnly: true, params: ["workerId", "commandId", "outputDir"],
+          optionalParams: ["workflowId", "index"], rawLogAnalysis: true, rewritesHistory: false, launchesTraining: false },
+        "plans.cleanup.preview": { readOnly: true, zeroWrites: true, modes: ["move", "delete"], authorizationModes: ["associated", "confirmed_paths"], default: "move", historicalNodes: true,
+          lifecycleProtocol: 2, ownershipSource: "plan_declarations_and_artifact_manifests", observation: "active_tmux_and_filesystem_query",
+          optionalJob: { fields: ["workflowId", "index", "commandId", "purpose", "manifest"], failedFormalJobOnly: false,
+            default: "failed_review", replacementPurpose: "replace_outputs", replacementStates: ["failed", "completed"], excludesPlanAndConfig: true, neverRequeues: true } },
         "plans.cleanup.list": { readOnly: true },
-        "plans.cleanup.status": { readOnly: true, durableOperationId: true },
+        "plans.cleanup.status": { readOnly: true, durableOperationId: true, activeRemoteObservation: true, receiptRequired: false },
         "plans.cleanup.continue": { previewOnly: true, newExactConfirmation: true, deleteConfirmationCount: 2, archivedMetadata: true },
         "plans.cleanup.recheck": { remoteReadOnly: true, automaticExecution: false, durablePendingSignals: true },
         "plans.cleanup.confirm": { previewDigest: true, exactTargets: true, deleteConfirmationCount: 2, rememberedConfirmations: false },

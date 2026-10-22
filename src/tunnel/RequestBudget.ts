@@ -7,9 +7,11 @@ export type TunnelRequestPurpose =
   | "run_plan"
   | "job_dispatch"
   | "job_reconcile"
+  | "operation_status"
   | "stop"
   | "parse_results"
   | "diagnostics"
+  | "task_diagnostics"
   | "events"
   | "file_transfer"
   | "tensorboard_scalar";
@@ -66,6 +68,8 @@ export interface RequestBudgetSnapshot {
   maxConcurrentEmergencyRequests: number;
   maxQueuedRequests: number;
   queueWaitMsLast: number;
+  statusInFlight?: number;
+  statusQueued?: number;
   maxQueueDepth: number;
   coalescedRequests: number;
   retries: number;
@@ -100,7 +104,7 @@ export const defaultRequestBudgetConfig: RequestBudgetConfig = {
   minIntervalByPurpose: {},
 };
 
-type RequestPool = "control" | "transfer" | "emergency";
+type RequestPool = "control" | "transfer" | "emergency" | "logs" | "status";
 
 interface RequestBudgetLimits {
   maxConcurrentRequestsPerWorker: number;
@@ -138,10 +142,10 @@ function abortError(): Error {
 
 /** Shared scheduler for all endpoint budgets belonging to one realtime client. */
 export class RequestBudgetCoordinator {
-  private readonly queues: Record<RequestPool, QueueRequest[]> = { emergency: [], control: [], transfer: [] };
-  private readonly activeByPool: Record<RequestPool, number> = { emergency: 0, control: 0, transfer: 0 };
+  private readonly queues: Record<RequestPool, QueueRequest[]> = { emergency: [], control: [], transfer: [], logs: [], status: [] };
+  private readonly activeByPool: Record<RequestPool, number> = { emergency: 0, control: 0, transfer: 0, logs: 0, status: 0 };
   private readonly activeByScope: Record<RequestPool, Map<string, number>> = {
-    emergency: new Map(), control: new Map(), transfer: new Map(),
+    emergency: new Map(), control: new Map(), transfer: new Map(), logs: new Map(), status: new Map(),
   };
   private dispatching = false;
   private dispatchAgain = false;
@@ -161,7 +165,9 @@ export class RequestBudgetCoordinator {
     };
   }
 
-  get queued(): number { return this.queues.emergency.length + this.queues.control.length + this.queues.transfer.length; }
+  get queued(): number { return this.queues.emergency.length + this.queues.control.length + this.queues.transfer.length + this.queues.logs.length + this.queues.status.length; }
+  get statusInFlight(): number { return this.activeByPool.status; }
+  get statusQueued(): number { return this.queues.status.length; }
   get maxQueueDepth(): number { return this.observedMaxQueueDepth; }
   get globalInFlight(): number { return this.activeByPool.control; }
   get transferInFlight(): number { return this.activeByPool.transfer; }
@@ -212,7 +218,7 @@ export class RequestBudgetCoordinator {
     try {
       do {
         this.dispatchAgain = false;
-        for (const pool of ["emergency", "control", "transfer"] as const) {
+        for (const pool of ["emergency", "status", "control", "transfer", "logs"] as const) {
           const queue = this.queues[pool];
           for (let index = queue.length - 1; index >= 0; index -= 1) {
             const item = queue[index];
@@ -241,7 +247,7 @@ export class RequestBudgetCoordinator {
           const regularOrder: readonly ("control" | "transfer")[] = this.nextRegularPool === "control"
             ? ["control", "transfer"]
             : ["transfer", "control"];
-          for (const pool of ["emergency", ...regularOrder] as const) {
+          for (const pool of ["emergency", "status", ...regularOrder, "logs"] as const) {
             const index = this.queues[pool].findIndex((item) => this.canStart(item));
             if (index < 0) continue;
             const [item] = this.queues[pool].splice(index, 1);
@@ -270,6 +276,12 @@ export class RequestBudgetCoordinator {
     const activeGlobal = this.activeByPool[pool];
     const activeScope = this.activeByScope[pool].get(scopeKey) || 0;
     if (pool === "emergency") return activeGlobal < this.limits.maxConcurrentEmergencyRequests && activeScope < this.limits.maxConcurrentEmergencyRequests;
+    // Tiny operation receipts and idle-GPU/dispatch requests never queue behind
+    // directory inventories. Stops retain their own separate reserved slots.
+    if (pool === "status") return activeGlobal < 2 && activeScope < 2;
+    // Raw NFS log reads cannot consume execution/metadata/stop slots, even
+    // when the user's ordinary per-worker concurrency is one.
+    if (pool === "logs") return activeGlobal < 2 && activeScope < 1;
     if (pool === "transfer") return activeGlobal < this.limits.maxConcurrentTransfersGlobal && activeScope < this.limits.maxConcurrentTransfersPerWorker;
     return activeGlobal < this.limits.maxConcurrentRequestsGlobal && activeScope < this.limits.maxConcurrentRequestsPerWorker;
   }
@@ -438,6 +450,8 @@ export class RequestBudget {
       emergencyInFlight: this.coordinator.emergencyInFlight,
       ...this.coordinator.limits,
       queueWaitMsLast: this.queueWaitMsLast,
+      statusInFlight: this.coordinator.statusInFlight,
+      statusQueued: this.coordinator.statusQueued,
       maxQueueDepth: this.coordinator.maxQueueDepth,
       coalescedRequests: this.coalescedRequests,
       retries: this.retries,
@@ -510,6 +524,8 @@ export class RequestBudget {
 }
 
 function requestPool(purpose: TunnelRequestPurpose, options: RequestBudgetRunOptions): RequestPool {
+  if (purpose === "operation_status" || purpose === "job_dispatch") return "status";
+  if (purpose === "task_diagnostics") return "logs";
   if (purpose === "file_transfer") return "transfer";
   if (purpose === "stop" || purpose === "job_reconcile" || (purpose === "health" && options.userInitiated)) return "emergency";
   return "control";

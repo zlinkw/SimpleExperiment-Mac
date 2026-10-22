@@ -12,9 +12,9 @@ if (compiledRuntimeVersion !== packageJson.version) {
   process.exit(1);
 }
 // Use the lockfile-pinned local tool. Validation must never fetch packages or wait for npm consent.
-const vsceCli = require.resolve("@vscode/vsce/vsce");
+const inventoryScript = path.join(__dirname, "list-vsix-files.js");
 const projection = createPackageProjection(root);
-const result = spawnSync(process.execPath, [vsceCli, "ls", "--no-dependencies"], {
+const result = spawnSync(process.execPath, [inventoryScript], {
   cwd: projection.directory,
   encoding: "utf8",
   timeout: 8000,
@@ -26,12 +26,11 @@ if (result.status !== 0) {
 }
 assertPackageProjection(projection);
 
-const packaged = new Set(
-  String(result.stdout || "")
-    .split(/\r?\n/)
-    .map((line) => line.trim().replace(/^\.\//, "").replace(/\\/g, "/"))
-    .filter((line) => line && !line.startsWith("INFO ") && !line.startsWith("WARNING ")),
-);
+const listed = JSON.parse(result.stdout);
+if (!Array.isArray(listed) || listed.some(file => typeof file !== "string" || !file)) {
+  throw new Error("VSCE returned an invalid package inventory");
+}
+const packaged = new Set(listed.map(file => file.replace(/^\.\//, "").replace(/\\/g, "/")));
 const entrypoints = [packageJson.main, ...Object.values(packageJson.bin || {})]
   .filter(Boolean)
   .map((entry) => String(entry).replace(/^\.\//, "").replace(/\\/g, "/"));

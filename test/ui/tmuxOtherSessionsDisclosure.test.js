@@ -102,18 +102,19 @@ test("empty GPU and removed explicit window never fall back to historical consol
   assert.equal(f.requests[0].window, "zlk-gpu-0:7");
 });
 
-test("old unbound GPU windows stay collapsed while the current task is shown", () => {
-  const f = harness();
-  f.context.tmuxListCache.sessions[0].windows.push({ index: "7", name: "run-old", panes: [{ target: "zlk-gpu-0:7.0", command: "bash" }] });
-  f.render();
-  const html = f.elements.tmuxOverview.innerHTML;
-  const folded = html.indexOf('<details id="tmuxOtherOverview"');
-  assert.ok(folded > 0);
-  assert.doesNotMatch(html.slice(0, folded), /run-old|0:bash/);
-  assert.match(html.slice(0, folded), /1:run-0/);
-  assert.doesNotMatch(html.slice(folded, html.indexOf(">", folded) + 1), /\bopen\b/);
-  assert.match(html.slice(folded), /未绑定任务的服务器窗口/);
-  assert.match(html.slice(folded), /data-tmux-filter="zlk-gpu-0:7"/);
+test("GPU windows stay out of the ordinary overview and appear only after explicit GPU selection", () => {
+  const f=harness();
+  f.context.tmuxListCache.sessions[0].windows.push({index:'7',name:'run-old',panes:[{target:'zlk-gpu-0:7.0',command:'bash'}]});
+  f.render(); const html=f.elements.tmuxOverview.innerHTML;
+  const folded=html.indexOf('<details id="tmuxOtherOverview"');assert.ok(folded>=0);
+  assert.doesNotMatch(html,/run-old|run-0|data-tmux-filter="zlk-gpu-0:7"/);
+  assert.doesNotMatch(html.slice(folded,html.indexOf('>',folded)+1),/\bopen\b/);
+  f.context.tmuxWindowFilter='zlk-gpu-0';f.render();
+  assert.match(f.elements.tmuxOverview.innerHTML,/data-tmux-task-target="zlk-gpu-0:1"/);
+  assert.match(f.elements.tmuxOverview.innerHTML,/data-tmux-task-target="zlk-gpu-0:7"/);
+  assert.match(f.elements.tmuxOverview.innerHTML,/case-0 · seed 42 · 失败/);
+  assert.doesNotMatch(f.elements.tmuxOverview.innerHTML,/m1mechanism/);
+
 });
 
 test("unrelated tmux windows are folded outside the GPU cards and overview", () => {
@@ -125,17 +126,23 @@ test("unrelated tmux windows are folded outside the GPU cards and overview", () 
   const overview = elements.tmuxOverview.innerHTML;
   const overviewFolded = overview.indexOf('<details id="tmuxOtherOverview"');
   assert.ok(overviewFolded > 0);
-  assert.doesNotMatch(overview.slice(0, overviewFolded), /m1mechanism|zlk-worker-agent/);
-  assert.equal((overview.match(/<details/g) || []).length, 1);
+  const service=overview.indexOf('<details id="tmuxServicesOverview"');
+  assert.ok(service>=0 && service<overviewFolded);
+  assert.doesNotMatch(overview.slice(0,service),/m1mechanism|zlk-worker-agent/);
+  assert.match(overview.slice(service,overviewFolded),/zlk-worker-agent/);
+  assert.doesNotMatch(overview.slice(service,overviewFolded),/m1mechanism/);
+  assert.equal((overview.match(/<details/g) || []).length, 2);
   assert.doesNotMatch(overview.slice(overviewFolded, overview.indexOf(">", overviewFolded) + 1), /\bopen\b/);
   assert.match(overview.slice(overviewFolded), /data-tmux-filter="m1mechanism:16"/);
   assert.match(overview.slice(overviewFolded), /data-tmux-close="m1mechanism:16"/);
-  assert.match(elements.tmuxListMeta.textContent, /GPU 2.*任务标签 2.*其他会话 2/);
+  assert.match(elements.tmuxListMeta.textContent, /GPU 2.*任务标签 2.*我的其他会话 0.*其他前缀 1/);
 });
 
 test("selecting an ordinary window reveals its exact target and pane", () => {
   const { context, elements, render } = harness();
   context.tmuxWindowFilter = "m1mechanism:12";
+  const win=context.tmuxListCache.sessions.find(row=>row.name==="m1mechanism").windows[12];
+  win.panes.push({target:"m1mechanism:12.1",command:"bash"});
   render();
   assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /<details/);
   assert.equal(elements.tmuxWindowSelect.value, "m1mechanism:12");
@@ -173,7 +180,7 @@ test("a Worker with only ordinary sessions still offers their windows without in
   assert.doesNotMatch(elements.tmuxFilterBar.innerHTML, /data-tmux-filter="m1mechanism:0"/);
   assert.match(elements.tmuxOverview.innerHTML, /data-tmux-filter="m1mechanism:0"/);
   assert.match(elements.tmuxOverview.innerHTML, /<details id="tmuxOtherOverview"[^>]*><summary>/);
-  assert.match(elements.tmuxListMeta.textContent, /GPU 0.*任务标签 0.*其他会话 2/);
+  assert.match(elements.tmuxListMeta.textContent, /GPU 0.*任务标签 0.*我的其他会话 0.*其他前缀 1/);
 });
 
 test("empty inventory keeps idle GPU slots and does not leave an empty ordinary-session disclosure", () => {
@@ -199,11 +206,14 @@ test("configured namespace counts physical GPUs once and each raw window appears
   assert.match(bar, /data-tmux-filter="gpu-slot:2"/);
   assert.equal((bar.match(/data-tmux-close-gpu-session=/g) || []).length, 3);
   const fold = overview.indexOf('<details id="tmuxOtherOverview"');
-  assert.equal((overview.match(/<details/g) || []).length, 1);
+  assert.equal((overview.match(/<details/g) || []).length, 2);
   assert.doesNotMatch(overview.slice(0, fold), /lwb-gpu-|zlk-gpu-3|0:bash/);
   for (const session of context.tmuxListCache.sessions) for (const win of session.windows) {
     const marker = 'data-tmux-filter="' + session.name + ':' + win.index + '"';
-    assert.equal(overview.split(marker).length - 1, 1, marker);
+    const ownGpu=session.name.startsWith("zlk-gpu-");
+    assert.equal(overview.split(marker).length - 1, ownGpu?0:1, marker);
+    if(ownGpu) {context.tmuxWindowFilter=session.name;render();
+      assert.equal(elements.tmuxOverview.innerHTML.split('data-tmux-task-target="'+session.name+':'+win.index+'"').length-1,1,marker);}
   }
   context.tmuxListCache.tmuxSessionPrefix = "lwb";
   render();
@@ -248,11 +258,10 @@ test("GPU card close submits a frozen stable batch without changing filters or b
   }
 });
 
-test("missing configured namespace never assigns another user's GPU session", () => {
-  const f = harness();
-  f.context.tmuxListCache.tmuxSessionPrefix = "";
-  f.render();
-  assert.doesNotMatch(f.elements.tmuxFilterBar.innerHTML, /data-tmux-filter="zlk-gpu-|data-tmux-close-gpu-session=/);
-  assert.match(f.elements.tmuxFilterBar.innerHTML, /data-tmux-filter="gpu-slot:0"/);
-  assert.match(f.elements.tmuxOverview.innerHTML, /data-tmux-filter="zlk-gpu-0:1"/);
+test("missing configured namespace offers no GPU session close authority", () => {
+  const f=harness();f.context.tmuxListCache.tmuxSessionPrefix='';f.render();
+  assert.doesNotMatch(f.elements.tmuxFilterBar.innerHTML,/data-tmux-close-gpu-session=/);
+  assert.match(f.elements.tmuxFilterBar.innerHTML,/data-tmux-filter="zlk-gpu-0"/);
+  assert.match(f.elements.tmuxFilterBar.innerHTML,/data-tmux-filter="zlk-gpu-1"/);
+  assert.equal(f.requests.length,0);
 });

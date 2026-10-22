@@ -1,3 +1,4 @@
+const retainedFixture = require('../_helpers/retainedFixture');
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const { createRequire } = require('node:module'), { spawnSync } = require('node:child_process'), { randomUUID } = require('node:crypto');
@@ -13,7 +14,7 @@ const tables = compiled('dist/results/ProjectResultTables.js', { './ResultLayout
 const scope = compiled('dist/mac/ResultSummaryScope.js');
 for (const scenario of ['workflow', 'paths', 'references', 'archive', 'identity', 'snapshots', 'inputs', 'handler']) {
   test('isolated actual checked Agent claim evidence and compiled summary: ' + scenario, () => {
-    const directory = path.join(root, 'release-artifacts', 'Agent claim 证据读取 ' + scenario + ' ' + randomUUID()); fs.mkdirSync(directory, { recursive: true });
+    const directory = retainedFixture(root, 'Agent claim 证据读取 ' + scenario); fs.mkdirSync(directory, { recursive: true });
     const result = spawnSync(process.env.PYTHON || 'python', ['-B', '-X', 'utf8', path.join(__dirname, 'macClaimEvidenceRead.fixture.py'), scenario,
       path.join(root, 'dist/runtime/cluster_agent.py'), directory], { encoding: 'utf8', timeout: 10000, windowsHide: true });
     assert.equal(result.status, 0, result.stderr || result.error?.message);

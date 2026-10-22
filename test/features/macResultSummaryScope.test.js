@@ -2,6 +2,7 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), ts = require('typescript');
 const root = path.resolve(__dirname, '../..');
 const scope = require('../../dist/mac/ResultSummaryScope'), posix = require('../../dist/mac/PosixPath');
+const { compiledModule } = require('../_helpers/compiledModule');
 const plans = [' A.yaml ', 'A.yaml', 'a.yaml', 'A%20.yaml', 'é.yaml', 'e\u0301.yaml'].map(name => 'experiments/Plans 中文 /' + name);
 const file = ' Results/中文 A /Metrics.csv ', hash = 'a'.repeat(64);
 function backend(platform = 'darwin') {
@@ -14,6 +15,7 @@ function backend(platform = 'darwin') {
     'filterCompletedResultSummaryForPlan', 'resultSummaryInspectionCandidates', 'resultSummarySyncCandidates',
     'normalizeRemoteResultInspectionPath', 'compactResultsSummaryForPlanForWebview'];
   const context = vm.createContext({ process: { platform }, MacResultSummaryScope: scope, PosixPath_1: posix,
+    ResultOwnershipScope: compiledModule(path.join(root, 'dist/results/ResultOwnershipScope.js'), platform),
     FileTransferTypes_1: require('../../dist/tunnel/FileTransferTypes'),
     WrapperResultBundle: require('../../dist/results/WrapperResultBundle'),
     normalizePosixRelativePath: posix.normalizePosixRelativePath,
@@ -128,9 +130,23 @@ test('actual Mac webview cache preserves spaces and separate variants, and stale
   const b = api.compactResultsSummaryForPlanForWebview(mixed, 'plans/A', 'r.yaml|v');
   assert.notEqual(a, b); assert.equal(a.planFile, 'plans/A|r.yaml'); assert.equal(b.planFile, 'plans/A');
 });
-test('non-Mac compiled summary filtering retains Windows selection aliases', () => {
+test('non-Mac scalar summary compatibility cannot authorize a basename-only artifact owner', () => {
   const windows = backend('win32');
   const original = summary('experiments/plans/a.yaml');
   assert.equal(windows.filterCompletedResultSummaryForPlan(original, 'a.yaml').results.length, 1);
-  assert.ok(windows.resultSummaryInspectionCandidates(original, 'a.yaml').includes(file.trim()));
+  assert.deepEqual(array(windows.resultSummaryInspectionCandidates(original, 'a.yaml')), []);
+  assert.ok(windows.resultSummaryInspectionCandidates(original, 'EXPERIMENTS/PLANS/A.yaml').includes(file.trim()));
+});
+
+test('active query keeps current job coverage with exact Mac identities and never falls back to historical rows', () => {
+  const report = { source: 'active_query', jobs: plans.map((planFile, index) => ({ planFile, state: 'complete', aggregationState: 'eligible', index })),
+    results: plans.map(planFile => ({ planFile, metrics: { auc: 0.8 } })), planCoverage: { [plans[0]]: { completed: 1, expected: 2, reviewRequired: 0 } } };
+  const scoped = api.filterResultsSummaryForSelectedPlan(report, plans[0]);
+  assert.equal(scoped.source, 'active_query'); assert.equal(scoped.jobs.length, 1); assert.equal(scoped.results.length, 1);
+  assert.equal(scoped.jobs[0].planFile, plans[0]); assert.equal(scoped.completed, 1); assert.equal(scoped.expected, 2);
+  const other = api.filterResultsSummaryForSelectedPlan(report, plans[1]);
+  assert.equal(other.jobs[0].planFile, plans[1]); assert.notEqual(other.jobs[0], scoped.jobs[0]);
+  const invalid = api.filterResultsSummaryForSelectedPlan(report, '../bad.yaml');
+  assert.equal(invalid.results.length, 0); assert.equal(invalid.workerResultTables.length, 0);
+  assert.equal(report.jobs.length, plans.length); assert.equal(report.results.length, plans.length);
 });

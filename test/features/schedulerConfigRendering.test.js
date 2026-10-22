@@ -1,3 +1,4 @@
+const { writePythonFixture, isolatePythonRuntime } = require("../_helpers/isolatedPythonFixture");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -11,12 +12,6 @@ const schedulerRuntime = path.join(root, "dist", "runtime", "cluster_scheduler.p
 
 test("scheduler resolves config inheritance and renders nested job config values", (t) => {
   const python = process.env.PYTHON || "python";
-  const dependencies = spawnSync(python, ["-c", "import yaml"], { encoding: "utf8" });
-  if (dependencies.status !== 0) {
-    t.skip("python or PyYAML unavailable");
-    return;
-  }
-
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "simple-experiment-scheduler-config-"));
   const variants = path.join(project, "configs", "variants");
   fs.mkdirSync(variants, { recursive: true });
@@ -76,8 +71,8 @@ print(json.dumps({
 }, ensure_ascii=False))
 `;
 
-  const run = spawnSync(python, ["-c", script], {
-    cwd: root,
+  const run = spawnSync(python, [writePythonFixture(isolatePythonRuntime(script, "scheduler"))], {
+    cwd: root, timeout: 10000, windowsHide: true,
     encoding: "utf8",
     env: { ...process.env, PYTHONIOENCODING: "utf-8" },
   });

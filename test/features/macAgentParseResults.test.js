@@ -1,3 +1,4 @@
+const retainedFixture = require('../_helpers/retainedFixture');
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm');
 const { createRequire } = require('node:module'), { spawnSync } = require('node:child_process'), { randomUUID } = require('node:crypto');
@@ -12,7 +13,7 @@ const layout = compiled('dist/results/ResultLayout.js');
 const tables = compiled('dist/results/ProjectResultTables.js', { './ResultLayout': layout });
 for (const scenario of ['request', 'receipt', 'paths', 'selection', 'rows', 'policy', 'snapshots', 'aggregate', 'summary']) {
   test('isolated actual Agent Plan parser and compiled table identity: ' + scenario, () => {
-    const directory = path.join(root, 'release-artifacts', 'Agent 结果解析 ' + scenario + ' ' + randomUUID()); fs.mkdirSync(directory, { recursive: true });
+    const directory = retainedFixture(root, 'Agent 结果解析 ' + scenario); fs.mkdirSync(directory, { recursive: true });
     const result = spawnSync(process.env.PYTHON || 'python', ['-B', '-X', 'utf8', path.join(__dirname, 'macAgentParseResults.fixture.py'), scenario,
       path.join(root, 'dist/runtime/cluster_agent.py'), directory], { encoding: 'utf8', timeout: 10000, windowsHide: true });
     assert.equal(result.status, 0, result.stderr || result.error?.message);

@@ -97,7 +97,7 @@ export class ResourceOperationLeaseManager {
     const processOwner = `${os.hostname()}:${this.processId}`;
     const stableOwner = this.windowId.startsWith(processOwner + ":") ? processOwner : this.windowId;
     this.file = path.join(this.directory, crypto.createHash("sha256").update(stableOwner).digest("hex") + ".json");
-    const key = process.platform === "win32" ? this.file.toLowerCase() : this.file;
+    const key = this.file;
     if (!pools.has(key)) pools.set(key, { queue: Promise.resolve(), registry: { schemaVersion: 2, windowId: this.windowId, processId: this.processId, ticket: 0, choosing: false, admissionExpiresAt: 0, leases: [] } });
     this.state = pools.get(key);
   }
@@ -185,7 +185,7 @@ export class ResourceOperationLeaseManager {
       try { row = JSON.parse(text); } catch { row = {}; }
       // The updater closes admission, then lets existing transfers finish.
       // Existing operations must keep their ordinary ownership/heartbeat checks.
-      if (existingOperation && row.actionType === "mac-preview-update") return;
+      if (existingOperation && ["paired-plugin-update", "mac-preview-update"].includes(row.actionType)) return;
       const expiry = Date.parse(row.expiresAt) || (await fs.stat(this.leasePath)).mtimeMs + 30_000;
       if (expiry > this.now()) throw new Error(`旧版全局锁仍由窗口 ${row.windowId || "未知"} 持有。请重新加载该窗口以完成两款插件升级，然后重试；不能绕过活动旧锁。`);
     } catch (error: any) { if (error.code !== "ENOENT") throw error; }
@@ -286,5 +286,9 @@ export class ResourceOperationLeaseManager {
     try { process.kill(record.processId, 0); return true; }
     catch (error: any) { return error.code !== "ESRCH"; }
   }
-  async inspect(): Promise<any> { return { records: (await this.rows()).flatMap(row => row.leases).filter(row => Date.parse(row.expiresAt) > this.now()) }; }
+  async inspect(options: { excludeCurrent?: boolean } = {}): Promise<any> {
+    const own = new Set(options.excludeCurrent ? (contexts.getStore() || []).map(row => row.leaseId) : []);
+    return { records: (await this.rows()).flatMap(row => row.leases)
+      .filter(row => Date.parse(row.expiresAt) > this.now() && this.ownerAlive(row) && !own.has(row.leaseId)) };
+  }
 }

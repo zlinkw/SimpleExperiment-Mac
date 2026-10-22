@@ -18,7 +18,8 @@ function provider(names, extra = {}) {
   const cls = ast.statements.find((node) => ts.isClassDeclaration(node) && node.name?.text === 'RealtimeTunnelPanelProvider');
   const code = 'class Provider {' + cls.members.filter((node) => names.includes(node.name?.getText(ast))).map((node) => node.getText(ast)).join('\n') + '}; Provider;';
   return vm.runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
-    { DistributedPlanQueue: queueApi, workspaceRoot: () => root, makeOpId: (kind) => `${kind}-12345678`,
+    { DistributedPlanQueue: queueApi, PulledTaskControl: require('../../dist/features/PulledTaskControl'),
+      workspaceRoot: () => root, makeOpId: (kind) => `${kind}-12345678`,
       errorMessage: (error) => error.message, vscode: { window: { showInformationMessage: () => undefined } }, ...extra });
 }
 function snapshot(plan, job, status = 'queued', aliases = false, extra = {}) {
@@ -40,9 +41,13 @@ function releaseReceipt(request, legacy = false) {
     durableAccepted: !legacy, legacyReleased: legacy, neverStarted: true,
     neverStartedEvidence: legacy ? 'worker_command_queued' : 'durable_queued_row' };
 }
-function providerState(stored) {
-  const Provider = provider(['recallPlanToLocalQueueFromUi', 'processDistributedRecall']);
+function providerState(stored, compatibility = true, globals = {}) {
+  // Existing durable v1 queue receipts remain readable; new v2 recall is separately fenced below.
+  if (compatibility) for (const plan of stored.value.plans) for (const job of plan.jobs) delete job.lifecycleProtocol;
+  const Provider = provider(['recallPlanToLocalQueueFromUi', 'processDistributedRecall'],globals);
   const instance = new Provider();
+  instance.captureProjectContext = () => ({ root });
+  instance.projectContextIsCurrent = context => context.root === root;
   instance.distributedQueueGeneration = 0;
   instance.distributedRecallInFlight = new Set();
   instance.distributedQueueTickPromise = undefined;
@@ -219,3 +224,19 @@ test('historical pending receipts can be recalled through the Agent queued-only 
   assert.equal(stored.value.plans[0].jobs[0].status, 'pending');
   assert.equal(stored.value.plans[0].jobs[0].attempt, 0);
 });
+
+ test('native recall needs explicit confirmation and an identity-bound cancelled observation',async()=>{
+  for(const confirmed of [false,true]) {
+    const q=queueApi.enqueuePlan(queueApi.emptyDistributedQueue(),{projectId:root,planFile:'plans/native.yaml',revision:'r',codeFingerprint:'code',jobs:[0,1].map(index=>({index,case:'case',seed:42+index,outputDir:'runs/native/'+index,collectionResultCsv:'tmp/result/native/'+index+'.csv'}))},'native-run');
+    Object.assign(q.plans[0].jobs[0],{status:'running',workerId:'worker',commandId:'original-native-command',runKey:'original-native-command'});
+    const original=JSON.stringify(q),sibling=JSON.stringify(q.plans[0].jobs[1]),stored={value:q},posts=[],queries=[];
+    const p=providerState(stored,false,{vscode:{window:{showWarningMessage:async()=>confirmed?'确认召回':undefined}}});
+    p.client={postWorkerAction:async(worker,action,request)=>{posts.push(request);assert.equal(worker,'worker');assert.equal(action,'stop-worker-task');assert.equal(request.targetCommandId,'original-native-command');assert.equal(Object.hasOwn(request,'attempt'),false);},getWorkerTasks:async(worker,options)=>{
+      queries.push(options);assert.equal(worker,'worker');assert.equal(options.queries[0].commandId,'original-native-command');
+      return {queryComplete:true,capabilities:{taskLifecycle:2},tasks:[{observation:{lifecycleProtocol:2,commandId:'original-native-command',projectId:root,workerId:'worker',cancelled:true}}]};
+    }};
+    await p.recallPlanToLocalQueueFromUi({planId:'native-run',jobIndex:0,planFile:'plans/native.yaml'});
+    if(!confirmed){assert.equal(JSON.stringify(stored.value),original);assert.equal(posts.length,0);assert.equal(queries.length,0);continue;}
+    const job=stored.value.plans[0].jobs[0];assert.equal(posts.length,1);assert.equal(queries.length,1);assert.equal(job.status,'pending');assert.equal(job.lifecycleProtocol,2);assert.equal(job.commandId,undefined);assert.ok(job.nextCommandId);assert.equal(job.localQueueOnly,true);assert.equal(job.outputDir,'runs/native/0');assert.equal(JSON.stringify(stored.value.plans[0].jobs[1]),sibling);
+  }
+ });

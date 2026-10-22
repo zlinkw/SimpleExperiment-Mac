@@ -83,7 +83,7 @@ if scenario in ("physical", "agent", "changed", "revision"):
         assert agent.worker_path_value({"plan": plan_name}, {"planFile": plan_name}, ("planFile", "plan")) == plan_name
         rejects(lambda: agent.worker_path_value({"plan": plan_name}, {"planFile": plan_name.rstrip()}, ("planFile", "plan")))
     elif scenario == "revision":
-        raw = b"mode: train\n" + b"# retained full plan\n" * 70000
+        raw = b"mode: train\n" + b"# retained full plan\n" * 40000
         reads = [raw, raw]
         scheduler = SimpleNamespace(load_plan=lambda name: {"mode": "train"}, plan_execution_mode=lambda plan: plan["mode"])
         command = {"planFile": plan_name, "planRevision": hashlib.sha256(raw).hexdigest(), "executionMode": "train"}
@@ -92,6 +92,9 @@ if scenario in ("physical", "agent", "changed", "revision"):
             assert agent.verified_durable_execution_mode(root, command) == "train"
             reads[:] = [raw, raw + b"#changed"]
             rejects(lambda: agent.verified_durable_execution_mode(root, command))
+            reads[:] = [raw + b"#oversize" * 200000]
+            oversized = {**command, "planRevision": hashlib.sha256(reads[0]).hexdigest()}
+            rejects(lambda: agent.verified_durable_execution_mode(root, oversized))
             reads[:] = [b"changed"]
             rejects(lambda: agent.verified_durable_execution_mode(root, command))
     else:
@@ -105,9 +108,9 @@ if scenario in ("physical", "agent", "changed", "revision"):
         def probe(*args):
             if scenario == "changed": nodes[root + "/experiments/Plans"] = stat.S_IFLNK
         replacements = {
-            "agent_install_dir": lambda _: root + "/runtime ", "require_scheduler_dependencies": probe,
-            "verified_formal_job_command": lambda *args: {"identity": {"globalJobId": "workflow:0"}},
-            "simple_runtime_python": lambda _: "virtual-python", "verified_durable_execution_mode": lambda *args: "train",
+            "agent_install_dir": lambda _: root + "/runtime ",
+            "verified_formal_job_command": lambda *args, **kwargs: {"identity": {"globalJobId": "workflow:0"}},
+            "simple_runtime_python": lambda _: "virtual-python", "verified_durable_execution_mode": lambda *args: probe() or "train",
             "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
             "tmux_available": lambda: True, "start_job_in_gpu_pane": lambda window, args, *rest: launched.append((args, rest)) or "%virtual",
             "worker_task_tmux_location": lambda *args: {"tmuxPane": "%virtual", "tmuxWindowId": "@virtual", "tmuxSession": "session"},
@@ -134,6 +137,8 @@ if scenario in ("physical", "agent", "changed", "revision"):
                 launched.clear(); saved.clear(); mkdirs.clear()
                 for changes in [{"planFile": plan_name.rstrip()}, {"plan": []}, {"outputDir": "/invalid"},
                                 {"configPath": "../outside"}, {"defaultResultCsvDir": 2}, {"logPath": "tmp//log"},
+                                {"resultPathPolicy": None, "logPath": ".git/task.log"},
+                                {"resultPathPolicy": None, "logPath": ".ssh/id_rsa"},
                                 {"options": {"distributedResults": True, "outputDir": attempt.rstrip()}}]:
                     rejects(lambda: agent._execute_worker_command_unfenced(root, {**command, **changes}, "worker"))
                     assert not launched and not saved and not mkdirs

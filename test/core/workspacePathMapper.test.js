@@ -5,31 +5,31 @@ const path = require("node:path");
 
 const { resolveWorkspaceLocation: resolveNativeWorkspaceLocation } = require("../../dist/core/WorkspacePathMapper.js");
 
-function resolveWorkspaceLocation(uri, config = {}) { return resolveNativeWorkspaceLocation(uri, { platform: "win32", ...config }); }
+function resolveWorkspaceLocation(uri, config = {}) { return resolveNativeWorkspaceLocation(uri, config); }
 
 const mapping = {
-  hostRoot: "D:\\GitRepo\\",
+  hostRoot: "/Users/dev/GitRepo/",
   containerRoot: "/workspaces/",
 };
 
-test("SimpleExperiment declares a Windows UI host and optional mapping settings", () => {
+test("SimpleExperiment declares a local UI host and optional mapping settings", () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "../../package.json"), "utf8"));
   assert.deepEqual(packageJson.extensionKind, ["ui"]);
   assert.equal(packageJson.contributes.configuration.properties["simpleExperimentMac.workspaceHostRoot"].default, "");
   assert.equal(packageJson.contributes.configuration.properties["simpleExperimentMac.workspaceContainerRoot"].default, "");
 });
 
-test("workspace path mapping preserves Windows file workspaces", () => {
+test("workspace path mapping preserves native POSIX file workspaces", () => {
   const result = resolveWorkspaceLocation({
     scheme: "file",
-    path: "/D:/GitRepo/demo",
-    fsPath: "D:/GitRepo/demo/",
-    external: "file:///D:/GitRepo/demo",
+    path: "/Users/dev/GitRepo/demo",
+    fsPath: "/Users/dev/GitRepo/demo/",
+    external: "file:///Users/dev/GitRepo/demo",
   });
   assert.deepEqual(result, {
     scheme: "file",
-    editorUri: "file:///D:/GitRepo/demo",
-    hostPath: "D:\\GitRepo\\demo\\",
+    editorUri: "file:///Users/dev/GitRepo/demo",
+    hostPath: "/Users/dev/GitRepo/demo/",
     relativePath: "",
     remote: false,
   });
@@ -43,7 +43,7 @@ test("workspace path mapping keeps the remote editor URI and maps nested host pa
     external: "vscode-remote://dev-container+abc/workspaces/MCP/simple-experiment",
   }, mapping);
   assert.equal(result.editorUri, "vscode-remote://dev-container+abc/workspaces/MCP/simple-experiment");
-  assert.equal(result.hostPath, "D:\\GitRepo\\MCP\\simple-experiment");
+  assert.equal(result.hostPath, "/Users/dev/GitRepo/MCP/simple-experiment");
   assert.equal(result.relativePath, "MCP/simple-experiment");
   assert.equal(result.remote, true);
 });
@@ -54,14 +54,14 @@ test("workspace path mapping accepts the configured container root itself", () =
     path: "/workspaces/",
     fsPath: "/workspaces/",
   }, mapping);
-  assert.equal(result.hostPath, "D:\\GitRepo");
+  assert.equal(result.hostPath, "/Users/dev/GitRepo");
   assert.equal(result.relativePath, "");
 });
 
 test("workspace path mapping requires explicit remote root settings", () => {
   const uri = { scheme: "vscode-remote", path: "/workspaces/demo", fsPath: "/workspaces/demo" };
   assert.throws(() => resolveWorkspaceLocation(uri, {}), /simpleExperimentMac\.workspaceHostRoot/);
-  assert.throws(() => resolveWorkspaceLocation(uri, { hostRoot: "D:\\GitRepo" }), /simpleExperimentMac\.workspaceContainerRoot/);
+  assert.throws(() => resolveWorkspaceLocation(uri, { hostRoot: "/Users/dev/GitRepo" }), /simpleExperimentMac\.workspaceContainerRoot/);
   assert.throws(() => resolveWorkspaceLocation({ ...uri, scheme: "untitled" }, mapping), /不支持的工作区 URI scheme/);
 });
 
@@ -90,7 +90,7 @@ test("workspace path mapping rejects traversal and path injection", () => {
     scheme: "vscode-remote",
     path: "/workspaces/demo",
     fsPath: "/workspaces/demo",
-  }, { ...mapping, hostRoot: "\\\\server\\share" }), /Windows 盘符绝对路径/);
+  }, { ...mapping, hostRoot: "\\\\server\\share" }), /POSIX/);
 });
 
 test('Mac file workspaces preserve Chinese, spaces, case and literal percent paths', () => {
@@ -102,5 +102,5 @@ test('Mac file workspaces preserve Chinese, spaces, case and literal percent pat
   for (const p of ['C:/work','//host/work','/Users/test/../escape','relative','/Users/test/\\bad','/Users/test/\0bad']) {
     assert.throws(()=>resolveWorkspaceLocation({scheme:'file',path:p,fsPath:p},{platform:'darwin'}),/POSIX/);
   }
-  assert.throws(()=>resolveWorkspaceLocation({scheme:'vscode-remote',path:'/workspaces/demo',fsPath:'/workspaces/demo'},{platform:'darwin'}),/Dev Containers/);
+  assert.throws(()=>resolveWorkspaceLocation({scheme:'vscode-remote',path:'/workspaces/demo',fsPath:'/workspaces/demo'},{platform:'darwin'}),/simpleExperimentMac\.workspaceHostRoot/);
 });

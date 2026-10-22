@@ -12,8 +12,8 @@ const {
 const fs = require("node:fs");
 const path = require("node:path");
 
-const panelSource = readSource("src/ui/PanelHtml.ts");
-const extensionSource = readSource("src/extension.ts");
+const panelSource = readSource("src/ui/PanelHtml.legacy.ts");
+const extensionSource = readSource("src/extension/legacy.ts");
 
 function release(version, names = [`simple-${version}.vsix`, `simple-${version}.vsix.sha256`]) {
   return {
@@ -85,7 +85,7 @@ test("update card hides installation when the installed versions are current", (
   assert.match(panelSource, /storedStatus === "update_available" && !hasStoredUpdate \? "up_to_date" : storedStatus/);
   assert.match(panelSource, /canInstall = status === "update_available" && hasStoredUpdate/);
   assert.match(panelSource, /\(canInstall \? '<button data-command="installPluginUpdates"/);
-  assert.match(panelSource, /当前已是最新版本；更新来源为两个仓库的 GitHub Latest Release。/);
+  assert.match(panelSource, /当前已是最新版本；配套更新来源为 SimpleExperiment Mac 的 GitHub preview Release。/);
 });
 
 test("local API update commands return their plans directly", () => {

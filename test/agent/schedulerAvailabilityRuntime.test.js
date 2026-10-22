@@ -1,3 +1,4 @@
+const { writePythonFixture, isolatePythonRuntime } = require("../_helpers/isolatedPythonFixture");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -13,7 +14,7 @@ const runtimePath = path.join(root, "dist/runtime/cluster_scheduler.py");
 function runPythonScript(script) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "scheduler-availability-"));
   const scriptPath = path.join(directory, "run.py");
-  fs.writeFileSync(scriptPath, script, "utf8");
+  fs.writeFileSync(scriptPath, isolatePythonRuntime(script, "module"), "utf8");
   try {
     return spawnSync("python", [scriptPath], {
       encoding: "utf8", cwd: root,
@@ -21,7 +22,7 @@ function runPythonScript(script) {
       timeout: 10000, windowsHide: true,
     });
   } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
+    // Retain fixture and byte evidence.
   }
 }
 
@@ -94,9 +95,8 @@ print(json.dumps({"before": before, "after": after}))
   assert.deepEqual(value.before, []);
   assert.deepEqual(value.after, ["1"]);
   const source = readSource("src/clusterSchedulerRuntime.ts");
-  assert.match(source, /_force_refresh = _pending_signal_type in \(SCHEDULER_SIGNAL_FIRST_RUN, SCHEDULER_SIGNAL_TASK_END\)/);
-  assert.match(source, /_pending_signal_type = SCHEDULER_SIGNAL_TASK_END/);
-  assert.match(source, /read_availability_cache\(args\.availability_path, workers, worker_status_ttl_seconds\)\s+_busy_for_probe/);
+  const signals = runPython(`print(json.dumps([module.scheduler_signal_requires_refresh(value) for value in ["first_run", "task_end", "poll_tick", "unknown"]]))`);
+  assert.deepEqual(signals, [true, true, false, false]);
 });
 
 test("terminal Worker events bypass the periodic session check interval", () => {
@@ -110,8 +110,12 @@ print(json.dumps({
 `);
   assert.deepEqual(value, { finished: true, waiting: false, elapsed: true });
   const source = readSource("src/clusterSchedulerRuntime.ts");
-  assert.equal((source.match(/should_check_finished_session\(sess, finished_events, last_session_check/g) || []).length, 2);
-  assert.match(source, /session_check_min_seconds = max\(0\.5, float\(args\.session_check_min_seconds/);
+  const native = fs.readFileSync(path.join(root,"src/runtime/TmuxTaskLifecycle.ts"),"utf8");
+  const queue = native.slice(native.indexOf("def task_queue_serve("), native.indexOf("def task_runner("));
+  assert.match(queue, /rows = task_inventory\(root, execution_only=True\)/);
+  assert.match(queue, /not row\["dead"\] and row\["phase"\] == "queued"/);
+  assert.match(queue, /wake\.wait\(timeout=1 if queued else 5\)/);
+  assert.match(queue, /wake\.set\(\)/);
 });
 
 test("worker telemetry samples GPU occupancy within six seconds during a plan", () => {
@@ -130,7 +134,7 @@ print(json.dumps({"running": module.worker_gpu_sample_delay(60, 30, True),
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const value = JSON.parse(result.stdout);
   assert.ok(value.running <= 6, JSON.stringify(value));
-  assert.equal(value.idle, 90);
+  assert.equal(value.idle, 1);
 });
 
 test("worker sampler wakes within five seconds when a plan starts during idle wait", () => {
@@ -150,7 +154,7 @@ print(json.dumps(slept))
 `;
   const result = runPythonScript(script);
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.deepEqual(JSON.parse(result.stdout), [5]);
+  assert.deepEqual(JSON.parse(result.stdout), [1]);
 });
 
 test("scheduler recomputes raw GPU rows when cached available flag is stale", () => {
@@ -257,13 +261,22 @@ test("scheduler propagates the run-plan operation ID to Worker task commands", (
   const value = runPython(`
 import pathlib
 commands = []
+module.load_plan = lambda _: {"suite":"demo", "base_config":{"value":"fixture"}, "seeds":[42], "cases":[{"case":"baseline"}], "naming":{"sweep_dir":"work_dirs/demo"}}
+module.formal_source_fingerprint = lambda _: "fixture-code"
+module.Path.read_bytes = lambda _: b"mode: train_test\\n"
 module.ensure_worker_runtime = lambda worker: "simple_cluster/runtime/cluster_scheduler.py"
 module.enqueue_worker_command = lambda worker, command: commands.append(command)
 worker = {"id": "worker-a", "project_dir": "/tmp/project", "conda_env": "research"}
 session = module.launch_experiment(worker, "experiments/plans/demo.yaml", 0, "0", pathlib.Path("/tmp"), workflow_id="run-plan-parent", output_dir="work_dirs/demo/0_baseline_seed42")
 command = commands[0]
-module.launch_experiment(worker, "experiments/plans/demo.yaml", 1, "0", pathlib.Path("/tmp"), workflow_id="run-plan-parent")
-print(json.dumps({"workflowId": command.get("workflowId"), "commandId": command["commandId"], "runKey": command["runKey"], "session": session, "outputDir": command.get("outputDir"), "configPath": command.get("configPath"), "legacyHasPath": "configPath" in commands[1]}))
+try:
+    module.launch_experiment(worker, "experiments/plans/demo.yaml", 0, "0", pathlib.Path("/tmp"), workflow_id="run-plan-parent")
+except ValueError as exc:
+    assert "FORMAL_JOB_DECLARATION_CHANGED" in str(exc)
+    legacy_rejected = True
+else:
+    raise AssertionError("missing declared output accepted")
+print(json.dumps({"workflowId": command.get("workflowId"), "commandId": command["commandId"], "runKey": command["runKey"], "session": session, "outputDir": command.get("outputDir"), "configPath": command.get("configPath"), "legacyRejected": legacy_rejected, "commands":len(commands)}))
 `);
   assert.equal(value.workflowId, "run-plan-parent");
   assert.equal(value.commandId, value.session);
@@ -271,5 +284,5 @@ print(json.dumps({"workflowId": command.get("workflowId"), "commandId": command[
   assert.notEqual(value.commandId, value.workflowId);
   assert.equal(value.outputDir, "work_dirs/demo/0_baseline_seed42");
   assert.equal(value.configPath, "work_dirs/demo/0_baseline_seed42/job_config.yaml");
-  assert.equal(value.legacyHasPath, false);
+  assert.equal(value.legacyRejected, true); assert.equal(value.commands, 1);
 });

@@ -1331,7 +1331,6 @@ function isPlanAllowedResultCandidate(value) {
 function uniquePlanStrings(values) {
     return [...new Set(values.map((item) => String(item || "").trim()).filter(Boolean))];
 }
-// Mac 使用经校验的完整原始路径键；下列折叠仅为非 Mac 兼容。
 // 输出候选归一键（去重×2根因修复）：trim→反斜杠转正斜杠→占位符展开→小写；
 // 4种契约文件（metrics_summary.csv/metrics_case.csv/stdout.log/stderr.log）按小写basename折叠，
 // 大表（experiments/results/<method>.csv等）走全路径键，避免不同方法名被误折叠。

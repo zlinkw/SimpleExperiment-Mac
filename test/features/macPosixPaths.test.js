@@ -90,18 +90,29 @@ test("actual three-topology preview and uploads match manual guide paths with Ch
       projectParentDir: "/Data/研究 " + endpoint.id + " ", agentInstallDir: "/Data/runtime " + endpoint.id + " ", condaEnv: "/opt/环境 " }));
     f.provider.setupConfig = manual.setupFromManualEndpoints(endpoints);
     f.provider.agentRuntimeDirs = method("agentRuntimeDirs", { remoteProjectName: () => projectName, normalizeRemoteWorkRoot: api.normalizeApiRemotePath });
+    // The retired manualStart/upload-receipt contract has no counterpart in the frozen Windows
+    // 0.5.400 source; upload-path binding is covered there. This gate proves the current preview
+    // chain keeps Chinese names and edge spaces byte-identical end to end.
     await assert.rejects(f.provider.apiProjectPrepare({}), error => {
       assert.equal(error.apiCode, 2001); assert.equal(error.apiData.preview.workspace, "/Users/test/" + projectName);
-      for (const target of error.apiData.preview.servers) assert.equal(target.workDir, endpoints.find(endpoint => endpoint.id === target.serverId).projectParentDir + "/" + projectName);
+      for (const target of error.apiData.preview.servers) {
+        const source = endpoints.find(endpoint => endpoint.id === target.serverId);
+        assert.equal(target.workDir, source.projectParentDir + "/" + projectName);
+        assert.equal(target.projectPath, source.projectParentDir + "/" + projectName);
+        assert.equal(target.remoteRoot, source.projectParentDir);
+        assert.equal(target.agentProjectDir, source.projectParentDir + "/" + projectName, "the current contract reports the Agent project directory, byte-identical");
+      }
+      // Hub is removed from the current contract: only enabled worker endpoints are prepare targets.
+      const workerPoints = endpoints.filter(endpoint => endpoint.role === "worker");
+      assert.equal(error.apiData.preview.servers.some(target => target.serverId === "hub"), false, "a retained legacy hub endpoint is never a prepare target");
+      assert.equal(error.apiData.preview.modifications.remoteRuntime.length, workerPoints.length);
+      for (const runtime of error.apiData.preview.modifications.remoteRuntime) {
+        const source = endpoints.find(endpoint => endpoint.id === runtime.serverId);
+        assert.equal(runtime.installDir, source.agentInstallDir);
+        assert.equal(runtime.workDir, source.projectParentDir + "/" + projectName);
+      }
       return true;
     });
-    const result = await f.provider.apiProjectPrepare({ confirm: true });
-    for (const endpoint of endpoints) {
-      const workDir = endpoint.projectParentDir + "/" + projectName;
-      assert.ok(result.manualStart.guide.includes(workDir)); assert.ok(result.manualStart.guide.includes(endpoint.agentInstallDir));
-      assert.ok(f.uploads.some(upload => upload.command.endsWith("uploadWorkspace") && upload.args.remotePath === workDir));
-      assert.ok(f.uploads.some(upload => upload.command.endsWith("uploadFiles") && upload.args.remotePath === endpoint.agentInstallDir + "/simple_cluster/runtime"));
-    }
   }
   for (const directory of ["/root/", "/tmp///", "//data", "/data/../other"]) {
     const point = { ...manual.endpointsFromSetup(module.exports.fixture().provider.setupConfig)[0], projectParentDir: directory };

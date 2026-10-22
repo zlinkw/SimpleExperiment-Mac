@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-**当前 preview 已交付独立安装、配套更新、Termius 手动端点配置、项目与 runtime 上传及 Agent/tmux 指引，完整科研业务仍在适配。** M5 真机更新、独立认证传输和三拓扑尚未验收。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，Agent 和隧道由用户在 Termius 手动启动。
+**当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，完整科研业务仍在适配。** M5 真机更新、独立认证传输和三拓扑尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
 ## 1. 首次安装与打开说明
 
@@ -112,15 +112,23 @@
 
 跨服务器产物传输在 Mac 默认经过本机内存管道，来源和目标各建立自己的 SSH 连接。分别配置两端认证即可，不需要 Worker 之间互相免密登录。普通 tar 分组与大文件断点分块保留哈希核对、接收检查点和有限并发；本机不生成中转压缩包。传输失败等待两个本地进程退出，远端接收结果不明时先恢复核验再补传。真实跨服务器、断连后恢复仍待 M5 验收。
 
-## 5. Termius 手动隧道与端点配置
+## 5. 系统 OpenSSH 一键启动与 Termius 备份（端点配置）
 
-在 [Termius](https://termius.com/) 中自行配置 Linux 主机、SSH 端口和认证，手动登录。为每个端点建立 **本地端口转发（Local port forwarding）**，本机监听使用 loopback，目标为该 SSH 主机上的 Agent 监听地址与端口。手动启动转发并保持 Termius 连接。
+### 一键启动系统隧道
+
+1. **启动全部隧道 / 启动隧道**（含面板与命令面板入口）经 macOS 系统 `/usr/bin/ssh` 为每个明确启用的 Worker 建立 `-N -L` 本地端口转发；执行前展示端点明细并需确认。认证复用 SimpleSFTP Mac 的独立认证会话，不读取 Termius 私有会话或密码，不执行任意远端命令，不启动其它调度服务；使用用户自己的 SSH 配置时，插件先以只读解析核验有效配置恰好包含预期转发且不含隐藏本地命令或代理，不满足则拒绝启动。
+2. 汇总分别报告 **启动请求 / 真实隧道 / Agent 就绪** 三档：端口确认监听才算真实隧道，检测确认前视为待确认；已被其它进程占用的端口只失败该端点，健康既有转发按现状复用。**停止本插件启动的系统隧道** 只结束本插件启动的转发进程，不触碰其它进程。
+3. 以上路径通过本地隔离环境回归验证；macOS 真机验收尚未执行。
+
+### Termius 手动备份
+
+在 [Termius](https://termius.com/) 中自行配置 Linux 主机、SSH 端口和认证，手动登录。为每个端点建立 **本地端口转发（Local port forwarding）**，本机监听使用 loopback，目标为该 SSH 主机上的 Agent 监听地址与端口。手动启动转发并保持 Termius 连接；打开插件指引文本不会被记为启动成功。
 
 ### 保存端点
 
 打开 SimpleExperiment 面板 **设置 → 服务器 → 配置手动端点**，或按 **⇧⌘P → SimpleExperiment Mac：配置 Termius 手动端点**。在打开的设置页搜索结果中编辑 `tunnel.manualEndpoints`；数组在 JSON 中编辑。
 
-这是全局应用设置，使用 **Preferences: Open User Settings (JSON)** 打开用户 `settings.json`，不要写入项目 `.vscode/settings.json`。将以下字段合并到已有 JSON，不覆盖其他设置。下面是单 Worker 示例，主机、用户、端口和路径都需替换为自己的实际配置：
+这是全局应用设置，使用 **Preferences: Open User Settings (JSON)** 打开用户 `settings.json`，不要写入项目 `.vscode/settings.json`。旧 simpleExperimentMac.tunnel.manualEndpoints 设置保留读取兼容；显式修改该设置会重新应用其中的 Worker 端点。将以下字段合并到已有 JSON，不覆盖其他设置。下面是单 Worker 示例，主机、用户、端口和路径都需替换为自己的实际配置：
 
 ```json
 {
@@ -174,10 +182,10 @@
 ### 准备项目与 Agent
 
 1. 打开本机项目，保存有效拓扑与端点，在 SimpleSFTP 中配置各服务器认证。SSH 认证与 Agent HTTP 隧道分开，上传前无需 Agent 已运行。
-2. 点击 **设置 → 服务器 → 准备项目与 Agent**，或按 **⇧⌘P → SimpleExperiment Mac：准备项目与 Agent（手动启动）**。运行环境准备区域的同名按钮也可使用。
+2. 点击 **设置 → 服务器 → 准备项目与 Agent**，或按 **⇧⌘P → SimpleExperiment：准备 Agent 并启动**。运行环境准备区域的 **部署Agent** 按钮走同一流程。
 3. 确认对话框列出每台服务器的 `用户名@主机:SSH端口`、最终项目目录及 runtime 安装目录。逐项核对后点击 **确认上传并查看指引**；取消不修改目标或上传。确认后端点/工作区变化会要求重新预览。
 4. 插件通过 SimpleSFTP 分别上传最新版 runtime 与当前本机项目。项目遵循现有上传忽略规则，不自动清理远端文件。默认 runtime 位于 `<项目父目录>/simple_agent/simple_cluster/runtime/`；最终项目位于 `<项目父目录>/<当前工作区名称>/`。
-5. 上传成功后打开下方的 Termius/tmux 指引。此时仅证明上传完成，尚未证明 Agent 就绪；不会自动登录、启动转发、重启 Agent 或停止远端实验。按指引手动操作后点击 **检测全部**。
+5. 上传成功后打开下方的隧道与 tmux 指引。此时仅证明上传完成，尚未证明 Agent 就绪；不会擅自启动转发（需一键启动确认或 Termius 手动操作），不会重启 Agent 或停止远端实验。隧道就绪后点击 **检测全部**；Agent 启动由共同受管生命周期协议在受管启动时保障。
 
 上传失败先核对 SimpleSFTP 的目标和认证、父目录权限及传输错误，再重试准备；已运行的实验保持原状态。这个准备流程已通过本地模拟测试，真实 SSH 和 M5 仍待验收。
 
@@ -185,7 +193,9 @@
 
 “准备项目与 Agent”成功后自动打开指引。需要再次查看时，点击服务器卡片 **Agent/tmux 指引**，或运行 **SimpleExperiment Mac：打开 Agent/tmux 操作指引**；单独打开这个入口只生成文本，不传输文件。命令按当前端点、项目名、runtime 目录和 Python 路径生成。
 
-1. 在对应服务器的 Termius 终端按指引接入已有 tmux 会话，或创建尚不存在的会话。
+Mac 没有可编辑的会话文件：**写入 Agent 自启动** 兼容入口返回真实回执（跳过原因 mac_openssh_managed_lifecycle），不假报写入；受管启动时 Agent 由共同受管生命周期协议拉起。手动核对仍可用以下方式：
+
+1. 在对应服务器的 SSH 终端按指引接入已有 tmux 会话，或创建尚不存在的会话。
 2. 已有 Agent 正在运行时只检查；仅在新会话或确认 Agent 未启动时执行生成的启动命令。配置改变不会自动重启远端进程。
 3. 如设置了 `simpleExperimentMac.tunnel.agentToken`，在远端按指引交互输入同一 token；生成文本不会包含设置中的 token 值。
 4. 按 **Ctrl+B，再按 D** 分离远端 tmux，保留 Agent 和实验。回插件点击 **检测全部**，检查版本、项目路径及 Worker 能力。

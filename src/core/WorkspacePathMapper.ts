@@ -1,4 +1,5 @@
 import path from "node:path";
+import { hostPathApi, normalizeHostAbsolutePath } from "../platform/Filesystem";
 
 export interface WorkspaceUriDescriptor {
   scheme: string;
@@ -8,7 +9,6 @@ export interface WorkspaceUriDescriptor {
 }
 
 export interface WorkspacePathMappingConfig {
-  platform?: string;
   hostRoot?: string;
   containerRoot?: string;
   remoteScheme?: string;
@@ -28,13 +28,10 @@ export function resolveWorkspaceLocation(
 ): ResolvedWorkspaceLocation {
   const scheme = String(uri?.scheme || "").trim().toLowerCase();
   const editorUri = String(uri?.external || `${scheme}:${String(uri?.path || "")}`);
-  const platform = config.platform || process.platform;
   if (scheme === "file") {
-    const hostPath = platform === "darwin" ? normalizeMacAbsolutePath(uri?.fsPath) : normalizeWindowsAbsolutePath(uri?.fsPath, "本地工作区路径");
+    const hostPath = normalizeHostAbsolutePath(uri?.fsPath, "本地工作区路径");
     return { scheme, editorUri, hostPath, relativePath: "", remote: false };
   }
-
-  if (platform === "darwin") throw new Error("Mac 首版仅支持本地 file 工作区；Dev Containers 不在验收范围。");
 
   const remoteScheme = String(config.remoteScheme || "vscode-remote").trim().toLowerCase();
   if (scheme !== remoteScheme) {
@@ -47,7 +44,7 @@ export function resolveWorkspaceLocation(
     throw new Error("远程工作区缺少配置 simpleExperimentMac.workspaceContainerRoot。");
   }
 
-  const hostRoot = normalizeWindowsAbsolutePath(config.hostRoot, "simpleExperimentMac.workspaceHostRoot");
+  const hostRoot = normalizeHostAbsolutePath(config.hostRoot, "simpleExperimentMac.workspaceHostRoot");
   const containerRoot = normalizeContainerRoot(config.containerRoot);
   const containerPath = normalizeContainerPath(uri?.path, "远程工作区路径");
   if (containerPath !== containerRoot && !containerPath.startsWith(`${containerRoot}/`)) {
@@ -63,28 +60,12 @@ export function resolveWorkspaceLocation(
     throw new Error("远程工作区路径不得包含 Windows 盘符或 alternate data stream。");
   }
 
-  const hostPath = path.win32.resolve(hostRoot, ...segments);
-  const hostRelative = path.win32.relative(hostRoot, hostPath);
-  if (isEscapingRelativePath(hostRelative, path.win32)) {
-    throw new Error(`映射后的 Windows 路径越界：${hostPath}`);
+  const hostPath = hostPathApi.resolve(hostRoot, ...segments);
+  const hostRelative = hostPathApi.relative(hostRoot, hostPath);
+  if (isEscapingRelativePath(hostRelative, hostPathApi)) {
+    throw new Error(`映射后的本机路径越界：${hostPath}`);
   }
   return { scheme, editorUri, hostPath, relativePath, remote: true };
-}
-
-function normalizeMacAbsolutePath(value: unknown): string {
-  const raw = String(value || "");
-  if (!raw.startsWith("/") || raw.startsWith("//") || /[\\\0\r\n]/.test(raw) || raw.split("/").some(part => part === "." || part === "..")) {
-    throw new Error("本地工作区路径必须是无越界路径段的 POSIX 绝对路径。");
-  }
-  return path.posix.normalize(raw);
-}
-
-function normalizeWindowsAbsolutePath(value: unknown, label: string): string {
-  const raw = String(value || "").trim();
-  if (!/^[A-Za-z]:[\\/]/.test(raw) || raw.startsWith("\\\\")) {
-    throw new Error(`${label} 必须是 Windows 盘符绝对路径。`);
-  }
-  return path.win32.normalize(raw);
 }
 
 function normalizeContainerRoot(value: unknown): string {

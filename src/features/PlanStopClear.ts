@@ -5,9 +5,29 @@ export type PlanCleanupTarget = {
   active: boolean;
   tmuxSession: string;
   tmuxTarget: string;
+  nativeTask?: Record<string, any>;
 };
 
+/** Stop authority comes from the current window binding, not a former scheduler operation. */
+export function nativePlanStopTargets(snapshot: any, workerId: string, planFile: string, projectId: string): PlanCleanupTarget[] {
+  if (snapshot?.queryComplete !== true || snapshot?.error || snapshot?.capabilities?.taskLifecycle !== 2) return [];
+  return (snapshot.tasks || []).flatMap((task: any) => {
+    if (!samePlan(text(task.planFile), planFile) || !task.observation?.tmux) return [];
+    const evidence = task.observation, pane = evidence.tmux;
+    const safe = (value: any) => typeof value === "string" && value.length > 0 && !value.startsWith("/")
+      && !/[:\\\x00-\x1f]/.test(value) && value.split("/").every(part => part && part !== "." && part !== "..");
+    if (task.lifecycleProtocol !== 2 || task.projectId !== projectId || task.workerId !== workerId || !text(task.commandId)
+      || !text(task.workflowId) || evidence.commandId !== task.commandId || evidence.projectId !== projectId
+      || evidence.workerId !== workerId || evidence.queryError || !/^%\d+$/.test(pane.paneId) || !/^@\d+$/.test(pane.windowId)
+      || !safe(task.outputDir) || (task.collectionResultCsv && !safe(task.collectionResultCsv)))
+      throw new Error(`Worker ${workerId} 的 ${planFile} 窗口绑定不完整，未关闭窗口；请刷新后核对具体窗口。`);
+    return [{ operationId: task.commandId, planFile: task.planFile, workerId, active: !pane.dead,
+      tmuxSession: "", tmuxTarget: pane.windowId, nativeTask: task }];
+  });
+}
+
 const PLAN_RUN_TYPES = new Set(["run-plan", "reproduce-plan"]);
+const PLAN_HISTORY_TYPES = new Set([...PLAN_RUN_TYPES, "validate-plan", "dry-run-plan"]);
 
 function text(value: unknown): string {
   return String(value || "").trim();
@@ -44,6 +64,54 @@ export function planCleanupTargets(operations: Record<string, any>, planFile: st
       tmuxTarget: tmuxTarget.includes(":") ? tmuxTarget : (tmuxSession.includes(":") ? tmuxSession : ""),
     }];
   });
+}
+
+export type TerminalPlanHistorySelection = {
+  operationIds: string[];
+  jobs: Array<Record<string, any>>;
+  deferredIds: string[];
+  signature: string;
+};
+
+/** Local display/index removal only; this is never evidence of remote termination. */
+export function terminalPlanHistorySelection(operations: Record<string, any>, distributed: Array<Record<string, any>>,
+  planFile: string, terminal: (row: any) => boolean): TerminalPlanHistorySelection | undefined {
+  const ended: Array<Record<string, any>> = [];
+  for (const [key, row] of Object.entries(operations || {})) {
+    if (!row || typeof row !== "object") continue;
+    const payload = row.payload && typeof row.payload === "object" ? row.payload : row.latestEvent?.payload || {};
+    const options = payload.options || row.options || {};
+    const type = text(row.type || row.action || payload.action || payload.type).toLowerCase();
+    const file = text(row.planFile || row.plan || payload.planFile || payload.plan || options.planFile || options.plan);
+    if (!PLAN_HISTORY_TYPES.has(type) || !samePlan(file, planFile)) continue;
+    if (!terminal(row) || row.reconcileEvidenceActive === true || payload.reconcileEvidenceActive === true) return undefined;
+    ended.push({ id: text(row.operationId || row.id || row.opId || payload.operationId || payload.opId || key),
+      type, file, status: text(row.status || row.state || payload.status),
+      revision: text(row.planRevision || payload.planRevision || options.planRevision),
+      workerId: text(row.schedulerOwnerWorkerId || row.workerId || payload.workerId),
+      projectId: text(row.projectId || payload.projectId), commandId: text(row.commandId || payload.commandId),
+      codeFingerprint: text(row.codeFingerprint || payload.codeFingerprint) });
+  }
+  const jobs = [], deferredIds = [];
+  let terminalJobs = 0;
+  for (const row of distributed || []) {
+    if (row.active) return undefined;
+    if (row.kind === "deferred") {
+      if (!["pending", "blocked", "superseded"].includes(text(row.status))) return undefined;
+      deferredIds.push(text(row.planId));
+    } else if (["completed", "failed", "cancelled"].includes(text(row.status))) {
+      terminalJobs += 1;
+      jobs.push({ ...row });
+    } else if (["pending", "blocked"].includes(text(row.status)) && !row.workerId && !row.commandId && row.gpuId === undefined) {
+      jobs.push({ ...row });
+    } else return undefined;
+  }
+  if (!ended.length && !terminalJobs) return undefined;
+  ended.sort((a, b) => a.id.localeCompare(b.id));
+  jobs.sort((a, b) => text(a.jobKey).localeCompare(text(b.jobKey)));
+  deferredIds.sort();
+  return { operationIds: ended.map(row => row.id), jobs, deferredIds,
+    signature: JSON.stringify([ended, jobs, deferredIds]) };
 }
 
 export type TrustedRemotePlanEvidence = {
@@ -206,9 +274,9 @@ export function planStopMissingEvidenceMessage(planFile: string, detail: { realt
   const reasons = [
     `没有找到 ${label} 的本机运行进度条目。`,
     detail.realtime
-      ? `已向 ${detail.workersChecked} 个已启用 Worker 查询实时调度任务，没有同时具备 operationId、Plan 路径和 Worker 归属的记录。`
+      ? `已查询 ${detail.workersChecked} 个已启用 Worker，但尚未完整核实当前任务窗口。`
       : "当前不是实时连接，不能读取远端 Worker 任务，因此不能凭 Plan 路径中止。",
-    "未发送停止命令。可恢复动作：确认对应 Worker 隧道在线后点「刷新状态」，或在该 Plan 的操作记录恢复后再点一次「一键中止并清除 Plan」。",
+    "未发送停止命令。确认对应 Worker 隧道在线后点「刷新状态」，再重试中止并清理；不需要恢复旧操作记录。",
   ];
   if (detail.failures.length) reasons.splice(2, 0, `查询失败：${detail.failures.join("；")}`);
   return reasons.join("\n");

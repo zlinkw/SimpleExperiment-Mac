@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { cloneDistributedQueue, DistributedQueue, QueuedPlan } from "./DistributedPlanQueue";
 import { selectLatestCompletePlanRun } from "../results/PlanRunFreshness";
+import { newestJobOutputs } from "./LatestJobArtifacts";
 
 export type OutputRetirementCandidate = {
   planFile: string;
@@ -73,6 +74,14 @@ export function withValidatedPlanJobCounts(queue: DistributedQueue, metadata: re
 
 /** Only the complete authority and newer staging runs need artifact transfer. History is metadata. */
 export function plansForOutputSync(queue: DistributedQueue): QueuedPlan[] {
+  const native = newestJobOutputs(queue).filter(row => row.job.lifecycleProtocol === 2);
+  const nativePlans = new Map<string, QueuedPlan>();
+  for (const { plan, job } of native) {
+    if (!nativePlans.has(plan.id)) nativePlans.set(plan.id, { ...plan, jobs: [] });
+    nativePlans.get(plan.id)!.jobs.push(job);
+  }
+  const nativeIds = new Set(queue.plans.filter(plan => plan.jobs.some(job => job.lifecycleProtocol === 2)).map(plan => plan.id));
+  queue = { ...queue, plans: queue.plans.filter(plan => !nativeIds.has(plan.id)) };
   queue = { ...queue, plans: queue.plans.filter(plan => !plan.cleanup) };
   const keep = new Set<string>();
   for (const file of new Set(queue.plans.map((plan) => normalizePlan(plan.planFile)))) {
@@ -83,7 +92,7 @@ export function plansForOutputSync(queue: DistributedQueue): QueuedPlan[] {
     if (latest) keep.add(latest.id);
     for (const plan of plans) if (plan.jobs.some((job) => !terminal.has(job.status))) keep.add(plan.id);
   }
-  return queue.plans.filter((plan) => keep.has(plan.id));
+  return [...queue.plans.filter((plan) => keep.has(plan.id)), ...nativePlans.values()];
 }
 
 /** Only a single literal attempt leaf can ever be retired, never the Plan/job/project root. */

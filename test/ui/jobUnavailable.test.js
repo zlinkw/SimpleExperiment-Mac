@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const ts = require("typescript");
 const { renderPanelHtml } = require("../../dist/ui/PanelHtml.js");
+const { panelPrelude } = require('../_helpers/panelPrelude');
 const script = [...renderPanelHtml().matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(m => m[1]).join("\n");
 const parsed = ts.createSourceFile("panel.js", script, ts.ScriptTarget.ES2022, true, ts.ScriptKind.JS);
 const functions = new Map(); let click;
@@ -28,7 +29,7 @@ function render(jobs) {
     detailsOpenAttr: () => "", statusClass: String, loadingPrefix: () => "", renderOperationItem: () => "",
     renderTaskCards: () => "", setHtmlIfChanged: (_, value) => { html = value; } };
   vm.createContext(sandbox);
-  vm.runInContext(helpers(["asArray", "esc", "escAttr", "distributedPlanRecoveryView", "executionPlanGroupKey",
+  vm.runInContext(panelPrelude() + helpers(["asArray", "esc", "escAttr", "distributedPlanRecoveryView", "executionPlanGroupKey",
     "executionCurrentDistributedJobs", "executionSubmissionLabel", "executionOperationWorkflowId",
     "executionNewerSubmission", "executionDeferredView", "renderExecutionPlanList"]), sandbox);
   sandbox.renderExecutionPlanList({ distributedPlans: [{ id: "run-id", planFile: "plans/tuning/method.yaml",
@@ -44,10 +45,12 @@ test("per-job exclusion and undo render with exact job identity; active jobs hav
     assert.doesNotMatch(render([{ ...base, status }]), /data-command="(?:markJobUnavailable|restoreJobAvailability)"/);
   assert.match(render([{ ...base, status: "pending", workerId: undefined, commandId: undefined }]), /标记不可用/);
   const excluded = render([{ ...base, status: "cancelled", unavailable: { reason: "参数 <invalid>", markedAt: "2026-10-10T00:02:00Z" } },
-    { ...base, index: 1, seed: 43, status: "completed" }]);
+    { ...base, index: 1, seed: 43, status: "completed", completionState: "verified" }]);
   assert.match(excluded, /已结束（含不可用 job）/); assert.match(excluded, /成功 1\/2/);
   assert.match(excluded, /不可用 1/); assert.match(excluded, /data-command="restoreJobAvailability"/);
   assert.match(excluded, /参数 &lt;invalid&gt;/); assert.doesNotMatch(excluded, /不可用原因：参数 <invalid>/);
+  const unverified = render([{ ...base, status: "completed" }]);
+  assert.match(unverified, /成功 0\/1/); assert.match(unverified, /运行日志待核实/);
 });
 
 test("actual generic click dispatch carries attempt and commandId and correlates independent jobs", () => {

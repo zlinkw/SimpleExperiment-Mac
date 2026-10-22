@@ -1,10 +1,10 @@
+import { normalizePosixRelativePath } from "../mac/PosixPath";
 import * as fs from "fs";
 import * as path from "path";
-import { normalizePosixRelativePath } from "../mac/PosixPath";
 import { datasetPartitions, datasetPathKey, planDirectoryKey, tablePaths, workerDirectoryKey } from "./ResultLayout";
 export { datasetPartitions, datasetPathKey, planDirectoryKey, planArtifactPath } from "./ResultLayout";
 
-export type SeedRecord = { planFile: string; workerId: string; case: string; seed: string; method: string; dataset: string; datasetSource?: string; rate: string; endpoint: string; metrics: Record<string, number>; runId?: string; attempt?: string; revision?: string; jobDir?: string; checkpointPath?: string };
+export type SeedRecord = { planFile: string; workerId: string; case: string; seed: string; method: string; dataset: string; datasetSource?: string; rate: string; endpoint: string; metrics: Record<string, number>; runId?: string; attempt?: string; revision?: string; jobDir?: string; checkpointPath?: string; workflowId?: string; codeFingerprint?: string; executionWorkerId?: string };
 export type DerivedMetric = { metric: string; leftEndpoint: string; rightEndpoint: string; outputName: string; scale: number };
 export type TableRegistry = { schemaVersion: 1; plans: Record<string, { revision: string; expectedSeeds: number; records: SeedRecord[]; wrapperEvidence?: unknown }>; derivedMetric?: DerivedMetric; publicationGeneration?: string };
 export const emptyTableRegistry = (): TableRegistry => ({ schemaVersion: 1, plans: {} });
@@ -353,12 +353,13 @@ function canonicalMetricValues(metrics: Record<string, number>): Record<string, 
   }
   return values;
 }
-function buildDatasetTables(registry: TableRegistry): Record<string, ResultTable> {
-  type Group = { record: SeedRecord; expected: number; seeds: Map<string, Record<string, number>>; derived?: number[] };
+function buildDatasetTables(registry: TableRegistry, options: { partial?: boolean } = {}): Record<string, ResultTable> {
+  type Group = { record: SeedRecord; expected: number; seeds: Map<string, Record<string, number>>; sources: Map<string, SeedRecord>; derived?: number[] };
   const grouped = new Map<string, Group>();
   for (const plan of Object.values(registry.plans || {})) for (const record of plan.records) {
     const identity = JSON.stringify([record.planFile, record.method, record.dataset, record.rate, record.endpoint, record.case]);
-    const group = grouped.get(identity) || { record, expected: 0, seeds: new Map() };
+    const group = grouped.get(identity) || { record, expected: 0, seeds: new Map(), sources: new Map() };
+    group.sources.set(record.seed, record);
     group.expected = Math.max(group.expected, plan.expectedSeeds);
     const values = group.seeds.get(record.seed) || {};
     for (const [name, value] of Object.entries(canonicalMetricValues(record.metrics))) {
@@ -408,7 +409,9 @@ function buildDatasetTables(registry: TableRegistry): Record<string, ResultTable
     const derivedName = derived?.outputName ? label(derived.outputName) : "";
     if (derivedName && labels.includes(derivedName)) throw new Error("派生指标输出列名与原始指标冲突。");
     const showPlan = true;
+    const provenance = chosen.some(group => [...group.sources.values()].some(row => row.codeFingerprint));
     const header = ["result_family", ...(showPlan ? ["plan_file"] : []), "dataset", "rate_percent", "eval_protocol", ...(showCase ? ["case"] : []), "jobs", ...labels.flatMap((name) => [name + "_mean", name + "_sd"]), ...(derivedName ? [derivedName + "_mean", derivedName + "_sd"] : [])];
+    if (provenance) header.push("mixed_versions", "job_versions");
     const ordered = [...chosen].sort((a, b) => a.record.method.localeCompare(b.record.method) || a.record.dataset.localeCompare(b.record.dataset) || Number(a.record.rate) - Number(b.record.rate) || a.record.endpoint.localeCompare(b.record.endpoint) || a.record.case.localeCompare(b.record.case));
     const rows = ordered.map((group) => {
       const seeds = [...group.seeds.values()];
@@ -418,17 +421,23 @@ function buildDatasetTables(registry: TableRegistry): Record<string, ResultTable
       const row: (string | number)[] = [group.record.method, ...(showPlan ? [group.record.planFile] : []), group.record.dataset, group.record.rate, group.record.endpoint, ...(showCase ? [group.record.case] : []), jobs === expected ? String(jobs) : String(jobs) + "/" + expected];
       for (const name of metrics) {
         const values = seeds.map((seed) => seed[name]).filter(Number.isFinite);
-        const complete = values.length === expected;
+        const complete = options.partial ? values.length > 0 : values.length === expected;
         const mean = complete ? values.reduce((a, b) => a + b, 0) / values.length : "";
         const sd = complete && values.length > 1 ? Math.sqrt(values.reduce((sum, value) => sum + (value - Number(mean)) ** 2, 0) / (values.length - 1)) : "";
         row.push(mean, sd);
       }
       if (derivedName) {
         const values = group.derived || [];
-        const complete = values.length === expected;
+        const complete = options.partial ? values.length > 0 : values.length === expected;
         const mean = complete ? values.reduce((a, b) => a + b, 0) / values.length : "";
         const sd = complete && values.length > 1 ? Math.sqrt(values.reduce((sum, value) => sum + (value - Number(mean)) ** 2, 0) / (values.length - 1)) : "";
         row.push(mean, sd);
+      }
+      if (provenance) {
+        const sources = [...group.sources.values()].sort((a, b) => a.seed.localeCompare(b.seed));
+        const versions = new Set(sources.map(source => source.codeFingerprint).filter(Boolean));
+        row.push(versions.size > 1 ? "true" : sources.every(source => source.codeFingerprint) ? "false" : "unknown",
+          sources.map(source => source.case + "/" + source.seed + ":" + (source.codeFingerprint || "unknown") + "@" + (source.executionWorkerId || "unknown") + ":" + (source.runId || "unknown")).join("; "));
       }
       return row;
     });
@@ -452,12 +461,12 @@ function buildDatasetTables(registry: TableRegistry): Record<string, ResultTable
 }
 
 export type ResultTableArtifact = ResultTable & { dataset: string; datasetKey: string; name: string; kind: "final" | "method"; tableKey: string; relativePath: string; markdownPath: string };
-export function buildTables(registry: TableRegistry): Record<string, ResultTableArtifact> {
+export function buildTables(registry: TableRegistry, options: { partial?: boolean } = {}): Record<string, ResultTableArtifact> {
   const datasets = datasetPartitions(Object.values(registry.plans || {}).flatMap(plan => plan.records.map(row => row.dataset)));
   const output: Record<string, ResultTableArtifact> = {};
   for (const { dataset, datasetKey } of datasets) {
     const plans = Object.fromEntries(Object.entries(registry.plans || {}).map(([file, plan]) => [file, { ...plan, records: plan.records.filter(row => String(row.dataset || "").trim() === dataset).map(row => ({...row, dataset})) }]));
-    for (const [name, table] of Object.entries(buildDatasetTables({ ...registry, plans }))) {
+    for (const [name, table] of Object.entries(buildDatasetTables({ ...registry, plans }, options))) {
       const kind: "final" | "method" = name === "final" ? "final" : "method";
       const artifact = { ...table, dataset, datasetKey, name, kind, ...tablePaths(datasetKey, name, kind) };
       output[artifact.tableKey] = artifact;

@@ -33,15 +33,17 @@ test('real Scheduler conflict travels through Agent action, durable audit, snaps
   agentReceipt = report.receipt;
 });
 
-function fixture(initial = true) {
+function fixture(initial = true, compatibility = true) {
   const Provider = vm.runInNewContext(code, { DistributedPlanQueue: Queue, DistributedSchedulingPolicy: Policy,
+    GpuQuotaScheduling: require('../../dist/features/GpuQuotaScheduling'),
+    PlanCodeScopeHost: require('../../dist/extension/PlanCodeScopeHost'),
     GpuJobOwnership: Ownership, PlanExecutionMode: Modes, workspaceRoot: () => root,
     mapLimited: async (rows, _limit, fn) => Promise.all(rows.map(fn)), errorMessage: error => error.message,
     makeOpId: () => 'generated-command', setInterval, clearInterval });
   const p = new Provider();
   Object.assign(p, { distributedQueueGeneration: 0, distributedPlanStopEpoch: 0, distributedLaunchInFlight: new Set(),
     distributedNextFailureDetailAt: Infinity, distributedNextPostprocessAt: Infinity, lastWorkerProbes: { worker: {
-      status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1 } } } },
+      status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1 } } } },
     lastCodeSyncState: { workerVersions: { worker: { fingerprint: agentReceipt.codeFingerprint } } } });
   p.isRealtimeMode = () => true;
   p.projectTopologyAssessment = () => ({ mode: 'worker_pool' });
@@ -58,12 +60,14 @@ function fixture(initial = true) {
   p.readWorkerTaskSnapshotBatch = async () => [{ workerId: 'worker', generatedAt: new Date().toISOString(), fetchedAt: new Date().toISOString(),
     capabilities: { durablePlanQueue: true, idleGpuAdmission: true, schemaVersion: 1 }, tasks: [] }];
   p.client = { getGpu: async () => ({ worker: [0, 1].map(index => ({ index: String(index), utilizationPercent: 0,
-    memoryUsedMb: 7, processes: [] })) }) };
+    memoryTotalMb: 48 * 1024, memoryUsedMb: 7, processes: [] })) }) };
   let stored = Queue.enqueuePlan(Queue.emptyDistributedQueue(), { projectId, planFile: agentReceipt.planFile,
     revision: agentReceipt.planRevision, codeFingerprint: agentReceipt.codeFingerprint, executionMode: 'train_test',
     resultPathPolicy: 'declared', schedulingMode: 'local_idle', jobs: [42, 43].map((seed, index) => ({ index, case: 'case', seed,
       outputDir: agentReceipt.outputDir.replace('seed42', 'seed' + seed),
       collectionResultCsv: agentReceipt.collectionResultCsv.replace('seed42', 'seed' + seed) })) }, agentReceipt.workflowId);
+  if(compatibility) stored.plans[0].jobs.forEach(job => { delete job.lifecycleProtocol; }); // This suite exercises persisted v1 durable receipts.
+  // Persisted v1 receipts exercise the v1 reconciliation path; newly enqueued jobs retain protocol 2.
   if (!initial) stored.plans[0].jobs.forEach((job, index) => Object.assign(job, {
     status: 'unknown', workerId: 'worker', gpuId: String(index), commandId: index ? 'second-command' : agentReceipt.commandId,
     runKey: index ? 'second-command' : agentReceipt.commandId,
@@ -92,7 +96,7 @@ test('initial Host dispatch resolves both rejections immediately and never resub
   for (let i = 0; i < 3; i++) await p.tickDistributedQueueCore();
   assert.equal(receipts.length, 2);
   assert.equal(Queue.distributedSubmissionDisposition(stored().plans[0]).durableAccepted, false);
-  const submission = Queue.distributedSubmissionProgress(Queue.distributedSubmissionResult(stored().plans[0]));
+  const submission = Queue.distributedSubmissionProgress({ ...Queue.distributedSubmissionResult(stored().plans[0]), enqueued: true, localQueued: true });
   assert.equal(submission.status, 'failed');
   assert.equal(submission.waiting, false);
 });
@@ -157,3 +161,12 @@ test('plain HTTP failures stay unknown and busy GPU rejection remains local pend
     assert.ok(stored().plans[0].jobs.every(job => !job.admissionRejection));
   }
 });
+
+ test('native rejected-start evidence cannot substitute for a subsequent current task query',async()=>{
+  const {p,stored,receipts}=fixture(true,false);await p.tickDistributedQueueCore();assert.equal(receipts.length,2);
+  assert.ok(stored().plans[0].jobs.every(job=>job.lifecycleProtocol===2&&job.status==='failed'));
+  const identities=stored().plans[0].jobs.map(job=>job.commandId);
+  await p.tickDistributedQueueCore();
+  assert.equal(receipts.length,2);assert.deepEqual(stored().plans[0].jobs.map(job=>job.commandId),identities);
+  assert.ok(stored().plans[0].jobs.every(job=>job.lifecycleProtocol===2&&job.status==='unknown'&&job.statusQueryError));
+ });

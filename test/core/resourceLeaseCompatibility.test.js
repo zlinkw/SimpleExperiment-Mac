@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const main = require('../../dist/core/HostOperationLease');
-const sftp = require(path.resolve(__dirname, '../../../simple-sftp/host-operation-lease'));
+const sftp = require(path.resolve(__dirname, '../../../SimpleSFTP-Mac/host-operation-lease'));
 
 test('both plugins retain atomic admission through Windows sharing violations', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'resource-compat-evidence-'));

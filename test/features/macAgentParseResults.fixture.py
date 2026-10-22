@@ -21,7 +21,7 @@ if os.name == "nt" and not base.startswith("\\\\?\\"):
 os.makedirs(base, exist_ok=True)
 native, virtual = bind_posix_runtime(agent, base)
 events, writes, csv_outputs = [], [], []
-agent.agent_dir = lambda root: "/fixture/state/" + root.rsplit("/", 1)[-1]
+agent.agent_dir = lambda root: os.path.join(root, "simple_cluster/agent_state")
 agent.append_event = lambda root, event: events.append(copy.deepcopy(event))
 agent.atomic_write = lambda file, value: writes.append((file, copy.deepcopy(value)))
 agent.write_atomic_csv = lambda file, header, rows: csv_outputs.append((file, list(header), copy.deepcopy(rows)))

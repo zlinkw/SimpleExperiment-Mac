@@ -307,14 +307,11 @@ export class DefaultTunnelFactory implements TunnelFactory {
       throw new Error("Tunnel endpoint registry requires the user's configured setup; refusing to create an empty registry.");
     const setup = this.normalizeSetupConfig(candidate as Partial<XshellSetupConfig>);
     const workers = Array.isArray(setup["workerTunnels"]) ? setup["workerTunnels"] as Array<Record<string, unknown>> : [];
-    const hasHub = Boolean(String(setup["hubHost"] || "").trim()
-      && Number.isInteger(Number(setup["localForwardPort"])) && Number(setup["localForwardPort"]) > 0
-      && Number.isInteger(Number(setup["remoteAgentPort"])) && Number(setup["remoteAgentPort"]) > 0);
     const hasWorker = workers.some((worker) => worker.enabled !== false && String(worker.id || "").trim()
       && String(worker.workerHost || worker.remoteAgentHost || "").trim()
       && Number.isInteger(Number(worker.localForwardPort || worker.localPort)) && Number(worker.localForwardPort || worker.localPort) > 0
       && Number.isInteger(Number(worker.remoteAgentPort || worker.remotePort)) && Number(worker.remoteAgentPort || worker.remotePort) > 0);
-    if (!hasHub && !hasWorker) throw new Error("Tunnel endpoint registry requires at least one fully configured endpoint.");
+    if (!hasWorker) throw new Error("请先配置至少一个 Worker；旧中心节点字段不再作为连接目标。");
     return setup;
   }
 }

@@ -82,6 +82,7 @@ export class RealtimeTunnelClient {
   private readonly sharedReads = new SharedReadCoalescer(64);
   private requiresManualReconnect = false;
   private connectionGeneration = 0;
+  get progressGeneration(): number { return this.connectionGeneration; }
   private disposed = false;
   private workerGpuUpdatedAt = 0;
 
@@ -129,6 +130,7 @@ export class RealtimeTunnelClient {
           this.connectionLost(this.lastError);
           return;
         }
+        if (["websocket"].includes(this.status)) return;
       }
     }
     if (this.shouldUseSse()) {
@@ -144,6 +146,7 @@ export class RealtimeTunnelClient {
           this.connectionLost(this.lastError);
           return;
         }
+        if (["sse"].includes(this.status)) return;
       }
     }
     if (this.policy.fallbackToPolling) {
@@ -349,9 +352,35 @@ export class RealtimeTunnelClient {
     return this.coalescedRead(`operation:${String(operationId)}`, undefined, () => this.http.getOperation(operationId));
   }
 
-  getWorkerTasks(options: { signal?: AbortSignal } = {}): Promise<unknown> {
+  getPlanCodeScope(query: unknown, options: { signal?: AbortSignal } = {}): Promise<any> {
     if (this.requiresManualReconnect) return Promise.reject(new Error(this.lastError));
-    return this.coalescedRead("worker-tasks", options, () => this.http.getWorkerTasks(options));
+    return this.coalescedRead("plan-code-scope:" + JSON.stringify(query), options, () => this.http.getPlanCodeScope(query, options));
+  }
+  getWorkerTasks(options: { signal?: AbortSignal; executionOnly?: boolean; selectedOnly?: boolean; observationOnly?: boolean; diagnosticsOnly?: boolean; declarationOnly?: boolean; retiredCommandIds?: string[]; queries?: any[]; declarations?: any[]; discovery?: { planFile: string; condaEnv?: string } } = {}): Promise<unknown> {
+    if (this.requiresManualReconnect) return Promise.reject(new Error(this.lastError));
+    const selection = [...new Set(options.retiredCommandIds || [])].sort().join(",") + JSON.stringify(options.queries || []) + JSON.stringify(options.declarations || []) + JSON.stringify(options.discovery || null) + ":execution=" + (options.executionOnly === true) + ":selected=" + (options.selectedOnly === true) + ":observation=" + (options.observationOnly === true) + ":declaration=" + (options.declarationOnly === true) + ":diagnostics=" + (options.diagnosticsOnly === true);
+    const generation = this.connectionGeneration;
+    return this.coalescedRead("worker-tasks:" + selection, options, () => this.http.getWorkerTasks(options)).then(value => {
+      if (generation !== this.connectionGeneration || this.disposed)
+        throw Object.assign(new Error("Worker connection changed during query"), { code: "CONNECTION_GENERATION_CHANGED" });
+      // An execution inventory may carry the Worker's already-collected GPU sample.
+      // Feeding the existing in-memory state keeps the display current without any
+      // separate automatic getGpu read; the sample keeps its own collected time.
+      const carried = (value as any)?.gpuSample;
+      if (options.executionOnly === true && carried && typeof carried === "object" && this.isWorkerTelemetryEndpoint() && !("gpuSampleError" in (value as any)))
+        this.acceptWorkerGpuSample(carried);
+      return value;
+    });
+  }
+
+  getSyncScopeIndex(query: unknown, options: { signal?: AbortSignal } = {}): Promise<any> {
+    if (this.requiresManualReconnect) return Promise.reject(new Error(this.lastError));
+    if (!this.http.getSyncScopeIndex) return Promise.reject(new Error("SCOPE_INDEX_UNSUPPORTED"));
+    const generation = this.connectionGeneration;
+    return this.http.getSyncScopeIndex(query, options).then(value => {
+      if (generation !== this.connectionGeneration || this.disposed) throw new Error("CONNECTION_GENERATION_CHANGED");
+      return value;
+    });
   }
 
   getRunEvidence(params: { operationId?: string; planFile?: string; pid?: number | string; tmuxSession?: string }): Promise<unknown> {
@@ -510,7 +539,7 @@ export class RealtimeTunnelClient {
     this.pollTimer = setTimeout(() => {
       if (!this.isCurrentConnection(generation) || this.status !== "polling" || this.hidden) return;
       this.pollTimer = undefined;
-      void this.refreshSnapshot()
+      void this.readSnapshot(false, true)
         .catch((error) => { if (this.isCurrentConnection(generation)) this.connectionLost(message(error)); })
         .finally(() => { if (this.isCurrentConnection(generation)) this.scheduleSnapshotFallbackPoll(); });
     }, this.snapshotFallbackDelayMs());
@@ -525,7 +554,7 @@ export class RealtimeTunnelClient {
     await this.readSnapshot(false);
   }
 
-  private async readSnapshot(manual: boolean): Promise<ClusterSnapshot> {
+  private async readSnapshot(manual: boolean, fromPoll = false): Promise<ClusterSnapshot> {
     if (this.requiresManualReconnect) throw new Error(this.lastError);
     if (this.snapshotInFlight) return this.snapshotInFlight;
     const abort = new AbortController();
@@ -537,23 +566,28 @@ export class RealtimeTunnelClient {
         if (this.isWorkerTelemetryEndpoint()) {
           // Worker telemetry deliberately has no Hub /api/snapshot. Bootstrap
           // from current snapshots even when no GPU change is in the SSE replay.
-          const [gpuResult, tasksResult] = await Promise.allSettled([
-            this.http.getGpu(), this.http.getWorkerTasks({ signal: abort.signal }),
-          ]);
-          if (gpuResult.status === "rejected") throw gpuResult.reason;
-          if (generation !== this.connectionGeneration || this.disposed) return { gpu: {} };
-          this.acceptWorkerGpuSample(gpuResult.value);
-          if (tasksResult.status === "fulfilled") {
-            const tasks = objectRecord(tasksResult.value) || {};
-            const rows = Array.isArray(tasksResult.value) ? tasksResult.value : tasks.tasks || tasks.workerTasks || tasks.rows;
-            if (Array.isArray(rows)) this.state = compactRealtimeState({ ...this.state,
-              workerTasks: { ...(this.state.workerTasks || {}), [this.workerEndpointId()]: rows },
-            }, { protectedLogKeys: this.protectedLogKeys });
+          // GPU telemetry has its own current read. Task/result observations
+          // belong to the Host's shared progress query, never this stream boot.
+          // When the shared execution inventory recently CARRIED a GPU sample
+          // into memory, the fallback poll must not read getGpu a second time;
+          // it still samples whenever nothing fresh has been carried.
+          const carriedFresh = fromPoll === true && this.workerGpuUpdatedAt > 0
+            && Date.now() - this.workerGpuUpdatedAt <= this.snapshotFallbackDelayMs() * 2;
+          if (carriedFresh) snapshot = { generatedAt: new Date(this.workerGpuUpdatedAt).toISOString(), gpu: this.state.gpu };
+          else {
+            const gpuResult = await this.http.getGpu();
+            if (generation !== this.connectionGeneration || this.disposed) return { gpu: {} };
+            this.acceptWorkerGpuSample(gpuResult);
+            snapshot = { generatedAt: objectRecord(gpuResult)?.generatedAt, gpu: this.state.gpu };
           }
-          snapshot = { generatedAt: objectRecord(gpuResult.value)?.generatedAt, gpu: this.state.gpu };
         } else snapshot = await this.http.getSnapshot({ manual, signal: abort.signal });
       } catch (error) {
-        if (generation === this.connectionGeneration && !(error instanceof RequestBudgetDeniedError)) this.connectionLost(message(error));
+        if (generation === this.connectionGeneration && !(error instanceof RequestBudgetDeniedError)) {
+          // A slow GPU snapshot does not invalidate an independently open
+          // event stream. Authentication errors still fence the connection.
+          if (isHardConnectionError(error) || !["sse", "websocket"].includes(this.status)) this.connectionLost(message(error));
+          else this.lastError = "遥测查询待核实：" + message(error);
+        }
         throw error;
       }
       if (generation !== this.connectionGeneration) return snapshot;
@@ -593,7 +627,8 @@ export class RealtimeTunnelClient {
     this.state = applyRealtimeEvent(this.state, raw, { protectedLogKeys: this.protectedLogKeys });
     if (this.isWorkerTelemetryEndpoint() && event && typeof event === "object"
       && (event as RealtimeEvent).type === "gpu_snapshot" && this.state.lastSeq > before) {
-      const sampledAt = Date.parse((event as RealtimeEvent).generatedAt);
+      const payload = objectRecord((event as RealtimeEvent).payload) || {};
+      const sampledAt = Date.parse(String(payload.generatedAt || (event as RealtimeEvent).generatedAt));
       if (Number.isFinite(sampledAt) && sampledAt < this.workerGpuUpdatedAt) {
         // Advance replay cursor without letting an old journal sample undo HTTP refresh.
         this.state = { ...this.state, gpu: beforeState.gpu,
@@ -601,10 +636,9 @@ export class RealtimeTunnelClient {
       } else {
         if (Number.isFinite(sampledAt)) this.workerGpuUpdatedAt = sampledAt;
         const gpu = { [this.workerEndpointId()]: this.state.gpu[(event as RealtimeEvent).workerId || (event as RealtimeEvent).serverId || "hub"] || [] };
-        const payload = objectRecord((event as RealtimeEvent).payload) || {};
         this.state = { ...this.state, gpu,
           workerHealth: { ...(this.state.workerHealth || {}), [this.workerEndpointId()]: {
-            status: payload.status || "ok", lastError: payload.error || "", updatedAt: (event as RealtimeEvent).generatedAt,
+            status: payload.status || "ok", lastError: payload.error || "", updatedAt: payload.generatedAt || (event as RealtimeEvent).generatedAt,
           } }, lastKnownGood: { ...(this.state.lastKnownGood || {}), gpu } };
       }
     }
@@ -620,6 +654,10 @@ export class RealtimeTunnelClient {
   private shouldUseWebSocket(): boolean {
     if (!this.policy.preferWebSocket || typeof WebSocket === "undefined") return false;
     const endpoints = capabilityEndpoints(this.endpoint.capabilities);
+    // Worker Agents publish SSE. Before the first probe there are no cached
+    // capabilities; trying an unadvertised WebSocket used to return success
+    // before its asynchronous rejection, bypassing SSE fallback entirely.
+    if (this.isWorkerTelemetryEndpoint() && endpoints?.websocketEvents !== true) return false;
     return endpoints ? endpoints.websocketEvents !== false : true;
   }
 

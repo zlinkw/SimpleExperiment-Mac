@@ -127,18 +127,16 @@ async function deleteLocalCandidate(root: string, row: Candidate): Promise<void>
   if (!leaf || leaf === "." || leaf === ".." || leaf.includes("/") || leaf.includes("\\")
     || !parentInfo.isDirectory() || parentInfo.isSymbolicLink() || parentInfo.dev !== Number(stat.dev)
     || parentReal !== parent || parentRelative === ".." || parentRelative.startsWith(`..${path.sep}`) || path.isAbsolute(parentRelative)) throw new Error("PARENT_CD_FAILED");
-  const modifiedTicks = (621355968000000000n + stat.mtimeNs / 100n).toString();
-  const base64 = (value: string) => Buffer.from(value, "utf8").toString("base64");
-  const script = `$ErrorActionPreference='Stop'; $p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64(parent)}')); $leaf=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${base64(leaf)}')); try { Set-Location -LiteralPath $p; $cwd=[IO.Path]::GetFullPath((Get-Location).ProviderPath); if (-not [string]::Equals($cwd,$p,[StringComparison]::OrdinalIgnoreCase)) { throw 'PARENT_CD_FAILED' } } catch { [Console]::Error.WriteLine('PARENT_CD_FAILED'); exit 75 }; $target=Get-Item -LiteralPath ('./'+$leaf) -Force -ErrorAction Stop; if (($target.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $target -isnot [IO.FileInfo]) { throw 'TARGET_CHANGED' }; if ($target.Length -ne [long]'${stat.size}' -or $target.LastWriteTimeUtc.Ticks -ne [long]'${modifiedTicks}') { throw 'TARGET_CHANGED' }; Remove-Item -LiteralPath ('./'+$leaf) -Force -ErrorAction Stop`;
   const immediatelyBeforeDelete = await fs.lstat(full, { bigint: true });
   if (!immediatelyBeforeDelete.isFile() || immediatelyBeforeDelete.isSymbolicLink() || immediatelyBeforeDelete.nlink !== 1n
     || candidateIdentity(row.path, immediatelyBeforeDelete) !== row.token) throw new Error(`本机候选在删除前再次发生变化：${row.path}`);
-  if (process.platform === "darwin") {
+  {
     const { fingerprintCacheFile } = require("../mac/CacheDelete");
     const fingerprint = fingerprintCacheFile(full, row.path);
     if (fingerprint.token !== row.token) throw new Error(`本机候选在删除前再次发生变化：${row.path}`);
     const approval = { root: realRoot, relative: row.path, fullPath: full, ...fingerprint,
-      confirm: true, secondConfirmation: true, confirmedAbsolutePath: full };
+      confirm: true, secondConfirmation: true, confirmedAbsolutePath: full,
+      handleProbe: path.join(vscode.extensions.getExtension("simple-local.simple-sftp-mac")?.extensionPath || "", "mac_cleanup_handles.py") };
     await new Promise<void>((resolve, reject) => {
       const child = spawn(process.execPath, [require.resolve("../mac/CacheDelete"), JSON.stringify(approval)], {
         cwd: parent, windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, stdio: ["ignore", "ignore", "pipe"],
@@ -151,17 +149,8 @@ async function deleteLocalCandidate(root: string, row: Candidate): Promise<void>
     try { await fs.lstat(full); } catch (error: any) { if (error?.code === "ENOENT") return; throw error; }
     throw new Error(`本机删除后仍存在：${row.path}`);
   }
-  const encoded = Buffer.from(script, "utf16le").toString("base64");
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn("pwsh.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded], { cwd: parent, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
-    let error = "";
-    child.stderr.on("data", data => { error = (error + String(data)).slice(-500); });
-    child.on("error", error => reject(new Error(`PARENT_CD_FAILED：无法在已核验父目录启动删除程序：${String(error)}`)));
-    child.on("exit", code => code === 0 ? resolve() : reject(new Error(error || "PARENT_CD_FAILED")));
-  });
-  try { await fs.lstat(full); } catch (error: any) { if (error?.code === "ENOENT") return; throw error; }
-  throw new Error(`本机删除后仍存在：${row.path}`);
 }
+
 
 function cleanupReadError(error: any): string {
   const code = String(error?.cause?.code || error?.code || "").slice(0, 80);
@@ -190,7 +179,7 @@ function completedCleanupCandidates(result: any): Candidate[] {
 }
 
 export function openCacheCleanupPanel(contextProvider: () => CleanupContext, onDidChangeContext?: vscode.Event<void>): void {
-  const panel = vscode.window.createWebviewPanel("simpleExperimentMacCacheCleanup", "缓存回收审核", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
+  const panel = vscode.window.createWebviewPanel("simpleExperimentCacheCleanup", "缓存回收审核", vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true });
   let current = new Map<string, Candidate>();
   let busy = false;
   let disposed = false;

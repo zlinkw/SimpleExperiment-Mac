@@ -28,7 +28,12 @@ async function fixture(t) {
       else if (body.method === "workflow.plan") {
         result = { ok: state.route !== "blocked", ready: state.route !== "blocked", plan: { planFile: state.route === "wrong_plan" ? "experiments/plans/different.yaml" : body.params.planFile }, topology: { mode: state.topology }, blocker: { code: "INFRASTRUCTURE_NOT_READY" }, nextAction: "server.testAll" };
         if (state.changeWorkspace) state.workspace = other;
-      } else if (body.method === "workflow.run") result = state.run === "blocked" ? { ok: false, started: false, blocker: { code: "ACTIVE_PLAN_RUN_EXISTS" }, nextAction: "operations.list" } : { ok: true, started: true, operationId: "mock-op", status: "waiting_confirmation", confirmation: "vscode_modal", nextAction: "operations.list" };
+      } else if (body.method === "workflow.run") {
+        // The current server owns preflight and workspace revalidation within workflow.run.
+        if (state.changeWorkspace) state.workspace = other;
+        const blocked = state.route === "blocked" || state.run === "blocked" || state.workspace !== body.params.workspace || state.route === "wrong_plan";
+        result = blocked ? { ok: false, started: false, plan: { planFile: state.route === "wrong_plan" ? "experiments/plans/different.yaml" : body.params.planFile }, blocker: { code: state.workspace !== body.params.workspace ? "WORKSPACE_CHANGED" : state.run === "blocked" ? "ACTIVE_PLAN_RUN_EXISTS" : "INFRASTRUCTURE_NOT_READY" }, nextAction: "operations.list" } : { ok: true, started: true, operationId: "mock-op", status: "waiting_confirmation", confirmation: "vscode_modal", nextAction: "operations.list" };
+      }
       else result = { gpus: [] };
       res.end(JSON.stringify({ jsonrpc: "2.0", id: body.id, result }));
     });
@@ -55,24 +60,25 @@ test("CLI binds Plan and workspace and reports VS Code confirmation as a pending
     assert.equal(result.payload.requested, true); assert.equal(result.payload.submitted, false);
     assert.equal(result.payload.status, "waiting_confirmation"); assert.equal(result.payload.confirmation, "vscode_modal");
     assert.equal(result.payload.operationId, "mock-op"); assert.equal(result.payload.nextAction, "operations.list");
-    assert.deepEqual(f.calls.map(c => c.method), ["status", "workflow.plan", "status", "workflow.run"]);
+    assert.deepEqual(f.calls.map(c => c.method), ["status", "workflow.run"]);
     const params = f.calls.at(-1).params;
     assert.equal(params.planFile, f.planFile); assert.equal(params.workspace, fs.realpathSync(f.root));
     assert.equal(Object.hasOwn(params, "confirm"), false); assert.equal(Object.hasOwn(params, "autoPrepare"), false);
   }
 });
 
-test("failed readiness, mismatched workspaces, changed workspace or Plan cannot send workflow.run", async t => {
+test("failed readiness, mismatched workspaces, changed workspace or Plan never become accepted operations", async t => {
   const f = await fixture(t);
   f.state.route = "blocked";
   let result = await f.run([]); assert.equal(result.code, 3); assert.equal(result.payload.requested, false); assert.equal(result.payload.status, "blocked");
   f.state.route = "ready"; f.state.workspace = f.other;
   result = await f.run([]); assert.equal(result.code, 2); assert.match(result.payload.error.message, /workspace/);
   f.state.workspace = f.root; f.state.changeWorkspace = true;
-  result = await f.run([]); assert.equal(result.code, 2);
+  result = await f.run([]); assert.equal(result.code, 3); assert.equal(result.payload.requested, false); assert.equal(result.payload.blocker.code, "WORKSPACE_CHANGED");
   f.state.workspace = f.root; f.state.changeWorkspace = false; f.state.route = "wrong_plan";
   result = await f.run([]); assert.equal(result.code, 3); assert.match(result.payload.error.message, /different Plan/);
-  assert.ok(f.calls.every(c => c.method !== "workflow.run"));
+  assert.equal(f.calls.filter(c => c.method === "workflow.run").length, 3);
+  assert.ok(f.calls.filter(c => c.method === "workflow.run").every(c => c.params.workspace === fs.realpathSync(f.root)));
 });
 
 test("online preview and check use live preflight; offline preview cannot claim live readiness", async t => {
@@ -91,7 +97,7 @@ test("online preview and check use live preflight; offline preview cannot claim 
 test("HTTP or business rejection never becomes submitted success and does not retry workflow.run", async t => {
   const f = await fixture(t);
   f.state.failure = "workflow.plan";
-  const preflight = await f.run([]); assert.notEqual(preflight.code, 0); assert.ok(f.calls.every(c => c.method !== "workflow.run"));
+  const preflight = await f.run(["--check"]); assert.notEqual(preflight.code, 0); assert.ok(f.calls.every(c => c.method !== "workflow.run"));
   f.state.failure = "workflow.run"; f.calls.length = 0;
   const failed = await f.run([]); assert.notEqual(failed.code, 0); assert.equal(f.calls.filter(c => c.method === "workflow.run").length, 1);
   f.state.failure = ""; f.state.run = "blocked"; f.calls.length = 0;
@@ -110,11 +116,11 @@ test("Plan path spelling is retained and outside files or linked escapes are rej
   assert.throws(() => assertProjectPlan(f.root, "linked/outside.yaml"), /inside/);
 });
 
-test("online CLI seed override is rejected before any API call; offline preview does not claim it was applied", async t => {
+test("online and offline CLI seed overrides are rejected before any API call", async t => {
   const f = await fixture(t);
   const online = await f.run(["--seed", "42"]);
   assert.equal(online.code, 3); assert.match(online.payload.error.message, /seed/);
   assert.equal(f.calls.length, 0);
   const offline = await f.run(["--seed", "42", "--dry-run"], true);
-  assert.equal(offline.code, 0); assert.equal(offline.payload.seedApplied, false); assert.match(offline.payload.seedWarning, /seed/);
+  assert.equal(offline.code, 3); assert.match(offline.payload.error.message, /seed/); assert.equal(f.calls.length, 0);
 });

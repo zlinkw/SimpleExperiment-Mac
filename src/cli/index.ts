@@ -1,13 +1,13 @@
 import { artifactCommand, compareEntry, experimentCommand, gpuCommand, logCommand, metricCommand, planCommand, projectStatus, resourceCommand, resultCommand, serverCommand } from "./commands";
 import { asCliError, envError, EXIT_OK, jsonErrorBody, usageError } from "./errors";
-import { optionalApi } from "./api";
+import { optionalApi, callApi } from "./api";
 import { isExperimentProjectRoot, setProjectRoot, validProjectRoot } from "./data";
 import { writeJson, writeText } from "./format";
 import { domainHelp, SIMPLE_HELP } from "./help";
 import { parseArgv } from "./parse";
 
 const LEGACY_COMMANDS = new Set(["status", "api", "self-check", "agent", "experiments", "metrics", "results", "run"]);
-const SIMPLE_DOMAINS = new Set(["project", "experiment", "plan", "result", "log", "metric", "compare", "gpu", "resource", "server", "artifact"]);
+const SIMPLE_DOMAINS = new Set(["project", "experiment", "plan", "result", "log", "metric", "compare", "gpu", "resource", "server", "artifact", "task"]);
 
 export async function runSimpleCli(argv: string[]): Promise<number> {
   let parsed;
@@ -27,6 +27,22 @@ export async function runSimpleCli(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
   await initializeProjectRoot();
+  if (domain === "task") {
+    if (action === "analyze") {
+      writeJson(await callApi("tasks.analyze", { workflowId: flags.workflow, index: flags.index, workerId: flags.worker,
+        commandId: flags.command, outputDir: flags.out })); return EXIT_OK;
+    }
+    if (action !== "dispatch") throw usageError("用法：simpleex task dispatch --workflow ID --jobs 0,1 --worker ID --gpu 0 --confirm [--stop-running]");
+    if(flags.remaining===true){
+      if(flags.all!==true&&!flags.workflow)throw usageError("请指定 --workflow ID 或 --all；仅选择尚未派发的剩余 job。");
+      writeJson(await callApi("tasks.dispatch",{distribution:"quota_remaining",workflowId:flags.workflow,all:flags.all===true,confirm:flags.confirm===true}));return EXIT_OK;
+    }
+    const jobs=String(flags.jobs||"").trim();
+    if (!/^\d+(?:,\d+)*$/.test(jobs)) throw usageError("请用 --jobs 明确选择 job 索引，例如 --jobs 0,2。");
+    const result=await callApi("tasks.dispatch",{workflowId:String(flags.workflow||""),indices:jobs.split(",").map(Number),
+      workerId:String(flags.worker||""),gpuId:String(flags.gpu??""),confirm:flags.confirm===true,stopRunning:flags["stop-running"]===true});
+    writeJson(result);return EXIT_OK;
+  }
   if (domain === "project") {
     if (action && action !== "status") throw usageError(`unknown project action: ${action}`);
     return projectStatus(flags);

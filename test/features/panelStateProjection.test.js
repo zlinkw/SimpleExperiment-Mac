@@ -155,7 +155,7 @@ test("Plan status summaries preserve selector rules while remaining scalar and p
   assert.equal(byFile.get("experiments/plans/retry-time.yaml").status, "completed");
   assert.equal(byFile.get("experiments/plans/retry-order.yaml").status, "running");
   assert.equal(byFile.get("experiments/plans/distributed.yaml").status, "completed");
-  assert.equal(byFile.get("experiments/plans/submitted.yaml").status, "running");
+  assert.equal(byFile.get("experiments/plans/submitted.yaml").status, "submitting");
   assert.equal(byFile.get("experiments/plans/submitted.yaml").taskCount, 0);
   assert.equal(byFile.get("experiments/plans/submitted.yaml").totalCount, 2);
   assert.equal(byFile.get("experiments/plans/hidden-history.yaml").status, "not-started");

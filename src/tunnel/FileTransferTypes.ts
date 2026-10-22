@@ -16,6 +16,7 @@ export interface FileTransferTask {
 }
 
 export interface FileTransferProgressEvent {
+  stalled?: boolean;
   transferId: string;
   transferredBytes: number;
   totalBytes?: number;

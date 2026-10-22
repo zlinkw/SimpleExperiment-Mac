@@ -1,9 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
+import { assertDarwinCleanupHandles } from "../platform/CleanupHandles";
 
 type Approval = { root: string; relative: string; fullPath: string; token: string; sha256: string;
-  confirm: boolean; secondConfirmation: boolean; confirmedAbsolutePath: string };
+  confirm: boolean; secondConfirmation: boolean; confirmedAbsolutePath: string; handleProbe: string };
 
 function identity(relative: string, stat: any): string {
   return createHash("sha256").update(`${relative}|${stat.dev}|${stat.ino}|${stat.size}|${stat.mtimeNs}|${stat.nlink}`).digest("hex");
@@ -50,6 +51,7 @@ export function deleteApprovedCacheFile(approval: Approval, disk: any = fs, host
     || Number(before.mtimeMs) > Date.now() - 7 * 86400000 || identity(approval.relative, before) !== approval.token) throw new Error("TARGET_CHANGED");
   const fingerprint = fingerprintCacheFile(target, approval.relative, disk);
   if (fingerprint.token !== approval.token || fingerprint.sha256 !== approval.sha256) throw new Error("TARGET_CHANGED");
+  assertDarwinCleanupHandles(approval.handleProbe, full, before);
   verifyParent();
   if (host.cwd() !== parent || disk.realpathSync(".") !== parent || identity(approval.relative, disk.lstatSync(target, { bigint: true })) !== approval.token) throw new Error("TARGET_CHANGED");
   disk.unlinkSync(target);

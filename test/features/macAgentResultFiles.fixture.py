@@ -160,6 +160,13 @@ elif scenario == "snapshots":
     with patch.object(agent.os, "read", changed_read):
         reject(lambda: agent.output_contract_read_snapshot(root, source))
     reject(lambda: agent.output_contract_verify_snapshot(root, source, first))
+    other = "outputs/demo/same-clock.json"
+    target = save(root, other, '{"metrics":{"AUC":0.94}}')
+    stable = agent.output_contract_read_snapshot(root, other)
+    with open(target, "wb") as stream:
+        stream.write(b'{"metrics":{"AUC":0.95}}')
+    with patch.object(agent, "output_contract_file_identity", lambda info: stable["identity"]):
+        reject(lambda: agent.output_contract_verify_snapshot(root, other, stable))
     for mode in [stat.S_IFLNK, stat.S_IFIFO]:
         original_lstat = agent.os.lstat
         target = agent.os.path.join(root, *source.split("/"))

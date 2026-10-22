@@ -1,61 +1,100 @@
-"""Only selected compiled functions; every process/remote leaf is simulated."""
+"""AST-selected current protocol-2 window functions; all native/process leaves simulated."""
+import base64
+import copy
+import json
 import pathlib
 import sys
-import json
 from types import SimpleNamespace
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "_helpers"))
 from extractRuntimeFunctions import extract_runtime_functions
 runtime = pathlib.Path(__file__).resolve().parents[2] / "dist/runtime/cluster_agent.py"
-agent = extract_runtime_functions(str(runtime), ["start_scheduler_in_gpu_tab", "scheduler_tmux_stop_command", "tmux_session_alive"])
+agent = extract_runtime_functions(str(runtime), ["task_queue_accept", "task_inventory", "task_stop"])
+agent.__file__ = str(runtime)
+agent.agent_dir = lambda _: "/virtual/state"
 scenario = sys.argv[1]
-calls, launches = [], []
-agent._resolve_tmux_prefix = lambda *args: "lwb"
-agent._tmux_prefix = lambda: "lwb"
-agent.fixed_gpu_window_name = lambda prefix, gpu: prefix + "-gpu-" + str(gpu)
-agent.tmux_pane_pid = lambda *args: 321
-agent.process_start_identity = lambda pid: "boot:321:start"
-def run(args, **kwargs):
-    calls.append(args)
-    if args[0] == "nvidia-smi":
-        return SimpleNamespace(returncode=0, stdout="3\n1\n", stderr="")
-    if args[1] == "display-message":
-        if args[-1] == "#{pane_id}|#{session_name}|#{pane_pid}":
-            return SimpleNamespace(returncode=0, stdout="%17|" + launches[-1] + "|321\n", stderr="")
-        return SimpleNamespace(returncode=0, stdout="%17|lwb-gpu-1\n", stderr="")
-    if args[1] == "has-session":
-        return SimpleNamespace(returncode=0)
-    raise AssertionError("unexpected process " + str(args))
-agent.subprocess = SimpleNamespace(run=run, PIPE=-1, DEVNULL=-3)
-def launch(container, *args):
-    launches.append(container)
-    return "%17"
-agent.start_job_in_gpu_pane = launch
-env = {"SIMPLE_EXPERIMENT_REMOTE_TMUX_SESSION_PREFIX": "lwb"}
+calls, options, windows = [], {}, []
+session = "$3"
+listing = ""
+def tmux(args, timeout=5):
+    calls.append(copy.deepcopy(args))
+    if args[0] == "list-panes": return listing
+    if args[0] == "display-message":
+        if args[-1] == "#{session_id}": return session
+        raise AssertionError(args)
+    if args[0] == "new-window":
+        pane = "%" + str(17 + len(windows)); windows.append(pane); return pane
+    if args[0] == "set-option":
+        options[(args[3], args[4])] = args[5]; return ""
+    if args[0] == "kill-window": return ""
+    raise AssertionError("unexpected native command: " + repr(args))
+agent.task_tmux = tmux
+root = "/virtual"
+def job(index=0):
+    return dict(action="start-worker-task", commandId="command-" + str(index), projectId="project", workerId="worker",
+                workflowId="workflow", globalJobId="workflow:" + str(index), experimentIndex=index,
+                planFile="experiments/Plans/ A.yaml ", outputDir="outputs/中文 " + str(index),
+                collectionResultCsv="results/" + str(index) + ".csv", resultPathPolicy="declared",
+                planRevision="revision", codeFingerprint="code", lifecycleProtocol=2, case="case", seed=42)
+def rejects(action, text):
+    try: action()
+    except (ValueError, RuntimeError) as exc: assert text in str(exc), str(exc)
+    else: raise AssertionError("unverified identity was accepted")
 if scenario in ("launch", "hub"):
-    if scenario == "hub": env["SIMPLE_EXPERIMENT_TOPOLOGY_MODE"] = "hub_worker"
-    for _ in range(2):
-        assert agent.start_scheduler_in_gpu_tab("/virtual", ["python", "scheduler"], env, "log", "exit") == (321, "%17")
-    assert launches == (["lwb-control"] * 2 if scenario == "hub" else ["lwb-gpu-1"] * 2)
-    assert not any(call[:2] == ["tmux", "new-session"] for call in calls)
-    assert not any("-sch-" in target for target in launches)
+    # Historical topology metadata cannot switch protocol-2 launch back to a Hub/control container.
+    if scenario == "hub": agent.os.environ["SIMPLE_EXPERIMENT_TOPOLOGY_MODE"] = "hub_worker"
+    for index in range(2):
+        result = agent.task_queue_accept(root, "worker", job(index), "@1")
+        assert result["pane"] == windows[index] and result["root"] == root and result["lifecycleProtocol"] == 2
+        bound = json.loads(base64.urlsafe_b64decode(options[(windows[index], "@se_job")]))
+        assert bound["commandId"] == job(index)["commandId"] and bound["planFile"] == job(index)["planFile"]
+        assert options[(windows[index], "@se_phase")] == "queued"
+    launch = [call for call in calls if call[0] == "new-window"]
+    assert len(launch) == 2 and all(call[call.index("-t") + 1] == "$3:" for call in launch)
+    assert all(call[call.index("-c") + 1] == root and "task-runner" in call[-1] for call in launch)
+    assert not any(call[0] in ("new-session", "kill-session", "kill-window", "kill-pane") for call in calls)
+    assert not any("-sch-" in str(call) or "-control" in str(call) for call in calls)
 elif scenario == "failed":
-    agent.subprocess.run = lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout="", stderr="not available")
-    try: agent.start_scheduler_in_gpu_tab("/virtual", [], env, "log", "exit")
-    except RuntimeError: pass
-    else: raise AssertionError("unknown GPU must not create a fake GPU slot or standalone scheduler")
-    assert not launches
+    for session in ("", "lwb-gpu-1", "$3\n$4", "$3;kill"):
+        rejects(lambda: agent.task_queue_accept(root, "worker", job(), "@1"), "SCHEDULER_SESSION_UNVERIFIED")
+    assert not windows and not options
 elif scenario == "identity":
-    assert agent.tmux_session_alive("%17", "/virtual", env)
-    for text in ("%18|lwb-gpu-1", "%17|zlk-gpu-1", "%17|lwb-sch-old", "%17|lwb-gpu-1\n%18|lwb-gpu-1"):
-        agent.subprocess.run = lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=text)
-        assert not agent.tmux_session_alive("%17", "/virtual", env)
-    assert not agent.tmux_session_alive("%17;kill", "/virtual", env)
+    bound = {**job(), "root": root, "pane": "%17"}
+    def row(value):
+        encoded = base64.urlsafe_b64encode(json.dumps(value).encode()).decode()
+        return "\t".join(["%17", "@17", "worker-gpu", "0", "", encoded, "running", "1", "logs/task.log"])
+    listing = row(bound)
+    result = agent.task_inventory(root, execution_only=True)
+    assert len(result) == 1 and result[0]["commandId"] == bound["commandId"] and result[0]["tmuxWindowId"] == "@17"
+    for change in ({"root": "/other"}, {"pane": "%18"}, {"lifecycleProtocol": 1}):
+        listing = row({**bound, **change}); assert agent.task_inventory(root, execution_only=True) == []
+    listing = "malformed"; assert agent.task_inventory(root, execution_only=True) == []
+    assert not any(call[0].startswith("kill-") for call in calls)
 elif scenario == "stop":
-    assert agent.scheduler_tmux_stop_command("/virtual", "%17", 321, "boot:321:start") == ["tmux", "kill-pane", "-t", "%17"]
-    assert agent.scheduler_tmux_stop_command("/virtual", "lwb-sch-old", 321, "") == ["tmux", "kill-session", "-t", "lwb-sch-old"]
-    for target, pid, start in (("%17", 322, "boot:321:start"), ("%17", 321, ""), ("%17", 321, "reused"), ("lwb-gpu-1", 321, "boot:321:start"), ("zlk-sch-other", 321, "")):
-        try: agent.scheduler_tmux_stop_command("/virtual", target, pid, start)
-        except ValueError: pass
-        else: raise AssertionError("unconfirmed tab or shared GPU must not be closed")
+    row = {**job(), "tmuxWindowId": "@17"}
+    rows = [row]
+    agent.task_inventory = lambda *args, **kwargs: list(rows)
+    agent.local_stop_tmux_inventory = lambda _: []
+    def unavailable(*args, **kwargs): raise RuntimeError("isolated controller unavailable")
+    agent.task_queue_rpc = unavailable
+    command = dict(targetCommandId="command-0", projectId="project")
+    for changed in ({"projectId": "foreign"}, {"workerId": "foreign"}):
+        rows[:] = [{**row, **changed}]
+        rejects(lambda: agent.task_stop(root, command, "worker"), "TASK_OWNER_MISMATCH")
+    rejects(lambda: agent.task_stop(root, {}, "worker"), "TASK_STOP_IDENTITY_REQUIRED")
+    assert not calls
+    rows[:] = [row]
+    original = agent.task_tmux
+    def close(args, timeout=5):
+        result = original(args, timeout)
+        if args == ["kill-window", "-t", "@17"]: rows.clear()
+        return result
+    agent.task_tmux = close
+    result = agent.task_stop(root, command, "worker")
+    assert result["status"] == "completed" and result["stoppedTasks"][0]["paneClosed"] is True
+    assert calls == [["kill-window", "-t", "@17"]]
+    # A close command without a fresh disappearance observation cannot claim success.
+    calls.clear(); rows[:] = [row]; agent.task_tmux = original
+    rejects(lambda: agent.task_stop(root, command, "worker"), "TASK_STOP_NOT_CONFIRMED")
+    assert calls == [["kill-window", "-t", "@17"]]
 else: raise AssertionError(scenario)
 print(json.dumps({"scenario": scenario, "remoteOperations": 0}))

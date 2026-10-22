@@ -11,6 +11,7 @@ const compiledQueue = ts.transpileModule(fs.readFileSync(queueSourcePath, "utf8"
 const queueModule = new Module(queueSourcePath, module);
 queueModule.filename = queueSourcePath;
 queueModule.paths = Module._nodeModulePaths(path.dirname(queueSourcePath));
+queueModule.require = Module.createRequire(path.join(__dirname, '../../dist/features/DistributedPlanQueue.js'));
 queueModule._compile(compiledQueue, queueSourcePath);
 const queue = queueModule.exports;
 
@@ -319,6 +320,7 @@ test("a Worker remains version-locked for active or uncertain jobs, then release
   for (const status of ["dispatching", "queued", "running", "unknown"]) {
     const input = queue.enqueuePlan(queue.enqueuePlan(queue.emptyDistributedQueue(), old, "old"), fresh, "new");
     Object.assign(input.plans[0].jobs[0], { status, workerId: "worker-a", gpuId: "0", commandId: "old-command" });
+    delete input.plans[0].jobs[0].lifecycleProtocol; // Persisted legacy writer holds the old shared code slot.
     const worker = { workerId: "worker-a", online: true, declaredJobPaths: true, codeFingerprint: "new-code", idleGpuIds: ["1", "2", "3", "4", "5", "6"] };
     assert.equal(queue.workerCodeVersionAvailable(input, "worker-a", "new-code"), false);
     assert.equal(queue.allocateAvailable(input, [worker]).dispatches.length, 0);
@@ -460,6 +462,7 @@ test("cold recovery keeps a released older attempt as provenance without replaci
       { index: 0, case: "case-a", seed: 7, outputDir: "runs/a" , collectionResultCsv:("runs/a")+"/metrics.csv"},
     ] }, "workflow-a");
   input.plans[0].jobs[0].attempt = 2;
+  delete input.plans[0].jobs[0].lifecycleProtocol; // Historical attempt representation, never a new v2 execution.
   delete input.plans[0].resultPathPolicy;
   input.plans[0].jobs[0].outputDir = "runs/a/attempts/run-new";
   const old = { projectId, workflowId: "workflow-a", planFile: "experiments/plans/a.yaml", planRevision: "rev-a",
@@ -484,6 +487,7 @@ test("a delayed old queued row contradicting release fences the plan", () => {
       { index: 0, case: "case-a", seed: 7, outputDir: "runs/a" , collectionResultCsv:("runs/a")+"/metrics.csv"},
     ] }, "workflow-a");
   input.plans[0].jobs[0].attempt = 2;
+  delete input.plans[0].jobs[0].lifecycleProtocol;
   delete input.plans[0].resultPathPolicy;
   input.plans[0].jobs[0].outputDir = "runs/a/attempts/run-new";
   input.plans[0].jobs[0].history = [{ attempt: 1, status: "cancelled", workerId: "worker-a", commandId: "command-old",

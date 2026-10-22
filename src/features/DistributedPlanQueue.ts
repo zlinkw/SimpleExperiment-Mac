@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import * as path from "node:path";
 import { PlanExecutionMode } from "./PlanExecutionMode";
+import { observationMatches, taskLifecycle, TaskObservation } from "./TaskLifecycle";
+import type { RuntimeDiagnostics, CompletionState } from "./RuntimeDiagnostics";
+import { freshTaskObservation } from "./WorkerProgressEvidence";
+import { hasVerifiedCompletion, nextVerifiedCompletion, verifiedCompletionProjection, type VerifiedCompletion } from "./VerifiedCompletion";
 
 export type JobState = "pending" | "dispatching" | "queued" | "running" | "completed" | "failed" | "cancelled" | "unknown";
 export type JobFailureClass = "deterministic" | "resource" | "transient" | "unknown";
@@ -18,6 +22,22 @@ export type QueuedJob = {
   /** Zero is the historical schema compatibility sentinel, never an execution version. */
   attempt: number;
   status: JobState;
+  lifecycleProtocol?: 2;
+  manualDispatch?: { workerId: string; gpuId: string; stage: "preparing" | "ready" | "sent"; origin?: "server_queue"; batchId?: string };
+  manualDispatchNotice?: string;
+  retainExistingOutputs?: boolean;
+  executionState?: string;
+  resultState?: string;
+  runtimeDiagnostics?: RuntimeDiagnostics;
+  completionState?: CompletionState;
+  verifiedCompletion?: VerifiedCompletion;
+  verificationQueryError?: string;
+  exitCode?: number | null;
+  statusQueryError?: string;
+  lastObservedAt?: string;
+  tmuxPane?: string;
+  tmuxWindowId?: string;
+  tmuxSession?: string;
   /** Explicit local exclusion of this exact attempt; never a successful result. */
   unavailable?: { identity: string; reason: string; markedAt: string; previousStatus: JobState;
     previousFinishedAt?: string; previousTrustedTerminalStatus?: "completed" | "failed" | "cancelled" };
@@ -33,6 +53,8 @@ export type QueuedJob = {
   workerId?: string;
   gpuId?: string;
   commandId?: string;
+  /** Local unresolved start input, never proof that the remote command is running. */
+  startIntent?: { commandId: string; workerId: string; gpuId: string };
   nextCommandId?: string;
   reassignmentPending?: boolean;
   /** The verified migration destination must survive the release RPC and a restart. */
@@ -55,15 +77,19 @@ export type QueuedJob = {
   mirroredWorkerIds?: string[];
   artifactError?: string;
   artifactRetryAfter?: string;
+  latestArtifactSync?: { key: string; state: "synced" | "partial" | "excluded"; scopes: string[]; checkedAt: string;
+    workerIds?: string[]; error?: string; retryAfter?: string; artifactDigest?: string };
   outputRetiredAt?: string;
   reconciliationAttempts?: number;
   lastReconciliationAt?: string;
   blockReason?: string;
   stopReason?: string;
+  stopIntent?: { commandId: string; workerId: string; requestedAt: string; state: "pending" };
   automaticRetry?: AutomaticJobRetry;
   history?: Array<{ attempt: number; status: JobState; workerId?: string; commandId?: string; outputDir: string; finishedAt?: string; stopReason?: string; error?: string; outputRetiredAt?: string; admissionRejection?: QueuedJob["admissionRejection"]; cleanupOperationId?: string }>;
 };
 export type QueuedPlan = {
+  executionSource?: { digest: string; manifest: Record<string, { size: number; sha256: string }> };
   id: string;
   /** Explicit top-level PLAN identity, retained across a recorded rename. */
   stablePlanId?: string;
@@ -101,7 +127,12 @@ export type DeferredPlan = { id: string; planFile: string; revision: string; cod
 export type ClearedDistributedJob = { projectId: string; workflowId: string; planFile: string; planRevision: string;
   codeFingerprint: string; experimentIndex: number; case: string; seed: number; attempt?: number;
   resultPathPolicy?: "declared"; globalJobId?: string; outputDir: string;
-  workerId: string; commandId: string; runKey: string; clearedAt: string };
+  collectionResultCsv?: string; status?: JobState; actualExecutionMode?: PlanExecutionMode;
+  checkpointSource?: QueuedJob["checkpointSource"]; mirroredWorkerIds?: string[]; fragmentWorkerIds?: string[];
+  cleanup?: QueuedJob["cleanup"]; outputRetiredAt?: string;
+  stopBoundary?: "local_command";
+  workerId: string; commandId: string; runKey: string; clearedAt: string;
+  clearMode?: "terminal_history"; remoteClosureConfirmed?: false; activeReceiptObservedAt?: string };
 export type FailedAttemptRecovery = {
   id: string; plan: Pick<QueuedPlan, "id" | "projectId" | "planFile" | "revision" | "codeFingerprint" | "planJobCount">;
   job: Pick<QueuedJob, "index" | "case" | "seed" | "attempt" | "outputDir" | "workerId" | "commandId" | "runKey" | "gpuId">;
@@ -143,8 +174,32 @@ export function restoreFormalJobQueue(queue: DistributedQueue): DistributedQueue
   for (const plan of queue.plans || []) if (plan.resultPathPolicy === "declared") {
     for (const job of plan.jobs || []) {
       if (job.resultPathPolicy === "declared" && job.attempt === undefined) job.attempt = 0;
+      if (job.lifecycleProtocol === 2) clearNativeProjection(job, plan);
       for (const record of job.history || []) if (record.attempt === undefined && !record.outputDir.split("/").includes("attempts")) record.attempt = 0;
     }
+  }
+  return queue;
+}
+
+function clearNativeProjection(job: QueuedJob, plan: QueuedPlan) {
+  job.status = job.unavailable || job.retainExistingOutputs ? "cancelled" : job.commandId ? "unknown" : "pending";
+  for (const key of ["executionState", "resultState", "completionState", "runtimeDiagnostics", "exitCode", "statusQueryError", "verificationQueryError", "lastObservedAt", "trustedTerminalStatus", "error", "blockReason",
+    "tmuxPane", "tmuxWindowId", "tmuxSession", "logPath", "finishedAt"] as const) delete job[key];
+  if (hasVerifiedCompletion(plan, job)) Object.assign(job, verifiedCompletionProjection(plan, job));
+  else delete job.verifiedCompletion;
+}
+
+/** Metadata writes keep the current in-memory observation; disk history never supplies runtime truth. */
+export function keepCurrentObservations(queue: DistributedQueue, live: DistributedQueue | undefined, now = Date.now()): DistributedQueue {
+  if (!live) return queue;
+  const keys = ["status", "executionState", "resultState", "completionState", "runtimeDiagnostics", "exitCode", "statusQueryError", "lastObservedAt", "error", "blockReason",
+    "tmuxPane", "tmuxWindowId", "tmuxSession", "logPath", "finishedAt"] as const;
+  for (const plan of queue.plans) for (const job of plan.jobs) {
+    const current = live.plans.find(row => row.id === plan.id && row.projectId === plan.projectId)?.jobs.find(row => row.index === job.index);
+    if (job.lifecycleProtocol !== 2 || !job.commandId || !current || current.commandId !== job.commandId || current.workerId !== job.workerId
+      || !current.lastObservedAt || now - Date.parse(current.lastObservedAt) > 30000 || !Number.isFinite(Date.parse(current.lastObservedAt))) continue;
+    for (const key of keys) (job as any)[key] = current[key];
+    Object.assign(job, verifiedCompletionProjection(plan, job));
   }
   return queue;
 }
@@ -152,10 +207,28 @@ export function restoreFormalJobQueue(queue: DistributedQueue): DistributedQueue
 export function serializeDistributedQueue(queue: DistributedQueue): string {
   const copy = cloneDistributedQueue(queue);
   for (const plan of copy.plans) if (plan.resultPathPolicy === "declared") for (const job of plan.jobs) {
+    if (job.lifecycleProtocol === 2) {
+      clearNativeProjection(job, plan);
+    }
     if (job.attempt === 0) delete (job as Partial<QueuedJob>).attempt;
     for (const record of job.history || []) if (record.attempt === 0) delete (record as { attempt?: number }).attempt;
   }
   return JSON.stringify(copy, null, 2) + "\n";
+}
+
+/** Persist only compact confirmed facts into the existing queue, never raw
+ * observations, log text, metrics or a replayable remote task registration. */
+export function updateVerifiedCompletions(queue: DistributedQueue, snapshot: any, projectId: string, now = Date.now(), maxAgeMs = 20_000): DistributedQueue | undefined {
+  const projected = mergeDurableWorkerSnapshots(queue, [snapshot], projectId, now, maxAgeMs);
+  let changed = false;
+  const next = { ...queue, plans: queue.plans.map(plan => ({ ...plan, jobs: plan.jobs.map(job => {
+    if (plan.projectId !== projectId || job.workerId !== snapshot.workerId || job.lifecycleProtocol !== 2) return job;
+    const observed = projected.plans.find(row => row.id === plan.id)?.jobs.find(row => row.index === job.index && row.commandId === job.commandId);
+    if (!observed || JSON.stringify(observed.verifiedCompletion) === JSON.stringify(job.verifiedCompletion)) return job;
+    changed = true;
+    return { ...job, verifiedCompletion: observed.verifiedCompletion, ...verifiedCompletionProjection(plan, observed) };
+  }) })) };
+  return changed ? next : undefined;
 }
 
 export function taskAttempt(task: Record<string, unknown>): number {
@@ -200,10 +273,15 @@ export function workerTaskLogBinding(plan: Pick<QueuedPlan, "id">, job: Pick<Que
   return { logPath };
 }
 
-export type WorkerSlots = { workerId: string; idleGpuIds: string[]; online: boolean; capacity?: number; codeFingerprint?: string; idleGpuAdmission?: boolean; declaredJobPaths?: boolean };
+export type WorkerSlots = { workerId: string; idleGpuIds: string[]; gpuSlots?: string[]; online: boolean; capacity?: number; codeFingerprint?: string; idleGpuAdmission?: boolean; declaredJobPaths?: boolean; compatiblePlans?: string[]; codeScopeErrors?: Record<string,string> };
+export function workerCanRunPlan(queue: DistributedQueue, worker: Pick<WorkerSlots,"workerId"|"codeFingerprint"|"compatiblePlans"|"codeScopeErrors">, plan: QueuedPlan): boolean {
+  if (worker.codeScopeErrors?.[plan.id]) return false;
+  return worker.compatiblePlans?.includes(plan.id) === true || worker.codeFingerprint === plan.codeFingerprint
+    && workerCodeVersionAvailable(queue, worker.workerId, plan.codeFingerprint);
+}
 export type DurableWorkerSnapshot = {
   workerId: string;
-  capabilities?: { durablePlanQueue?: boolean; idleGpuAdmission?: boolean; queuedJobRecall?: boolean; declaredJobPaths?: boolean; schemaVersion?: number };
+  capabilities?: { durablePlanQueue?: boolean; idleGpuAdmission?: boolean; queuedJobRecall?: boolean; declaredJobPaths?: boolean; gpuMemoryRatioScheduling?: number; schemaVersion?: number };
   generatedAt?: string;
   fetchedAt?: string;
   error?: string;
@@ -213,6 +291,8 @@ export type DurableWorkerSnapshot = {
 export function hasFreshDurableSnapshot(snapshot: DurableWorkerSnapshot | undefined, now = Date.now(), maxAgeMs = 180_000): boolean {
   const generatedAt = Date.parse(String(snapshot?.generatedAt || ""));
   const fetchedAt = Date.parse(String(snapshot?.fetchedAt || ""));
+  if ((snapshot?.capabilities as any)?.taskLifecycle === 2) return Boolean(snapshot && !snapshot.error && !(snapshot as any).pending
+    && (snapshot as any).queryComplete === true && Number.isFinite(fetchedAt) && now - fetchedAt <= maxAgeMs && fetchedAt <= now + 30_000);
   return Boolean(snapshot && !snapshot.error && snapshot.capabilities?.durablePlanQueue === true
     && snapshot.capabilities.schemaVersion === 1 && Number.isFinite(generatedAt) && Number.isFinite(fetchedAt)
     && now - generatedAt <= maxAgeMs && now - fetchedAt <= maxAgeMs
@@ -373,7 +453,7 @@ function clearedJobIdentityKey(identity: Record<string, unknown>): string {
 }
 
 function clearedJobBelongsToPlan(entry: ClearedDistributedJob, plan: QueuedPlan, projectId: string): boolean {
-  return entry.projectId === projectId && entry.workflowId === plan.id && entry.planFile === plan.planFile
+  return !entry.activeReceiptObservedAt && entry.projectId === projectId && entry.workflowId === plan.id && entry.planFile === plan.planFile
     && entry.planRevision === plan.revision && entry.codeFingerprint === plan.codeFingerprint;
 }
 
@@ -402,8 +482,78 @@ function reviewedTrainingCompletion(plan: QueuedPlan, job: QueuedJob, task: Reco
 /** Merge only fresh, capability-bearing server snapshots for this exact project. */
 export function mergeDurableWorkerSnapshots(queue: DistributedQueue, snapshots: readonly DurableWorkerSnapshot[], projectId: string,
   now = Date.now(), maxAgeMs = 180_000): DistributedQueue {
-  const clearedJobs = Array.isArray(queue.clearedJobs) ? queue.clearedJobs : [];
-  const clearedKeys = new Set(clearedJobs.map(entry => clearedJobIdentityKey(entry)));
+  const pulled = snapshots.filter(snapshot => (snapshot.capabilities as any)?.taskLifecycle === 2);
+  // Rebuild control inputs from authenticated live window bindings when a local card is absent.
+  // Never invent missing jobs or replay a saved Worker queue.
+  if (pulled.length) {
+    queue = cloneDistributedQueue(queue);
+    for (const snapshot of pulled) {
+      const fresh = Date.parse(String(snapshot.fetchedAt || snapshot.generatedAt || ""));
+      if (snapshot.error || !Number.isFinite(fresh) || now - fresh > maxAgeMs) continue;
+      for (const raw of snapshot.tasks || []) {
+        const task = raw as any, index = Number(task.experimentIndex);
+        if (!task.observation?.tmux || !observationMatches(task.observation, { commandId: task.commandId, workerId: snapshot.workerId, projectId })
+          || !task.workflowId || task.globalJobId !== task.workflowId + ":" + index || !Number.isInteger(index) || index < 0
+          || !task.planFile || !task.planRevision || !task.codeFingerprint || task.resultPathPolicy !== "declared"
+          || [task.outputDir, task.collectionResultCsv, task.planFile].some(value => typeof value !== "string" || !value || value.startsWith("/")
+            || /[:\\\x00-\x1f]/.test(value) || value.split("/").some(part => !part || part === "." || part === ".." || part === "attempts"))) continue;
+        let plan = queue.plans.find(row => row.id === task.workflowId);
+        if (!plan) {
+          plan = { id: task.workflowId, projectId, planFile: task.planFile, revision: task.planRevision, codeFingerprint: task.codeFingerprint,
+            enqueuedAt: task.enqueuedAt || task.observation.observedAt, resultPathPolicy: "declared", executionMode: task.executionMode || task.mode,
+            planJobCount: task.planJobCount, fullPlanJobCount: task.fullPlanJobCount, jobs: [] };
+          queue.plans.push(plan);
+        }
+        if (plan.projectId !== projectId || plan.jobs.some(job => job.index === index)) continue;
+        plan.jobs.push({ index, case: task.case, seed: Number(task.seed), attempt: 0, commandId: task.commandId, workerId: snapshot.workerId,
+          runKey: task.commandId, globalJobId: task.globalJobId, outputDir: task.outputDir, collectionResultCsv: task.collectionResultCsv,
+          resultPathPolicy: "declared", lifecycleProtocol: 2, status: "unknown", actualExecutionMode: task.mode,
+          checkpointSource: task.checkpointSource });
+      }
+    }
+  }
+  queue = { ...queue, plans: queue.plans.map(plan => ({ ...plan, jobs: plan.jobs.map(job =>
+    job.lifecycleProtocol === 2 && !hasVerifiedCompletion(plan, job) && job.workerId && job.commandId && !pulled.some(row => row.workerId === job.workerId)
+      && !snapshots.some(row => row.workerId === job.workerId && (row as any).pending === true)
+      ? { ...job, status: "unknown" as const, executionState: "unknown" as const, resultState: "unverified" as const,
+          error: undefined, statusQueryError: "当前 Worker 主动查询不可用；原任务未重复派发", blockReason: "查询失败，可刷新或中止原任务" } : job) })) };
+  if (pulled.length) {
+    queue = { ...queue, plans: queue.plans.map(plan => ({ ...plan, jobs: plan.jobs.map(job => {
+      const snapshot = pulled.find(row => row.workerId === job.workerId);
+      if (!snapshot || (snapshot as any).pending === true || !job.commandId || !job.workerId || !["dispatching", "queued", "running", "unknown", "failed", "completed"].includes(job.status)) return job;
+      const fresh = Date.parse(String(snapshot.fetchedAt || snapshot.generatedAt || ""));
+      const task = (snapshot.tasks || []).find(row => row.commandId === job.commandId && row.projectId === projectId);
+      const observation: TaskObservation = freshTaskObservation(snapshot, task, { lifecycleProtocol: 2, commandId: job.commandId,
+        projectId, workerId: job.workerId, observedAt: String(snapshot.generatedAt || ""),
+        queryError: snapshot.error || (!Number.isFinite(fresh) || now - fresh > maxAgeMs ? "状态查询已过期" : undefined) }, now, maxAgeMs);
+      if (!observationMatches(observation, { commandId: job.commandId, workerId: job.workerId, projectId }))
+        observation.queryError = "任务查询身份与当前任务不符；请刷新核实";
+      if (task && ["outputDir", "collectionResultCsv"].some(field => typeof (task as any)[field] === "string"
+        && typeof (job as any)[field] === "string" && (task as any)[field] !== (job as any)[field]))
+        observation.queryError = "任务产物路径与当前任务不符；请刷新核实";
+      const state = taskLifecycle(observation);
+      const verifiedCompletion = nextVerifiedCompletion(plan, job, observation, state, now);
+      const fixed = verifiedCompletionProjection(plan, { ...job, verifiedCompletion });
+      return { ...job, lifecycleProtocol: 2 as const, status: state.status, executionState: state.execution, resultState: state.result,
+        runtimeDiagnostics: state.runtimeDiagnostics, completionState: state.completionState, exitCode: state.exitCode,
+        startIntent: !observation.queryError && !observation.executionQueryError && (observation.tmux || observation.cancelled || state.result === "complete") ? undefined : job.startIntent,
+        ...( ["train", "test", "train_test"].includes(String(task?.actualExecutionMode)) ? { actualExecutionMode: task!.actualExecutionMode as PlanExecutionMode } : {}),
+        recoveryConflict: undefined, trustedTerminalStatus: undefined,
+        statusQueryError: observation.queryError || observation.executionQueryError, lastObservedAt: snapshot.fetchedAt || observation.observedAt,
+        error: state.status === "failed" ? String(task?.error || `任务退出码 ${task?.exitCode ?? "未知"}`) : undefined,
+        blockReason: state.message, verifiedCompletion,
+        verificationQueryError: verifiedCompletion ? observation.queryError || observation.executionQueryError || observation.resultQueryError || observation.runtimeQueryError : undefined,
+        ...fixed, ...(task ? { gpuId: String(task.gpuId ?? job.gpuId ?? ""),
+          tmuxPane: String(task.tmuxPane || ""), tmuxWindowId: String(task.tmuxWindowId || ""), tmuxSession: String(task.tmuxSession || "") } : {}) };
+    }) })) };
+    snapshots = snapshots.filter(snapshot => (snapshot.capabilities as any)?.taskLifecycle !== 2);
+    if (!snapshots.length) return queue;
+  }
+  const clearedJobs = Array.isArray(queue.clearedJobs) ? queue.clearedJobs.map(entry => ({ ...entry })) : [];
+  const clearedByKey = new Map(clearedJobs.map(entry => [clearedJobIdentityKey(entry), entry]));
+  const clearedKeys = new Set(clearedJobs.filter(entry => !entry.activeReceiptObservedAt).map(entry => clearedJobIdentityKey(entry)));
+  const locallyStopped = new Set(clearedJobs.filter(entry => entry.stopBoundary === "local_command").map(entry =>
+    JSON.stringify([entry.projectId, entry.workflowId, entry.workerId, entry.commandId])));
   const acceptedRows: Array<{ workerId: string; task: Record<string, unknown>; status: JobState }> = [];
   for (const snapshot of snapshots) {
     if (snapshot.error || snapshot.capabilities?.durablePlanQueue !== true || snapshot.capabilities.schemaVersion !== 1) continue;
@@ -415,9 +565,13 @@ export function mergeDurableWorkerSnapshots(queue: DistributedQueue, snapshots: 
       const task: Record<string, unknown> = { ...rawTask, attempt: taskAttempt(rawTask) };
       const status = durableStatus(task.status);
       if (!status || String(task.projectId || "") !== projectId || String(task.workerId || snapshot.workerId) !== snapshot.workerId) continue;
+      // Once this exact local command was closed, stale terminal metadata cannot recreate its card.
+      if (["completed", "failed", "cancelled"].includes(status) && locallyStopped.has(JSON.stringify([
+        task.projectId, task.workflowId, snapshot.workerId, task.commandId]))) continue;
       if (task.durableAccepted === false && !preflightRejectionEvidence(task)) continue;
       const localPlan = queue.plans.find(plan => plan.id === task.workflowId);
       const localJob = localPlan?.jobs.find(job => job.index === Number(task.experimentIndex));
+      if (localJob?.lifecycleProtocol === 2) continue;
       if (preflightRejectionEvidence(task) && localPlan && localJob && !preflightRejectionMatchesJob(localPlan, localJob, task)) continue;
       if (!String(task.workflowId || "") || !String(task.planFile || "") || !String(task.planRevision || "")
         || !String(task.codeFingerprint || "") || !String(task.commandId || "") || !String(task.outputDir || "")
@@ -430,6 +584,14 @@ export function mergeDurableWorkerSnapshots(queue: DistributedQueue, snapshots: 
         || !Number.isInteger(Number(task.planJobCount)) || Number(task.planJobCount) < 1) continue;
       // A terminal audit record survives on the server, but must not recreate a user-cleared card.
       // Active/uncertain receipts always remain visible, including contradictory old identities.
+      const clearedKey = clearedJobIdentityKey({ ...task, workerId: snapshot.workerId,
+        experimentIndex: Number(task.experimentIndex), seed: Number(task.seed), attempt: Number(task.attempt) });
+      const cleared = clearedByKey.get(clearedKey);
+      if (cleared?.clearMode === "terminal_history" && !["completed", "failed", "cancelled"].includes(status)) {
+        // Local history hiding cannot suppress a subsequently verified active task.
+        cleared.activeReceiptObservedAt ||= new Date(now).toISOString();
+        clearedKeys.delete(clearedKey);
+      }
       if (["completed", "failed", "cancelled"].includes(status)
         && clearedKeys.has(clearedJobIdentityKey({ ...task, workerId: snapshot.workerId,
           experimentIndex: Number(task.experimentIndex), seed: Number(task.seed), attempt: Number(task.attempt) }))) continue;
@@ -450,6 +612,7 @@ export function mergeDurableWorkerSnapshots(queue: DistributedQueue, snapshots: 
     return jobs.length || !plan.jobs.length ? [{ ...plan, jobs }] : [];
   });
   const plans = retainedPlans.map((plan) => plan.projectId !== projectId ? plan : { ...plan, jobs: plan.jobs.map((job) => {
+    if (job.lifecycleProtocol === 2) return job;
     const legacy = legacyReceipt(plan, job);
     const legacyStatus = legacy && durableStatus(legacy.status);
     if (legacyStatus) {
@@ -654,7 +817,7 @@ export function mergeDurableWorkerSnapshots(queue: DistributedQueue, snapshots: 
     if (!countConflict && plan.recoveryConflict?.startsWith("Server summaries disagree on expected Plan job count")) delete plan.recoveryConflict;
     if (planIndex < 0) plans.push(plan); else plans[planIndex] = plan;
   }
-  return { ...queue, plans };
+  return { ...queue, plans, clearedJobs };
 }
 
 export function unfinishedJobs(plan: QueuedPlan, states: readonly JobState[] = UNFINISHED_JOB): boolean {
@@ -711,7 +874,7 @@ export function queueOccupiesCodeVersion(queue: DistributedQueue, verifiedWorker
     : Object.values(verifiedWorkerFingerprints || {});
   const known = verified.filter(Boolean);
   return queue.plans.some((plan) => plan.jobs.some((job) => {
-    if (["dispatching", "queued", "running", "unknown"].includes(job.status)) return true;
+    if (jobHasLiveExecution(job)) return true;
     if (job.status !== "pending") return false;
     if (!known.length) return true;
     return known.includes(plan.codeFingerprint);
@@ -719,12 +882,35 @@ export function queueOccupiesCodeVersion(queue: DistributedQueue, verifiedWorker
 }
 export type Dispatch = { planId: string; jobIndex: number; workerId: string; gpuId: string; attempt: number; commandId: string };
 
+/** Current windows or an exact unresolved local start reserve capacity; history alone never does. */
+export function jobHasLiveExecution(job: QueuedJob): boolean {
+  if (job.lifecycleProtocol === 2 && job.executionState === "missing" && !job.statusQueryError) return false;
+  const intent = job.startIntent;
+  const starting = Boolean(intent && ["dispatching", "unknown", "queued"].includes(job.status)
+    && intent.commandId === job.commandId && intent.workerId === job.workerId && intent.gpuId === job.gpuId);
+  return job.lifecycleProtocol === 2 ? starting || ["queued", "starting", "running"].includes(job.executionState || "")
+    || job.executionState === "unknown" && Boolean(job.statusQueryError || job.tmuxWindowId && job.tmuxPane)
+    || job.status === "dispatching" && !job.lastObservedAt
+    : ["dispatching", "queued", "running", "unknown"].includes(job.status);
+}
+
+/** Reserve automatic slots from current execution evidence, never from historical unknown labels. */
+export function activeGpuReservations(queue: DistributedQueue) {
+  const activeByWorker = new Map<string, number>(), occupiedGpuIds = new Set<string>();
+  for (const plan of queue.plans) for (const job of plan.jobs) {
+    if (job.manualDispatch || !job.workerId || !jobHasLiveExecution(job)) continue;
+    activeByWorker.set(job.workerId, (activeByWorker.get(job.workerId) || 0) + 1);
+    if (job.gpuId !== undefined) occupiedGpuIds.add(`${job.workerId}:${job.gpuId}`);
+  }
+  return { activeByWorker, occupiedGpuIds };
+}
+
 /** A project root on one Worker may host only one live code version. Other Workers are independent. */
 export function workerCodeVersionAvailable(queue: DistributedQueue, workerId: string, fingerprint: string): boolean {
   return Boolean(workerId && fingerprint) && !queue.plans.some((plan) => {
-    if (plan.recoveryConflict && plan.codeFingerprint !== fingerprint) return true;
+    if (plan.recoveryConflict && plan.jobs.some(job => job.lifecycleProtocol !== 2) && plan.codeFingerprint !== fingerprint) return true;
     return plan.jobs.some((job) => {
-      if (!["dispatching", "queued", "running", "unknown"].includes(job.status)) return false;
+      if (!jobHasLiveExecution(job)) return false;
       if (job.workerId && job.workerId !== workerId) return false;
       return !plan.codeFingerprint || plan.codeFingerprint !== fingerprint;
     });
@@ -769,10 +955,17 @@ export function enqueuePlan(queue: DistributedQueue, plan: Omit<QueuedPlan, "id"
       throw new Error("FORMAL_JOB_CSV_PATH_REQUIRED");
     if (plan.jobs.some(other => other !== job && (other.outputDir === job.outputDir
         || job.collectionResultCsv && other.collectionResultCsv === job.collectionResultCsv))
-      || queue.plans.some(other => !other.cleanup && other.jobs.some(prior => prior.outputDir === job.outputDir
-        || job.collectionResultCsv && prior.collectionResultCsv === job.collectionResultCsv)))
-      throw new Error("FORMAL_JOB_CONFLICT: this declared directory is already registered; review existing ownership before resubmitting.");
-    return { ...job, resultPathPolicy: "declared" as const, globalJobId: `${id}:${job.index}`, attempt: 0, status: "pending" as const };
+      || queue.plans.some(other => !(other.cleanup && ["archived", "deleted"].includes(other.cleanup.state)
+        && other.cleanup.operationId && !other.cleanup.pendingNodes?.length) && other.jobs.some(prior => !(prior.outputRetiredAt
+        && ["completed", "failed", "cancelled"].includes(prior.status) && prior.cleanup && ["archived", "deleted"].includes(prior.cleanup.state)
+        && prior.cleanup.operationId && prior.cleanup.completedTargets?.length && !prior.cleanup.pendingNodes?.length)
+        && prior.lifecycleProtocol === 2 && prior.status === "pending" && !prior.workerId && !prior.commandId
+        && (prior.outputDir === job.outputDir || job.collectionResultCsv && prior.collectionResultCsv === job.collectionResultCsv))))
+      throw new Error("FORMAL_JOB_CONFLICT: duplicate local pending job declarations; cancel the unsent duplicate first.");
+    return { index: job.index, case: job.case, seed: job.seed, outputDir: job.outputDir,
+      ...(job.collectionResultCsv ? { collectionResultCsv: job.collectionResultCsv } : {}),
+      ...(job.checkpointSource ? { checkpointSource: job.checkpointSource } : {}),
+      lifecycleProtocol: 2 as const, resultPathPolicy: "declared" as const, globalJobId: `${id}:${job.index}`, attempt: 0, status: "pending" as const };
   });
   if (!jobs.length) throw new Error("Plan has no jobs.");
   const planJobCount = Number(plan.planJobCount || plan.jobs.length);
@@ -782,7 +975,7 @@ export function enqueuePlan(queue: DistributedQueue, plan: Omit<QueuedPlan, "id"
 }
 
 function usableSlots(row: WorkerSlots) {
-  return row.online && [...new Set(row.idleGpuIds)].slice(0, Math.max(0, row.capacity ?? row.idleGpuIds.length)).length > 0;
+  return row.online && (row.gpuSlots ?? [...new Set(row.idleGpuIds)]).slice(0, Math.max(0, row.capacity ?? row.gpuSlots?.length ?? row.idleGpuIds.length)).length > 0;
 }
 
 export function pinnedRetryPlanAllowed(plan: QueuedPlan): boolean {
@@ -792,25 +985,27 @@ export function pinnedRetryPlanAllowed(plan: QueuedPlan): boolean {
 
 export function hostedRetryCandidates(plan: QueuedPlan, now = Date.now()): QueuedJob[] {
   if (plan.resultPathPolicy !== "declared" || plan.executionModeBlocked || plan.schedulingMode !== "server_prequeue" || plan.localDispatchOverride === true || plan.recoveryConflict) return [];
-  return plan.jobs.filter((job) => job.localQueueOnly !== true && job.recallRequested !== true
+  return plan.jobs.filter((job) => job.localQueueOnly !== true && job.recallRequested !== true && !job.stopIntent
     && Boolean(job.workerId && job.commandId) && ["dispatching", "unknown"].includes(job.status)
     && dispatchReconciliationDue(job, now));
 }
 
 function noteFingerprintMismatch(plans: QueuedPlan[], workers: readonly WorkerSlots[]) {
-  if (!workers.some((row) => row.codeFingerprint)) return;
+  if (!workers.some((row) => row.codeFingerprint || row.codeScopeErrors || row.compatiblePlans?.length)) return;
   const anyOnline = workers.some((row) => row.online);
   for (const plan of plans) {
     if (plan.resultPathPolicy !== "declared") continue; // Retain old queue records, never resume their execution.
-    const matched = workers.some((row) => row.online && row.codeFingerprint === plan.codeFingerprint);
-    const held = plan.jobs.some((item) => ["dispatching", "queued", "running", "unknown"].includes(item.status));
-    const waiting = matched && !workers.some((row) => row.online && row.codeFingerprint === plan.codeFingerprint
-      && workerCodeVersionAvailable({ schemaVersion: 1, plans }, row.workerId, plan.codeFingerprint));
+    const matched = workers.some((row) => row.online && workerCanRunPlan({schemaVersion:1,plans},row,plan));
+    const held = plan.jobs.some(jobHasLiveExecution);
+    const waiting = !matched && workers.some(row => row.online && row.codeFingerprint === plan.codeFingerprint);
     for (const job of plan.jobs) {
       if (job.status !== "pending") continue;
+      const scopeErrors = workers.filter(row=>row.online).map(row=>row.codeScopeErrors?.[plan.id]).filter(Boolean);
+      if (!matched && scopeErrors.length) { job.blockReason = "PLAN 所需源码待核实：" + scopeErrors.slice(0,3).join("；"); continue; }
       if (waiting) job.blockReason = CODE_FINGERPRINT_WAITING;
       else if (anyOnline && !matched && !held) job.blockReason = CODE_FINGERPRINT_MISMATCH;
-      else if (job.blockReason === CODE_FINGERPRINT_MISMATCH || String(job.blockReason || "").startsWith("等待当前代码版本")) delete job.blockReason;
+      else if (job.blockReason === CODE_FINGERPRINT_MISMATCH || String(job.blockReason || "").startsWith("等待当前代码版本")
+        || matched && String(job.blockReason || "").startsWith("PLAN 所需源码待核实")) delete job.blockReason;
     }
   }
 }
@@ -819,7 +1014,7 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
   const versioned = workers.some((row) => row.codeFingerprint);
   const plans = queue.plans.map((plan) => ({ ...plan, jobs: plan.jobs.map((job) => ({ ...job })) }));
   const dispatches: Dispatch[] = [];
-  const activeFingerprint = plans.find((plan) => plan.jobs.some((job) => ["dispatching", "queued", "running", "unknown"].includes(job.status)))?.codeFingerprint;
+  const activeFingerprint = plans.find((plan) => plan.jobs.some(jobHasLiveExecution))?.codeFingerprint;
   const runnableFingerprint = !versioned && (activeFingerprint || plans.find((plan) => (!options.localIdleOnly || plan.schedulingMode !== "server_prequeue" || plan.localDispatchOverride === true
     || plan.jobs.some((job) => job.status === "pending" && job.localQueueOnly === true && !job.recallRequested))
     && plan.jobs.some((job) => job.status === "pending" && !job.recallRequested
@@ -827,19 +1022,20 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
     && (!versioned || workers.some((row) => usableSlots(row)
       && (!options.requireIdleGpuAdmission || row.idleGpuAdmission === true) && row.codeFingerprint === plan.codeFingerprint)))?.codeFingerprint);
   const slots = new Map(workers.filter((row) => row.online && (!options.requireIdleGpuAdmission || row.idleGpuAdmission === true)
-    && (!versioned || Boolean(row.codeFingerprint)))
-    .map((row) => [row.workerId, [...new Set(row.idleGpuIds)].slice(0, Math.max(0, row.capacity ?? row.idleGpuIds.length))]));
+    && (!versioned || Boolean(row.codeFingerprint) || Boolean(row.compatiblePlans?.length)))
+    .map((row) => [row.workerId, (row.gpuSlots ?? [...new Set(row.idleGpuIds)]).slice(0, Math.max(0, row.capacity ?? row.gpuSlots?.length ?? row.idleGpuIds.length))]));
   for (const plan of plans) {
     if (plan.executionModeBlocked || plan.recoveryConflict) continue;
     if (plan.resultPathPolicy !== "declared") continue;
     if (options.localIdleOnly && plan.schedulingMode === "server_prequeue" && plan.localDispatchOverride !== true
       && !plan.jobs.some((job) => job.status === "pending" && job.localQueueOnly === true && !job.recallRequested)) continue;
-    if (!versioned && (!runnableFingerprint || plan.codeFingerprint !== runnableFingerprint)) continue;
-    const pending = plan.jobs.filter((job) => job.status === "pending" && !job.recallRequested
+    if (!versioned && (!runnableFingerprint || plan.codeFingerprint !== runnableFingerprint)
+      && !workers.some(row=>row.online&&row.compatiblePlans?.includes(plan.id))) continue;
+    const pending = plan.jobs.filter((job) => !job.manualDispatch && job.status === "pending" && !job.recallRequested && !job.stopIntent
       && (!options.localIdleOnly || plan.schedulingMode !== "server_prequeue" || plan.localDispatchOverride === true || job.localQueueOnly === true));
     if (!pending.length) continue;
-    const eligibleWorkerIds = new Set(workers.filter(row => row.declaredJobPaths === true && (!versioned || row.codeFingerprint === plan.codeFingerprint)
-      && workerCodeVersionAvailable({ ...queue, plans }, row.workerId, plan.codeFingerprint)).map(row => row.workerId));
+    const eligibleWorkerIds = new Set(workers.filter(row => row.declaredJobPaths === true
+      && !row.codeScopeErrors?.[plan.id] && (!versioned || workerCanRunPlan({ ...queue, plans }, row, plan))).map(row => row.workerId));
     const ranked = () => [...slots].filter(([id, gpuIds]) => gpuIds.length && eligibleWorkerIds.has(id))
       .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
     const assignedWorkerIds = [...new Set(plan.jobs.filter((job) => job.workerId).map((job) => job.workerId!))];
@@ -859,7 +1055,9 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
         const gpuId = slots.get(chosen)?.shift();
         if (gpuId === undefined) break;
         const commandId = durableCommandId(plan, job, chosen, gpuId);
+        if (commandId !== job.commandId) Object.assign(job, { runtimeDiagnostics: undefined, completionState: undefined, exitCode: undefined });
         Object.assign(job, { status: "dispatching", workerId: chosen, gpuId, commandId, blockReason: undefined,
+          ...(job.lifecycleProtocol === 2 ? { startIntent: { commandId, workerId: chosen, gpuId } } : {}),
           reassignmentWorkerId: undefined });
         dispatches.push({ planId: plan.id, jobIndex: job.index, workerId: chosen, gpuId, attempt: job.attempt, commandId });
       }
@@ -871,10 +1069,20 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
 
 export function previewAvailable(queue: DistributedQueue, plan: Omit<QueuedPlan, "id" | "enqueuedAt" | "jobs"> & { jobs: Array<Pick<QueuedJob, "index" | "case" | "seed" | "outputDir">> }, workers: readonly WorkerSlots[]) {
   const previewId = "distributed-preview";
-  const candidate = enqueuePlan(queue, plan, previewId);
+  // Capacity preview does not authorize a writer. Retain original terminal rows
+  // in the real queue and surface their conflicts for the explicit output review.
+  const reviewedIndices = new Set<number>();
+  const capacityQueue = { ...queue, plans: queue.plans.map(prior => ({ ...prior, jobs: prior.jobs.filter(job => {
+    const conflicts = plan.jobs.filter(current => current.outputDir === job.outputDir);
+    if (["completed", "failed", "cancelled"].includes(job.status) && conflicts.length) {
+      conflicts.forEach(current => reviewedIndices.add(current.index)); return false;
+    }
+    return true;
+  }) })).filter(prior => prior.jobs.length) };
+  const candidate = enqueuePlan(capacityQueue, plan, previewId);
   const { dispatches } = allocateAvailable(candidate, workers);
   const selected = dispatches.filter((item) => item.planId === previewId);
-  return { totalJobs: plan.jobs.length, dispatchableCount: selected.length,
+  return { totalJobs: plan.jobs.length, outputReviewIndices: [...reviewedIndices], dispatchableCount: selected.length,
     queuedCount: plan.jobs.length - selected.length,
     assignments: selected.map(({ jobIndex, workerId, gpuId }) => ({ jobIndex, workerId, gpuId })) };
 }
@@ -915,10 +1123,16 @@ export function hasLegacyOwnership(job: QueuedJob): boolean {
   return job.legacyOwnership === true && Boolean(job.workerId && job.commandId);
 }
 
-export function resetUnsentDispatch(queue: DistributedQueue, planId: string, jobIndex: number, commandId: string): DistributedQueue {
+export function resetUnsentDispatch(queue: DistributedQueue, planId: string, jobIndex: number, commandId: string, reason?: string): DistributedQueue {
+  const plan = queue.plans.find(row => row.id === planId), job = plan?.jobs.find(row => row.index === jobIndex && row.commandId === commandId);
+  if (!job || job.status !== "dispatching" && !(job.lifecycleProtocol === 2 && job.status === "unknown" && job.startIntent?.commandId === commandId)
+    || job.stopIntent || job.recallRequested || job.dispatchAcknowledgedAt || job.executionState && job.executionState !== "missing") return queue;
   return { ...queue, plans: queue.plans.map((plan) => plan.id !== planId ? plan : { ...plan,
-    jobs: plan.jobs.map((job) => job.index !== jobIndex || job.commandId !== commandId || job.status !== "dispatching"
-      ? job : { ...job, status: "pending" as const, workerId: undefined, gpuId: undefined, commandId: undefined }) }) };
+    jobs: plan.jobs.map((row) => row !== job ? row : { ...row, status: "pending" as const, workerId: undefined, gpuId: undefined,
+      commandId: undefined, startIntent: undefined, runKey: undefined, lastDispatchAttemptAt: undefined,
+      executionState: undefined, statusQueryError: undefined, lastObservedAt: undefined,
+      ...(row.lifecycleProtocol === 2 ? { nextCommandId: commandId } : {}),
+      blockReason: reason ? "尚未发送，等待重新核实：" + reason : undefined }) }) };
 }
 
 export function resetBusyRejectedDispatch(queue: DistributedQueue, dispatch: Dispatch, receipt: Record<string, unknown>): DistributedQueue {
@@ -932,7 +1146,7 @@ export function resetBusyRejectedDispatch(queue: DistributedQueue, dispatch: Dis
     jobs: plan.jobs.map((job) => job.index !== dispatch.jobIndex || job.attempt !== dispatch.attempt
       || job.commandId !== dispatch.commandId || job.workerId !== dispatch.workerId || job.gpuId !== dispatch.gpuId
       || !["dispatching", "unknown"].includes(job.status) ? job : { ...job, status: "pending" as const, workerId: undefined,
-        gpuId: undefined, commandId: undefined, runKey: undefined, lastDispatchAttemptAt: undefined, dispatchAcknowledgedAt: undefined,
+        gpuId: undefined, commandId: undefined, startIntent: undefined, runKey: undefined, lastDispatchAttemptAt: undefined, dispatchAcknowledgedAt: undefined,
         blockReason: "Worker confirmed the requested GPU was busy; awaiting fresh availability." }) }) };
 }
 
@@ -953,7 +1167,7 @@ export function applyPreflightRejectedDispatch(queue: DistributedQueue, plan: Qu
   return { ...queue, plans: queue.plans.map(row => row.id !== plan.id ? row : { ...row,
     jobs: row.jobs.map(item => item.index !== job.index || item.commandId !== job.commandId ? item : {
       ...item, status: "failed" as const, trustedTerminalStatus: "failed" as const, error: rejection.message,
-      admissionRejection: rejection, finishedAt: rejection.rejectedAt, blockReason: undefined,
+      admissionRejection: rejection, finishedAt: rejection.rejectedAt, blockReason: undefined, startIntent: undefined,
       formalConflictEvidence: receipt.formalConflictEvidence as Record<string, unknown> | undefined,
       dispatchAcknowledgedAt: new Date().toISOString(),
     }) }) };
@@ -969,7 +1183,7 @@ export function retryPinnedDispatch(queue: DistributedQueue, planId: string, job
   snapshot: DurableWorkerSnapshot | undefined, idleGpuIds: readonly string[], now = Date.now()): Dispatch | undefined {
   const plan = queue.plans.find((row) => row.id === planId);
   const job = plan?.jobs.find((row) => row.index === jobIndex);
-  if (!plan || !job || plan.recoveryConflict || job.recoveryConflict || job.recallRequested === true || !["dispatching", "unknown"].includes(job.status)
+  if (!plan || !job || plan.recoveryConflict || job.recoveryConflict || job.recallRequested === true || job.stopIntent || !["dispatching", "unknown"].includes(job.status)
     || !job.workerId || !job.commandId || !String(job.gpuId || "").trim()
     || !dispatchReconciliationDue(job, now)
     || !snapshotAllowsPinnedRetry(snapshot, job, now)) return undefined;
@@ -1000,7 +1214,8 @@ export function releaseQueuedForReassignment(queue: DistributedQueue, planId: st
   const outputDir = nextAttemptOutputDir(job.outputDir, nextRunId);
   return { ...queue, plans: queue.plans.map((row) => row.id !== planId ? row : { ...row,
     jobs: row.jobs.map((item) => item.index !== jobIndex ? item : {
-      ...item, outputDir, attempt: 0, nextCommandId: nextRunId, workerId: undefined, commandId: undefined, runKey: undefined, gpuId: undefined,
+      ...item, outputDir, attempt: 0, nextCommandId: nextRunId, workerId: undefined, commandId: undefined, runKey: undefined, gpuId: undefined, manualDispatch: undefined,
+      runtimeDiagnostics: undefined, completionState: undefined, exitCode: undefined,
       status: "pending" as const, projectId: item.projectId, localQueueOnly: true, recallRequested: undefined,
       recallOperationId: undefined, reassignmentPending: undefined,
       reassignmentWorkerId: item.reassignmentWorkerId,
@@ -1113,7 +1328,8 @@ export function sameDistributedPlanFile(left: string, right: string): boolean {
   return samePlanFile(left, right);
 }
 
-export function matchingActiveDeferred(queue: DistributedQueue, identity: { id?: string; planFile: string; revision: string; codeFingerprint: string }) {
+export function matchingActiveDeferred(queue: DistributedQueue, identity: { id?: string; planFile: string; revision: string }) {
+  // 29：接续只看 PLAN 身份与 revision；代码指纹只是同步时快照，不再是冻结条件。
   const rows = queue.deferred || [];
   const id = String(identity.id || "");
   if (id) {
@@ -1121,14 +1337,12 @@ export function matchingActiveDeferred(queue: DistributedQueue, identity: { id?:
     if (!row) return null;
     const same = samePlanFile(row.planFile, identity.planFile)
       && row.revision === identity.revision
-      && row.codeFingerprint === identity.codeFingerprint
       && row.confirmedOutputChoice !== true
       && (row.status === "pending" || row.status === "blocked");
     return same ? row : null;
   }
   return rows.find((item) => samePlanFile(item.planFile, identity.planFile)
     && item.revision === identity.revision
-    && item.codeFingerprint === identity.codeFingerprint
     && item.confirmedOutputChoice !== true
     && (item.status === "pending" || item.status === "blocked"));
 }
@@ -1221,7 +1435,7 @@ export function distributedJobControlKey(plan: Pick<QueuedPlan, "id" | "revision
 
 /** Drop only confirmed plan runs. A partial stop keeps every unconfirmed job and deferred row. */
 export function removeConfirmedDistributedPlan(queue: DistributedQueue, planFile: string, confirmed: {
-  jobKeys: ReadonlySet<string>; deferredIds: ReadonlySet<string>; projectId?: string }): DistributedQueue {
+  jobKeys: ReadonlySet<string>; deferredIds: ReadonlySet<string>; projectId?: string; historyOnlyJobKeys?: ReadonlySet<string>; localControlJobKeys?: ReadonlySet<string> }): DistributedQueue {
   const selected = process.platform === "darwin" ? String(planFile || "") : String(planFile || "").trim();
   const clearedJobs = [...(queue.clearedJobs || [])];
   const clearedKeys = new Set(clearedJobs.map(entry => clearedJobIdentityKey(entry)));
@@ -1236,10 +1450,16 @@ export function removeConfirmedDistributedPlan(queue: DistributedQueue, planFile
         const entry: ClearedDistributedJob = { projectId: plan.projectId || job.projectId || confirmed.projectId || "",
           workflowId: plan.id, planFile: plan.planFile, planRevision: plan.revision, codeFingerprint: plan.codeFingerprint,
           experimentIndex: job.index, case: job.case, seed: job.seed,
-          ...(formalRecord ? { resultPathPolicy: "declared" as const, globalJobId: job.globalJobId } : { attempt: record.attempt }),
+          ...(formalRecord ? { resultPathPolicy: "declared" as const, globalJobId: job.globalJobId,
+            collectionResultCsv: job.collectionResultCsv, status: record.status, actualExecutionMode: job.actualExecutionMode || plan.executionMode,
+            checkpointSource: job.checkpointSource, mirroredWorkerIds: job.mirroredWorkerIds, fragmentWorkerIds: job.fragmentWorkerIds,
+            cleanup: job.cleanup, outputRetiredAt: record.outputRetiredAt } : { attempt: record.attempt }),
           outputDir: record.outputDir,
           workerId: record.workerId || "", commandId: record.commandId || "",
-          runKey: record === job ? job.runKey || job.commandId || "" : record.commandId || "", clearedAt };
+          runKey: record === job ? job.runKey || job.commandId || "" : record.commandId || "", clearedAt,
+          ...(record === job && job.workerId && job.commandId && confirmed.localControlJobKeys?.has(distributedJobControlKey(plan, job)) ? { stopBoundary: "local_command" as const } : {}),
+          ...(confirmed.historyOnlyJobKeys?.has(distributedJobControlKey(plan, job))
+            ? { clearMode: "terminal_history" as const, remoteClosureConfirmed: false as const } : {}) };
         const key = clearedJobIdentityKey(entry);
         if (!clearedKeys.has(key)) { clearedJobs.push(entry); clearedKeys.add(key); }
       }
@@ -1304,12 +1524,13 @@ export function retryVerifiedJob(queue: DistributedQueue, planId: string, jobInd
   const outputDir = nextAttemptOutputDir(prefix, "");
   return { ...queue, plans: queue.plans.map((row) => row.id !== planId ? row : { ...row,
     jobs: row.jobs.map((item) => item.index !== jobIndex ? item : {
-      ...item, outputDir, attempt: 0, nextCommandId: runId, workerId: undefined, commandId: undefined, runKey: undefined, gpuId: undefined,
+      ...item, outputDir, attempt: 0, nextCommandId: runId, workerId: undefined, commandId: undefined, runKey: undefined, gpuId: undefined, manualDispatch: undefined,
+      runtimeDiagnostics: undefined, completionState: undefined, exitCode: undefined,
       trustedTerminalStatus: undefined, admissionRejection: undefined, error: undefined, finishedAt: undefined,
       failureDiagnostic: undefined, formalConflictEvidence: undefined, blockReason: undefined, recoveryConflict: undefined,
       stopReason: undefined, automaticRetry: undefined, dispatchAcknowledgedAt: undefined, lastDispatchAttemptAt: undefined,
       cleanup: undefined,
-      artifacts: undefined, artifactError: undefined, artifactRetryAfter: undefined, outputRetiredAt: undefined,
+      artifacts: undefined, artifactError: undefined, artifactRetryAfter: undefined, latestArtifactSync: undefined, outputRetiredAt: undefined,
       historyLogIdentity: undefined, logPath: undefined,
       status: "pending" as const, history: [...(item.history || []), { attempt: item.attempt,
         status: item.status, workerId: item.workerId, commandId: item.commandId, outputDir: item.outputDir,
@@ -1361,6 +1582,7 @@ export function scheduleAutomaticJobRetries(queue: DistributedQueue, snapshots: 
     .find(task => remoteTaskMatchesJob(plan, job, task) && !task.identityConflict && !task.manualStopType
       && !task.stopReason && !job.stopReason && !job.recallRequested && !job.recoveryConflict);
   for (const original of latest.values()) {
+    if (original.jobs.some(job => job.lifecycleProtocol === 2)) continue;
     if (original.resultPathPolicy !== "declared") continue;
     if (hasUnresolvedPlanRecovery(original) || original.automaticRetry?.disabledAt
       || options.excludedPlanFiles?.some(file => samePlanFile(file, original.planFile))) continue;
@@ -1376,7 +1598,8 @@ export function scheduleAutomaticJobRetries(queue: DistributedQueue, snapshots: 
     }
     const evidence = new Map(plan.jobs.map(job => [job.index, proof(plan, job)]));
     if (!plan.automaticRetry.healthyAt) {
-      const completed = plan.jobs.some(job => job.status === "completed" && evidence.get(job.index)?.status === "completed");
+      const completed = plan.jobs.some(job => job.status === "completed" && evidence.get(job.index)?.status === "completed"
+        && (job.lifecycleProtocol !== 2 || job.completionState === "verified"));
       const running = plan.jobs.filter(job => job.status === "running" && evidence.get(job.index)?.status === "running"
         && !evidence.get(job.index)?.error).length;
       const total = Math.max(plan.jobs.length, Number(plan.fullPlanJobCount || plan.planJobCount || plan.jobs.length));

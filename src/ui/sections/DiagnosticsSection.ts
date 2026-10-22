@@ -31,16 +31,13 @@ export class DiagnosticsSection implements Section {
       </details>
       <details class="advanced">
         <summary>高级诊断</summary>
-        <div class="toolbar" title="插件不内置 SSH；Hub 和 Worker 连接由 Xshell 本地端口转发提供">
-          <button data-command="startHub" type="button">启动 Hub</button>
+        <div class="toolbar" title="插件不内置 SSH；Worker 连接由 Xshell 本地端口转发提供">
           <button data-command="startWorker" type="button">启动 Worker</button>
           <button data-command="configurePorts" class="secondary" type="button">配置端口</button>
           <button data-command="repairPorts" class="secondary" type="button">处理端口冲突</button>
         </div>
         <h3>配置来源</h3>
         <div id="configurationSources" data-anchor="diagnostics-config-sources"></div>
-        <h3>Hub 控制面</h3>
-        <div id="hubControlStatus" data-anchor="diagnostics-hub-control"></div>
         <h3>Worker 实时观测</h3>
         <div id="workerTelemetryStatus" data-anchor="diagnostics-worker-telemetry"></div>
         <h3>隧道端口分配</h3>

@@ -29,6 +29,7 @@ export async function expandSyncScopeBatchSelection(
   list: (parent: string) => Promise<ScopeEntry[]>,
   progress: (completed: number, total: number) => void = () => {},
   knownEntries: ScopeEntry[] = [],
+  options: { fresh?: boolean; onMissing?: (path: string) => void } = {},
 ): Promise<ScopeEntry[]> {
   const paths = [...new Set(selected)];
   const exclusions = [...new Set(excluded.map(safeSyncPath))];
@@ -40,11 +41,14 @@ export async function expandSyncScopeBatchSelection(
     if (!cache.has(parent)) cache.set(parent, list(parent));
     return cache.get(parent)!;
   };
-  const resolve = async (relative: string): Promise<ScopeEntry> => {
+  const resolve = async (relative: string): Promise<ScopeEntry | undefined> => {
     if (relative === ".") return { name: ".", path: ".", directory: true };
-    if (known.has(relative)) return known.get(relative)!;
+    if (!options.fresh && known.has(relative)) return known.get(relative)!;
     const entry = (await children(parentOf(relative))).find((item) => item.path === relative);
-    if (!entry) throw new Error(`已勾选路径不存在，请刷新文件树：${relative}`);
+    if (!entry) {
+      if (options.fresh && options.onMissing) { options.onMissing(relative); return undefined; }
+      throw new Error(`已勾选路径不存在，请刷新文件树：${relative}`);
+    }
     return entry;
   };
   const result: ScopeEntry[] = [];
@@ -55,7 +59,7 @@ export async function expandSyncScopeBatchSelection(
     if (relative === "." || hasExcludedChild) {
       if (!entry.directory) throw new Error(`文件下不能设置排除项：${relative}`);
       for (const child of await children(relative)) {
-        if (child.selectable === false) continue;
+        // selectable describes automatic transfer scope eligibility, not manual management.
         safeSyncPath(child.path);
         if (parentOf(child.path) !== relative) throw new Error(`文件树返回了越级路径：${child.path}`);
         await expand(child);
@@ -65,15 +69,16 @@ export async function expandSyncScopeBatchSelection(
   const topPaths = paths.filter((relative) => !paths.some((ancestor) => ancestor !== relative && (ancestor === "." || relative.startsWith(`${ancestor}/`))));
   let next = 0;
   let completed = 0;
-  await Promise.all(Array.from({ length: Math.min(8, topPaths.length) }, async () => {
+  await Promise.all(Array.from({ length: Math.min(options.fresh ? 2 : 8, topPaths.length) }, async () => {
     for (;;) {
       const index = next++;
       if (index >= topPaths.length) return;
-      await expand(await resolve(topPaths[index]));
+      const entry = await resolve(topPaths[index]);
+      if (entry) await expand(entry);
       progress(++completed, topPaths.length);
     }
   }));
-  if (!result.length) throw new Error("所选范围内没有可操作的文件或目录。");
+  if (!result.length && !options.fresh) throw new Error("所选范围内没有可操作的文件或目录。");
   return result.sort((a, b) => a.path.localeCompare(b.path));
 }
 

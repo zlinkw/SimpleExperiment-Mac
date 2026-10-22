@@ -12,15 +12,17 @@ function pythonDefinition(name) {
   const start = source.search(new RegExp(`^def ${name}\\(`, "m"));
   assert.notEqual(start, -1, `missing production definition: ${name}`);
   const tail = source.slice(start);
-  const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\\s*=)/m);
+  const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\s*=|\$\{)/m);
   return next === -1 ? tail : tail.slice(0, next + 1);
 }
 
 function fixture(root) {
-  const definitions = [
+  const definitions = ["durable_plan_path", "worker_path_value",
     "atomic_write_file", "atomic_write",
     "durable_plan_queue_path", "read_durable_plan_queue", "write_durable_plan_queue",
-    "durable_plan_path", "durable_plan_value", "durable_plan_identity", "durable_plan_public_task",
+    "durable_plan_value", "durable_plan_identity", "durable_plan_public_identity", "durable_plan_public_task",
+    "safe_project_path", "action_bool", "worker_task_stop_identity_mismatches",
+    "worker_recall_tombstones_path", "read_worker_recall_tombstones", "release_distributed_gpu_reservation",
     "durable_plan_same_identity", "accept_durable_plan_job", "cancel_durable_plan_job",
     "durable_plan_queue_processor_key", "durable_plan_queue_wake_event", "signal_durable_plan_queue_processor",
     "start_durable_plan_queue_processor",
@@ -28,7 +30,7 @@ function fixture(root) {
   const identity = source.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m);
   assert.ok(identity, "missing durable identity contract");
   return String.raw`
-import faulthandler, hashlib, json, os, stat, threading, time
+import copy, faulthandler, hashlib, json, os, stat, threading, time
 faulthandler.dump_traceback_later(3)
 ROOT = ${JSON.stringify(root.replace(/\\/g, "/"))}
 SCHEMA_VERSION = 1
@@ -38,6 +40,7 @@ WORKER_TASK_SNAPSHOT_LOCK = threading.RLock()
 CODE_SYNC_PROOF_LOCK = threading.RLock()
 DURABLE_PLAN_QUEUE_PROCESSOR_LOCK = threading.Lock()
 DURABLE_PLAN_QUEUE_PROCESSORS = {}
+DISTRIBUTED_GPU_RESERVATIONS = {}
 EVENTS = []
 def path_for(root, name):
     state = os.path.join(root, ".agent")
@@ -58,20 +61,40 @@ ${identity[0]}
 ${definitions.join("\n\n")}
 
 def verified_durable_execution_mode(root, command): return "train_test"
+def verified_formal_job_command(root, command, structure_only=False):
+    assert structure_only is True, "queue acknowledgement must not run task/asset preflight"
+    assert command["resultPathPolicy"] == "declared"
+    assert "attempt" not in command and "attempts" not in command["outputDir"].split("/")
+    return command
 
 def make_job(index, command_id):
     return {"projectId":"project-a", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
         "executionMode":"train_test", "mode":"train_test", "planRevision":"revision-a", "codeFingerprint":"sha-a", "experimentIndex":index, "case":"case-a",
-        "seed":40+index, "attempt":1, "outputDir":"experiments/runs/job-"+str(index)+"/attempts/1",
+        "seed":40+index, "outputDir":"experiments/runs/job-"+str(index),
+        "resultPathPolicy":"declared", "globalJobId":"workflow-a:"+str(index),
+        "collectionResultCsv":"experiments/results/job-"+str(index)+".csv",
         "runKey":command_id, "commandId":command_id, "workerId":"worker-a", "planJobCount":3,
         "action":"start-worker-task", "durablePlanQueue":True}
 
+# Keep acknowledgement/cancel/restart assertions on the current declaration
+# contract. Historical attempt namespaces remain read-only, never re-enabled.
+for old in [{**make_job(0, "old"), "attempt":1},
+            {**make_job(0, "old"), "outputDir":"experiments/runs/old/attempts/1"}]:
+    try:
+        accept_durable_plan_job(ROOT, old, "worker-a")
+    except ValueError as error:
+        assert "HISTORICAL_ATTEMPT_READ_ONLY" in str(error)
+    else:
+        raise AssertionError("historical attempt was admitted")
 first = accept_durable_plan_job(ROOT, make_job(0, "legacy-0"), "worker-a")
 again = accept_durable_plan_job(ROOT, make_job(0, "legacy-0"), "worker-a")
 assert first["durableAccepted"] is True and first["status"] == "queued"
 assert again["commandId"] == "legacy-0" and again["durableAccepted"] is True
 assert first["runKey"] == "legacy-0" and first["planJobCount"] == 3
 assert len(read_durable_plan_queue(ROOT)["jobs"]) == 1
+assert "attempt" not in first
+with open(durable_plan_queue_path(ROOT), encoding="utf-8") as persisted:
+    assert "attempt" not in json.load(persisted)["jobs"][0]
 
 cancel = {**make_job(0, "legacy-0"), "targetCommandId":"legacy-0", "commandId":"cancel-op"}
 bad = {**cancel, "seed":999}

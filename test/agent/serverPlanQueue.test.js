@@ -1,3 +1,4 @@
+const { isolatePythonGlobals } = require("../_helpers/isolatedPythonFixture");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -56,12 +57,12 @@ function makeFixtureScript(root) {
     "retain_worker_task_snapshot",
     "append_worker_task",
     "api_worker_tasks",
-  ].map(pythonDefinition);
+  ];
   const identity = source.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m);
   assert.ok(identity, "missing production durable identity fields");
   const legacyIdentity = source.match(/^LEGACY_WORKER_STOP_IDENTITY_FIELDS\s*=.*$/m);
   assert.ok(legacyIdentity, "missing production legacy stop identity fields");
-  return String.raw`
+  return isolatePythonGlobals(path.join(__dirname, "../../dist/runtime/cluster_agent.py"), definitions, String.raw`
 import json, os, threading, time, math, hashlib, re
 
 ROOT = ${JSON.stringify(root.replace(/\\/g, "/"))}
@@ -145,7 +146,7 @@ def idle_gpu(gpu_id):
 ${identity[0]}
 ${legacyIdentity[0]}
 
-${definitions.join("\n\n")}
+
 
 REAL_RESOLVE_DURABLE_CODE_SYNC_PROOF = resolve_durable_code_sync_proof
 def resolve_durable_code_sync_proof(root, row):
@@ -153,6 +154,7 @@ def resolve_durable_code_sync_proof(root, row):
         return {"proofId":"fixture-proof"}
     return REAL_RESOLVE_DURABLE_CODE_SYNC_PROOF(root, row)
 
+def verified_formal_job_command(*args, **kwargs): return {"identity":{}}
 def verified_durable_execution_mode(root, command): return "train_test"
 
 def make_job(index, command_id=None):
@@ -165,8 +167,8 @@ def make_job(index, command_id=None):
         "experimentIndex": index,
         "case": "case-a",
         "seed": 40 + index,
-        "attempt": 1,
-        "outputDir": "experiments/runs/job-" + str(index) + "/attempts/1",
+        "attempt": 0, "resultPathPolicy": "declared", "globalJobId": "workflow-1:" + str(index), "collectionResultCsv": "results/job-" + str(index) + ".csv",
+        "outputDir": "experiments/runs/job-" + str(index),
         "runKey": command_id or "command-" + str(index),
         "commandId": command_id or "command-" + str(index),
         "workerId": "worker-a",
@@ -179,7 +181,7 @@ def make_job(index, command_id=None):
     }
 
 def persist_task(job, status, gpu_id=""):
-    task = {**durable_plan_identity(job), "planJobCount": job["planJobCount"],
+    task = {**durable_plan_public_identity(job), "planJobCount": job["planJobCount"],
             "enqueuedAt": job.get("enqueuedAt"), "status": status, "gpuId": gpu_id}
     append_worker_task(ROOT, task)
 
@@ -192,7 +194,8 @@ first = accept_durable_plan_job(ROOT, make_job(0), "worker-a")
 replay = accept_durable_plan_job(ROOT, make_job(0), "worker-a")
 assert first["durableAccepted"] is True and first["status"] == "queued"
 assert replay["commandId"] == first["commandId"] and replay["status"] == "queued"
-assert all(first.get(key) == make_job(0).get(key) for key in DURABLE_PLAN_IDENTITY_FIELDS)
+assert all(first.get(key) == make_job(0).get(key) for key in DURABLE_PLAN_IDENTITY_FIELDS if key != "attempt")
+assert "attempt" not in first
 assert first["projectId"] == make_job(0)["projectId"] and first["planJobCount"] == 4 and first["enqueuedAt"]
 assert "gpuId" not in read_durable_plan_queue(ROOT)["jobs"][0] or read_durable_plan_queue(ROOT)["jobs"][0]["gpuId"] == ""
 assert read_durable_plan_queue(ROOT)["jobs"][0]["enqueuedAt"]
@@ -219,7 +222,7 @@ persist_task({**make_job(99), "commandId": "existing"}, "running", "0")
 calls = []
 def execute(root, command, worker_id):
     calls.append((command["commandId"], command["gpuId"]))
-    task = {**durable_plan_identity(command), "planJobCount": command["planJobCount"],
+    task = {**durable_plan_public_identity(command), "planJobCount": command["planJobCount"],
             "enqueuedAt": command["enqueuedAt"], "status": "running", "gpuId": command["gpuId"]}
     append_worker_task(root, task)
     return {"status": "running", "commandId": command["commandId"]}
@@ -252,6 +255,8 @@ runtime_proof = register_code_sync_proof(runtime_root, {
 runtime_job = {**make_job(0), "commandId": "runtime-waiting", "runKey": "runtime-waiting",
     "codeFingerprint": fingerprint, "codeSyncProofId": runtime_proof["proofId"], "manifestDigest": fingerprint}
 accept_durable_plan_job(runtime_root, runtime_job, "worker-a")
+# Existing declared output requires current read-only preflight even with a busy GPU hint.
+os.makedirs(os.path.join(runtime_root, runtime_job["outputDir"]), exist_ok=True)
 runtime_queue = read_durable_plan_queue(runtime_root)
 runtime_queue["jobs"][0].update({"codeBlocked":True,"error":"code-sync proof identity mismatch or stale runtime generation"})
 write_durable_plan_queue(runtime_root, runtime_queue)
@@ -261,17 +266,18 @@ runtime_busy = lambda: ([{"gpuId":"9","processes":[{}]}], "")
 assert not drain_durable_plan_queue_once(runtime_root, "worker-a", gpu_probe=runtime_busy, execute=lambda *args: runtime_calls.append(True))
 renewed_row = read_durable_plan_queue(runtime_root)["jobs"][0]
 assert renewed_row["status"] == "queued" and not runtime_calls
-assert renewed_row["codeSyncProofId"] != runtime_proof["proofId"]
+assert renewed_row["codeSyncProofId"] != runtime_proof["proofId"], repr(renewed_row)
 assert renewed_row["codeSyncProofRuntimeGeneration"] == code_sync_proof_runtime_generation()
 assert not renewed_row.get("codeBlocked") and not renewed_row.get("error"), "busy GPU must not retain an obsolete code error"
 assert durable_plan_same_identity(renewed_row, runtime_job), "runtime refresh must not create an attempt or change job provenance"
 public_row = next(row for row in api_worker_tasks(runtime_root)["tasks"] if row["commandId"] == runtime_job["commandId"])
 assert public_row["status"] == "queued" and not public_row.get("error"), "Host snapshot must see the cleared blocker"
 def runtime_execute(root, command, worker_id):
-    runtime_calls.append((command["commandId"],command["attempt"],command["outputDir"]))
+    assert command["attempt"] == 0 and "attempts" not in command["outputDir"].split("/")
+    runtime_calls.append((command["commandId"],command["outputDir"]))
     return {"status":"running"}
 assert len(drain_durable_plan_queue_once(runtime_root, "worker-a", gpu_probe=lambda: ([idle_gpu("9")], ""), execute=runtime_execute)) == 1
-assert runtime_calls == [(runtime_job["commandId"],runtime_job["attempt"],runtime_job["outputDir"])]
+assert runtime_calls == [(runtime_job["commandId"],runtime_job["outputDir"])]
 assert not drain_durable_plan_queue_once(runtime_root, "worker-a", gpu_probe=lambda: ([idle_gpu("9")], ""), execute=runtime_execute)
 assert len(runtime_calls) == 1, "repeated polling cannot start another copy"
 
@@ -306,6 +312,7 @@ assert calls == [("command-0", "1"), ("command-1", "2"), ("command-2", "1")]
 assert next(item for item in read_durable_plan_queue(ROOT)["jobs"] if item["commandId"] == "command-2")["status"] == "running"
 
 cancel_job = make_job(3)
+cancel_job.pop("attempt", None)
 try:
     cancel_durable_plan_job(ROOT, {**cancel_job, "targetCommandId": cancel_job["commandId"], "projectId": "D:\\wrong", "commandId": "bad-stop"})
     raise AssertionError("queued cancellation with conflicting project identity was accepted")
@@ -347,7 +354,7 @@ sync_durable_plan_task_rows(ROOT)
 conflict_after = next(item for item in read_durable_plan_queue(ROOT)["jobs"] if item["commandId"] == "command-1")
 assert conflict_after["status"] == "unknown" and conflict_after["identityConflict"] is True
 print(json.dumps({"accepted": True, "fifo": calls, "offlineDrained": True, "cancelled": cancelled["commandId"], "conflict": True}))
-`;
+`);
 }
 
 test("server Agent durably accepts, drains, cancels, and fences Plan jobs", () => {

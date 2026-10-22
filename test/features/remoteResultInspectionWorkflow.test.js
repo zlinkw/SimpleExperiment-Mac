@@ -24,6 +24,7 @@ function loadHelpers() {
   const sandbox = {
     path,
     crypto,
+    ResultOwnershipScope: require("../_helpers/compiledModule").compiledModule(require.resolve("../../dist/results/ResultOwnershipScope"), "win32"),
     ProjectResultTables: require("../../dist/results/ProjectResultTables.js"),
     WrapperResultBundle: require("../../dist/results/WrapperResultBundle.js"),
     process: { platform: 'win32' },
@@ -273,12 +274,12 @@ test("Plan concise table is the primary result entry with scoped explanations", 
   assert.match(panel, /data-command="openLocalResultTable"/);
   assert.match(panel, /查看共享产物/);
   assert.doesNotMatch(panel, /resultFileButton\("查看简洁汇总 CSV"/);
-  assert.match(panel, /更新当前 Plan 指标表/);
+  assert.match(panel, /更新结果汇总/);
   assert.doesNotMatch(panel, /data-details-key="result-trace-files"/);
   assert.doesNotMatch(panel, /原始数据与详细追溯/);
   assert.match(panel, /data-details-key="result-split-tables"/);
-  assert.match(panel, /尚无总表。点击“同步服务器结果并更新总表”/);
-  assert.match(panel, /重建当前 Plan 汇总/);
+  assert.match(panel, /尚无总表。点击“更新结果汇总”/);
+  assert.match(panel, /重建本机表格/);
 });
 
 test("current Plan sync delegates to the scoped verified metric rebuild without saving raw copies", () => {
@@ -301,7 +302,8 @@ test("operation details retain each parser error and add file-only fallbacks", (
     { path: "work_dirs/a/metrics_summary.csv", error: "value 列不是数值" },
     { path: "work_dirs/b/metrics_summary.csv", error: "" },
   ]);
-  assert.match(agent, /"unparseable": report\.get\("unparseable"\) or \[\]/);
+  assert.match(agent, /"unparseable": unparseable/);
+  assert.match(agent, /unparseable\.append\(\{"path": item, "error": str\(exc\)\}\)/);
 });
 
 test("file transfer enforces the inspection size cap before streaming", () => {
@@ -310,30 +312,28 @@ test("file transfer enforces the inspection size cap before streaming", () => {
   assert.match(realtimeClient, /downloadFile\(remotePath: string, localPath: string, options: DownloadOptions = \{\}\)/);
   assert.match(realtimeClient, /this\.files\.downloadFile\(remotePath, localPath, options\)/);
   assert.match(multiClient, /downloadFile\(remotePath: string, localPath: string, options: DownloadOptions = \{\}\)/);
-  assert.match(multiClient, /hubClient\(\)\.downloadFile\(remotePath, localPath, options\)/);
+  assert.match(multiClient, /selectedWorkerClient\(\)\.downloadFile\(remotePath, localPath, options\)/);
   assert.match(agent, /if int\(max_bytes or 0\) > 0 and size > int\(max_bytes\):/);
   assert.match(agent, /status=413/);
   assert.match(agent, /params\.get\("maxBytes"\)/);
 });
 
-test("file transfer sends maxBytes to the Hub file API", async () => {
-  const previousFetch = global.fetch;
+test("file transfer sends maxBytes to the selected Worker transport and refuses HTTP 413", async () => {
   let requestedUrl = "";
-  global.fetch = async (url) => {
-    requestedUrl = String(url);
-    return new Response('{"error":"file exceeds requested maxBytes"}', { status: 413, headers: { "content-type": "application/json" } });
-  };
-  try {
-    const budget = { run: async (_kind, work) => work() };
-    const client = new FileTransferClient({ localHost: "127.0.0.1", localPort: 18765 }, budget);
-    await assert.rejects(
-      client.downloadFile("work_dirs/smoke/metrics_summary.csv", path.join(root, "simple_cluster", "tmp", "unused.csv"), { maxBytes: 12345 }),
-      /HTTP 413/
-    );
-    assert.match(requestedUrl, /maxBytes=12345/);
-  } finally {
-    global.fetch = previousFetch;
-  }
+  const {FileTransferClient: IsolatedClient} = require('../_helpers/compiledModule').compiledModule(
+    require.resolve('../../dist/tunnel/FileTransferClient.legacy'), process.platform, {
+      '../core/ProgressRpcTransport': {postProgressRpc: async url => {
+        requestedUrl=String(url);return new Response('{"error":"file exceeds requested maxBytes"}',
+          {status:413,headers:{'content-type':'application/json'}});
+      }}
+    });
+  const directory=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'result-inspection-limit-'));
+  const client=new IsolatedClient({localHost:'fixture.invalid',localPort:23456}, {run:async (_kind,work)=>work()});
+  await assert.rejects(client.downloadFile('work_dirs/smoke/metrics_summary.csv',path.join(directory,'unused.csv'),
+    {maxBytes:12345,maxRetries:0}), /HTTP 413/);
+  assert.match(requestedUrl,/maxBytes=12345/);
+  assert.match(requestedUrl,/fixture\.invalid:23456\/api\/files\/download/);
+  assert.equal(fs.existsSync(path.join(directory,'unused.csv')),false);
 });
 
  test("dataset tables remain eligible metric downloads with Worker ownership", () => {

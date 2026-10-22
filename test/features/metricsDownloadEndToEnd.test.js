@@ -6,10 +6,18 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const test = require("node:test");
 const ts = require("typescript");
-const vm = require("node:vm");
+// A persistent .ts loader keeps the later direct src requires (ResultCollectionHost, PlanCodeScopeHost,
+// WorkspacePathMapper) resolvable after the one-off shim below is restored.
+require("../_helpers/registerTsRequire");
 
 const repo = path.join(__dirname, "..", "..");
-const tablesModule = { exports: require("../../dist/results/ProjectResultTables") };
+const tablesPath = path.join(repo, "src", "results", "ProjectResultTables.ts");
+const tablesModule = new Module(tablesPath, module);
+tablesModule.filename = tablesPath;
+tablesModule.paths = Module._nodeModulePaths(path.dirname(tablesPath));
+tablesModule._compile(ts.transpileModule(fs.readFileSync(tablesPath, "utf8"), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+}).outputText, tablesPath);
 
 const uiNotices = [];
 const vscode = {
@@ -21,20 +29,32 @@ const vscode = {
   Uri: { file: (fsPath) => ({ fsPath }) }, ProgressLocation: { Notification: 1 },
 };
 const originalLoad = Module._load;
+const originalTsLoader = Module._extensions[".ts"];
+Module._extensions[".ts"] = (loadedModule, filename) => {
+  const source = fs.readFileSync(filename, "utf8") + (filename.endsWith(path.join("src", "extension", "legacy.ts"))
+    ? "\nexport { planValidationFromResult };\n" : "");
+  loadedModule._compile(ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText, filename);
+};
 Module._load = function (request, parent, isMain) {
   if (request === "vscode") return vscode;
+  if (request === "node:worker_threads" || request === "worker_threads") {
+    const workerThreads = originalLoad.call(this, request, parent, isMain);
+    return { ...workerThreads, Worker: class extends workerThreads.Worker { constructor(filename, options) {
+      super(String(filename).endsWith(path.join('src', 'results', 'ProjectResultCatalogWorker.js'))
+        ? path.join(repo, 'dist/results/ProjectResultCatalogWorker.js') : filename, options);
+    } } };
+  }
+  if (request.startsWith("../vendor/semver/")) return originalLoad.call(this, path.join(repo, "dist/vendor/semver", request.slice("../vendor/semver/".length)), parent, isMain);
+  if (request === "../results/ProjectResultTables" && parent?.filename.endsWith(path.join("src", "extension", "legacy.ts"))) return tablesModule.exports;
+  if (request === "../results/ProjectResultCatalog") return originalLoad.call(this, path.join(repo, "dist/results/ProjectResultCatalog.js"), parent, isMain);
   return originalLoad.call(this, request, parent, isMain);
 };
-let __syncPendingResultMetricsForTest, RealtimeTunnelPanelProvider;
-try {
-  ({ __syncPendingResultMetricsForTest, RealtimeTunnelPanelProvider } = require("../../dist/extension/legacy.js"));
-} finally { Module._load = originalLoad; }
-// Extract only this pure parser from the same compiled artifact; never patch production exports.
-const actual = fs.readFileSync(path.join(repo, "dist/extension/legacy.js"), "utf8");
-const ast = ts.createSourceFile("actual.js", actual, ts.ScriptTarget.Latest, true);
-const parser = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "planValidationFromResult");
-assert.ok(parser, "the compiled plan validation parser must exist");
-const planValidationFromResult = vm.runInNewContext(parser.getText(ast) + "\nplanValidationFromResult;");
+const { __syncPendingResultMetricsForTest, RealtimeTunnelPanelProvider, planValidationFromResult } = require("../../src/extension/legacy.ts");
+Module._load = originalLoad;
+if (originalTsLoader) Module._extensions[".ts"] = originalTsLoader;
+else delete Module._extensions[".ts"];
 
 const planFile = "experiments/plans/demo.yaml";
 const remoteCsv = "simple_cluster/results/worker-a/seed_metrics.csv";
@@ -86,190 +106,155 @@ function providerFor(workspace, csvText, oldRegistry) {
   return provider;
 }
 
-function seedRegistry() {
-  return tablesModule.exports.updateRegistry(tablesModule.exports.emptyTableRegistry(), {
-    planFile, planRevision: "rev-1", completedRunId: "run-old", rawResultCsvPath: remoteCsv,
-    workerResultTables: [{ workerId: "worker-a", rawResultCsvPath: remoteCsv, aggregateStatus: "ready" }],
-    results: [{ workerId: "worker-a", runId: "run-old", attempt: "1", planRevision: "rev-1",
-      dimensions: { case: "alpha", seed: "42", method: "demo", dataset: "set" }, metrics: { AUC: { value: 0.5 } },
-      sourceFiles: [{ path: remoteCsv }] }],
-  }, planFile, 1);
-}
+const {fixture, planText}=require('../_helpers/freshResultHost');
+const {ResultCollectionHost}=require('../../src/extension/ResultCollectionHost.ts');
+const {resultDigest}=require('../../src/results/FreshResults.ts');
 
-test("production metrics-only SFTP mapping retains provenance in the registry without raw cache, with alias-normalized mean and sample SD", async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-metrics-chain-"));
-  try {
-    const provider = providerFor(workspace, csvFor([
-      { seed: 42, metric: "AUC", value: 0.4 }, { seed: 42, metric: "roc_auc", value: 0.4 },
-      { seed: 42, metric: "ECE", value: 0.1 }, { seed: 42, metric: "ece", value: 0.1 },
-      { seed: 43, metric: "auc", value: 0.6 }, { seed: 43, metric: "ECE", value: 0.3 },
-    ]));
-    const report = await __syncPendingResultMetricsForTest(provider);
-    assert.equal(report.downloaded, true);
-    assert.equal(report.included.length, 1);
-    const call = provider.calls.find(([method]) => method === "sync.downloadMappedPaths");
-    assert.ok(call);
-    assert.equal(call[0], "sync.downloadMappedPaths");
-    assert.equal(call[1].metricsOnly, true);
-    assert.equal(call[1].memoryOnly, true);
-    assert.equal(call[1].confirm, true);
-    assert.equal(call[1].pathConfirmed, true);
-    assert.equal(call[1].server.id, "worker-a");
-    assert.equal(call[1].server.host, "worker-a.example", "the mapped transfer follows the configured Worker endpoint");
-    assert.equal(call[1].server.remotePath, "/project");
-    assert.equal(provider.calls.filter(([method]) => method === "sync.downloadMappedPaths").length, 1,
-      "the cross test uses the mapped metrics transport seam once");
-    assert.deepEqual(call[1].entries.map((entry) => entry.remotePath), [remoteCsv]);
-    assert.ok(call[1].entries.every((entry) => !/weight|checkpoint|\.log$/i.test(entry.remotePath)));
-    const localMetricFiles = [];
-    const visit = (directory) => {
-      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-        const full = path.join(directory, entry.name);
-        if (entry.isDirectory()) visit(full);
-        else if (entry.isFile() && full.includes(localCsvPattern)) localMetricFiles.push(full);
-      }
-    };
-    visit(workspace);
-    assert.equal(localMetricFiles.length, 0, "raw metric bytes are parsed in memory, never saved as local cache");
-    const outputRoot = path.join(workspace, "experiments", "results", "set", "final");
-    const csv = fs.readFileSync(path.join(outputRoot, "final.csv"), "utf8");
-    const markdown = fs.readFileSync(path.join(outputRoot, "final.md"), "utf8");
-    const table = tablesModule.exports.readCsv(csv);
-    assert.equal(table.header.filter((column) => column === "roc_auc_mean").length, 1);
-    assert.equal(table.rows[0][table.header.indexOf("roc_auc_mean")], "0.5");
-    assert.ok(Math.abs(Number(table.rows[0][table.header.indexOf("roc_auc_sd")]) - Math.sqrt(0.02)) < 1e-12);
-    assert.equal(table.rows[0][table.header.indexOf("ece_mean")], "0.2");
-    assert.ok(Math.abs(Number(table.rows[0][table.header.indexOf("ece_sd")]) - Math.sqrt(0.02)) < 1e-12);
-    assert.match(markdown, /0\.5000 ± 0\.1414/);
-    const registry = JSON.parse(fs.readFileSync(path.join(workspace, "simple_cluster", "results", "project_table_registry.json"), "utf8"));
-    assert.deepEqual(Object.keys(registry.plans[planFile].records[0].metrics).sort(), ["AUC", "ECE", "ece", "roc_auc"].sort());
-    assert.equal(registry.plans[planFile].records[0].runId, "run-complete");
-    assert.ok(registry.plans[planFile].records.every(record=>record.runId==="run-complete"));
-  } finally {
-    vscode.workspace.workspaceFolders = [];
-  }
+test("actual UI entry reads native manifests and alias metrics into memory without a result registry", async()=>{
+  const f=fixture();f.raw['work_dirs/alpha42/metrics.csv']=csvFor([{seed:42,metric:'AUC',value:.4},{seed:42,metric:'roc_auc',value:.4},{seed:42,metric:'ECE',value:.1}]);
+  f.host.parseFreshResultMetric=RealtimeTunnelPanelProvider.prototype.parseFreshResultMetric;
+  const report=await __syncPendingResultMetricsForTest(f.host);
+  assert.equal(report.current,true,JSON.stringify(report.skipped));assert.equal(report.included.length,1);
+  const table=tablesModule.exports.readCsv(fs.readFileSync(path.join(f.root,'experiments/results/set/final/final.csv'),'utf8'));
+  assert.equal(table.rows[0][table.header.indexOf('roc_auc_mean')],'0.4');
+  assert.equal(fs.existsSync(path.join(f.root,'simple_cluster/results/project_table_registry.json')),false);
+  assert.ok(f.calls.filter(call=>call[0]==='sync.downloadMappedPaths').every(call=>call[1].memoryOnly));
+  // 原始指标只在内存中解析：本机绝不落任何 raw 缓存目录。
+  const walked=[];const visit=directory=>{for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
+    const full=path.join(directory,entry.name);if(entry.isDirectory())visit(full);else walked.push(full);}};
+  visit(f.root);
+  assert.ok(walked.every(file=>!file.includes(localCsvPattern)&&!file.includes(path.join('_unassigned'))),
+    'raw metric bytes are parsed in memory, never saved as local cache');
 });
 
-test("conflicting raw aliases retain the previous published CSV and Markdown", async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-metrics-conflict-"));
-  try {
-    const oldRegistry = seedRegistry();
-    const prior = tablesModule.exports.buildTables(oldRegistry)["set/final"];
-    const outputRoot = path.join(workspace, "experiments", "results", "set", "final");
-    fs.mkdirSync(outputRoot, { recursive: true });
-    fs.writeFileSync(path.join(outputRoot, "final.csv"), tablesModule.exports.writeCsv(prior.header, prior.rows), "utf8");
-    fs.writeFileSync(path.join(outputRoot, "final.md"), prior.markdown, "utf8");
-    const beforeCsv = fs.readFileSync(path.join(outputRoot, "final.csv"), "utf8");
-    const beforeMd = fs.readFileSync(path.join(outputRoot, "final.md"), "utf8");
-    const provider = providerFor(workspace, csvFor([
-      { seed: 42, metric: "AUC", value: 0.4 }, { seed: 42, metric: "roc_auc", value: 0.8 },
-      { seed: 43, metric: "AUC", value: 0.6 },
-    ]), oldRegistry);
-    const report = await __syncPendingResultMetricsForTest(provider);
-    assert.ok(report.skipped.some(issue=>/等价指标值冲突/.test(issue)), "the conflict stays visible in the partial-sync report");
-    assert.equal(report.included.length, 0);
-    assert.equal(provider.calls.find(([method]) => method === "sync.downloadMappedPaths")[1].metricsOnly, true);
-    assert.equal(fs.readFileSync(path.join(outputRoot, "final.csv"), "utf8"), beforeCsv);
-    assert.equal(fs.readFileSync(path.join(outputRoot, "final.md"), "utf8"), beforeMd);
-  } finally {
-    vscode.workspace.workspaceFolders = [];
+// 旧 0.5.x 门禁的均值/样本SD/来源保证在新直查管线下原样保留：两个正式 job 的别名指标
+// （AUC/auc/roc_auc、ECE/ece）归一后 mean=0.5、样本SD=√0.02，来源身份来自本轮主动查询。
+test("two formal jobs keep alias-normalized mean, sample SD and per-run provenance in the fresh export", async()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'simple-fresh-two-seeds-'));
+  fs.mkdirSync(path.join(root,'experiments/plans'),{recursive:true});fs.writeFileSync(path.join(root,planFile),planText,'utf8');
+  const jobs=[{index:0,seed:42},{index:1,seed:43}].map(row=>({...row,case:'alpha',
+    output_dir:`work_dirs/alpha${row.seed}`,result_csv:`work_dirs/alpha${row.seed}/metrics.csv`,planHash:resultDigest(planText)}));
+  const csv={'work_dirs/alpha42/metrics.csv':csvFor([{seed:42,metric:'AUC',value:.4},{seed:42,metric:'roc_auc',value:.4},{seed:42,metric:'ECE',value:.1}]),
+    'work_dirs/alpha43/metrics.csv':csvFor([{seed:43,metric:'auc',value:.6},{seed:43,metric:'ECE',value:.3}])};
+  for(const job of jobs)csv[`${job.output_dir}/artifact_manifest.json`]=JSON.stringify({simpleExperiment:{runId:'command',status:'completed',mode:'test',
+    job:{index:job.index,case:job.case,seed:job.seed},outputDir:job.output_dir,resultCsv:job.result_csv,weights:[]}});
+  const calls=[],worker={id:'a',host:'configured-host',port:222,user:'exp',remotePath:'/configured/project'};
+  const filesOf=job=>[`${job.output_dir}/artifact_manifest.json`,job.result_csv].map(remotePath=>
+    ({remotePath,bytes:Buffer.byteLength(csv[remotePath]),sha256:resultDigest(csv[remotePath])}));
+  const host={panelDisposed:false,resultCsvDirectory:'experiments/results',
+    captureProjectContext:()=>({root}),projectContextIsCurrent:()=>true,workerCodeSyncTargets:()=>[worker],
+    currentResultPlanInputs:async()=>[{planFile,revision:resultDigest(planText),mode:'test',seeds:[42,43],jobCount:2}],
+    resultAdapterRules:()=>({}),parseFreshResultMetric:RealtimeTunnelPanelProvider.prototype.parseFreshResultMetric,
+    client:{getWorkerTasks:async(id,options)=>{assert.equal(id,'a');
+      if(options.discovery)return{queryComplete:true,capabilities:{resultCollection:1},declaredJobs:jobs};
+      return{queryComplete:true,capabilities:{resultCollection:1},tasks:[],declaredResults:jobs.map(job=>({index:job.index,
+        outputDir:job.output_dir,completed:true,runId:'command',files:filesOf(job),
+        runtimeDiagnostics:{schemaVersion:1,commandId:'command',runId:'command',state:'clear',count:0,scanComplete:true}}))};}},
+    simpleSftpCapability:async()=>({methodOptions:{'sync.downloadMappedPaths':{memoryOnly:true,memoryWrapperResults:true}}}),
+    sftpServerOptions:row=>row,
+    simpleSftpApiCall:async(method,params)=>{calls.push([method,params]);assert.equal(method,'sync.downloadMappedPaths');
+      return{ok:true,memoryOnly:true,entries:params.entries.map(entry=>({remotePath:entry.remotePath,bytes:entry.bytes,
+        sha256:entry.sha256,dataBase64:Buffer.from(csv[entry.remotePath]).toString('base64')}))};},
+    refreshLocalResultCatalogForProject:async()=>{},postState(){},recordActionError(){},
+    loadDistributedQueue:()=>assert.fail('queue must not supply results'),loadPlanSyncLedger:()=>assert.fail('ledger must not supply results'),
+    loadProjectTableRegistry:()=>assert.fail('registry must not supply results')};
+  const report=await new ResultCollectionHost(host).update();
+  assert.equal(report.current,true,JSON.stringify(report.skipped.concat(report.missing)));
+  assert.equal(report.completed,2);assert.deepEqual(report.included,[planFile]);
+  const table=tablesModule.exports.readCsv(fs.readFileSync(path.join(root,'experiments/results/set/final/final.csv'),'utf8'));
+  assert.equal(table.header.filter(column=>column==='roc_auc_mean').length,1);
+  assert.equal(table.rows[0][table.header.indexOf('roc_auc_mean')],'0.5');
+  assert.ok(Math.abs(Number(table.rows[0][table.header.indexOf('roc_auc_sd')])-Math.sqrt(0.02))<1e-12);
+  assert.equal(table.rows[0][table.header.indexOf('ece_mean')],'0.2');
+  assert.ok(Math.abs(Number(table.rows[0][table.header.indexOf('ece_sd')])-Math.sqrt(0.02))<1e-12);
+  assert.match(fs.readFileSync(path.join(root,'experiments/results/set/final/final.md'),'utf8'),/0\.5000 ± 0\.1414/);
+  // 长表一行一条指标：逐行核验来源身份，再按 seed 聚合别名指标值，全部来自本轮核实集合。
+  const bySeed=new Map();
+  for(const row of report.results){
+    assert.equal(row.runId,'command');assert.equal(row.workerId,'a');
+    assert.equal(row.dimensions.case,'alpha');assert.equal(row.dimensions.method,'demo');assert.equal(row.dimensions.dataset,'set');
+    const bucket=bySeed.get(row.dimensions.seed)||{};bySeed.set(row.dimensions.seed,bucket);
+    for(const [metric,raw] of Object.entries(row.metrics))bucket[metric]=(raw&&raw.value!==undefined)?raw.value:raw;
   }
+  assert.deepEqual([...bySeed.keys()].sort(),['42','43'],'every declared job contributes rows from this verified collection');
+  assert.deepEqual(bySeed.get('42'),{AUC:0.4,roc_auc:0.4,ECE:0.1});
+  assert.deepEqual(bySeed.get('43'),{auc:0.6,ECE:0.3});
+  assert.deepEqual(report.jobs.map(job=>job.state),['complete','complete']);
+  assert.equal(fs.existsSync(path.join(root,'simple_cluster/results/project_table_registry.json')),false);
+  // 一次人工同步只走一次内存映射传输，批量携带全部四个声明文件，且仍按配置的 Worker 端点。
+  const downloads=calls.filter(call=>call[0]==='sync.downloadMappedPaths');
+  assert.equal(downloads.length,1,'one manual sync batches every declared file into a single memory read');
+  const params=downloads[0][1];
+  assert.equal(params.memoryOnly,true);assert.equal(params.metricsOnly,true);
+  assert.equal(params.confirm,true);assert.equal(params.pathConfirmed,true);
+  assert.equal(params.server.host,'configured-host','the mapped transfer follows the configured Worker endpoint');
+  assert.equal(params.server.remotePath,'/configured/project');
+  assert.deepEqual(new Set(params.entries.map(entry=>entry.remotePath)),new Set(Object.keys(csv)));
+  assert.ok(params.entries.every(entry=>!/weight|checkpoint|\.log$/i.test(entry.remotePath)));
+  const walked=[];const visit=directory=>{for(const entry of fs.readdirSync(directory,{withFileTypes:true})){
+    const full=path.join(directory,entry.name);if(entry.isDirectory())visit(full);else walked.push(full);}};
+  visit(root);
+  assert.ok(walked.every(file=>!file.includes(localCsvPattern)&&!file.includes(path.join('_unassigned'))),
+    'raw metric bytes are never written as a local cache');
 });
 
-test("corrupt or unrequested memory responses keep the existing registry, CSV and Markdown", async () => {
-  const corruptions = [
-    entry => ({ ...entry, remotePath: "simple_cluster/results/other/seed_metrics.csv" }),
-    entry => ({ ...entry, sha256: "0".repeat(64) }),
-    entry => ({ ...entry, bytes: entry.bytes + 1 }),
-    entry => ({ ...entry, dataBase64: Buffer.from("invalid").toString("base64") }),
+test("conflicting aliases remain visible as an unknown job and do not borrow the previous export",async()=>{
+  const f=fixture();f.host.parseFreshResultMetric=RealtimeTunnelPanelProvider.prototype.parseFreshResultMetric;
+  f.raw['work_dirs/alpha42/metrics.csv']=csvFor([{seed:42,metric:'AUC',value:.4}]);
+  await __syncPendingResultMetricsForTest(f.host);
+  f.raw['work_dirs/alpha42/metrics.csv']=csvFor([{seed:42,metric:'AUC',value:.4},{seed:42,metric:'roc_auc',value:.8}]);
+  const report=await __syncPendingResultMetricsForTest(f.host);
+  assert.equal(report.results.length,0);assert.equal(report.jobs[0].state,'unknown');assert.match(report.missing.join(' '),/指标.*冲突/);
+});
+
+// 旧"坏内存响应保留既有产物"门禁在直查管线下的等价形式：未声明/篡改响应必须显式失败，
+// 已发布的 CSV/Markdown 保持字节一致，绝不从旧数据补齐本轮结果。
+test("corrupt or unrequested memory responses keep the published CSV and Markdown byte-identical",async()=>{
+  const corruptions=[
+    [entry=>({...entry,remotePath:'simple_cluster/results/other/seed_metrics.csv'}),/RESULT_MEMORY_READ_UNDECLARED/],
+    [entry=>({...entry,sha256:'0'.repeat(64)}),/RESULT_CONTENT_CHANGED/],
+    [entry=>({...entry,bytes:entry.bytes+1}),/RESULT_CONTENT_CHANGED/],
+    [entry=>({...entry,dataBase64:Buffer.from('invalid').toString('base64')}),/RESULT_CONTENT_CHANGED/],
   ];
-  for (const corrupt of corruptions) {
-    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-metrics-reject-"));
-    const registry = seedRegistry(), prior = tablesModule.exports.buildTables(registry)["set/final"];
-    const outputs = {
-      "experiments/results/set/final/final.csv": tablesModule.exports.writeCsv(prior.header, prior.rows),
-      "experiments/results/set/final/final.md": prior.markdown,
-      "simple_cluster/results/project_table_registry.json": JSON.stringify(registry),
-    };
-    for (const [relative, contents] of Object.entries(outputs)) {
-      fs.mkdirSync(path.dirname(path.join(workspace, relative)), { recursive: true });
-      fs.writeFileSync(path.join(workspace, relative), contents, "utf8");
-    }
-    const provider = providerFor(workspace, csvFor([{ seed: 42, metric: "AUC", value: 0.9 }]), registry);
-    const api = provider.simpleSftpApiCall;
-    provider.simpleSftpApiCall = async (...args) => {
-      const response = await api(...args);
-      return args[0] === "sync.downloadMappedPaths"
-        ? { ...response, entries: response.entries.map(corrupt) } : response;
-    };
-    const report = await __syncPendingResultMetricsForTest(provider);
-    assert.equal(report.included.length, 0);
-    assert.ok(report.skipped.some(issue => /指纹不一致|未声明或超限文件/.test(issue)));
-    assert.equal(provider.calls.filter(([method]) => method === "sync.downloadMappedPaths").length, 1);
-    for (const [relative, contents] of Object.entries(outputs))
-      assert.equal(fs.readFileSync(path.join(workspace, relative), "utf8"), contents, relative);
+  for(const [corrupt,expected] of corruptions){
+    const f=fixture();
+    f.host.parseFreshResultMetric=RealtimeTunnelPanelProvider.prototype.parseFreshResultMetric;
+    f.raw['work_dirs/alpha42/metrics.csv']=csvFor([{seed:42,metric:'AUC',value:.9}]);
+    await __syncPendingResultMetricsForTest(f.host);
+    const outputs=['experiments/results/set/final/final.csv','experiments/results/set/final/final.md']
+      .map(relative=>path.join(f.root,relative));
+    const before=outputs.map(file=>fs.readFileSync(file,'utf8'));
+    const pristine=f.host.simpleSftpApiCall;
+    f.host.simpleSftpApiCall=async(...args)=>{const response=await pristine(...args);
+      return args[0]==='sync.downloadMappedPaths'?{...response,entries:response.entries.map(corrupt)}:response;};
+    const callsBefore=f.calls.filter(call=>call[0]==='sync.downloadMappedPaths').length;
+    const report=await __syncPendingResultMetricsForTest(f.host);
+    assert.equal(report.results.length,0,'a corrupted response cannot enter this export');
+    assert.equal(report.jobs[0].state,'unknown');
+    assert.match(report.missing.join(' '),expected);
+    assert.equal(f.calls.filter(call=>call[0]==='sync.downloadMappedPaths').length,callsBefore+1,
+      'a rejected read is not retried through an alternate path');
+    assert.deepEqual(outputs.map(file=>fs.readFileSync(file,'utf8')),before);
+    assert.equal(fs.existsSync(path.join(f.root,'simple_cluster/results/project_table_registry.json')),false);
   }
 });
 
-test("completed plans stay untouched until manual metrics sync downloads and publishes their results", async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-postprocess-chain-"));
-  try {
-    vscode.workspace.workspaceFolders = [{ uri: { scheme: "file", path: workspace.replace(/\\/g, "/"),
-      fsPath: workspace, toString: () => "file://" + workspace.replace(/\\/g, "/") } }];
-    const provider = providerFor(workspace, csvFor([
-      { seed: 42, metric: "AUC", value: 0.4 }, { seed: 43, metric: "AUC", value: 0.6 },
-    ]));
-    provider.testSummary.results = [42, 43].map((seed) => ({
-      workerId: "worker-a", runId: "run-complete", attempt: "1", planRevision: "rev-1",
-      dimensions: { case: "alpha", seed: String(seed), method: "demo", dataset: "set" },
-      metrics: { AUC: { value: seed === 42 ? 0.4 : 0.6 } }, sourceFiles: [{ path: remoteCsv }],
-    }));
-    let queue = { schemaVersion: 1, publishedSignature: "published-v1", previewSignature: "preview-v1",
-      plans: [{ id: "demo", planFile, revision: "rev-1", planJobCount: 1, recoveryMissingCount: 0,
-        jobs: [{ index: 0, attempt: 1, commandId: "command-1", status: "completed", workerId: "worker-a" }] }] };
-    provider.loadDistributedQueue = async () => queue;
-    provider.saveDistributedQueue = async (_root, next, options) => {
-      queue = options?.mutateLatest ? options.mutateLatest(queue) : next;
-    };
-    provider.distributedQueueWritePromise = Promise.resolve();
-    const stages = [];
-    provider.syncDistributedJobArtifacts = async (_root, _queue, stage) => { stages.push(stage); };
-    provider.rebuildDistributedResults = async (_root, _queue, preview) => { stages.push(preview ? "preview-rebuild" : "final-rebuild"); };
-    provider.recordActionError = (action) => { throw new Error("unexpected postprocess error: " + action.message); };
-    const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
-    const confirmations = [];
-    const confirmDownloads = host.confirmMappedResultDownloads;
-    host.confirmMappedResultDownloads = async (...args) => {
-      confirmations.push(args[4]);
-      return confirmDownloads.apply(host, args);
-    };
-    const warningCount = uiNotices.filter(([kind]) => kind === "warning").length;
-    host.scheduleDistributedPostprocess(workspace, true);
-    await Promise.resolve();
-    assert.deepEqual(stages, [], "completion must not trigger result postprocessing");
-    assert.equal(provider.calls.length, 0, "completion must not download metric files");
-    await host.syncPendingResultMetricsFromUi();
-
-    assert.deepEqual(stages, [], "manual metric sync builds local tables without remote mirroring or rebuilding");
-    assert.equal(provider.calls.filter(([method]) => method === "sync.downloadMappedPaths").length, 1, "manual sync reaches mapped SFTP transport once");
-    const [method, params] = provider.calls.find(([method]) => method === "sync.downloadMappedPaths");
-    assert.equal(method, "sync.downloadMappedPaths");
-    assert.equal(params.metricsOnly, true);
-    assert.equal(params.memoryOnly, true);
-    assert.equal(confirmations.length, 0, "memory-only parsing does not request an unrelated local raw-file overwrite");
-    assert.deepEqual(params.entries.map((entry) => entry.remotePath), [remoteCsv]);
-    const registry = JSON.parse(fs.readFileSync(path.join(workspace, "simple_cluster/results/project_table_registry.json"), "utf8"));
-    assert.ok(registry.plans[planFile].records.every(record=>record.runId==="run-complete"), "publication records the downloaded result generation");
-    assert.equal(uiNotices.filter(([kind]) => kind === "warning").length, warningCount, "new metric files do not require overwrite confirmation");
-    assert.ok(fs.existsSync(path.join(workspace, "experiments", "results", "set", "final", "final.csv")));
-    assert.ok(fs.existsSync(path.join(workspace, "experiments", "results", "set", "final", "final.md")));
-
-    host.scheduleDistributedPostprocess(workspace, true);
-    await Promise.resolve();
-    assert.equal(provider.calls.filter(([method]) => method === "sync.downloadMappedPaths").length, 1, "later queue ticks do not repeat the manual download");
-  } finally {
-    vscode.workspace.workspaceFolders = [];
-  }
+test("pulled completion automatically updates results without mirroring, remote aggregation or persisted completion marks",async()=>{
+  const f=fixture();const {resultCollectionHost}=require('../../src/extension/ResultCollectionHost.ts');
+  const service=resultCollectionHost(f.host);
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('automatic summary did not complete')),3000);
+    f.host.postState=()=>{clearTimeout(timer);resolve();};
+    service.observe({workerId:'a',queryComplete:true,capabilities:{resultCollection:1},tasks:[{commandId:'command',observation:{result:{verified:true,runId:'command',status:'completed'},tmux:{dead:true,exitCode:0}}}]});
+  });
+  assert.equal(f.host.resultsSummary.current,true,JSON.stringify(f.host.resultsSummary.skipped));assert.equal(f.host.resultsSummary.completed,1);
+  assert.ok(!f.calls.some(call=>/merge|rebuild|serverToServer/.test(call[0])));
+});
+test("API and legacy parse entry use the same fresh collection as UI",async()=>{
+  const f=fixture();
+  const report=await RealtimeTunnelPanelProvider.prototype.apiResultsList.call(f.host,{planFile});
+  assert.equal(report.source,'active_query');assert.equal(report.results.length,1);
+  const parsed=await RealtimeTunnelPanelProvider.prototype.runActionCommandCore.call(f.host,'parseResults',{});
+  assert.equal(parsed.source,'active_query');assert.equal(parsed.completed,1);
 });
 
 test("late local lock ACK is fenced before the captured Worker client can send", async () => {
@@ -277,30 +262,93 @@ test("late local lock ACK is fenced before the captured Worker client can send",
   try {
     vscode.workspace.workspaceFolders = [{ uri: { scheme: "file", path: workspace.replace(/\\/g, "/"),
       fsPath: workspace, toString: () => "file://" + workspace.replace(/\\/g, "/") } }];
-    let sends = 0, locks = 0;
+    let sends = 0;
     const provider = providerFor(workspace, "");
     provider.context.globalStorageUri.fsPath = workspace;
     provider.client = { postWorkerAction: async () => { sends += 1; return { status: "queued" }; } };
     provider.workerActionTargets = () => [{ id: "worker-a", condaEnv: "env-a" }];
     provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
     const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
-    host.distributedQueueGeneration = 7;host.lastWorkerProbes={"worker-a":{capabilities:{endpoints:{declaredJobPaths:true,formalJobIdentityEnv:1}}}};
-    host.withRemoteActionResource = async (workerId, resource, request, callback) => {
-      locks += 1;
-      assert.equal(workerId, "worker-a");
-      assert.equal(resource, "start-worker-task");
-      assert.equal(request.executionMode, "test");
-      assert.equal(request.planFile, planFile);
+    host.distributedQueueGeneration = 7;
+    let manifestBuilds = 0;
+    host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("code manifest must not be prepared before the fence"); };
+    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 } } } };
+    host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => {
       host.distributedQueueGeneration += 1;
       return callback();
     };
     const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
     await assert.rejects(() => host.sendDistributedJob(
-      { id: "plan-a", projectId: "project-a", executionMode: "test", resultPathPolicy: "declared", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
-      { index: 0, attempt: 0, case: "alpha", seed: 42, outputDir: "runs/a", globalJobId: "plan-a:0" }, "worker-a", undefined, "command-a",
+      { id: "plan-a", projectId: "project-a", resultPathPolicy: "declared", executionMode: "train_test", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
+      { index: 0, case: "alpha", seed: 42, outputDir: "runs/a", collectionResultCsv: "tmp/result/a.csv" }, "worker-a", undefined, "command-a",
     ), /提交已取消或项目已切换/);
-    assert.equal(locks, 1, "the fixture must pass Plan preflight and reach the actual local lock callback");
     assert.equal(sends, 0, "generation changed while awaiting the local resource lock must block the remote write");
+    assert.equal(manifestBuilds, 0, "a late lock ACK must fence before any code-manifest preparation runs");
+  } finally {
+    vscode.workspace.workspaceFolders = [];
+  }
+});
+
+test("a granted local lock ACK with unchanged context still sends the durable job with its proof fields", async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-ack-ok-"));
+  try {
+    vscode.workspace.workspaceFolders = [{ uri: { scheme: "file", path: workspace.replace(/\\/g, "/"),
+      fsPath: workspace, toString: () => "file://" + workspace.replace(/\\/g, "/") } }];
+    const sent = [];
+    const provider = providerFor(workspace, "");
+    provider.context.globalStorageUri.fsPath = workspace;
+    provider.client = { postWorkerAction: async (_workerId, _action, request) => { sent.push(request); return { status: "queued" }; } };
+    provider.workerActionTargets = () => [{ id: "worker-a", condaEnv: "env-a" }];
+    provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
+    const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
+    host.distributedQueueGeneration = 7;
+    let manifestBuilds = 0;
+    host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("a durable proof worker must not rebuild the local manifest"); };
+    const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
+    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 }, actionEndpoints: { "register-code-sync-proof": true } } } };
+    host.lastCodeSyncState = { workerVersions: { 'worker-a': { codeSyncProofId: "proof-9", manifestDigest: emptyManifestFingerprint, fingerprint: emptyManifestFingerprint } } };
+    host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => callback();
+    const receipt = await host.sendDistributedJob(
+      { id: "plan-a", projectId: "project-a", resultPathPolicy: "declared", executionMode: "train_test", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
+      { index: 0, case: "alpha", seed: 42, outputDir: "runs/a", collectionResultCsv: "tmp/result/a.csv" }, "worker-a", undefined, "command-a",
+    );
+    assert.deepEqual(receipt, { status: "queued" });
+    assert.equal(sent.length, 1, "an undisrupted lock ACK must still deliver exactly one durable job");
+    assert.equal(manifestBuilds, 0, "the persistent proof path carries the proof id without touching the local tree");
+    assert.equal(sent[0].codeSyncProofId, "proof-9", "the deferred proof preparation must rejoin the request before transport");
+    assert.equal(sent[0].manifestDigest, emptyManifestFingerprint);
+    assert.equal(sent[0].projectId, "project-a");
+    assert.equal(sent[0].outputDir, "runs/a");
+    assert.equal(sent[0].planFile, planFile);
+    assert.equal(sent[0].resultPathPolicy, "declared");
+  } finally {
+    vscode.workspace.workspaceFolders = [];
+  }
+});
+
+test("a normal send without a resolvable local project root fails explicitly before manifest preparation", async () => {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-no-root-"));
+  try {
+    vscode.workspace.workspaceFolders = [];
+    let sends = 0;
+    const provider = providerFor(workspace, "");
+    provider.context.globalStorageUri.fsPath = workspace;
+    provider.client = { postWorkerAction: async () => { sends += 1; return { status: "queued" }; } };
+    provider.workerActionTargets = () => [{ id: "worker-a", condaEnv: "env-a" }];
+    provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
+    const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
+    host.distributedQueueGeneration = 7;
+    let manifestBuilds = 0;
+    host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("manifest preparation must be blocked by the explicit root guard"); };
+    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 } } } };
+    host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => callback();
+    const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
+    await assert.rejects(() => host.sendDistributedJob(
+      { id: "plan-a", projectId: "project-a", resultPathPolicy: "declared", executionMode: "train_test", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: emptyManifestFingerprint },
+      { index: 0, case: "alpha", seed: 42, outputDir: "runs/a", collectionResultCsv: "tmp/result/a.csv" }, "worker-a", undefined, "command-a",
+    ), /缺少本机项目根目录/);
+    assert.equal(sends, 0, "a request without a resolvable project root must never reach the Worker transport");
+    assert.equal(manifestBuilds, 0, "the explicit root guard must reject before any local manifest I/O");
   } finally {
     vscode.workspace.workspaceFolders = [];
   }
@@ -323,4 +371,127 @@ test("actual plan validation parser prefers the latest complete 0.5.179 wrapped 
   for (const validation of [null, [], "bad"]) assert.equal(planValidationFromResult({
     latestEvent: { payload: { validation } }, payload: { validation: { ok: true, jobs: rows } },
   }), undefined, "a malformed latest receipt must not borrow stale validation");
+});
+
+// ─── R22 race regressions: a fence flip landing while code-source preparation is awaited ───
+// The lazy preparation runs inside the lock callback / protocol-2 branch after the pre-send
+// fence. The lease guarantees resource ownership only, so both transports must re-check the
+// fence synchronously after the awaited preparation and before transmissionStarted.
+const scopeHostModule = require(path.join(repo, "src/extension/PlanCodeScopeHost.ts"));
+const scopeHostOriginal = {
+  supportsPlanCodeScope: scopeHostModule.supportsPlanCodeScope,
+  verifyWorkerPlanSource: scopeHostModule.verifyWorkerPlanSource,
+};
+// 本发布线的工作区身份只接受 POSIX 绝对路径（platform/Filesystem），Windows 盘符根由配套
+// Windows 仓的对应门禁覆盖；这里用两个真实可解析的 POSIX 根保持同一条切换围栏保证。
+const posixFolder = (fsPath) => ({ uri: { scheme: "file", path: fsPath, fsPath,
+  toString: () => "file://" + fsPath } });
+
+function raceFixture(mode, flip) {
+  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-race-"));
+  vscode.workspace.workspaceFolders = [{ uri: { scheme: "file", path: workspace.replace(/\\/g, "/"),
+    fsPath: workspace, toString: () => "file://" + workspace.replace(/\\/g, "/") } }];
+  const sent = [];
+  const provider = providerFor(workspace, "");
+  provider.context.globalStorageUri.fsPath = workspace;
+  provider.client = { postWorkerAction: async (_w, _a, request) => { sent.push(request); return { status: "queued" }; } };
+  provider.workerActionTargets = () => [{ id: "worker-a", condaEnv: "env-a" }];
+  provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
+  const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
+  host.distributedQueueGeneration = 7;
+  host.lastWorkerProbes = { 'worker-a': { status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, planCodeScope: 1 } } } };
+  let manifestBuilds = 0;
+  host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("source-branch preparation must not build a manifest"); };
+  scopeHostModule.supportsPlanCodeScope = () => true;
+  scopeHostModule.verifyWorkerPlanSource = async () => {
+    await new Promise(resolve => setImmediate(resolve));
+    flip(host);
+    await new Promise(resolve => setImmediate(resolve));
+    return { policy: "plan-dependency-verified", verifiedAt: "now" };
+  };
+  if (mode === "p2") {
+    host.lastWorkerTaskSnapshots = new Map([
+      [workspace + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }],
+      [String(undefined) + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }],
+    ]);
+  } else {
+    host.withRemoteActionResource = async (_w, _r, _req, callback) => callback();
+  }
+  const plan = { id: "plan-a", projectId: "project-a", resultPathPolicy: "declared", executionMode: "train_test", planJobCount: 1, planFile, revision: "rev-1", codeFingerprint: "fp-source-branch" };
+  const job = mode === "p2"
+    ? { index: 0, lifecycleProtocol: 2, case: "alpha", seed: 42, outputDir: "runs/a", collectionResultCsv: "tmp/result/a.csv" }
+    : { index: 0, case: "alpha", seed: 42, outputDir: "runs/a", collectionResultCsv: "tmp/result/a.csv" };
+  return { workspace, sent, host, plan, job, manifestBuilds: () => manifestBuilds };
+}
+
+async function assertFencedRace(label, f) {
+  const outcome = await f.host.sendDistributedJob(f.plan, f.job, "worker-a", undefined, "command-a")
+    .then(r => ({ ok: r && r.status }), e => ({ err: String(e && e.message) }));
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.equal(f.sent.length, 0, label + ": a flip during awaited preparation must never post via the old captured client");
+  assert.ok(outcome.err && /提交已取消或项目已切换/.test(outcome.err), label + ": must fail with the cancellation fence error");
+}
+
+test("R0 control: an undisrupted source-branch send still joins the verified executionSource once", async () => {
+  const f = raceFixture("legacy", () => {});
+  try {
+    const receipt = await f.host.sendDistributedJob(f.plan, f.job, "worker-a", undefined, "command-a");
+    assert.deepEqual(receipt, { status: "queued" });
+    assert.equal(f.sent.length, 1);
+    assert.equal(f.sent[0].executionSource.policy, "plan-dependency-verified", "the normal path still joins proof fields before transport");
+    assert.equal(f.manifestBuilds(), 0);
+  } finally {
+    Object.assign(scopeHostModule, scopeHostOriginal);
+    vscode.workspace.workspaceFolders = [];
+  }
+});
+
+for (const [label, flip] of [
+  ["R1 legacy generation flip during preparation", host => { host.distributedQueueGeneration += 1; }],
+  ["R2 legacy captured-client replacement during preparation", host => { host.client = { postWorkerAction: async () => { throw new Error("OLD CLIENT STILL POSTED"); } }; }],
+  ["R3 legacy stop-epoch opening during preparation", host => { host.distributedPlanStopEpoch = 1; }],
+]) test(label + " must send nothing", async () => {
+  const f = raceFixture("legacy", flip);
+  try { await assertFencedRace(label, f); } finally {
+    Object.assign(scopeHostModule, scopeHostOriginal);
+    vscode.workspace.workspaceFolders = [];
+  }
+});
+
+test("R4 protocol-2 generation flip during preparation must send nothing", async () => {
+  const f = raceFixture("p2", host => { host.distributedQueueGeneration += 1; });
+  try { await assertFencedRace("R4", f); } finally {
+    Object.assign(scopeHostModule, scopeHostOriginal);
+    vscode.workspace.workspaceFolders = [];
+  }
+});
+
+test("R5 flip plus a preparation failure stays dispatchNotSent with zero sends for honest release", async () => {
+  const f = raceFixture("legacy", host => { host.distributedQueueGeneration += 1; });
+  scopeHostModule.verifyWorkerPlanSource = async () => {
+    await new Promise(resolve => setImmediate(resolve));
+    throw new Error("source verification failed after fence flip");
+  };
+  try {
+    await assert.rejects(() => f.host.sendDistributedJob(f.plan, f.job, "worker-a", undefined, "command-a"),
+      (error) => { assert.equal(error.dispatchNotSent, true, "an unsent failure must stay dispatchNotSent for honest release"); return true; });
+    assert.equal(f.sent.length, 0);
+  } finally {
+    Object.assign(scopeHostModule, scopeHostOriginal);
+    vscode.workspace.workspaceFolders = [];
+  }
+});
+
+for (const mode of ["legacy", "p2"]) test(`R6 workspace switch between two resolvable roots during ${mode} preparation must send nothing`, async () => {
+  const rootA = fs.mkdtempSync(path.join(os.tmpdir(), "p6-switch-a-"));
+  const rootB = fs.mkdtempSync(path.join(os.tmpdir(), "p6-switch-b-"));
+  const f = raceFixture(mode, () => { vscode.workspace.workspaceFolders = [posixFolder(rootB)]; });
+  try {
+    if (mode === "p2") f.host.lastWorkerTaskSnapshots = new Map([[rootA + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }]]);
+    vscode.workspace.workspaceFolders = [posixFolder(rootA)];
+    await assertFencedRace("R6-" + mode, f);
+  } finally {
+    Object.assign(scopeHostModule, scopeHostOriginal);
+    vscode.workspace.workspaceFolders = [];
+  }
 });

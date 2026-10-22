@@ -30,12 +30,14 @@ export const workerTelemetryActionNames = [
   "start-worker-task",
   "preflight-worker-task",
   "register-code-sync-proof",
+  "configure-gpu-quota",
   "rebuild-distributed-results",
   "retry-worker-task",
   "stop-worker-task",
   "stop-worker-task-exact-pane",
   "delete-worker-artifacts",
   "archive-worker-artifacts",
+  "finalize-worker-operation",
   "start-tensorboard",
   "stop-tensorboard",
   "get-tensorboard-status",
@@ -47,6 +49,7 @@ export const workerTelemetryActionNames = [
 export const workerTelemetryCapabilityMarkerNames = [
   "stop-worker-task-formal-identity",
   "stop-worker-task-formal-no-attempt",
+  "stop-worker-task-local-command",
 ] as const;
 
 export const workerLocalSchedulerActionNames = [

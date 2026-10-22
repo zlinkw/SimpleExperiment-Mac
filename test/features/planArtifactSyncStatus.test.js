@@ -8,7 +8,7 @@ const ts = require("typescript");
 function compile(source, globals = {}) {
   const loaded = { exports: {} };
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const resolve = name => require(name.startsWith("./") ? path.join(__dirname, "../../dist/features", name) : name);
+  const resolve = require('node:module').createRequire(path.join(__dirname, '../../dist/features/PlanArtifactSyncStatus.js'));
   vm.runInNewContext(code, { module: loaded, exports: loaded.exports, require: resolve, ...globals });
   return loaded.exports;
 }
@@ -96,6 +96,10 @@ function hostFixture() {
   const scope = { root: "D:/MultiModal", reads: [], posts: 0, active: 0, peak: 0 };
   const Host = compile(`export class Host { ${members.map(node => node.getText(ast)).join("\n")} }`, {
     PlanArtifactSyncStatus: feature, workspaceRoot: () => scope.root,
+    normalizeMirrorScopePaths: require('../../dist/features/ProjectMirror').normalizeMirrorScopePaths,
+    filterInventoryByScope: require('../../dist/features/ProjectMirror').filterInventoryByScope,
+    loadSyncHolds: async () => ({}),
+    vscode: { Uri: { file: value => ({ fsPath: value }) }, workspace: { getConfiguration: () => ({ get: (_key, fallback) => fallback }) } },
     Date: class extends Date { static now() { return clock.now; } },
     errorMessage: error => String(error.message || error), console,
     mapLimited: async (items, limit, work) => {
@@ -107,6 +111,7 @@ function hostFixture() {
   }).Host;
   const host = new Host();
   Object.assign(host, {
+    context: { globalStorageUri: { fsPath: '/fixture-only/plugin-state' } },
     distributedQueueRoot: scope.root, distributedQueueCache: { plans: [plan()] }, projectContextGeneration: 1, client: {},
     localPlanMetadata: { plans: metadata }, manualResultSyncCounts: new Map(), cacheCleanupConnectionKey: "connected",
     lastWorkerProbes: Object.fromEntries(workers.map(id => [id, { status: "ok" }])),
@@ -150,7 +155,7 @@ test("startup reads once per Worker, progress ticks reuse it, rerun completion a
   assert.equal(host.planArtifactSyncStatuses.C.status, "unknown");
 });
 
-test("a forced refresh during a read or manual sync is retained and deferred until that work ends", async () => {
+test("a forced refresh during a read or Worker mirror is retained and deferred until that work ends", async () => {
   const { host, scope } = hostFixture();
   let release;
   const gate = new Promise(resolve => { release = resolve; });
@@ -161,12 +166,21 @@ test("a forced refresh during a read or manual sync is retained and deferred unt
   release(); await first;
   await host.planArtifactSyncStatusPromise;
   assert.equal(scope.reads.length, 6, "one forced follow-up after the first check");
-  await host.withManualResultSync(async () => {
+  host.distributedPostprocessPromise = Promise.resolve();
+  try {
     await host.refreshPlanArtifactSyncStatus(true);
     assert.equal(scope.reads.length, 6, "no competing scan while transfer is active");
-  });
+  } finally { host.distributedPostprocessPromise = undefined; }
+  await host.refreshPlanArtifactSyncStatus();
   await host.planArtifactSyncStatusPromise;
   assert.equal(scope.reads.length, 9);
+});
+
+test("the retired manual-result wrapper cannot create a global transfer state machine", async () => {
+  const { host } = hostFixture(); let calls = 0;
+  const counts = host.manualResultSyncCounts;
+  assert.equal(await host.withManualResultSync(async () => { calls++; return 'done'; }), 'done');
+  assert.equal(calls, 1); assert.equal(host.manualResultSyncCounts, counts); assert.equal(counts.size, 0);
 });
 
 test("transient inventory failures use bounded backoff; stale project reads cannot publish", async () => {

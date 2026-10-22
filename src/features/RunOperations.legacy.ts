@@ -95,6 +95,50 @@ export function operationTerminalStatus(value: unknown): boolean {
   ]).has(String(value || "").trim().toLowerCase());
 }
 
+export interface HistoryHideableOperationRecord extends RunOperationRecord {
+  action?: unknown;
+  outcomePending?: unknown;
+  reconcileEvidenceActive?: unknown;
+}
+
+/**
+ * 已证明不持有 Plan 调度窗口也不持有远端任务窗口的短操作才能使用“结果待确认”本机隐藏入口。
+ * 未知、缺失或未来新增的 type 一律 fail closed：宁可不给清除入口，也不能误隐藏。
+ */
+export const OUTCOME_PENDING_HISTORY_ACTION_TYPES: readonly string[] = Object.freeze([
+  "validate-plan", "dry-run-plan", "rebuild-distributed-results",
+]);
+
+/**
+ * 显式活动状态优先于陈旧的 outcomePending 标记；后端与面板内联副本必须同列。
+ * 子串匹配（与面板 operationIsActive 同口径）：“outcome_pending” 自已在前面已被排除。
+ */
+export const ACTIVE_OPERATION_STATUS_TOKENS: readonly string[] = Object.freeze([
+  "accepted", "submitted", "queued", "pending", "running", "starting", "dispatching",
+  "cancelling", "in_progress", "started", "progress", "schedul", "waiting",
+]);
+
+/**
+ * 校验/预检/结果重建等短操作在 Agent 未回终态时会永久停在 outcome_pending（执行结果待确认），
+ * 旧版本遗留的这类记录更是没有任何清除入口。本机隐藏只移除面板显示，绝不能当作远端结束证据，
+ * 也不停止任务、不删产物、不抹去产物归属证据。以下一律不放开：
+ * • 非白名单（含缺失/未知/未来）type；
+ * • 当前状态是任何活动状态（即使旧的 outcomePending 仍为 true）；
+ * • 仍有活动远端证据（reconcileEvidenceActive === true）；
+ * • 长任务 run-plan/reproduce-plan 的未知结果。
+ */
+export function isOutcomePendingHistoryRecord(record: HistoryHideableOperationRecord | undefined | null): boolean {
+  if (!record || typeof record !== "object") return false;
+  const item = record as HistoryHideableOperationRecord;
+  const type = String(item.type || item.action || "").trim().toLowerCase();
+  if (!OUTCOME_PENDING_HISTORY_ACTION_TYPES.includes(type)) return false;
+  const status = String(item.status || item.state || "").trim().toLowerCase();
+  if (status !== "outcome_pending" && ACTIVE_OPERATION_STATUS_TOKENS.some((token) => status.includes(token))) return false;
+  if (item.reconcileEvidenceActive === true) return false;
+  if (isLongRunningPlanOperation(item)) return false;
+  return status === "outcome_pending" || item.outcomePending === true;
+}
+
 export function restorePlanOperationsFromWorkerTasks(
   existing: Record<string, any>,
   snapshot: unknown,

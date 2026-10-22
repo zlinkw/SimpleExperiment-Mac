@@ -25,8 +25,9 @@ export interface AgentEvent<T = unknown> {
   seq: number;
   type: AgentEventType;
   generatedAt: string;
-  source: "hub_agent";
-  hubId: string;
+  source: "worker_telemetry" | "hub_agent";
+  /** Legacy event decoding only; never an execution target. */
+  hubId?: string;
   workerId?: string;
   runKey?: string;
   payload: T;
@@ -58,7 +59,7 @@ export function validateAgentEvent(value: unknown): AgentEventValidation {
   if (Number(item.schemaVersion) !== AGENT_SCHEMA_VERSION) {
     return { ok: false, code: "incompatible_schema", message: `unsupported schemaVersion=${item.schemaVersion}`, event: item };
   }
-  if (!Number.isFinite(Number(item.seq)) || !item.type || !item.generatedAt || item.source !== "hub_agent") {
+  if (!Number.isFinite(Number(item.seq)) || !item.type || !item.generatedAt || !["worker_telemetry", "hub_agent"].includes(item.source)) {
     return { ok: false, code: "bad_schema", message: "missing required event fields", event: item };
   }
   if (!knownTypes.has(item.type)) return { ok: false, code: "unknown_type", message: `unknown event type=${item.type}`, event: item };

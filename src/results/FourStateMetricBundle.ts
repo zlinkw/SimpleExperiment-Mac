@@ -6,6 +6,7 @@ import type { ProjectResultFile } from "./ProjectResultPublication";
 
 export type MetricMemoryFile = { remotePath: string; sha256: string; text: string; bytes?: number; encoding?: "base64" };
 export type MetricJob = { runId: string; index: number; attempt: number; case: string; seed: number;
+  lifecycleProtocol?: 2;
   resultPathPolicy?: "declared"; collectionResultCsv?: string; globalJobId?: string;
   planRevision?: string; codeFingerprint?: string;
   checkpointSource?: Record<string, string>;

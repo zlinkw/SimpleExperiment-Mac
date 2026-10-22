@@ -161,10 +161,10 @@ def checked_case_analysis_export(root, plan, revision=""):
     csv.writer(buffer).writerows([["group", "count", "metrics"], *rows])
     if len(buffer.getvalue().encode("utf-8")) > 16 * 1024 * 1024:
         raise ValueError("样本分析导出表超出大小预算")
-    paths = [worker_plan_project_path(root, target) for target in (relative, latest)]
+    paths = [result_io_project_path(root, target) for target in (relative, latest)]
     for filename in ("case_level_index.json", "subgroup_analysis.json"):
-        worker_plan_project_path(root, plan_results_artifact_relpath(plan, filename, strict_plan=True))
-        worker_plan_project_path(root, "simple_cluster/results/" + filename)
+        result_io_project_path(root, plan_results_artifact_relpath(plan, filename, strict_plan=True))
+        result_io_project_path(root, "simple_cluster/results/" + filename)
     case_analysis_verify(root, context)
     for path in paths:
         write_atomic_csv(path, ["group", "count", "metrics"], rows)

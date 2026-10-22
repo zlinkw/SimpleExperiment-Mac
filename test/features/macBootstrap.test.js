@@ -1,111 +1,134 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const { registerPreviewUpdater, getUpdateStatus, CHECK_COMMAND, INSTALL_COMMAND } = require("../../dist/mac/Bootstrap");
+// Mac paired-update bootstrap, aligned to the Windows-authoritative updates/Bootstrap chain
+// (frozen pairedUpdateBootstrap call chain): the updater registers before business code, journals
+// are reconciled without ever auto-installing, and the SFTP wait-protocol floor blocks the gate.
+const { registerUpdater, activateWithBusiness, deactivate, getUpdateStatus, CHECK_COMMAND, INSTALL_COMMAND } = require("../../dist/updates/Bootstrap");
+const { getPreviewUpdater } = require("../../dist/mac/Bootstrap");
+const { TRANSACTION_KEY } = require("../../dist/updates/UpdateTransaction");
+const { SFTP_EXTENSION_ID, EXPERIMENT_EXTENSION_ID, SFTP_UPDATE_REPO, EXPERIMENT_UPDATE_REPO } = require("../../dist/features/ExtensionUpdates");
+const { assetRepository } = require("../../dist/platform/UpdateDistribution");
 
-function recoveryFixture({ installed = false, cancellation = false } = {}) {
-  const vm = require("node:vm"), path = require("node:path");
-  const file = require.resolve("../../dist/mac/Bootstrap"), from = require("node:module").createRequire(file), exports = {};
-  const tag = "preview-v0.5.314", prefix = "https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/" + tag + "/";
-  const rawManifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: "2026-10-13T00:00:00Z", minimumMacOS: "26.0",
-    components: [["sftp", "0.2.101", "SimpleSFTP"], ["experiment", "0.5.314", "SimpleExperiment"]].map(([name, version, repository]) => ({
-      extensionId: "simple-local.simple-" + name + "-mac", version, sourceCommit: "a".repeat(40), sourceRepository: "zlinkw/" + repository + "-Mac",
-      targetPlatform: "darwin-arm64", vscodeEngine: "^1.100.0", size: 128, sha256: "b".repeat(64), downloadUrl: prefix + "simple-" + name + "-mac-" + version + "-darwin-arm64.vsix" })) };
-  const manifest = from("./PreviewRelease").parseManifest(rawManifest, { tag_name: tag, assets: rawManifest.components.map(item => ({ name: item.downloadUrl.split("/").at(-1), browser_download_url: item.downloadUrl, size: item.size })) }, "1.100.0");
-  const key = "simpleExperimentMac.preview.transaction.v1", journal = { manifest, completed: [], status: "failed", installationRequested: true };
-  const state = new Map(cancellation ? [] : [[key, journal]]), subscriptions = [], commands = new Map();
-  let blocked = false, held = false, checks = 0, downloads = 0, installs = 0, cancel;
-  const gate = { setLocalUpdateBlocked: value => { blocked = value; }, updateGateHeld: () => held,
-    assertCompatibleSftpForUpdate: from("./UpdateGate").assertCompatibleSftpForUpdate,
-    beginUpdateGate: async () => { held = true; blocked = true; }, endUpdateGate: async () => { held = false; blocked = false; }, waitForLocalOperations: async () => {} };
-  vm.runInNewContext(fs.readFileSync(file, "utf8"), { exports, require: name => name === "./UpdateGate" ? gate : from(name),
-    process: { ...process, platform: "darwin", arch: "arm64" }, AbortController, structuredClone, setInterval, clearInterval });
-  const context = { subscriptions, globalStorageUri: { fsPath: path.join(require("node:os").tmpdir(), "unused-bootstrap-recovery") },
-    globalState: { get: (name, fallback) => state.has(name) ? state.get(name) : fallback, update: async (name, value) => state.set(name, value) } };
-  const peer = { setUpdateGate() {}, waitForUpdateIdle: async ({ signal }) => new Promise((_resolve, reject) => {
-    signal.addEventListener("abort", () => reject(signal.reason), { once: true }); queueMicrotask(() => cancel());
-  }) };
-  const vscode = { version: "1.100.0", StatusBarAlignment: { Right: 1 }, ProgressLocation: { Notification: 1 }, Uri: { file: value => value },
-    extensions: { getExtension: id => ({ packageJSON: { version: id.endsWith("sftp-mac") ? "0.2.101" : installed ? "0.5.314" : "0.5.313" }, exports: peer }) },
-    commands: { registerCommand: (name, callback) => { commands.set(name, callback); return { dispose() {} }; }, executeCommand: async () => { installs++; } },
-    window: { createStatusBarItem: () => ({ show() {}, dispose() {} }), showInformationMessage: async () => undefined, showErrorMessage: async () => undefined,
-      withProgress: async (_options, work) => work({}, { onCancellationRequested: listener => { cancel = listener; return { dispose() {} }; } }) } };
-  const updater = exports.registerPreviewUpdater(context, vscode, { check: async () => { checks++; return { manifest, pending: installed ? [] : [manifest.components[1]] }; }, download: async () => { downloads++; throw Error("must never download during recovery or cancelled wait"); } });
-  return { updater, state, key, manifest, journal, commands, get blocked() { return blocked; }, get checks() { return checks; }, get downloads() { return downloads; }, get installs() { return installs; },
-    status: () => exports.getUpdateStatus(), dispose: () => subscriptions.forEach(item => item.dispose()) };
+function fixture(client, options = {}) {
+  const state = new Map(options.state || []), calls = [], commands = new Map(), subscriptions = [];
+  const versions = { [SFTP_EXTENSION_ID]: "1.0.0", [EXPERIMENT_EXTENSION_ID]: "1.0.0", ...options.versions };
+  const context = { subscriptions, globalStorageUri: { fsPath: "unused" },
+    globalState: { get: (key, fallback) => state.has(key) ? state.get(key) : fallback, update: async (key, value) => { value === undefined ? state.delete(key) : state.set(key, structuredClone(value)); } } };
+  const vscode = { version: "1.100.0", StatusBarAlignment: { Right: 1 }, ProgressLocation: { Notification: 1 }, Uri: { file: fsPath => ({ fsPath }) },
+    extensions: { getExtension: id => ({ packageJSON: { version: versions[id] || "0.0.0" } }) },
+    commands: { registerCommand: (id, fn) => { commands.set(id, fn); return { dispose() { } }; },
+      executeCommand: async (id, uri) => { calls.push(id); if (id === "workbench.extensions.installExtension") { if (options.installFail === uri.fsPath) throw Error("install failed"); versions[uri.fsPath] = "1.1.0"; } } },
+    window: { createStatusBarItem: () => ({ show() { }, dispose() { } }), showInformationMessage: async message => { calls.push("notice:" + message); },
+      showWarningMessage: async () => { calls.push("confirm"); return options.deny ? "取消" : "安装并重载"; }, showErrorMessage: async message => { calls.push("error:" + message); },
+      withProgress: options.cancelWait === undefined ? undefined : async (_options, work) => work({}, { onCancellationRequested: listener => { if (options.cancelWait) listener(); return { dispose() { } }; } }) } };
+  // Mac distribution: SFTP assets are published in the Experiment preview repository (assetRepository maps them).
+  const components = [[SFTP_EXTENSION_ID, SFTP_UPDATE_REPO], [EXPERIMENT_EXTENSION_ID, EXPERIMENT_UPDATE_REPO]]
+    .map(([id, repo]) => ({ id, repo, label: id, currentVersion: "1.0.0", latestVersion: "1.1.0", updateAvailable: true,
+      vsix: { size: 100, url: `https://github.com/${assetRepository(repo)}/releases/download/v1.1.0/update-${id}.vsix`, digest: "sha256:" + "a".repeat(64) } }));
+  const plan = { status: "update_available", checkedAt: "", message: "update", sftp: components[0], experiment: components[1] };
+  const local = {
+    gate: { begin: async () => calls.push("gate"), end: async () => calls.push("ungate"), wait: async () => calls.push("wait") },
+    store: { prepare: async component => { calls.push("prepare:" + component.id); return component.id; }, verify: async file => { calls.push("verify:" + file); } },
+  };
+  const updater = options.noRegister ? undefined : registerUpdater(context, vscode, client || { check: async () => plan }, local);
+  return { updater, context, vscode, state, calls, commands, local, plan, versions, components, dispose: () => subscriptions.forEach(s => s.dispose()) };
 }
 
-test("uncertain first install restores its original batch before business startup without automatically installing", async () => {
-  const f = recoveryFixture();
-  try {
-    assert.equal(f.blocked, true); await f.updater.resume(); await f.updater.check(true);
-    assert.equal(f.status().plan.manifest.releaseTag, f.manifest.releaseTag); assert.match(f.status().message, /原批次/);
-    assert.equal(f.checks, 0); assert.equal(f.downloads, 0); assert.equal(f.installs, 0);
-    assert.equal(f.state.get(f.key), f.journal); assert.equal(f.blocked, true);
-  } finally { f.dispose(); }
-});
-test("a fresh reloaded host reconciles both installed versions and clears recovery without reinstalling", async () => {
-  const f = recoveryFixture({ installed: true });
-  try {
-    await f.updater.resume(); assert.equal(f.blocked, false); assert.equal(f.state.get(f.key), undefined);
-    assert.equal(f.downloads, 0); assert.equal(f.installs, 0); assert.equal(f.status().status, "up_to_date");
-  } finally { f.dispose(); }
-});
-test("cancellable update progress shares duplicate clicks and stops waiting before downloads", async () => {
-  const f = recoveryFixture({ cancellation: true });
-  try {
-    const first = f.updater.install(), second = f.updater.install(); assert.equal(first, second);
-    await assert.rejects(first, /取消配套更新等待/); assert.equal(f.downloads, 0); assert.equal(f.installs, 0);
-    assert.equal(f.blocked, false); assert.equal(f.state.get(f.key).installationRequested, false);
-  } finally { f.dispose(); }
-});
-
-function fixture(client) {
-  const state = new Map(), calls = [], commands = new Map(), subscriptions = [];
-  const context = { subscriptions, globalStorageUri: { fsPath: "/unused" }, globalState: { get: (key, fallback) => state.has(key) ? state.get(key) : fallback, update: async (key, value) => state.set(key, value) } };
-  const vscode = { version: "1.100.0", StatusBarAlignment: { Right: 1 }, extensions: { getExtension: () => ({ packageJSON: { version: "0.1.1" } }) }, commands: { registerCommand: (id, fn) => { commands.set(id, fn); return { dispose() {} }; } }, window: { createStatusBarItem: () => ({ show() {}, dispose() {} }), showInformationMessage: async message => { calls.push(message); }, showErrorMessage: async message => { calls.push(message); } } };
-  const updater = registerPreviewUpdater(context, vscode, client);
-  return { updater, state, calls, commands, dispose: () => subscriptions.forEach(item => item.dispose()) };
-}
-test("preview commands exist without business panel, server config or Termius", async () => {
+test("update commands register without business panel; checks share one pass and one notice per pair", async () => {
   const f = fixture({ check: async () => { throw Error("offline"); } });
-  try { assert.ok(f.commands.has(CHECK_COMMAND)); assert.ok(f.commands.has(INSTALL_COMMAND)); await assert.rejects(f.updater.check(true)); assert.equal(getUpdateStatus().status, "error"); assert.match(getUpdateStatus().message, /检查失败/); assert.ok(f.calls.every(message => !message.includes("已是最新"))); }
-  finally { f.dispose(); }
-});
-test("same preview prompts once across repeated checks and persists that receipt", async () => {
-  const manifest = { releaseTag: "preview-v0.1.2", components: [{ extensionId: "simple-local.simple-sftp-mac", version: "0.1.2" }, { extensionId: "simple-local.simple-experiment-mac", version: "0.1.2" }] };
-  const f = fixture({ check: async () => ({ manifest, pending: manifest.components }) });
-  try { await Promise.all([f.updater.check(), f.updater.check()]); await f.updater.check(); assert.equal(f.calls.length, 1); assert.equal(f.state.get("simpleExperimentMac.preview.notified.preview-v0.1.2"), true);
-    const status = getUpdateStatus(); assert.equal(status.sftp.updateAvailable, true); assert.equal(status.experiment.currentVersion, "0.1.1"); assert.equal(status.experiment.latestVersion, "0.1.2"); assert.ok(Number.isFinite(Date.parse(status.checkedAt)));
-  }
-  finally { f.dispose(); }
-});
-test("bootstrap registers updates before loading business code and polls every thirty minutes", () => {
-  const source = fs.readFileSync(require("node:path").join(__dirname, "../../src/mac/Bootstrap.ts"), "utf8");
-  assert.ok(source.indexOf("updater = registerPreviewUpdater(context, vscode)") < source.indexOf('business = require("../extension")'));
-  assert.match(source, /30 \* 60 \* 1000/); assert.match(source, /void updater\.resume\(\)/);
-  assert.equal(require("../../package.json").main, "./dist/mac/Bootstrap.js");
-});
-test("real client through update button retains failure state and retries a non-rate 403", async () => {
-  const { PreviewReleaseClient, PREVIEW_INDEX_URL, COMPONENT_IDS } = require("../../dist/mac/PreviewRelease");
-  let requests = 0;
-  const tag = "preview-v0.1.2", prefix = `https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/${tag}/`;
-  const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: "2026-10-10T00:00:00Z",
-    components: COMPONENT_IDS.map(extensionId => ({ extensionId, version: "0.1.2", sourceCommit: "a".repeat(40), targetPlatform: "darwin-arm64",
-      vscodeEngine: "^1.100.0", downloadUrl: prefix + extensionId.split(".")[1] + "-0.1.2-darwin-arm64.vsix", size: 100, sha256: "b".repeat(64) })) };
-  const bytes = Buffer.from(JSON.stringify(manifest));
-  const info = { prerelease: true, draft: false, tag_name: tag, published_at: manifest.publishedAt, assets: [{ name: "release.json", browser_download_url: prefix + "release.json", size: bytes.length, digest: "sha256:" + require("node:crypto").createHash("sha256").update(bytes).digest("hex") },
-    ...manifest.components.map(c => ({ name: c.downloadUrl.split("/").at(-1), browser_download_url: c.downloadUrl, size: c.size, digest: "sha256:" + c.sha256 }))] };
-  const client = new PreviewReleaseClient(async url => {
-    requests++; if (requests === 1) return new Response("Forbidden", { status: 403, headers: { "x-ratelimit-remaining": "59", "x-ratelimit-reset": "3600" } });
-    assert.notEqual(new URL(url).hostname, "api.github.com");
-    return Response.json(url === PREVIEW_INDEX_URL ? { protocolVersion: 1, channel: "preview", updatedAt: manifest.publishedAt, releases: [info] } : manifest);
-  }, () => 0);
-  const f = fixture(client);
   try {
-    await assert.rejects(f.commands.get(CHECK_COMMAND)(), /HTTP 403/);
+    assert.ok(f.commands.has(CHECK_COMMAND)); assert.ok(f.commands.has(INSTALL_COMMAND));
+    await assert.rejects(f.updater.check(true));
     assert.equal(getUpdateStatus().status, "error"); assert.match(getUpdateStatus().message, /检查失败/);
-    assert.equal(f.calls.some(s => s.includes("已是最新")), false);
-    await f.commands.get(CHECK_COMMAND)(); assert.equal(getUpdateStatus().status, "update_available"); assert.equal(requests, 3);
+    assert.ok(f.calls.some(call => call.startsWith("error:")));
   } finally { f.dispose(); }
+  const shared = fixture();
+  try {
+    const a = shared.updater.check(), b = shared.updater.check(); assert.equal(a, b);
+    await a; await shared.updater.check();
+    assert.equal(shared.calls.filter(call => call.startsWith("notice:")).length, 1);
+    assert.equal(shared.state.get(`simpleExperimentMac.update.notified.1.1.0:1.1.0`), true);
+  } finally { shared.dispose(); }
+});
+
+test("business loading failure retains working update commands and clear failure status", async () => {
+  const client = { check: async () => { throw Error("offline"); } }, f = fixture(client, { noRegister: true });
+  try {
+    await activateWithBusiness(f.context, f.vscode, () => { assert.ok(f.commands.has(CHECK_COMMAND)); throw Error("broken panel"); }, client, f.local);
+    await assert.rejects(f.commands.get(CHECK_COMMAND)(), /offline/); assert.equal(getUpdateStatus().status, "error");
+    assert.ok(f.calls.some(call => call.includes("独立更新命令仍可用")));
+  } finally { f.dispose(); await deactivate(); }
+});
+
+test("confirmation precedes side effects; packages prepare together and partial success remains reviewable", async () => {
+  const denied = fixture(undefined, { deny: true });
+  try {
+    await denied.updater.check(); await denied.updater.install();
+    assert.ok(!denied.calls.includes("gate")); assert.ok(!denied.state.has(TRANSACTION_KEY)); assert.ok(!denied.calls.some(c => c.startsWith("prepare:")));
+  } finally { denied.dispose(); }
+  const f = fixture(undefined, { installFail: EXPERIMENT_EXTENSION_ID });
+  try {
+    await f.updater.check(); await assert.rejects(f.updater.install(), /install failed/);
+    assert.ok(f.calls.indexOf("confirm") < f.calls.indexOf("gate"));
+    assert.ok(f.calls.indexOf("prepare:" + EXPERIMENT_EXTENSION_ID) < f.calls.indexOf("workbench.extensions.installExtension"));
+    assert.equal(f.updater.blocked, true); assert.deepEqual(f.state.get(TRANSACTION_KEY).completed, [SFTP_EXTENSION_ID]);
+    const installs = f.calls.filter(c => c === "workbench.extensions.installExtension").length; assert.equal(installs, 2); // SFTP installed; Experiment failed at its own step.
+    await f.updater.check(); assert.equal(getUpdateStatus().status, "update_available"); assert.match(getUpdateStatus().message, /上次/);
+    assert.equal(f.calls.filter(c => c === "workbench.extensions.installExtension").length, installs); // the re-check never auto-installs
+  } finally { f.dispose(); await f.updater.dispose(); }
+});
+
+test("reload settles an installed batch; incomplete original batch is reconciled without installing", async () => {
+  const f = fixture();
+  try {
+    await f.updater.check(); await f.updater.install(); const journal = f.state.get(TRANSACTION_KEY);
+    assert.equal(journal.status, "reload_required");
+    const restart = fixture(undefined, { state: [[TRANSACTION_KEY, journal]], versions: { [SFTP_EXTENSION_ID]: "1.1.0", [EXPERIMENT_EXTENSION_ID]: "1.1.0" } });
+    try {
+      await restart.updater.check();
+      assert.equal(restart.updater.blocked, false); assert.equal(restart.state.get(TRANSACTION_KEY), undefined);
+      assert.ok(!restart.calls.includes("workbench.extensions.installExtension")); assert.equal(getUpdateStatus().status, "update_available");
+    } finally { restart.dispose(); }
+    const incomplete = fixture(undefined, { state: [[TRANSACTION_KEY, { ...journal, status: "failed", completed: [SFTP_EXTENSION_ID] }]], versions: { [SFTP_EXTENSION_ID]: "1.1.0" } });
+    try {
+      await incomplete.updater.check();
+      assert.equal(incomplete.updater.blocked, true); assert.match(getUpdateStatus().message, /原批次/);
+      assert.equal(incomplete.state.get(TRANSACTION_KEY).status, "failed");
+      assert.ok(!incomplete.calls.includes("workbench.extensions.installExtension")); assert.ok(!incomplete.calls.some(c => c.startsWith("prepare:")));
+    } finally { incomplete.dispose(); await incomplete.updater.dispose(); }
+  } finally { f.dispose(); await f.updater.dispose(); }
+});
+
+test("cancelling the shared update wait releases admission before any package is prepared", async () => {
+  const f = fixture(undefined, { cancelWait: true });
+  try {
+    await f.updater.check();
+    const first = f.updater.install(), second = f.updater.install(); assert.equal(first, second);
+    await assert.rejects(first, /用户取消更新/);
+    assert.ok(!f.calls.includes("gate")); assert.ok(!f.calls.some(c => c.startsWith("prepare:"))); assert.ok(!f.calls.includes("workbench.extensions.installExtension"));
+    assert.equal(f.updater.blocked, false); assert.equal(f.state.get(TRANSACTION_KEY).installationRequested, false);
+  } finally { f.dispose(); }
+});
+
+test("old SFTP without the shared wait protocol cannot enter an update gate that would abort its transfers", async () => {
+  const f = fixture(undefined, { versions: { [SFTP_EXTENSION_ID]: "0.2.101" } });
+  try {
+    await f.updater.check(); await assert.rejects(f.updater.install(), /0\.2\.102/);
+    assert.ok(!f.calls.includes("gate")); assert.ok(!f.calls.includes("wait")); assert.ok(!f.calls.includes("workbench.extensions.installExtension"));
+  } finally { f.dispose(); }
+});
+
+test("Mac entry registers updates before business, polls every thirty minutes, and keeps the OS shim", () => {
+  const mac = fs.readFileSync(require("node:path").join(__dirname, "../../src/mac/Bootstrap.ts"), "utf8");
+  assert.ok(mac.indexOf("shared.activateWithBusiness") < mac.indexOf('return require("../extension")'));
+  assert.match(mac, /export const registerPreviewUpdater = shared\.registerUpdater/);
+  assert.match(mac, /context\.subscriptions\.push\(\s*vscode\.commands\.registerCommand\(CHECK_COMMAND/);
+  const shared = fs.readFileSync(require("node:path").join(__dirname, "../../src/updates/Bootstrap.ts"), "utf8");
+  assert.match(shared, /30 \* 60 \* 1000/);
+  assert.ok(shared.indexOf("service = registerUpdater") < shared.indexOf("business = loadBusiness"));
+  const provider = fs.readFileSync(require("node:path").join(__dirname, "../../src/extension/legacy.ts"), "utf8");
+  assert.match(provider, /if \(updater\) return updater\.check\(manual\)/); assert.match(provider, /if \(updater\) return updater\.install\(\)/);
+  assert.match(provider, /getUpdater\(\)\?\.blocked\) return/);
+  assert.equal(require("../../package.json").main, "./dist/mac/Bootstrap.js");
 });

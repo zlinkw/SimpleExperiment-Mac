@@ -88,8 +88,11 @@ function checkedBytes(root, relative, directories) {
  * large ignored evidence trees and machine state are never traversed or copied.
  */
 function createPackageProjection(sourceRoot, options = {}) {
+  const progress = options.onProgress || (() => {});
+  progress({ stage: "inventory" });
   const root = path.resolve(sourceRoot), rootStat = ordinaryDirectory(root);
   const tracked = options.trackedFiles || trackedFiles(root), files = sourceFiles(root, tracked);
+  progress({ stage: "inventory-complete", files: files.length });
   if (!files.includes("package.json")) throw new Error("Package source manifest is absent");
   let parent = root;
   for (const name of ["release-artifacts", "package-sources"]) {
@@ -99,37 +102,48 @@ function createPackageProjection(sourceRoot, options = {}) {
   }
   const directory = path.join(parent, crypto.randomUUID()); fs.mkdirSync(directory);
   const directories = new Map([[root, `${rootStat.dev}:${rootStat.ino}`]]), records = [];
+  const createdParents = new Set();
   let total = 0;
   for (const relative of files) {
     const source = checkedBytes(root, relative, directories); total += source.bytes.length;
     if (total > MAX_TOTAL_BYTES) throw new Error("Package source byte budget exceeded");
-    const target = path.join(directory, ...relative.split("/")); fs.mkdirSync(path.dirname(target), { recursive: true });
+    const target = path.join(directory, ...relative.split("/")), parent = path.dirname(target);
+    // Repeated recursive mkdir on the Windows 9p mount is expensive. This only
+    // avoids redundant creation; checked source and snapshot bindings remain.
+    if (!createdParents.has(parent)) { fs.mkdirSync(parent, { recursive: true }); createdParents.add(parent); }
     fs.writeFileSync(target, source.bytes, { flag: "wx" });
     records.push({ relative, size: source.bytes.length, sha256: hash(source.bytes), identity: source.identity });
+    if (records.length % 250 === 0) progress({ stage: "copy", files: records.length, totalBytes: total });
   }
   const snapshotStat = ordinaryDirectory(directory);
   const projection = { root, directory, records, directories, tracked: options.trackedFiles, total,
     snapshotIdentity: `${snapshotStat.dev}:${snapshotStat.ino}` };
-  assertPackageProjection(projection);
+  progress({ stage: "copy-complete", files: records.length, totalBytes: total });
+  assertPackageProjection(projection, progress);
   fs.writeFileSync(directory + ".binding.json", JSON.stringify({ capturedAt: new Date().toISOString(), root, directory, total, records }, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
+  progress({ stage: "bound", files: records.length, totalBytes: total });
   return projection;
 }
-function assertPackageProjection(projection) {
+function assertPackageProjection(projection, progress = () => {}) {
+  progress({ stage: "verify-directories", directories: projection.directories.size });
   for (const [directory, expected] of projection.directories) {
     const stat = ordinaryDirectory(directory);
     if (`${stat.dev}:${stat.ino}` !== expected) throw new Error("Package source directory changed");
   }
   const names = sourceFiles(projection.root, projection.tracked || trackedFiles(projection.root));
+  progress({ stage: "verify-file-set", files: names.length });
   if (JSON.stringify(names) !== JSON.stringify(projection.records.map(record => record.relative))) throw new Error("Package source file set changed");
   const snapshotStat = ordinaryDirectory(projection.directory);
   if (`${snapshotStat.dev}:${snapshotStat.ino}` !== projection.snapshotIdentity
     || JSON.stringify(snapshotFiles(projection.directory)) !== JSON.stringify(names)) throw new Error("Package snapshot identity or file set changed");
   const snapshotDirectories = new Map();
+  let verified = 0;
   for (const record of projection.records) {
     const source = checkedBytes(projection.root, record.relative, projection.directories);
     const snapshot = checkedBytes(projection.directory, record.relative, snapshotDirectories);
     if (source.identity !== record.identity || source.bytes.length !== record.size || hash(source.bytes) !== record.sha256
       || !snapshot.bytes.equals(source.bytes)) throw new Error("Package source or snapshot bytes changed");
+    if (++verified % 250 === 0) progress({ stage: "verify-bytes", files: verified });
   }
   return true;
 }

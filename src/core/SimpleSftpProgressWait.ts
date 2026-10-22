@@ -4,6 +4,23 @@ import { assertRetryRequestCurrent, registerRetryStopCheck, retryRequestSignal }
 import { BoundedSseDecoder, readBoundedResponseText } from "../tunnel/BoundedResponse";
 import { postProgressRpc } from "./ProgressRpcTransport";
 
+/** Keep cleanup guard evidence visible even when an older companion returns only a path. */
+export function cleanupApiErrorMessage(method: string, error: any): string {
+  const data = error?.data || {}, code = typeof data.code === "string" ? data.code.slice(0, 100) : "";
+  const reasons: Record<string, string> = {
+    PROTECTED_DESCENDANT: "目标包含受保护的子项", PROTECTED_PATH: "目标路径受保护",
+    LINK_OR_REPARSE_POINT: "目标包含符号链接或重解析点", MOUNT_ESCAPE: "目标跨越文件系统或挂载边界",
+    PATH_ESCAPE: "目标超出安全根目录", UNSAFE_ROOT: "项目根目录或系统根目录不可删除",
+    PARENT_CD_FAILED: "无法核实或进入目标的直接父目录", PREVIEW_CHANGED: "目标在确认后发生变化，需要重新确认",
+  };
+  const reason = typeof data.reason === "string" && data.reason ? data.reason.slice(0, 4096) : reasons[code] || "";
+  const blockingPath = typeof data.blockingPath === "string" ? data.blockingPath.slice(0, 4096) : "";
+  const message = String(error?.message || "未知错误").slice(0, 4096);
+  const details = [code ? `[${code}]` : "", reason, blockingPath ? `阻拦路径：${blockingPath}` : ""];
+  if (message !== reason && message !== blockingPath && message !== code) details.push(message);
+  return `SimpleSFTP ${method}：${details.filter(Boolean).join("；")}`;
+}
+
 async function readSftpJson(response: Response): Promise<any> {
   return JSON.parse(await readBoundedResponseText(response, () => {}));
 }
@@ -13,6 +30,7 @@ export type SimpleSftpDiscovery = {
   headers: Record<string, string>;
   instanceId?: string;
   features?: Record<string, unknown>;
+  methodOptions?: Record<string, Record<string, unknown>>;
 };
 
 export type SimpleSftpProgress = {
@@ -33,6 +51,13 @@ export type SimpleSftpProgress = {
   totalFiles?: number;
   completedGroups?: number;
   totalGroups?: number;
+  writtenBytes?: number;
+  writtenFiles?: number;
+  stalled?: boolean;
+  capacityState?: "queued" | "running";
+  capacityQueuedAt?: string;
+  capacityGrantedAt?: string;
+  capacityWaitMs?: number;
   elapsedMs: number;
 };
 
@@ -151,17 +176,32 @@ export async function callSftpWithProgress(
   const scopedSignal = retryRequestSignal();
   if (scopedSignal) params = { ...params, signal: params.signal ? AbortSignal.any([params.signal, scopedSignal]) : scopedSignal };
   const discovery = await discover(method);
+  if (method === "sync.projectInventory" && params.metadataOnly === true && discovery.methodOptions?.[method]?.metadataOnly !== 1)
+    throw new Error("SimpleSFTP 当前实例不支持递归文件信息；请更新并重载，未发送内容哈希请求。");
   const { endpoint, headers } = discovery;
   assertRetryRequestCurrent();
   const operationId = `sftp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const cleanupOperation = method.startsWith("files.cleanup.");
+  const metadataRead = ["sync.projectInventory", "sync.projectTree", "sync.projectTreeState", "sync.projectFileStats",
+    "sync.planLogPaths", "remote.listDirs",
+    "files.cleanup.inspect", "files.cleanup.preview", "files.cleanup.check", "files.cleanup.verify", "files.cleanup.status"].includes(method)
+    || method === "sync.downloadMappedPaths" && params.memoryOnly === true;
   const fileOperation = /^(sync[.]|upload[.]|download[.]|remote[.])/.test(method);
+  const progressOperation = fileOperation || cleanupOperation;
+  // Silence is not filesystem evidence of failure. This includes inventory
+  // enumeration, capacity waits and cleanup preflight, not just byte transfers.
+  const observeOnlyIdle = progressOperation;
   const requestAbort = new AbortController(), eventsAbort = new AbortController();
   const startedAt = Date.now();
   let timer: NodeJS.Timeout | undefined, disposed = false;
   let forgetStopCheck = () => {};
   let cancellation: Promise<void> | undefined, operationSent = false, operationNotStarted = false;
   let stopPending = false;
+  let reportedStalled = false;
+  let reportedCapacity = "";
   function cancelRemote(): Promise<void> {
+    // Closing a read cancels its request-scoped SSH child. No writer receipt or saved retry fence is needed.
+    if (metadataRead || cleanupOperation) return Promise.resolve();
     if (cancellation) return cancellation;
     cancellation = cancelRemoteCore();
     return cancellation;
@@ -198,10 +238,14 @@ export async function callSftpWithProgress(
       stopPending = true;
     } catch { stopPending = true; /* Outcome remains unknown; never replay a modifying operation. */ }
   }
-  const inactivity = new ProgressInactivity(fileOperation ? 120_000 : 30_000, () => {
-    requestAbort.abort(new Error("无真实进展，执行结果待确认。连接中断时实时通道会自动重连；请刷新目标状态，勿重复执行。"));
+  const inactivity = new ProgressInactivity(progressOperation ? 120_000 : 30_000, () => {
+    if (observeOnlyIdle) {
+      try { onProgress?.({ phase: "stalled", stalled: true, elapsedMs: Date.now() - startedAt }); } catch {}
+      return;
+    }
+    requestAbort.abort(new Error("控制请求无有效响应，执行结果待确认；请刷新实际状态，勿重复执行。"));
     void cancelRemote();
-  });
+  }, Date.now, observeOnlyIdle);
   const onCancel = () => { requestAbort.abort(params.signal?.reason); void cancelRemote(); };
   if (params.signal?.aborted) onCancel();
   else params.signal?.addEventListener("abort", onCancel, { once: true });
@@ -211,7 +255,12 @@ export async function callSftpWithProgress(
     const count = (value: unknown) => Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : undefined;
     const processedBytes = count(item.processedBytes ?? item.transferredBytes), processedFiles = count(item.processedFiles);
     const changed = inactivity.update({ phase, scope: item.progressScope || item.id, processedBytes, processedFiles, status: item.status });
-    if (changed && onProgress) {
+    const newlyStalled = item.stalled === true && !reportedStalled;
+    reportedStalled = item.stalled === true;
+    const capacityState = ["queued", "running"].includes(item.capacityState) ? item.capacityState : undefined;
+    const capacityChanged = Boolean(capacityState && capacityState !== reportedCapacity);
+    if (capacityState) reportedCapacity = capacityState;
+    if ((changed || newlyStalled || capacityChanged) && onProgress) {
       const visiblePhase = ["packing", "transferring", "unpacking"].includes(phase) ? "streaming" : phase;
       try { onProgress({ phase: visiblePhase, processedBytes, processedFiles, transferredBytes: count(item.transferredBytes),
         comparedFiles: count(item.comparedFiles), changedFiles: count(item.changedFiles), totalBytes: count(item.totalBytes),
@@ -219,7 +268,12 @@ export async function callSftpWithProgress(
         cacheStatus: ["ready", "unavailable", "read-failed", "write-failed"].includes(item.cacheStatus) ? item.cacheStatus : undefined,
         missingFiles: count(item.missingFiles), differentFiles: count(item.differentFiles), unchangedFiles: count(item.unchangedFiles),
         completedFiles: count(item.completedFiles), totalFiles: count(item.totalFiles),
-        completedGroups: count(item.completedGroups), totalGroups: count(item.totalGroups), elapsedMs: Date.now() - startedAt }); }
+        completedGroups: count(item.completedGroups), totalGroups: count(item.totalGroups),
+        writtenBytes: count(item.writtenBytes), writtenFiles: count(item.writtenFiles), stalled: item.stalled === true,
+        capacityState, capacityWaitMs: count(item.capacityWaitMs),
+        capacityQueuedAt: typeof item.capacityQueuedAt === "string" ? item.capacityQueuedAt : undefined,
+        capacityGrantedAt: typeof item.capacityGrantedAt === "string" ? item.capacityGrantedAt : undefined,
+        elapsedMs: Date.now() - startedAt }); }
       catch { /* Notification failures cannot cancel a genuine transfer. */ }
     }
     if (item.status === "cancelled") requestAbort.abort(new Error(item.reason || "传输已取消"));
@@ -233,10 +287,18 @@ export async function callSftpWithProgress(
         signal: AbortSignal.any([eventsAbort.signal, AbortSignal.timeout(30_000)]),
       });
       const payload = await readSftpJson(response);
-      if (payload.result?.instanceId !== discovery.instanceId) throw new Error("SimpleSFTP 实例已变化");
+      if (!response.ok || payload.error || !Array.isArray(payload.result?.transfers)) throw new Error("文件进度暂时无法查询");
+      if (discovery.instanceId && payload.result?.instanceId !== discovery.instanceId) {
+        requestAbort.abort(new Error("SimpleSFTP 实例已变化，文件操作结果未知；请刷新实际文件状态，勿重复执行。"));
+        return;
+      }
       for (const item of payload.result?.transfers || []) accept(item);
-      if (!disposed && !requestAbort.signal.aborted) { timer = setTimeout(() => void poll(), 500); timer.unref?.(); }
-    } catch { /* Manual recovery only. Do not restart a failed event connection or query. */ }
+    } catch { /* A failed observation never replays the file operation. */ }
+    finally {
+      if (!disposed && !requestAbort.signal.aborted) {
+        timer = setTimeout(() => void poll(), 1000); timer.unref?.();
+      }
+    }
   }
   async function readEvents(): Promise<void> {
     try {
@@ -262,12 +324,12 @@ export async function callSftpWithProgress(
       }
     } catch { /* Keep fallback reads; no event reconnect. */ }
   }
-  if (fileOperation) { void readEvents(); timer = setTimeout(() => void poll(), 500); }
+  if (progressOperation) { void readEvents(); timer = setTimeout(() => void poll(), 500); }
   try {
     requestAbort.signal.throwIfAborted();
     const recovery = { method, params, discover, onProgress };
     const registerStopCheck = () => registerRetryStopCheck(() => confirmSftpOperationStopped(operationId, discovery, recovery));
-    if (fileOperation) forgetStopCheck = registerStopCheck();
+    if (fileOperation && !metadataRead) forgetStopCheck = registerStopCheck();
     const { signal: _signal, ...serializable } = params;
     const requestBody = JSON.stringify({ jsonrpc: "2.0", id: operationId, method, params: {
         ...serializable, _operationId: operationId, _operationInstanceId: discovery.instanceId,
@@ -286,7 +348,8 @@ export async function callSftpWithProgress(
         if (requestAbort.signal.aborted) throw requestAbort.signal.reason || error;
         const cause = (error as any)?.cause?.code || (error as any)?.code;
         const detail = `${error instanceof Error ? error.message : String(error || "连接中断")}${cause ? ` [${String(cause).slice(0, 64)}]` : ""}`;
-        throw new Error(`SimpleSFTP ${method} 请求中断，旧传输结果未知，未重新传输；刷新目标状态并确认远端退出后再重试。${detail ? ` (${detail})` : ""}`);
+        throw new Error(metadataRead ? `SimpleSFTP ${method} 文件查询失败，可重新刷新。${detail}`
+          : `SimpleSFTP ${method} 请求中断，旧传输结果未知，未重新传输；刷新目标状态并确认远端退出后再重试。${detail ? ` (${detail})` : ""}`);
       }
     };
     let response = await sendOperation();
@@ -295,7 +358,7 @@ export async function callSftpWithProgress(
     requestAbort.signal.throwIfAborted();
     const blocker = payload.error?.data;
     operationNotStarted = blocker?.notStarted === true;
-    if (fileOperation && blocker?.blockedOperationId && typeof blocker.operationInstanceId === "string") {
+    if (fileOperation && !metadataRead && blocker?.blockedOperationId && typeof blocker.operationInstanceId === "string") {
       // Only an explicit producer receipt proves that this new operation never
       // started. Do not retain a stop check for a nonexistent operation id.
       if (blocker.notStarted === true) forgetStopCheck();
@@ -315,7 +378,8 @@ export async function callSftpWithProgress(
       // modifying transfer; the current error response alone may not prove
       // that all remote writers have exited.
       if (payload.error) {
-        const error = new Error(`SimpleSFTP ${method}：${payload.error.message || "未知错误"}`);
+        const error = new Error(method.startsWith("files.cleanup.") ? cleanupApiErrorMessage(method, payload.error)
+          : `SimpleSFTP ${method}：${payload.error.message || "未知错误"}`);
         if (method.startsWith("files.cleanup.")) Object.assign(error, { apiCode: payload.error.code, apiData: payload.error.data,
           code: payload.error.data?.code });
         throw error;

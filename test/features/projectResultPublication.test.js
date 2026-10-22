@@ -13,9 +13,7 @@ const registryPath = "simple_cluster/results/project_table_registry.json";
 const hash = text => crypto.createHash("sha256").update(text, "utf8").digest("hex");
 
 async function workspace(t) {
-  const root = fsSync.mkdtempSync(path.join(os.tmpdir(), "simple-result-publication-"));
-  t.after(() => fsSync.rmSync(root, { recursive: true, force: true }));
-  return root;
+  return require('../_helpers/retainedFixture')(path.resolve(__dirname, '../..'), 'result-publication');
 }
 
 async function write(root, relative, text) {

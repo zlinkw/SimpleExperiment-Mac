@@ -15,10 +15,9 @@ const guide = fs.readFileSync(path.join(root, "docs/simple-experiment-setup.md")
 const advancedCommands = [
   "simpleExperimentMac.writeXshellAgentStartupCommands",
   "simpleExperimentMac.configureXshellRealtimeTunnel",
-  "simpleExperimentMac.startHubTunnel",
   "simpleExperimentMac.startWorkerTunnel",
-  "simpleExperimentMac.startXshellRealtimeTunnel",
   "simpleExperimentMac.startAllXshellRealtimeTunnels",
+  "simpleExperimentMac.stopMacSystemTunnels",
   "simpleExperimentMac.showTunnelEndpointRegistry",
   "simpleExperimentMac.testXshellTunnel",
   "simpleExperimentMac.restartRealtimeStream",
@@ -65,7 +64,8 @@ test("command palette defaults to the new-project main workflow without removing
   }
 
   assert.match(readme, /simpleExperimentMac\.tunnel\.manualEndpoints/);
-  assert.match(guide, /SimpleExperiment Mac：配置 Termius 手动端点/);
+  assert.match(guide, /系统 OpenSSH 一键启动与 Termius 备份/);
+  assert.match(guide, /simpleExperimentMac\.tunnel\.manualEndpoints 设置保留读取兼容/);
   const command = packageJson.contributes.commands.find(item => item.command === "simpleExperimentMac.generateXshellTunnelScript");
   assert.equal(command.title, "SimpleExperiment：显示 Termius 隧道与 Agent 指引");
   assert.ok(readSource("src/factories/CommandFactory.ts").includes(command.title));

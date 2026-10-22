@@ -90,7 +90,9 @@ test("Worker polling bootstraps all GPU rows without requesting the Hub snapshot
     try {
       await client.connect();
       assert.equal(client.currentState().gpu.nwpu3?.length, 4);
-      assert.equal(client.currentState().workerTasks.nwpu3?.[0].commandId, "running-1");
+      assert.equal(client.currentState().workerTasks.nwpu3,undefined,'connection bootstrap cannot invent an execution projection');
+      const live=await client.getWorkerTasks();assert.equal(live.tasks[0].commandId,'running-1');
+      assert.equal(client.currentState().workerTasks.nwpu3,undefined,'a query returns evidence to its caller, not a durable state mirror');
       assert.ok(requested.includes("/api/gpu"));
       assert.ok(!requested.includes("/api/snapshot"));
       assert.equal(client.diagnostics().lastError, undefined);

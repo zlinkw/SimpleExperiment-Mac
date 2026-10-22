@@ -9,12 +9,17 @@ test("Mac configuration button opens the bundled Mac guide without saved-session
   const source = fs.readFileSync(path.join(root,"dist/extension/legacy.js"),"utf8");
   const start=source.indexOf("async openSetupGuide()"), end=source.indexOf("async openPanel()",start);
   assert.ok(start>=0&&end>start);
+  // openSetupGuide delegates document opening to the shared guide-source seam (release packaging excludes docs/).
+  const guideStart=source.indexOf("async showSetupGuideDocument()"); assert.ok(guideStart>0);
+  const guideTail=source.slice(guideStart), guideEnd=guideTail.slice(1).search(/^    (?:private )?(?:async )?[a-zA-Z][a-zA-Z0-9_]*\(/m)+1; assert.ok(guideEnd>0);
+  const guideSource=require("../../dist/features/SetupGuideSource");
   for(const failPreview of [false,true]) {
     const calls=[];
-    const vscode={Uri:{file:file=>file},ViewColumn:{Active:1},commands:{executeCommand:async(command,uri)=>{calls.push([command,uri]);if(failPreview)throw Error("preview unavailable");}},
-      workspace:{openTextDocument:async uri=>({uri})},window:{showTextDocument:async document=>calls.push(["fallback",document.uri]),showInformationMessage:async()=>{throw Error("legacy wizard must not run");}}};
-    const sandbox={vscode,path};vm.createContext(sandbox);
-    const provider=vm.runInContext("({"+source.slice(start,end)+"})",sandbox);
+    const vscode={Uri:{file:file=>file,parse:url=>url},ViewColumn:{Active:1},commands:{executeCommand:async(command,uri)=>{calls.push([command,uri]);if(failPreview)throw Error("preview unavailable");}},
+      workspace:{openTextDocument:async uri=>({uri})},window:{showTextDocument:async document=>calls.push(["fallback",document.uri]),showInformationMessage:async()=>{throw Error("legacy wizard must not run");}},
+      env:{async openExternal(url){calls.push(["external",url]);return true;}}};
+    const sandbox={vscode,path,SetupGuideSource_1:guideSource};vm.createContext(sandbox);
+    const provider=vm.runInContext("({"+source.slice(start,end)+","+guideTail.slice(0,guideEnd)+"})",sandbox);
     provider.context={extensionPath:root,extension:{packageJSON:{name:"simple-experiment-mac"}}};
     await provider.openSetupGuide();
     assert.equal(calls[0][1],path.join(root,"docs/simple-experiment-setup.md"));

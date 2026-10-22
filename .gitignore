@@ -20,6 +20,7 @@ dist/
 *.vsix
 simple-experiment-0.1.5*.vsix
 dist/runtime/__pycache__/
+**/__pycache__/
 
 # Temp / scratch
 .tmp/

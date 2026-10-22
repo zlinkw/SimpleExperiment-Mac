@@ -48,7 +48,7 @@ with contextlib.ExitStack() as scope:
         "write_worker_recall_tombstone": tombstone,
         "signal_durable_plan_queue_processor": lambda *args: None,
         "verified_durable_execution_mode": lambda *args: "train",
-        "verified_formal_job_command": lambda *args: {},
+        "verified_formal_job_command": lambda *args, **kwargs: {},
         "safe_project_path": lambda _, value: agent.durable_plan_path(value, "fixture path"),
         "append_event": lambda _, event: events.append(copy.deepcopy(event)),
         "append_worker_task": lambda _, task: tasks.append(copy.deepcopy(task)),

@@ -3,6 +3,7 @@ import { normalizePosixAbsolutePath } from "./PosixPath";
 import { assertLocalhost } from "../tunnel/TunnelGateway";
 import { normalizeXshellSetupConfig, normalizeXshellWorkerTunnelConfig, XshellRealtimeTunnelConfig } from "../tunnel/XshellTunnelSetup";
 import { defaultAgentTmuxSessionName, simpleAgentRuntimeRelativePath } from "../tunnel/AgentTmuxPolicy";
+import { manualTerminalSetup } from "../platform/Terminal";
 
 export const MANUAL_ENDPOINT_SETTING = "tunnel.manualEndpoints";
 export interface ManualEndpoint {
@@ -22,7 +23,7 @@ export interface ManualEndpoint {
   enabled?: boolean;
   maxConcurrentGpus?: number | string;
 }
-export type ManualSetup = XshellRealtimeTunnelConfig & { manualProvider: "termius"; manualEndpointError?: string; manualDisabledHub?: ManualEndpoint };
+export type ManualSetup = XshellRealtimeTunnelConfig & { manualProvider: "termius"; manualEndpointError?: string; manualDisabledHub?: ManualEndpoint; macManagedSessions?: true };
 
 function text(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim() || /[\x00-\x1f\x7f]/.test(value)) throw new Error(`${label} 必须填写有效文本。`);
@@ -58,22 +59,23 @@ export function validateManualEndpoints(value: unknown): ManualEndpoint[] {
     if (raw.enabled !== false) ports.add(localForwardPort);
     const maxConcurrentGpus = raw.maxConcurrentGpus === undefined ? "auto" : raw.maxConcurrentGpus;
     if (maxConcurrentGpus !== "auto" && (typeof maxConcurrentGpus !== "number" || !Number.isInteger(maxConcurrentGpus) || maxConcurrentGpus < 1 || maxConcurrentGpus > 64)) throw new Error("maxConcurrentGpus 必须为 auto 或 1-64 整数。");
-    const condaEnv = raw.condaEnv ? directory(raw.condaEnv, `${id} Conda 环境`) : raw.condaEnv === undefined ? undefined : "";
+    const condaEnv = raw.condaEnv ? text(raw.condaEnv, `${id} Conda 环境`) : raw.condaEnv === undefined ? undefined : "";
     return { id, role: raw.role, displayName: raw.displayName ? text(raw.displayName, "显示名") : id,
       host: host(raw.host, `${id} SSH 地址`), user: text(raw.user, `${id} SSH 用户`), sshPort: port(raw.sshPort, `${id} SSH 端口`, 1),
       localForwardHost: host(raw.localForwardHost, `${id} 本机监听地址`), localForwardPort,
       remoteAgentHost: host(raw.remoteAgentHost, `${id} 远端 Agent 地址`), remoteAgentPort: port(raw.remoteAgentPort, `${id} Agent 端口`),
       projectParentDir: directory(raw.projectParentDir, `${id} 项目父目录`),
-      ...(raw.agentInstallDir ? { agentInstallDir: directory(raw.agentInstallDir, `${id} runtime 目录`) } : {}), condaEnv, enabled: raw.enabled !== false, maxConcurrentGpus };
+      ...(raw.agentInstallDir ? { agentInstallDir: directory(raw.agentInstallDir, `${id} runtime 目录`) } : {}), condaEnv, enabled: raw.role === "worker" && raw.enabled !== false, maxConcurrentGpus };
   });
 }
 
 export function enforceManualSetup(value: XshellRealtimeTunnelConfig): ManualSetup {
+  // Mac identity boundary (released contract): a Mac setup never carries private
+  // Windows session or authentication-file identity, on the top level or per worker.
   const clean = (item: any) => ({ ...item, xshellExePath: "", xshellSessionName: undefined, savedSessionPath: undefined,
     savedSessionForwardIndex: undefined, agentSessionPath: undefined, privateKeyPath: undefined, authMethod: "auto" as const,
     transferHost: undefined, resolvedHost: undefined, sftpHost: undefined, sshHost: undefined, sshConfigAlias: undefined });
-  return { ...clean(value), launchMode: "manual_guide", autoStartTunnelOnExtensionActivation: false,
-    workerTunnels: value.workerTunnels.map(clean), manualProvider: "termius" };
+  return manualTerminalSetup({ ...clean(value), workerTunnels: value.workerTunnels.map(clean) }) as ManualSetup;
 }
 
 export function setupFromManualEndpoints(value: unknown, saved: Partial<XshellRealtimeTunnelConfig> = {}): ManualSetup {

@@ -10,7 +10,7 @@ import {
 } from "./TunnelPortConflict";
 
 export interface PortAllocationRequest {
-  hub: {
+  hub?: {
     id: "hub";
     displayName?: string;
     sshConfigAlias?: string;
@@ -63,35 +63,7 @@ export async function allocateTunnelPorts(
   const used = new Map<number, string>();
   const assignments: TunnelEndpointPortAssignment[] = [];
 
-  const hubRequested = request.hub.requestedLocalPort || existing.get("hub")?.localForwardPort || defaultTunnelPorts.hubLocalPort;
-  const hubPort = await reservePort({
-    endpointId: "hub",
-    requestedPort: hubRequested,
-    role: "hub_control",
-    range,
-    used,
-    conflicts,
-    probe,
-    autoStart: defaultTunnelPorts.hubLocalPort,
-    source: request.hub.requestedLocalPort ? "manual" : existing.get("hub") ? "imported" : "auto",
-    allowOutsideWorkerRange: true,
-    localForwardHost: request.hub.localForwardHost || existing.get("hub")?.localForwardHost || "127.0.0.1",
-  });
-  assignments.push({
-    endpointId: "hub",
-    role: "hub_control",
-    displayName: request.hub.displayName,
-    remoteHostLabel: request.hub.host,
-    sshConfigAlias: request.hub.sshConfigAlias,
-    localForwardHost: request.hub.localForwardHost || existing.get("hub")?.localForwardHost || "127.0.0.1",
-    localForwardPort: hubPort,
-    remoteBindHost: request.hub.remoteBindHost || existing.get("hub")?.remoteBindHost || "127.0.0.1",
-    remoteServicePort: normalizeServicePort(request.hub.remoteAgentPort, defaultTunnelPorts.defaultHubAgentPort),
-    assignedAt: existing.get("hub")?.assignedAt || now,
-    source: request.hub.requestedLocalPort ? "manual" : existing.get("hub")?.source || "auto",
-  });
-
-  let nextWorkerPort = Math.max(range.start, hubPort + 1, defaultTunnelPorts.workerLocalPortRange.start);
+  let nextWorkerPort = range.start;
   for (const worker of request.workers) {
     const previous = existing.get(worker.id);
     const requested = request.preserveExistingAssignments && previous?.localForwardPort
@@ -112,16 +84,6 @@ export async function allocateTunnelPorts(
       localForwardHost: worker.localForwardHost || previous?.localForwardHost || "127.0.0.1",
       enabled: worker.enabled,
     });
-    if (assigned === defaultTunnelPorts.hubLocalPort && worker.enabled) {
-      conflicts.push(makeTunnelPortConflict(
-        worker.id,
-        assigned,
-        "reserved_for_hub",
-        "error",
-        `Worker ${worker.id} requested reserved Hub local port ${assigned}.`,
-        "Use Repair Port Conflicts or choose a Worker port in the worker range.",
-      ));
-    }
     assignments.push({
       endpointId: worker.id,
       role: "worker_telemetry",
@@ -138,7 +100,7 @@ export async function allocateTunnelPorts(
     nextWorkerPort = Math.max(nextWorkerPort, assigned + 1);
   }
 
-  const enabledAssignments = assignments.filter((item) => item.role === "hub_control" || request.workers.find((worker) => worker.id === item.endpointId)?.enabled !== false);
+  const enabledAssignments = assignments.filter((item) => request.workers.find((worker) => worker.id === item.endpointId)?.enabled !== false);
   const uniquePorts = new Set(enabledAssignments.map((item) => item.localForwardPort));
   if (uniquePorts.size !== enabledAssignments.length) {
     warnings.push("Local tunnel ports were de-duplicated; review the assignment table.");
@@ -152,19 +114,8 @@ export async function allocateTunnelPorts(
 }
 
 export function allocationRequestFromAssignments(assignments: TunnelEndpointPortAssignment[]): PortAllocationRequest {
-  const hub = assignments.find((item) => item.role === "hub_control");
   const workers = assignments.filter((item) => item.role === "worker_telemetry");
   return {
-    hub: {
-      id: "hub",
-      displayName: hub?.displayName,
-      sshConfigAlias: hub?.sshConfigAlias,
-      host: hub?.remoteHostLabel || "hub",
-      localForwardHost: hub?.localForwardHost,
-      remoteBindHost: hub?.remoteBindHost,
-      requestedLocalPort: hub?.localForwardPort,
-      remoteAgentPort: hub?.remoteServicePort || defaultTunnelPorts.defaultHubAgentPort,
-    },
     workers: workers.map((worker) => ({
       id: worker.endpointId,
       displayName: worker.displayName,
@@ -188,9 +139,7 @@ export function detectStaticTunnelPortConflicts(
 ): TunnelPortConflict[] {
   const conflicts: TunnelPortConflict[] = [];
   const seen = new Map<number, string>();
-  const hubLocalPorts = new Set(assignments
-    .filter((assignment) => assignment.role === "hub_control")
-    .map((assignment) => assignment.localForwardPort));
+  assignments = assignments.filter(a=>a.role==="worker_telemetry");
   for (const assignment of assignments) {
     const port = assignment.localForwardPort;
     if (!isValidTunnelPort(port)) {
@@ -203,29 +152,6 @@ export function detectStaticTunnelPortConflicts(
         "Use a local port between 1024 and 65535.",
       ));
       continue;
-    }
-    if (assignment.role === "worker_telemetry") {
-      const usesReleasedHubPort = hubLocalPorts.size === 0 && port === defaultTunnelPorts.hubLocalPort;
-      if (hubLocalPorts.has(port)) {
-        conflicts.push(makeTunnelPortConflict(
-          assignment.endpointId,
-          port,
-          "reserved_for_hub",
-          "error",
-          `Worker ${assignment.endpointId} uses the active Hub local port ${port}.`,
-          "Use Repair Port Conflicts.",
-        ));
-      }
-      if (!usesReleasedHubPort && !isPortInRange(port, range)) {
-        conflicts.push(makeTunnelPortConflict(
-          assignment.endpointId,
-          port,
-          "outside_allowed_range",
-          "warning",
-          `Worker ${assignment.endpointId} local port ${port} is outside ${range.start}-${range.end}.`,
-          "Expand the Worker local port range or repair assignments.",
-        ));
-      }
     }
     const owner = seen.get(port);
     if (owner) {
@@ -283,17 +209,6 @@ async function reservePort(options: {
         "Use Configure Tunnel Ports or expand the Worker local port range.",
       ));
     }
-    requested = options.autoStart;
-  }
-  if (options.role === "worker_telemetry" && requested === defaultTunnelPorts.hubLocalPort && enabled) {
-    options.conflicts.push(makeTunnelPortConflict(
-      options.endpointId,
-      requested,
-      "reserved_for_hub",
-      "error",
-      `Worker ${options.endpointId} requested Hub reserved port ${requested}.`,
-      "Assign this Worker a port from 18766 upward.",
-    ));
     requested = options.autoStart;
   }
   if (options.used.has(requested) && enabled) {

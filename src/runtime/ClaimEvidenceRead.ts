@@ -1,7 +1,7 @@
 /** Read claims and current Plan evidence from checked inputs; retain legacy entry points. */
 export const CLAIM_EVIDENCE_READ_PYTHON = String.raw`
 def claim_evidence_reference(value):
-    durable_plan_path(value, "claim 证据引用")
+    result_io_relative_path(value, "claim 证据引用")
     return (value == "experiments/results.csv" or value in ("experiments/runs", "experiments/results")
             or value.startswith(("experiments/runs/", "experiments/results/")))
 
@@ -17,7 +17,7 @@ def claim_evidence_refs(text):
                 raise ValueError("claim Markdown 引用的百分号编码无效")
             value = unquote(value, encoding="utf-8", errors="strict")
         if value.startswith(("experiments/", "paper/")) or "/experiments/" in value:
-            durable_plan_path(value, "claim 证据引用")
+            result_io_relative_path(value, "claim 证据引用")
             if value not in refs:
                 refs.append(value)
                 if len(refs) > 240:
@@ -48,7 +48,7 @@ def claim_evidence_record_key(record):
     for source in sources:
         if not isinstance(source, dict) or "path" not in source:
             raise ValueError("claim 结果来源缺少路径")
-        paths.append(durable_plan_path(source["path"], "claim 原始结果来源"))
+        paths.append(result_io_relative_path(source["path"], "claim 原始结果来源"))
     identifier = record.get("resultId", "")
     if not isinstance(identifier, str) or not identifier or len(identifier.encode("utf-8")) > 4096:
         raise ValueError("claim 结果缺少原始 resultId")
@@ -120,7 +120,7 @@ def claim_evidence_verify(root, snapshots, directories, missing=False):
 
 def checked_claim_evidence(root, summary, _publish=True):
     plan, revision = archive_evidence_identity(summary)
-    durable_plan_path(plan, "claim Plan")
+    result_io_relative_path(plan, "claim Plan")
     snapshots, directories, missing = ProjectAggregateSnapshots(), [], False
     try:
         snapshot = output_contract_read_snapshot(root, "paper/claims.md")
@@ -159,7 +159,7 @@ def checked_claim_evidence(root, summary, _publish=True):
     if not _publish:
         return report
     for target in (relative, "simple_cluster/results/claim_evidence.json"):
-        full = worker_plan_project_path(root, target)
+        full = result_io_project_path(root, target)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         atomic_write(full, report)
     return report

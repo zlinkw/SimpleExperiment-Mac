@@ -24,7 +24,10 @@ test("tooling uses pinned local VSCE and npm-cli without shell argument concaten
   const verifier = fs.readFileSync(path.join(root, "scripts", "verify-vsix-runtime.js"), "utf8");
   const acceptance = fs.readFileSync(path.join(root, "scripts", "acceptance.js"), "utf8");
   assert.match(helper, /command: process\.execPath/);
-  assert.match(verifier, /require\.resolve\("@vscode\/vsce\/vsce"\)/);
+  const reader=fs.readFileSync(path.join(root,"scripts/list-vsix-files.js"),"utf8");
+  assert.match(reader,/require\("@vscode\/vsce\/out\/package"\)\.listFiles/);
+  assert.match(reader,/dependencies: false/);
+  assert.match(verifier,/inventoryScript/);
   assert.match(verifier, /spawnSync\(process\.execPath/);
   const timeout = Number(verifier.match(/timeout: ([0-9]+)/)?.[1]);
   assert.ok(timeout > 0 && timeout <= 10000, "metadata verification must stay within the test process deadline");

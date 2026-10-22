@@ -3,29 +3,29 @@ import { compactRealtimeLogs, compactRealtimeState, RealtimeState, createRealtim
 import { WorkerTaskTelemetry } from "./WorkerTelemetryApi";
 
 export interface AuthorityMergePolicy {
-  gpu: "prefer_worker_direct_else_hub";
+  gpu: "worker_direct";
   workerHealth: "worker_direct";
   workerTasks: "worker_direct_enrichment";
-  scheduler: "hub_authoritative";
-  experimentTraces: "hub_authoritative_worker_enrichment";
-  operations: "hub_only";
-  fileTransfers: "hub_only";
-  files: "hub_only";
-  results: "hub_only";
-  logs: "selected_worker_preferred_else_hub";
+  scheduler: "worker_direct";
+  experimentTraces: "worker_direct";
+  operations: "worker_direct";
+  fileTransfers: "worker_direct";
+  files: "worker_direct";
+  results: "worker_direct";
+  logs: "selected_worker";
 }
 
 export const defaultAuthorityMergePolicy: AuthorityMergePolicy = {
-  gpu: "prefer_worker_direct_else_hub",
+  gpu: "worker_direct",
   workerHealth: "worker_direct",
   workerTasks: "worker_direct_enrichment",
-  scheduler: "hub_authoritative",
-  experimentTraces: "hub_authoritative_worker_enrichment",
-  operations: "hub_only",
-  fileTransfers: "hub_only",
-  files: "hub_only",
-  results: "hub_only",
-  logs: "selected_worker_preferred_else_hub",
+  scheduler: "worker_direct",
+  experimentTraces: "worker_direct",
+  operations: "worker_direct",
+  fileTransfers: "worker_direct",
+  files: "worker_direct",
+  results: "worker_direct",
+  logs: "selected_worker",
 };
 
 export interface AuthorityMergeOptions {
@@ -49,14 +49,12 @@ export function mergeAuthorityRealtimeStates(
   const staleSeconds = options.staleWorkerTelemetrySeconds ?? 180;
   const nowMs = Date.parse(options.now || new Date().toISOString());
   const protectedKeys = protectedLogKeys(options);
-  const hubEntries: AuthorityStateEntry[] = [];
   const workerEntries: AuthorityStateEntry[] = [];
   const merged = createRealtimeState();
   const warnings: string[] = [];
 
-  for (const entry of entries) {
-    if (entry.endpoint.role === "hub") hubEntries.push(entry);
-    else workerEntries.push(entry);
+  for (const entry of entries.filter(row => row.endpoint.role === "worker")) {
+    workerEntries.push(entry);
     merged.lastSeq = Math.max(merged.lastSeq, entry.state.lastSeq);
     merged.lastHeartbeatAt = latestTimestamp(merged.lastHeartbeatAt, entry.state.lastHeartbeatAt);
     if (newerResultSummaryDirty(entry.state, merged)) {
@@ -68,31 +66,22 @@ export function mergeAuthorityRealtimeStates(
     }
   }
 
-  for (const entry of hubEntries) {
-    Object.assign(merged.gpu, markGpuSource(entry.state.gpu, "hub", false));
-    merged.schedulerStates = mergeRows(merged.schedulerStates, entry.state.schedulerStates);
-    merged.experimentTraces = mergeRows(merged.experimentTraces, entry.state.experimentTraces);
-    Object.assign(merged.operations, entry.state.operations);
-    Object.assign(merged.fileTransfers, entry.state.fileTransfers);
-    Object.assign(merged.logs, entry.state.logs);
-    if (entry.state.diagnostics) mergeEndpointDiagnostics(merged, entry.endpoint.id, entry.state.diagnostics);
-    warnings.push(...entry.state.warnings);
-  }
 
   const workerTasks: WorkerTaskTelemetry[] = [];
   for (const entry of workerEntries) {
     const fresh = isFresh(entry.state.lastHeartbeatAt, nowMs, staleSeconds);
     if (fresh) Object.assign(merged.gpu, markGpuSource(remapWorkerGpu(entry.state.gpu, entry.endpoint.id), entry.endpoint.id, true));
-    else if (Object.keys(entry.state.gpu).length) warnings.push(`Worker ${entry.endpoint.id} telemetry stale; Hub GPU fallback is used.`);
+    else if (Object.keys(entry.state.gpu).length) warnings.push(`Worker ${entry.endpoint.id} 状态已过期，请主动刷新。`);
     for (const row of Object.values(entry.state.workerTasks || {}).flat()) {
       workerTasks.push(normalizeWorkerTask(row, entry.endpoint.id));
     }
     Object.assign(merged.workerHealth ||= {}, entry.state.workerHealth || {});
     merged.logs = mergeLogs(merged.logs, entry.state.logs, protectedKeys);
     if (entry.state.diagnostics) mergeEndpointDiagnostics(merged, entry.endpoint.id, entry.state.diagnostics);
-    if (entry.state.schedulerStates.length) warnings.push(`Worker ${entry.endpoint.id} sent scheduler state; ignored because Hub is authoritative.`);
-    if (Object.keys(entry.state.operations).length) warnings.push(`Worker ${entry.endpoint.id} sent operation state; ignored because operations are Hub-only.`);
-    if (Object.keys(entry.state.fileTransfers).length) warnings.push(`Worker ${entry.endpoint.id} sent file transfer state; ignored because file transfers are Hub-only.`);
+    merged.schedulerStates = mergeRows(merged.schedulerStates, entry.state.schedulerStates.map(row => ({ ...(row as object), workerId: entry.endpoint.id })));
+    merged.experimentTraces = mergeRows(merged.experimentTraces, entry.state.experimentTraces.map(row => ({ ...(row as object), workerId: entry.endpoint.id })));
+    for (const [key, row] of Object.entries(entry.state.operations)) merged.operations[entry.endpoint.id + ":" + key] = { ...(row as object), workerId: entry.endpoint.id };
+    for (const [key, row] of Object.entries(entry.state.fileTransfers)) merged.fileTransfers[entry.endpoint.id + ":" + key] = { ...(row as object), workerId: entry.endpoint.id };
     warnings.push(...entry.state.warnings.map((warning) => `${entry.endpoint.id}: ${warning}`));
   }
 
@@ -239,7 +228,7 @@ function protectedLogKeys(options: AuthorityMergeOptions): string[] {
 
 function rowKey(row: unknown): string {
   const item = row as Record<string, unknown>;
-  return String(item.runKey || item.run_key || item.experimentId || item.experiment_id || item.id || item.key || JSON.stringify(row));
+  return String(item.workerId || "") + ":" + String(item.runKey || item.run_key || item.experimentId || item.experiment_id || item.id || item.key || JSON.stringify(row));
 }
 
 function latestTimestamp(current: string | undefined, incoming: string | undefined): string | undefined {

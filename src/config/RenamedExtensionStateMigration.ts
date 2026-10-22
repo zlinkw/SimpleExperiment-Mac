@@ -79,8 +79,7 @@ export function renamedExtensionStateSourcePath(globalStoragePath: string): stri
 }
 
 export async function migrateRenamedExtensionState(context: any, options: { readState?: (databasePath: string) => Record<string, any> } = {}) {
-  // Mac identity is isolated; never import the Windows extension database.
-  if (context?.extension?.packageJSON?.name === "simple-experiment-mac") return { migrated: false, reason: "isolated_mac_identity" };
+  if (!require("../platform/HostPaths").adoptLegacyWindowsExtensionState) return { migrated: false, reason: "independent_mac_identity" };
   const globalState = context?.globalState;
   if (!globalState?.get || !globalState?.update) return { migrated: false, reason: "missing_global_state" };
   if (Number(globalState.get(RENAMED_EXTENSION_STATE_MIGRATION_KEY, 0)) >= RENAMED_EXTENSION_STATE_MIGRATION_VERSION)

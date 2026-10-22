@@ -47,3 +47,13 @@ docs/manual-cleanup-candidates.md
 docs/ssh-transport.md
 docs/[m][o][b][a][X][t][e][r][m]-real-integration-checklist.md
 docs/[m][o][b][a][X][t][e][r][m]-tunnel-full-feature-acceptance.md
+
+# 078: source-only packaging policy; actual archive verification remains deferred.
+.packaging-*
+*.exitcode
+msg.txt
+**/msg.txt
+docs/**
+tests/**
+CHANGELOG.md
+**/*.patched

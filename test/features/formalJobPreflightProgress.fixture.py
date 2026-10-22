@@ -52,15 +52,30 @@ def validate_result_paths(config, contract):
 ''', encoding="utf-8")
 (root / "asset.dat").write_bytes(b"owned-asset" * 512)
 child = root / "scheduler_probe.py"
-child.write_text('''import argparse, json, pathlib, sys
+child.write_text('''import argparse, json, os, pathlib, sys, time
 sys.path.insert(0, ''' + repr(str(repo / "test/_helpers")) + ''')
 from extractRuntimeFunctions import extract_runtime_functions
-scheduler = extract_runtime_functions(''' + repr(str(runtime / "cluster_scheduler.py")) + ''', ['formal_job_preflight_report'])
+scheduler = extract_runtime_functions(''' + repr(str(runtime / "cluster_scheduler.py")) + ''', ['formal_job_preflight_report', 'execution_shell_preflight'])
+# 资产核实归项目 hook（project_owned）后 Scheduler 预检不再执行 hook；失速/心跳/倒退/取消等
+# 看门狗场景由探针子进程自身产生，经真实 subprocess_inactivity_run 分类为 STALLED/CANCELLED。
+probe_variant = os.environ.get('PROBE_VARIANT', '')
+if probe_variant in ('stall', 'heartbeat', 'decreasing', 'cancel', 'exit', 'mixed'):
+    emit = lambda payload: print('SIMPLE_PROGRESS ' + json.dumps(payload), file=sys.stderr, flush=True)
+    if probe_variant == 'stall': time.sleep(2)
+    elif probe_variant == 'heartbeat':
+        for number in range(200): emit({'phase': 'heartbeat-' + str(number), 'processedBytes': 0, 'processedFiles': 1}); time.sleep(0.01)
+    elif probe_variant == 'decreasing':
+        for number in range(200): emit({'phase': 'assets', 'processedBytes': 1000 - number * 5, 'processedFiles': 0}); time.sleep(0.01)
+    elif probe_variant == 'cancel': time.sleep(2)
+    elif probe_variant == 'exit': print('ACTUAL_PREFLIGHT_EXIT_7', file=sys.stderr, flush=True); sys.exit(7)
+    elif probe_variant == 'mixed': print('SIMPLE_PROGRESS {"processedBytes": 999999}', flush=True)
+    print(json.dumps({'ok': True})); sys.exit(0)
 p = argparse.ArgumentParser()
 p.add_argument('--formal-job-preflight',action='store_true')
 p.add_argument('--check-execution-shell-json',action='store_true')
 p.add_argument('--plan');p.add_argument('--only-index',type=int);p.add_argument('--mode')
 p.add_argument('--plan-revision');p.add_argument('--output-dir-override')
+p.add_argument('--formal-job-structure-only',action='store_true')
 p.add_argument('--default-result-csv-dir',default='experiments/results')
 args=p.parse_args()
 print(json.dumps(scheduler.execution_shell_preflight() if args.check_execution_shell_json else scheduler.formal_job_preflight_report(args),ensure_ascii=False),flush=True)
@@ -90,16 +105,9 @@ command = {"schemaVersion": 1, "commandId": "owned-command", "runKey": "owned-co
 if variant == "identity": command["globalJobId"] = "foreign:0"
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"),
     ["accept_durable_plan_job", "subprocess_inactivity_run", "preflight_existing_worker_task"])
-def fixture_project_path(base, value, **options):
-    # Keep the POSIX contract; map only the native filesystem leaf to retained local fixtures.
-    agent.durable_plan_path(value, "fixture POSIX path")
-    target = pathlib.Path(base).joinpath(*value.split("/")).resolve()
-    assert target.is_relative_to(pathlib.Path(base).resolve())
-    if options.get("require_file"):
-        assert target.is_file()
-    return str(target)
-agent.worker_plan_project_path = fixture_project_path
+# 移植后 Agent 不再在宿主侧解析 Plan 路径（worker_plan_project_path 已删除），由真实 Scheduler 在子进程内把关。
 queue, events, stderr, children = {"schemaVersion": 1, "jobs": []}, [], [], []
+inactivity_calls = []
 agent.read_durable_plan_queue = lambda _: copy.deepcopy(queue)
 def save(_, value):
     queue.clear(); queue.update(copy.deepcopy(value))
@@ -112,6 +120,7 @@ agent.signal_durable_plan_queue_processor = lambda *args: None
 agent.cluster_scheduler_path = lambda _: str(child)
 agent.formal_job_path_capable = lambda _: True  # The child runs the real Scheduler preflight implementation.
 agent.execution_shell_preflight_capable = lambda _: True  # Version rejection is tested separately; this child uses the real extracted probe.
+agent.task_shell_environment_capable = lambda _: True  # 现行正式链路要求 task-shell 环境协议；登录 shell 重绑行为由 executionShellEnvironment 专测覆盖。
 agent.simple_runtime_python = lambda env: sys.executable
 agent.scalar_scheduler_module = lambda: scheduler
 def environment():
@@ -135,6 +144,8 @@ agent.subprocess.run = scaled_run
 agent.subprocess.Popen = popen
 original_inactivity = agent.subprocess_inactivity_run
 def inactivity(*args, **kw):
+    # 记录现行无固定墙钟预算的失速看门狗协议（stderr 进展流、非 file_step）。
+    inactivity_calls.append({"progress_stream": kw.get("progress_stream") or "", "file_step": bool(kw.get("file_step"))})
     result = original_inactivity(*args, **kw); stderr.append(result.stderr or ""); return result
 agent.subprocess_inactivity_run = inactivity
 entry = {"cancel": threading.Event(), "processes": set(), "root": str(root), "action": "preflight-worker-task",
@@ -199,4 +210,5 @@ else:
 assert all(proc.poll() is not None for proc in children), "preflight child is still alive"
 assert not entry["processes"], "preflight child remained registered"
 print(json.dumps({"receipt": receipt, "callbacks": callbacks, "progressCount": len(events),
+                  "inactivityCalls": inactivity_calls,
                   "elapsedVirtualSeconds": (time.monotonic() - started) * scale, "executionStarted": False}))

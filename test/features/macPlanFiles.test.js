@@ -84,7 +84,17 @@ function fixture() {
     PlanExecutionMode: require('../../dist/features/PlanExecutionMode'),
     DistributedSchedulingPolicy: require('../../dist/features/DistributedSchedulingPolicy'),
     DistributedPlanQueue: loadCompiled('dist/features/DistributedPlanQueue.js'),
-    WorkflowBinding_1: { assertWorkflowWorkspace() {}, bindWorkflowWorkspace: () => ({}) },
+    WorkflowBinding: (() => {
+      const binding = require('../../dist/features/WorkflowWorkspaceBinding');
+      const probe = actual => {
+        assert.equal(actual, workspace);
+        const node = disk.nodes.get(actual);
+        return { canonical: actual, device: '1', inode: String(node.ino) };
+      };
+      return { ...binding,
+        bindWorkflowWorkspace: (requested, current) => binding.bindWorkflowWorkspace(requested, current, probe),
+        assertWorkflowWorkspace: (record, current) => binding.assertWorkflowWorkspace(record, current, probe) };
+    })(),
     vscode: { workspace: { getConfiguration: () => ({ get: (_key, fallback) => sandbox.planDirConfig ?? fallback }) },
       window: { showInformationMessage: () => { throw Error('unexpected UI'); } } } });
   const functionNames = ['readLocalPlans', 'readLocalPlanSummary', 'readArchivedLocalPlans', 'readPlanArchiveBundle', 'archiveManifestFileList', 'walkYaml', 'isArchivedPlanFile', 'mapLimited', 'parseLocalPlanText',

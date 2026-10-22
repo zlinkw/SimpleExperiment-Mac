@@ -17,8 +17,10 @@ test('old Worker declared paths alone cannot save or submit a new formal job', a
   const ast = ts.createSourceFile('legacy.ts', source, ts.ScriptTarget.Latest, true);
   const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'RealtimeTunnelPanelProvider');
   const methods = cls.members.filter(node => ['enqueueDistributedPlan', 'sendDistributedJob'].includes(node.name?.getText(ast)));
+  // 工作区绑定只做直通桩：本测试只钉旧协议 Worker 在动作目标快照后立即被协议门禁拒绝，绑定语义由 WorkflowBinding 专测覆盖。
   const Provider = vm.runInNewContext(ts.transpileModule('class Provider {' + methods.map(node => node.getText(ast)).join('\n') + '};Provider;',
-    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
+    { workspaceRoot: () => '/fixture-project', WorkflowBinding: { bindWorkflowWorkspace: () => ({}), assertPlanSeedContract: () => {}, assertWorkflowWorkspace: () => {}, assertWorkflowContext: () => {} } });
   const p = new Provider();
   p.workerActionTargets = () => [{ id: 'old-worker' }];
   p.lastWorkerProbes = { 'old-worker': { capabilities: { endpoints: { declaredJobPaths: true } } } };

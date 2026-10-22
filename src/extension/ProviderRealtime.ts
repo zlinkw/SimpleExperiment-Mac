@@ -41,13 +41,10 @@ function endpointCapabilitiesFromProbe(probe: unknown): unknown {
 }
 
 export function buildRealtimeEndpoints(deps: RealtimeDeps): RealtimeEndpoint[] {
-  const registry = buildTunnelEndpointRegistry(deps.setupConfig, {
-    hub: deps.lastProbe,
-    ...(deps.lastWorkerProbes || {}),
-  });
+  const registry = buildTunnelEndpointRegistry(deps.setupConfig, deps.lastWorkerProbes || {});
   const token = String(deps.tunnelConfig?.token || "");
   return registry.endpoints
-    .filter((endpoint) => endpoint.enabled && (deps.topology.hubAllowed || endpoint.role !== "hub_control"))
+    .filter((endpoint) => endpoint.enabled && endpoint.role === "worker_telemetry")
     .map((endpoint) => {
       const localHost = String(endpoint.tunnel.localHost || "").trim();
       const remoteHost = String(endpoint.tunnel.remoteHost || "").trim();
@@ -59,7 +56,7 @@ export function buildRealtimeEndpoints(deps: RealtimeDeps): RealtimeEndpoint[] {
       }
       return {
         id: endpoint.id,
-        role: endpoint.role === "hub_control" ? "hub" : "worker",
+        role: "worker" as const,
         displayName: endpoint.displayName,
         localHost,
         localPort,
@@ -75,18 +72,6 @@ export function buildRealtimeEndpoints(deps: RealtimeDeps): RealtimeEndpoint[] {
 export function buildTunnelLaunchItems(deps: RealtimeDeps): TunnelLaunchItem[] {
   const base = normalizeXshellSetupConfig(deps.setupConfig);
   const items: TunnelLaunchItem[] = [];
-  if (deps.topology.hubAllowed) {
-    items.push({
-      id: "hub",
-      role: "hub",
-      config: normalizeXshellSetupConfig({
-        ...base,
-        workerRealtimeMode: "hub_only",
-        workerTelemetryMode: "hub_only",
-        workerTunnels: [],
-      }),
-    });
-  }
   for (const worker of base.workerTunnels) {
     if (worker.enabled === false) continue;
     items.push({
@@ -114,7 +99,7 @@ export function buildRealtimeStateSnapshot(deps: RealtimeDeps): Record<string, u
     endpoints: buildRealtimeEndpoints(deps),
     launchItems: buildTunnelLaunchItems(deps),
     agentLaunchItems: buildAgentLaunchItems(deps),
-    hubAllowed: deps.topology.hubAllowed === true,
+    hubAllowed: false,
     topologyMode: String(deps.topology.mode || ""),
   };
 }

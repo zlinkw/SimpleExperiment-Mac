@@ -1,4 +1,6 @@
 import { normalizePort } from "./TunnelGateway";
+import { memorySchedulingOverrides } from "../features/GpuMemoryScheduling";
+import { quotaOverrides } from "../features/GpuQuotaScheduling";
 import {
   defaultTunnelPorts,
   normalizePortRange,
@@ -38,6 +40,8 @@ export interface XshellWorkerTunnelConfig {
   agentSessionPath?: string;
   agentProjectDir?: string;
   agentInstallDir?: string;
+  /** Opt-in only: preserve custom login while maintaining a separate versioned fragment. */
+  agentLoginPolicy?: "preserve" | "managed";
   condaEnv?: string;
   maxConcurrentGpus: number | string;
   /** @deprecated allowed 语义已删除，仅兼容旧配置读取，始终视为空=全部允许 */
@@ -46,6 +50,16 @@ export interface XshellWorkerTunnelConfig {
   enabled: boolean;
   gpuIdleUtilThreshold?: number;
   gpuIdleMemThresholdMb?: number;
+  gpuMemoryRatioEnabled?: boolean;
+  gpuMemoryPerJobGb?: number;
+  gpuMemoryMaxJobsPerGpu?: number;
+  gpuMemoryReserveGb?: number;
+  gpuMemoryTolerancePercent?: number;
+  gpuJobsPerCard?: number;
+  gpuMinFreeMemoryGb?: number;
+  gpuMaxConcurrentCards?: number;
+  gpuCardOverrides?: import("../features/GpuQuotaScheduling").GpuCardOverrides;
+  gpuQuotaConfigured?: boolean;
   sessionCheckMinSeconds?: number;
   workerStatusTtlSeconds?: number;
 }
@@ -74,6 +88,7 @@ export interface XshellRealtimeTunnelConfig {
   agentSessionPath?: string;
   agentProjectDir?: string;
   agentInstallDir?: string;
+  agentLoginPolicy?: "preserve" | "managed";
   condaEnv: string;
   authMethod: XshellAuthMethod;
   launchMode: XshellLaunchMode;
@@ -134,6 +149,11 @@ export function normalizeXshellSetupConfig(input: Partial<XshellTunnelSetupConfi
   const normalizedWorkers = Array.isArray(input.workerTunnels)
     ? input.workerTunnels.map((worker, index) => normalizeXshellWorkerTunnelConfig(worker, index, input.remoteAgentPort)).filter((worker) => worker.id)
     : [];
+  for (const worker of normalizedWorkers) {
+    if (normalizedWorkers.filter(row => row.id === worker.id).some(row => row !== worker
+      && (row.workerHost !== worker.workerHost || row.workerSshPort !== worker.workerSshPort || row.agentProjectDir !== worker.agentProjectDir)))
+      throw new Error(`DUPLICATE_WORKER_ID: ${worker.id}`);
+  }
   const workerTunnels = dedupeWorkerTunnels(normalizedWorkers);
   const workerTelemetryMode = input.workerTelemetryMode === "hub_plus_worker_telemetry" || input.workerRealtimeMode === "hub_plus_workers"
     ? "hub_plus_worker_telemetry"
@@ -163,6 +183,7 @@ export function normalizeXshellSetupConfig(input: Partial<XshellTunnelSetupConfi
     agentSessionPath: input.agentSessionPath?.trim() || undefined,
     agentProjectDir: input.agentProjectDir?.trim() || undefined,
     agentInstallDir: input.agentInstallDir?.trim() || undefined,
+    agentLoginPolicy: input.agentLoginPolicy === "managed" ? "managed" : "preserve",
     condaEnv: normalizeCondaEnvName(input.condaEnv),
     authMethod: normalizeAuthMethod(input.authMethod),
     launchMode: normalizeLaunchMode(input.launchMode),
@@ -178,6 +199,8 @@ export function normalizeXshellSetupConfig(input: Partial<XshellTunnelSetupConfi
     ports: normalizePortConfig(input.ports, workerTunnels, input.localForwardPort, input.remoteAgentPort,
       input.hubDisplayName, input.localForwardHost, input.remoteAgentHost),
     realtime: { ...defaultMultiWorkerRealtimePolicy, ...(input.realtime || {}) },
+    // Mac managed-lifecycle marker must survive this whitelist rebuild; Windows input never sets it.
+    ...((input as unknown as { macManagedSessions?: true }).macManagedSessions === true ? { macManagedSessions: true as const } : {}),
   };
 }
 
@@ -219,12 +242,15 @@ export function normalizeXshellWorkerTunnelConfig(
     agentSessionPath: input.agentSessionPath?.trim() || undefined,
     agentProjectDir: input.agentProjectDir?.trim() || undefined,
     agentInstallDir: input.agentInstallDir?.trim() || undefined,
+    agentLoginPolicy: input.agentLoginPolicy === "managed" ? "managed" : "preserve",
     condaEnv: input.condaEnv === undefined ? undefined : normalizeCondaEnvName(input.condaEnv),
     maxConcurrentGpus: normalizePositiveInt(input.maxConcurrentGpus, 1) === 1 && input.maxConcurrentGpus !== 1 ? "auto" : normalizePositiveInt(input.maxConcurrentGpus, 1),
     authMethod: normalizeAuthMethod(input.authMethod),
     enabled: input.enabled !== false,
     gpuIdleUtilThreshold: normalizeIdleUtilThreshold((input as unknown as { gpuIdleUtilThreshold?: unknown }).gpuIdleUtilThreshold),
     gpuIdleMemThresholdMb: normalizeIdleMemThreshold((input as unknown as { gpuIdleMemThresholdMb?: unknown }).gpuIdleMemThresholdMb),
+    ...memorySchedulingOverrides(input),
+    ...quotaOverrides(input),
     sessionCheckMinSeconds: normalizeSessionCheckSeconds((input as unknown as { sessionCheckMinSeconds?: unknown }).sessionCheckMinSeconds),
     workerStatusTtlSeconds: normalizeWorkerTtlSeconds((input as unknown as { workerStatusTtlSeconds?: unknown }).workerStatusTtlSeconds),
   };
@@ -279,7 +305,8 @@ export function workerTunnelToXshellSetupConfig(base: XshellTunnelSetupConfig, w
 
 export function validateXshellSetupConfig(config: XshellTunnelSetupConfig): string[] {
   const errors: string[] = [];
-  if (!xshellExecutablePath(config).trim()) errors.push("请选择 Xshell.exe。");
+  // Only the native launcher differs; the endpoint checks below remain shared.
+  if (!xshellExecutablePath(config).trim() && config.launchMode !== "manual_guide") errors.push("请选择隧道终端程序。");
   if (config.launchMode === "open_saved_session" && !config.savedSessionPath) errors.push("Xshell 已保存会话模式需要选择 Hub 的 .xsh 会话文件。");
   if (config.launchMode !== "open_saved_session" && !config.sshConfigAlias && !config.hubHost.trim()) errors.push("请输入服务器 IP 或域名，或选择 Xshell 会话文件。");
   if (config.launchMode !== "open_saved_session" && !config.sshConfigAlias && !config.hubUser.trim()) errors.push("请输入登录用户名。");
@@ -397,20 +424,6 @@ function normalizePortConfig(
     ? input.assignments.filter((assignment) => validIds.has(assignment.endpointId) && String(assignment.localForwardHost || "").trim() && String(assignment.remoteBindHost || "").trim())
     : [];
   const assignedAt = new Date(0).toISOString();
-  if (!assignments.some((assignment) => assignment.endpointId === "hub")) {
-    assignments.push({
-      endpointId: "hub",
-      role: "hub_control",
-      displayName: String(hubDisplayName || "").trim() || "Hub",
-      remoteHostLabel: "hub",
-      localForwardHost: String(hubLocalHost || "127.0.0.1").trim() || "127.0.0.1",
-      localForwardPort: normalizePort(hubLocalPort, defaultTunnelPorts.hubLocalPort),
-      remoteBindHost: String(hubRemoteHost || "127.0.0.1").trim() || "127.0.0.1",
-      remoteServicePort: normalizePort(hubRemotePort, defaultTunnelPorts.defaultHubAgentPort),
-      assignedAt,
-      source: "imported",
-    });
-  }
   for (const worker of workers) {
     if (assignments.some((assignment) => assignment.endpointId === worker.id)) continue;
     assignments.push({
@@ -445,6 +458,7 @@ function dedupeWorkerTunnels(workers: XshellWorkerTunnelConfig[]): XshellWorkerT
 }
 
 function isDuplicateWorker(first: XshellWorkerTunnelConfig, second: XshellWorkerTunnelConfig): boolean {
+  if (first.id !== second.id) return false;
   if (first.savedSessionPath && second.savedSessionPath && pathKey(first.savedSessionPath) === pathKey(second.savedSessionPath)) return true;
   const firstHost = hostKey(first);
   const secondHost = hostKey(second);

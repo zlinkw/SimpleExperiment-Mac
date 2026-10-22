@@ -116,10 +116,11 @@ test("single-worker stop routes by Plan to the sole Worker without Hub", async (
     },
     runOperationWorkerId: (row) => String(row.schedulerOwnerWorkerId || ""),
     stopExperimentMatchesTarget: (row, target) => runOperationMatchesTarget(row, target),
-    async postWorkerTunnelAction(workerId, action, request) {
+    // Frozen 0.5.400 routing: every routed stop request carries stopBoundary "local_command" and posts via the client.
+    client: { async postWorkerAction(workerId, action, request) {
       calls.push({ workerId, action, request });
       return { status: "completed", matchedOperations: ["run-plan-old"], terminatedSessions: ["simple-scheduler-old"] };
-    },
+    } },
     markLocalOperationsDirty() {},
     postState() {},
   };
@@ -151,9 +152,9 @@ test("single-worker orphan stop stays running with manual hint when no process i
     },
     runOperationWorkerId: (row) => String(row.schedulerOwnerWorkerId || ""),
     stopExperimentMatchesTarget: (row, target) => runOperationMatchesTarget(row, target),
-    async postWorkerTunnelAction() {
+    client: { async postWorkerAction() {
       return { status: "completed", matchedOperations: ["run-plan-orphan"] };
-    },
+    } },
     markLocalOperationsDirty() {},
     postState() {},
   };
@@ -187,10 +188,10 @@ test("single-worker stop still matches a reconciled submission staying running w
     },
     runOperationWorkerId: (row) => String(row.schedulerOwnerWorkerId || ""),
     stopExperimentMatchesTarget: (row, target) => runOperationMatchesTarget(row, target),
-    async postWorkerTunnelAction(workerId, action, request) {
+    client: { async postWorkerAction(workerId, action, request) {
       calls.push({ workerId, action, request });
       return { status: "completed", matchedOperations: ["run-plan-stale"] };
-    },
+    } },
     markLocalOperationsDirty() {},
     postState() {},
   };
@@ -206,8 +207,11 @@ test("single-worker stop still matches a reconciled submission staying running w
 });
 
 async function contextStop(provider, body) {
+  // The current routed stop stamps the canonical project id onto every Worker action (frozen 0.5.400 body).
   const context = createContext({
     resolveWorkerEndpointId: (value) => String(value || "").trim(),
+    DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue"),
+    workspaceRoot: () => "/workspace/test-project",
   });
   const method = extractMethod(extensionSource, "async stopExperimentRouted(body)");
   vm.runInContext(`const methods = { ${method} };\nthis.stopExperimentRouted = methods.stopExperimentRouted;`, context);
@@ -259,50 +263,37 @@ test("result parse idempotency keys include workspace, Plan version, and owner",
 });
 
 test("concurrent result parses merge into one active operation", async () => {
-  assert.match(extensionSource, /resultParseInFlight = new Map\(\)/);
-  const context = createContext({
-    RESULT_PARSE_COMMANDS: new Set(["parseResults", "refreshResults"]),
-    PLAN_SUBMISSION_COMMANDS: new Set(["runPlan", "reproducePlan"]),
-    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    HostOperationLeaseConflictError: class HostOperationLeaseConflictError extends Error {},
-    HostOperationLease_1: { HostOperationLeaseConflictError: class HostOperationLeaseConflictError extends Error {} },
-  });
-  const method = extractMethod(extensionSource, "async runActionCommand(command, message)");
-  vm.runInContext(`const methods = { ${method} };\nthis.runActionCommand = methods.runActionCommand;`, context);
-  const provider = {
-    resultParseInFlight: new Map(),
-    localOperations: {},
-    resultParseIdempotencyKey: () => "parse-key",
-    activeResultParseOperation(keyValue) {
-      return Object.values(this.localOperations).find((row) => row.resultParseKey === keyValue && !operationTerminal(row));
-    },
-    async runActionCommandLeased() {
-      calls += 1;
-      this.localOperations.operation = { operationId: "operation", status: "running", resultParseKey: "parse-key" };
-      await wait(30);
-      return this.localOperations.operation;
-    },
-    async loadProjectLocalOperationsState() {},
-  };
+  // Frozen 0.5.400 wiring: parse/refresh route through the shared result-collection host, whose update()
+  // merges every concurrent caller into the single in-flight collection and starts fresh after completion.
+  assert.match(extensionSource, /return this\.rebuildProjectResultTablesFromUi\(\{ title: "更新结果汇总" \}\)/);
+  assert.match(extensionSource, /return resultCollectionHost\(this\)\.update\(\)/);
+  const { ResultCollectionHost } = require("../../dist/extension/ResultCollectionHost");
   let calls = 0;
-  const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-  const first = context.runActionCommand.call(provider, "parseResults", {});
+  const host = new ResultCollectionHost({ panelDisposed: true });
+  host.collect = async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return { operationId: "operation", ok: true };
+  };
+  const first = host.update();
   await new Promise((resolve) => setTimeout(resolve, 5));
-  const second = await context.runActionCommand.call(provider, "parseResults", {});
-  const firstResult = await first;
-
+  const second = host.update();
+  const [firstResult, secondResult] = await Promise.all([first, second]);
   assert.equal(calls, 1);
-  assert.equal(firstResult.merged, undefined);
-  assert.equal(second.merged, true);
+  assert.equal(secondResult, firstResult);
   assert.equal(firstResult.operationId, "operation");
-  assert.equal(second.operationId, "operation");
+  const third = await host.update();
+  assert.equal(calls, 2);
+  assert.equal(third.operationId, "operation");
 });
 
 test("runActionCommand executes the default action branch and returns its result", async () => {
   const context = createContext({
     RESULT_PARSE_COMMANDS: new Set(["parseResults"]),
     PLAN_SUBMISSION_COMMANDS: new Set(["runPlan", "reproducePlan"]),
+    require: () => ({ assertBusinessAllowed() {} }),
+    workspaceRoot: () => "C:\\work\\project",
+    normalizePlanSelectionKey: (value) => String(String(value || "").trim().replace(/\\/g, "/").replace(/^\.\//, "")).trim(),
   });
   const method = extractMethod(extensionSource, "async runActionCommand(command, message)");
   vm.runInContext(`const methods = { ${method} };\nthis.runActionCommand = methods.runActionCommand;`, context);
@@ -387,28 +378,31 @@ test("project.prepare merges partial Worker rows without resetting concurrency",
 });
 
 test("project.prepare setup merge preserves an existing Worker concurrency value", () => {
+  // The Mac overlay merges preparation params through ManualTunnel.setupFromPreparationApi (run for real here).
   const context = createContext({
     uniqueStrings: (values) => [...new Set(values.filter(Boolean))],
     normalizeCondaEnvSetting: (value) => String(value ?? "").trim(),
-    XshellTunnelSetup_1: {
-      normalizeXshellSetupConfig: (input) => ({ ...input }),
-    },
+    ManualTunnel_1: require("../../dist/mac/ManualTunnel"),
   });
   const method = extractMethod(extensionSource, "apiMergedSetupConfig(params = {})");
   vm.runInContext(`const methods = { ${method} };\nthis.mergeSetup = methods.apiMergedSetupConfig;`, context);
   const provider = {
     setupConfig: {
-      localForwardPort: 18765,
+      localForwardPort: 29101,
       remoteAgentPort: 18765,
       workerTunnels: [{
         id: "nwpu3",
         displayName: "NWPU3",
-        host: "gpu.example",
-        user: "researcher",
-        port: 22,
+        workerHost: "gpu.example",
+        workerUser: "researcher",
+        workerSshPort: 22,
+        localForwardHost: "127.0.0.1",
+        localForwardPort: 29101,
+        remoteAgentHost: "127.0.0.1",
+        remoteTelemetryPort: 18765,
         maxConcurrentGpus: 4,
         allowedGpuIds: ["0", "1"],
-        condaEnv: "zlk",
+        condaEnv: "old",
         agentProjectDir: "/data/qgking/zlk",
       }],
     },

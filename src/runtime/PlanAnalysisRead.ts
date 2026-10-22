@@ -2,7 +2,7 @@
 export const PLAN_ANALYSIS_READ_PYTHON = String.raw`
 def analysis_current_records(root, summary, snapshots, policy=None, require_complete=False):
     plan, revision = archive_evidence_identity(summary)
-    durable_plan_path(plan, "分析 Plan")
+    result_io_relative_path(plan, "分析 Plan")
     records = summary.get("results", [])
     if not isinstance(records, list) or len(records) > 50000:
         raise ValueError("分析结果列表类型或数量无效")
@@ -84,7 +84,7 @@ def plan_analysis_publish_report(root, report, filename):
     relative = plan_results_artifact_relpath(report["planFile"], filename, strict_plan=True)
     report.update(path=relative, resultPathIdentity="posix-v1")
     for target in (relative, "simple_cluster/results/" + filename):
-        full = worker_plan_project_path(root, target)
+        full = result_io_project_path(root, target)
         os.makedirs(os.path.dirname(full), exist_ok=True)
         atomic_write(full, report)
 `;

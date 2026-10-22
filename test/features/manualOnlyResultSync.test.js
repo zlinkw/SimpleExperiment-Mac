@@ -37,13 +37,16 @@ function selectedMethods(names, globals = {}) {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
   const sandbox = {
+    AbortController,
     workspaceRoot: () => "/project",
     errorMessage: (error) => String(error?.message || error),
     assertRetryRequestCurrent: () => undefined,
     retryRequestSignal: () => undefined,
     completedResultPlanFiles: async () => [],
+    resultCollectionHost: () => ({ update: async () => ({}) }),
     vscode: { ProgressLocation: { Notification: 1 }, window: {
       showInformationMessage: async () => {},
+      showWarningMessage: async () => {},
       withProgress: async (_options, work) => work({ report() {} }, { isCancellationRequested: false }),
     } },
     ...globals,
@@ -52,9 +55,9 @@ function selectedMethods(names, globals = {}) {
   return new sandbox.Subject();
 }
 
-function distributedHost() {
+function distributedHost(globals = {}) {
   const calls = [];
-  const provider = selectedMethods(["scheduleDistributedPostprocess", "postprocessDistributedResultsForManual", "syncPendingResultMetricsFromUi"]);
+  const provider = selectedMethods(["scheduleDistributedPostprocess", "postprocessDistributedResultsForManual", "syncPendingResultMetricsFromUi"], globals);
   provider.calls = calls;
   provider.distributedPostprocessPromise = undefined;
   provider.loadDistributedQueue = async () => ({ plans: [{ planFile: "experiments/plans/a.yaml" }] });
@@ -104,11 +107,28 @@ test("background Worker mirroring keeps local result parsing and publication man
 });
 
 test("manual result sync directly downloads metrics and publishes local tables without remote rebuild or full mirroring", async () => {
+  // 门面只负责路由：人工请求必须把原始 planFiles 交给本机总表重建，绝不触发远端重建或整树镜像。
   const provider = distributedHost();
   const result = await provider.syncPendingResultMetricsFromUi({ planFiles: ["experiments/plans/a.yaml"] });
-  assert.equal(result.title, "同步服务器结果并更新总表");
   assert.deepEqual(Array.from(result.planFiles), ["experiments/plans/a.yaml"]);
   assert.deepEqual(provider.calls, ["local-tables"]);
+  // 本机重建的真实主体：一次带取消信号的采集更新 + 进度标题"更新结果汇总"。
+  const signals = [];
+  const titles = [];
+  const real = selectedMethods(["rebuildProjectResultTablesFromUi"], {
+    resultCollectionHost: () => ({ update: async signal => { signals.push(signal); return { current: true, completed: 2, expected: 2, missing: [], skipped: [] }; } }),
+    vscode: { ProgressLocation: { Notification: 1 }, window: {
+      showInformationMessage: async () => {},
+      showWarningMessage: async () => { throw new Error("完整成功的同步不应弹警告"); },
+      withProgress: async (options, work) => { titles.push(options.title); return work({ report() {} }, {}); },
+    } },
+  });
+  const report = await real.rebuildProjectResultTablesFromUi({ planFiles: ["experiments/plans/a.yaml"] });
+  assert.deepEqual(titles, ["更新结果汇总"]);
+  assert.equal(signals.length, 1, "manual sync performs exactly one collection update");
+  assert.ok(signals[0] instanceof AbortSignal, "the manual notification stays cancellable");
+  assert.equal(report.current, true);
+  assert.equal(report.notificationShown, true);
 });
 
 test("explicit full artifact sync mirrors fragments, checkpoints and logs without remotely rebuilding results", async () => {
@@ -122,17 +142,26 @@ test("explicit full artifact sync mirrors fragments, checkpoints and logs withou
 });
 
 test("background metrics requests cannot enter the manual result path", async () => {
-  const provider = distributedHost();
-  const result = await provider.syncPendingResultMetricsFromUi({ background: true });
-  assert.equal(result.reason, "manual-only");
-  assert.deepEqual(provider.calls, []);
+  const updateArgs = [];
+  const provider = distributedHost({
+    resultCollectionHost: () => ({ update: async signal => { updateArgs.push(signal); return { current: true }; } }),
+  });
+  await provider.syncPendingResultMetricsFromUi({ background: true });
+  assert.equal(updateArgs.length, 1, "background refresh goes straight to the shared collection host");
+  assert.equal(updateArgs[0], undefined, "background updates carry no manual cancellation signal");
+  assert.deepEqual(provider.calls, [], "the manual local-table path is never entered");
 });
 
 test("two concurrent manual summary requests share at most three direct manual retries", async () => {
+  // 移植后契约：人工 dirtyKey 的直连重试只经预算退避入口排队，同一时刻至多一个定时器，
+  // 在途期间反复重排且总重试次数封顶 3，期间绝不提前发起采集。
   const timer = clock();
-  const provider = selectedMethods(["refreshResultsSummary", "scheduleResultsSummaryTimer"], {
+  let fetches = 0;
+  const warnings = [];
+  const provider = selectedMethods(["refreshResultsSummary", "scheduleResultsSummaryTimer", "scheduleResultsSummaryBudgetRetryFromRealtime"], {
     ...timer,
     usableSelectionKey: (value) => String(value || ""),
+    resultCollectionHost: () => ({ update: async () => { fetches += 1; return {}; } }),
   });
   Object.assign(provider, {
     resultsSummaryRefreshInFlight: true,
@@ -143,48 +172,54 @@ test("two concurrent manual summary requests share at most three direct manual r
     selectedPlanId: "experiments/plans/a.yaml",
     planFileInput: "experiments/plans/a.yaml",
     lastResultsSummaryRefreshedDirtyKey: "",
-    pendingResultsSummaryDirtyKey: "",
-    pendingResultsSummaryDirtyPlanFile: "",
+    pendingResultsSummaryDirtyKey: "d1",
+    pendingResultsSummaryDirtyPlanFile: "experiments/plans/a.yaml",
     effectiveConnectionMode: () => "tunnel",
-    shouldRefreshResultsSummaryForDirtyPlan: () => true,
-    hasResultsSummaryEndpointCapability: () => true,
+    recordActionError: entry => warnings.push(entry.command),
+    postState() {},
   });
-  await provider.refreshResultsSummary("experiments/plans/a.yaml");
-  await provider.refreshResultsSummary("experiments/plans/a.yaml");
+  const cooldown = { decision: { reason: "cooldown" } };
+  await provider.scheduleResultsSummaryBudgetRetryFromRealtime(cooldown, "manual_refresh", "d1");
+  await provider.scheduleResultsSummaryBudgetRetryFromRealtime(cooldown, "manual_refresh", "d1");
   assert.equal(timer.timers.size, 1, "the concurrent manual clicks coalesce to one timer");
-  timer.advance(2_000);
+  timer.advance(500);
+  timer.advance(500);
   assert.equal(provider.resultsSummaryRefreshRetryCount, 3);
   assert.equal(timer.timers.size, 0, "manual retry count is bounded");
+  assert.equal(fetches, 0, "an in-flight fetch is never duplicated by a bounded retry");
 });
 
 test("a queued manual summary retry returns to the manual fetch after the active fetch ends", async () => {
   const timer = clock();
-  const provider = selectedMethods(["refreshResultsSummary", "scheduleResultsSummaryTimer"], {
+  let fetches = 0;
+  const provider = selectedMethods(["refreshResultsSummary", "scheduleResultsSummaryTimer", "scheduleResultsSummaryBudgetRetryFromRealtime"], {
     ...timer,
     usableSelectionKey: (value) => String(value || ""),
+    resultCollectionHost: () => ({ update: async () => { fetches += 1; return {}; } }),
   });
-  let fetches = 0;
   Object.assign(provider, {
     resultsSummaryRefreshInFlight: true,
     resultsSummaryRefreshRetryCount: 0,
     resultsSummaryRefreshTimerGeneration: 0,
     projectContextGeneration: 1,
-    client: { getResultsSummary: async () => { fetches++; return {}; } },
+    client: {},
     selectedPlanId: "experiments/plans/a.yaml",
     planFileInput: "experiments/plans/a.yaml",
     localPlanMetadata: { plans: [{ planFile: "experiments/plans/a.yaml" }] },
     lastResultsSummaryRefreshedDirtyKey: "",
-    pendingResultsSummaryDirtyKey: "",
-    pendingResultsSummaryDirtyPlanFile: "",
+    pendingResultsSummaryDirtyKey: "d1",
+    pendingResultsSummaryDirtyPlanFile: "experiments/plans/a.yaml",
     effectiveConnectionMode: () => "tunnel",
-    shouldRefreshResultsSummaryForDirtyPlan: () => true,
-    hasResultsSummaryEndpointCapability: () => true,
+    recordActionError: () => { throw new Error("successful retry must not record an error"); },
     resolveSelectedPlanFile: (value) => value,
     postState() {},
   });
-  await provider.refreshResultsSummary("experiments/plans/a.yaml");
+  await provider.scheduleResultsSummaryBudgetRetryFromRealtime({ decision: { reason: "rate_limited" } }, "manual_refresh", "d1");
+  timer.advance(500);
+  assert.equal(fetches, 0, "the retry defers while the active fetch is in flight");
   provider.resultsSummaryRefreshInFlight = false;
   timer.advance(500);
   await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(fetches, 1);
+  assert.equal(fetches, 1, "the deferred manual retry re-enters the single manual fetch path");
+  assert.equal(provider.resultsSummaryRefreshRetryCount, 2);
 });

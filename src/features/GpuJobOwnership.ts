@@ -1,3 +1,4 @@
+import { observationMatches } from "./TaskLifecycle";
 import { DistributedQueue, DurableWorkerSnapshot, QueuedJob, QueuedPlan,
   hasFreshDurableSnapshot, remoteTaskMatchesJob } from "./DistributedPlanQueue";
 
@@ -17,7 +18,8 @@ export function submittedGpuJobs(queue: DistributedQueue | undefined, snapshots:
         || dispatchedAt > now + 30_000) continue;
       const receipts = snapshots.filter(s => s.workerId === job.workerId && hasFreshDurableSnapshot(s, now))
         .flatMap(s => s.tasks || []).filter(task => remoteTaskMatchesJob(plan, job, task)
-          && task.status === "running" && !task.identityConflict && !task.stale);
+          && task.status === "running" && !task.identityConflict && !task.stale
+          && (safelyNativeRunning(task, plan, job) || task.lifecycleProtocol !== 2));
       if (receipts.length !== 1) continue;
       const task = receipts[0];
       const gpuId = String(task.gpuId ?? "");
@@ -27,6 +29,13 @@ export function submittedGpuJobs(queue: DistributedQueue | undefined, snapshots:
     }
   }
   return result;
+}
+
+function safelyNativeRunning(task: Record<string, any>, plan: QueuedPlan, job: QueuedJob): boolean {
+  const observation = task.observation;
+  return observationMatches(observation || {}, { commandId: job.commandId, projectId: plan.projectId, workerId: job.workerId })
+    && !observation.queryError && observation.tmux?.dead === false && observation.tmux.phase === "running"
+    && Boolean(observation.tmux.paneId && observation.tmux.windowId);
 }
 
 function cliValues(command: string, option: string): string[] {
@@ -54,7 +63,10 @@ function matchesProcess(process: Record<string, unknown>, binding: Binding): boo
   const seeds = cliValues(command, "--seed");
   const exactPath = (value: string, relative: string) => value === relative
     || Boolean(projectDir && value === `${projectDir.replace(/\/$/, "")}/${relative}`);
-  const config = String(task.configPath || "");
+  // Protocol 2 generates this exact config within the declared output. Old
+  // running children may lack the newer command/project environment variables.
+  // Only a currently verified native running pane permits this compatibility.
+  const config = String(task.configPath || (safelyNativeRunning(task, plan, job) ? output + "/job_config.yaml" : ""));
   return outputs.length === 1 && exactPath(outputs[0], output)
     && config.startsWith(output + "/") && configs.length === 1 && exactPath(configs[0], config)
     && cases.length === 1 && cases[0] === job.case && seeds.length === 1 && seeds[0] === String(job.seed);

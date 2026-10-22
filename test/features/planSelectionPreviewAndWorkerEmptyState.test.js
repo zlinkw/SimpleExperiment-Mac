@@ -24,6 +24,7 @@ function extractFunction(name) {
 
 function loadPlanCompaction() {
   const sandbox = {
+    process: { platform: "win32" },
     WEBVIEW_LOCAL_PLAN_LIMIT: 80,
     WEBVIEW_PLAN_CASE_LIMIT: 2,
     WEBVIEW_PLAN_OUTPUT_LIMIT: 2,

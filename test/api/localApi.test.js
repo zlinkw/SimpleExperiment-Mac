@@ -66,7 +66,7 @@ async function startServer(methods = {}, options = {}) {
     token: discovery.token,
     cleanup: async () => {
       await server.dispose();
-      fs.rmSync(dir, { recursive: true, force: true });
+      // Retain the isolated fixture and discovery evidence after closing the listener.
     },
   };
 }
@@ -209,14 +209,14 @@ test("simpleex CLI reads the discovery file", () => {
       token: "test-token",
       pid: 123,
     })}\n`, "utf8");
-    process.env.SIMPLE_EXPERIMENT_API_FILE = discoveryPath;
+    process.env.SIMPLE_EXPERIMENT_MAC_API_FILE = discoveryPath;
     const { readApiDiscovery } = require("../../dist/cli.js");
     const discovery = readApiDiscovery();
     assert.equal(discovery.port, 19765);
     assert.equal(discovery.token, "test-token");
   } finally {
-    delete process.env.SIMPLE_EXPERIMENT_API_FILE;
-    fs.rmSync(dir, { recursive: true, force: true });
+    delete process.env.SIMPLE_EXPERIMENT_MAC_API_FILE;
+    // Retain this isolated discovery fixture; never recursively remove a path from a test.
   }
 });
 
@@ -225,7 +225,7 @@ test("simpleex CLI forwards the api subcommand", async () => {
   try {
     const { stdout } = await execFileAsync(process.execPath, [path.join(root, "dist", "cli.js"), "api", "status"], {
       encoding: "utf8",
-      env: { ...process.env, SIMPLE_EXPERIMENT_API_FILE: path.join(f.root, "api.json") },
+      env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: path.join(f.root, "api.json") },
     });
     const parsed = JSON.parse(stdout);
     assert.equal(parsed.ok, true);
@@ -239,7 +239,7 @@ test("simpleex CLI forwards the api subcommand", async () => {
 test("simpleex self-check reports missing discovery and listener", async () => {
   const missing = path.join(os.tmpdir(), `simple-experiment-self-check-${process.pid}-${Date.now()}.json`);
   const result = await runCli([path.join(root, "dist", "cli.js"), "self-check"], {
-    SIMPLE_EXPERIMENT_API_FILE: missing,
+    SIMPLE_EXPERIMENT_MAC_API_FILE: missing,
   });
   assert.equal(result.code, 1, result.stderr || "");
   const parsed = JSON.parse(result.stdout);
@@ -253,7 +253,7 @@ test("simpleex self-check passes with live listener", async () => {
   const f = await startServer({ status: async () => ({ ok: true }) });
   try {
     const result = await runCli([path.join(root, "dist", "cli.js"), "self-check"], {
-      SIMPLE_EXPERIMENT_API_FILE: path.join(f.root, "api.json"),
+      SIMPLE_EXPERIMENT_MAC_API_FILE: path.join(f.root, "api.json"),
     });
     assert.equal(result.code, 0, result.stderr || "");
     const parsed = JSON.parse(result.stdout);
@@ -317,9 +317,11 @@ test("live output Local API returns the direct Worker response before cached log
 });
 
 test("SimpleExperiment accepts topology aliases and keeps configured remote roots authoritative", () => {
-  assert.equal(topologyMode.normalizeTopologyMode("standalone"), "single_worker");
+  // Mac working-tree contract: worker_pool is the only executable mode; legacy values stay readable and collapse to it.
+  assert.equal(topologyMode.normalizeTopologyMode("standalone"), "worker_pool");
   assert.equal(topologyMode.normalizeTopologyMode("worker_only"), "worker_pool");
-  assert.equal(topologyMode.normalizeTopologyMode("hub_available"), "hub_worker");
+  assert.equal(topologyMode.normalizeTopologyMode("hub_available"), "worker_pool");
+  assert.equal(topologyMode.normalizeTopologyMode("banana"), undefined);
   assert.equal(workflow.resolveApiRemoteRoot("/data/qgking/zlk", { id: "nwpu3" }), "/data/qgking/zlk");
   assert.equal(workflow.resolveApiRemoteRoot("/data/custom", { id: "nwpu3" }), "/data/custom");
   assert.equal(workflow.resolveApiRemoteRoot("/data/other", { host: "10.0.0.2" }), "/data/other");
@@ -491,7 +493,9 @@ test("SimpleExperiment uses one configured root across workflow, runtime and SFT
   const targetStart = extensionSource.indexOf("apiPrepareServerTargets(topology, serverIds, workerTunnels, setup = this.setupConfig)");
   const targetEnd = extensionSource.indexOf("apiMergedWorkerConfigs(workerTunnels, setup = this.setupConfig)", targetStart);
   const targetBody = extensionSource.slice(targetStart, targetEnd);
-  assert.match(targetBody, /resolveApiRemoteRootWithPolicy\(hub\.remotePath/);
+  // Retired Hub is never a preparation target (HUB_REMOVED contract); only Worker endpoints are resolved.
+  assert.doesNotMatch(targetBody, /hub\.remotePath/);
+  assert.doesNotMatch(targetBody, /role: "hub"/);
   assert.match(targetBody, /resolveApiRemoteRootWithPolicy\(target\.remotePath, worker/);
   assert.match(targetBody, /workDir: this\.agentRuntimeDirs\(remoteRoot\)\.workDir \|\| ""/);
 
@@ -503,7 +507,7 @@ test("SimpleExperiment uses one configured root across workflow, runtime and SFT
 
 test("SimpleExperiment blocks unconfigured placeholder conda environments before workflow submission", () => {
   assert.match(extensionSource, /assertExecutionCondaEnvReady\(this\.workerActionTargets\(\)\)/);
-  assert.match(extensionSource, /condaEnv: normalizeCondaEnvSetting\(row\.condaEnv \?\? existing\?\.condaEnv\) \|\| undefined/);
+  assert.match(extensionSource, /condaEnv: worker\.condaEnv === undefined \? existing\.condaEnv : normalizeCondaEnvSetting\(worker\.condaEnv\),/);
   const start = extensionSource.indexOf("assertExecutionCondaEnvReady(workers = this.workerActionTargets())");
   const end = extensionSource.indexOf("assertHubAgentProjectReady()", start);
   assert.ok(start >= 0 && end > start);
@@ -557,9 +561,10 @@ test("one-shot workflow can auto prepare only after explicit confirmation", () =
 test("SimpleExperiment exposes a modal-confirmed standard experiment runner", () => {
   assert.match(extensionSource, /"workflow\.plan": async \(params\) => this\.apiWorkflowPlan\(params\)/);
   assert.match(extensionSource, /"workflow\.run": async \(params\) => this\.apiWorkflowRun\(params\)/);
-  assert.match(extensionSource, /confirmation: "vscode_modal"/);
+  // Frozen 0.5.400 runner receipt: submission proceeds detached and output-path confirmation happens in the main panel.
+  assert.match(extensionSource, /confirmation: "main_panel_if_outputs_exist"/);
   assert.match(extensionSource, /await this\.runActionCommand\("runPlan", route\.calls\[0\]\.params\)/);
-  assert.match(extensionSource, /status: "waiting_confirmation"/);
+  assert.match(extensionSource, /status: "checking_workers"/);
 });
 
 test("SimpleExperiment uses manual SFTP addresses and scopes runtime deployment", () => {
@@ -568,12 +573,12 @@ test("SimpleExperiment uses manual SFTP addresses and scopes runtime deployment"
   assert.match(extensionSource, /sshConfigAlias: identity\.sshConfigAlias/);
   assert.match(extensionSource, /networkHost: identity\.networkHost/);
   assert.doesNotMatch(extensionSource, /inspectOpenSshAlias\(identity\.sshConfigAlias\)/);
-  assert.match(extensionSource, /async deployLatestAgentRuntime\(showMessage = true, pathConfirmed = false, serverIds = \[\], deferVerification = false\)/);
+  assert.match(extensionSource, /async deployLatestAgentRuntime\(showMessage = true, pathConfirmed = false, serverIds = \[\], deferVerification = false, migrationOptions: any = \{\}\)/);
   assert.match(extensionSource, /AgentRuntimeScope_1\.selectAgentRuntimeTargets\(this\.agentRuntimeUploadTargets\(\), serverIds\)/);
   const prepareStart = extensionSource.indexOf("async apiProjectPrepare");
   const prepareEnd = extensionSource.indexOf("apiMergedSetupConfig(params = {})", prepareStart);
   const prepareBody = extensionSource.slice(prepareStart, prepareEnd);
-  assert.match(prepareBody, /deployLatestAgentRuntime\(false, true, serverIds\)/);
+  assert.match(prepareBody, /deployLatestAgentRuntime\(false, true, serverIds, true, \{ migrationDigests: params\.legacyMigrationDigests \}\)/);
 });
 
 test("SimpleExperiment server test rows always expose the AI contract", () => {
@@ -624,7 +629,8 @@ test("SimpleExperiment parameterized onboarding uses one structured confirmation
   assert.match(extensionSource, /API_PARAMETERIZED_CONNECTION_COMMANDS\??\.has\(command\)/);
   assert.match(extensionSource, /if \(command === "prepareAgents"\)/);
   assert.match(extensionSource, /PROJECT_FLOW_STATE_PATH = "simple_cluster\/ui\/flow_state\.json"/);
-  assert.match(extensionSource, /savedSessionPath: "",\s*agentProjectDir: "",/);
+  // The retired-Hub gate no longer fabricates saved-session identity in prepare; identity stays at the manual boundary.
+  assert.match(extensionSource, /HUB_REMOVED/);
 
   const start = extensionSource.indexOf("async runApiBootstrapOperation");
   const end = extensionSource.indexOf("async apiProjectBootstrapOperation", start);

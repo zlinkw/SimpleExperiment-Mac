@@ -18,8 +18,8 @@ resolved = []
 for mode in ("train", "test", "train_test"):
     raw = ("mode: " + mode + "\r\n").encode("utf-8")
     fake_scheduler = SimpleNamespace(load_plan=lambda _: {"mode": mode}, plan_execution_mode=scheduler.plan_execution_mode)
-    with patch.object(agent, "safe_project_path", lambda *args: "virtual"), \
-         patch.object(agent, "worker_plan_project_path", lambda *args, **kwargs: "virtual"), \
+    with patch.object(agent, "worker_plan_project_path", lambda root, value, **kwargs: agent.worker_plan_path(value, "fixture path")), \
+         patch.object(agent, "safe_project_path", lambda *args: "virtual"), \
          patch.object(agent, "scalar_scheduler_module", lambda: fake_scheduler), \
          patch.object(pathlib.Path, "read_bytes", lambda _: raw):
         legacy = {"planFile": "plan.yaml", "planRevision": hashlib.sha256(raw).hexdigest(), "mode": "train_test"}
@@ -48,7 +48,7 @@ for mode in ("train", "test", "train_test"):
              patch.object(agent, "recalled_worker_command", lambda *args: None), \
              patch.object(agent, "signal_durable_plan_queue_processor", lambda *args: None), \
              patch.object(agent, "append_event", lambda *args: None), \
-             patch.object(agent, "verified_formal_job_command", lambda *a: {"identity":{"workflowId":"run","commandId":"launch"}}):
+             patch.object(agent, "verified_formal_job_command", lambda *a, **kw: {"identity":{"workflowId":"run","commandId":"launch"}}):
             assert agent.accept_durable_plan_job("virtual", durable_command, "worker")["durableAccepted"]
             assert ledger["jobs"][0]["mode"] == mode and ledger["jobs"][0]["executionMode"] == mode
             assert agent.accept_durable_plan_job("virtual", durable_command, "worker")["durableAccepted"]
@@ -59,8 +59,8 @@ for mode in ("train", "test", "train_test"):
             else: raise AssertionError("existing durable command changed mode")
         with contextlib.ExitStack() as scope:
             replacements = {
-                "verified_formal_job_command": lambda *a: {"identity":{"workflowId":"run","commandId":"launch"}},
-                "agent_install_dir": lambda _: "virtual", "require_scheduler_dependencies": lambda *args: None,
+                "verified_formal_job_command": lambda *a, **kw: {"identity":{"workflowId":"run","commandId":"launch"}},
+                "agent_install_dir": lambda _: "virtual",
                 "simple_runtime_python": lambda _: "virtual-python",
                 "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
                 "tmux_available": lambda: True, "start_job_in_gpu_pane": lambda session, args, *rest: launched.append(args) or "%virtual",
@@ -84,7 +84,7 @@ for mode in ("train", "test", "train_test"):
         with contextlib.ExitStack() as scope:
             replacements = {
                 "reconcile_worker_task_exit_codes": lambda *args: None,
-                "verified_formal_job_command": lambda *a: {"identity":{"workflowId":"run","commandId":"launch"}},
+                "verified_formal_job_command": lambda *a, **kw: {"identity":{"workflowId":"run","commandId":"launch"}},
                 "sync_durable_plan_task_rows": lambda _: data,
                 "read_durable_plan_queue": lambda _: data,
                 "write_durable_plan_queue": lambda *args: None,

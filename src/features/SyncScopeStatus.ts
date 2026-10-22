@@ -9,7 +9,7 @@ import { SyncHolds, chosenSyncHash, isSyncHeld, safeSyncPath } from "./SyncResol
 import { HostOperationLeaseManager } from "../core/HostOperationLease";
 import { atomicWriteText } from "../state/StateStore";
 
-type File = { sha256: string; size: number; modifiedAtMs?: number };
+type File = { sha256: string; size: number; modifiedAtMs?: number; changedAtMs?: number; device?: string; inode?: string };
 type ScopeHashIdentity = { dev: string; ino: string; size: number; mtimeMs: number; ctimeMs: number; birthtimeMs: number };
 type ScopeHashRow = ScopeHashIdentity & { sha256: string; modifiedAtMs?: number };
 type ScopeHashDocument = { schemaVersion: 1; files: Record<string, ScopeHashRow> };
@@ -147,7 +147,7 @@ export function scopeInventoryPathAllowed(relative: string, directory = false): 
   const parts = relative.toLowerCase().split("/");
   const basename = parts.at(-1) || "";
   if (!directory && (basename.endsWith(".writing") || basename.endsWith(".pending") || /\.tmp(?:\.|$)/.test(basename) || basename.includes(".upload."))) return false;
-  if (parts[0] === "tmp" || parts.some((part) => [".git", ".vscode", ".codex", ".agents", ".coding-tools", ".local-gpt", ".runtime", "clean_dir", "zlk_cluster", ".venv", "venv", "env", "node_modules", "__pycache__", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox"].includes(part))) return false;
+  if (parts[0] === "tmp" && parts.length > 1 && parts[1] !== "result" || parts.some((part) => [".git", ".vscode", ".codex", ".agents", ".coding-tools", ".local-gpt", ".runtime", "clean_dir", "zlk_cluster", ".venv", "venv", "env", "node_modules", "__pycache__", ".cache", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox"].includes(part))) return false;
   if (parts[0] === "experiments" && parts[1] === "results" && parts.at(-1)?.endsWith(".csv.lock")) return false;
   if (parts[0] === "work_dirs" && parts.at(-1) === ".tb_mean.lock") return false;
   if (parts.at(-1)?.startsWith(".env")) return false;
@@ -249,18 +249,26 @@ async function verifyLocalScopeEntry(
 async function listLocalScopeFileNames(
   rootPath: string, relative: string, recursive = true, onUnverified?: (relative: string, reason: string) => void,
   budget: LocalScopeScanBudget = { directories: 0, entries: 0, files: 0 },
+  signal?: AbortSignal,
+  metadata?: { file: (name: string, stat: Stats) => void; directory: (name: string, stat: Stats) => void; report: (stage: string) => void },
 ): Promise<string[]> {
   const root = await resolveLocalScopeRoot(rootPath);
   const start = normalizeLocalScopeRelative(relative);
   const names: string[] = [];
   const pending = [start];
+  let nextReport = 0;
   const unverified = (child: string, reason: string): void => {
     if (!onUnverified) throw new Error(`本机清单无法完整验证（${child || "."}）：${reason}`);
     onUnverified(child || ".", reason);
   };
   while (pending.length) {
+    signal?.throwIfAborted();
     const current = pending.pop()!;
     const currentPath = current || ".";
+    if (metadata && Date.now() >= nextReport) {
+      metadata.report(`正在索引 ${currentPath} · ${budget.entries} 个目录项 · ${budget.files} 个文件`);
+      nextReport = Date.now() + 250;
+    }
     const candidate = path.join(root.realPath, ...current.split("/").filter(Boolean));
     const initial = await fs.lstat(candidate).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT" && current) { unverified(current, "扫描期间目录已消失"); return undefined; }
@@ -272,7 +280,7 @@ async function listLocalScopeFileNames(
       continue;
     }
     if (initial.isFile()) {
-      if (current && scopeInventoryPathAllowed(current, false)) names.push(current);
+      if (current && scopeInventoryPathAllowed(current, false)) { names.push(current); metadata?.file(current, initial); }
       continue;
     }
     if (!initial.isDirectory()) { unverified(currentPath, "目标不是普通文件或目录"); continue; }
@@ -282,10 +290,16 @@ async function listLocalScopeFileNames(
       unverified(currentPath, "目录解析后越出所选根目录");
       continue;
     }
+    metadata?.directory(currentPath, initial);
     const directory = await fs.opendir(candidate, { bufferSize: 32 });
     try {
       for await (const entry of directory) {
+        signal?.throwIfAborted();
         if (++budget.entries > LOCAL_SCOPE_MAX_ENTRIES) throw new Error(`本机清单超过目录项上限 ${LOCAL_SCOPE_MAX_ENTRIES}，拒绝生成不完整清单。`);
+        if (metadata && (budget.entries % 128 === 0 || Date.now() >= nextReport)) {
+          metadata.report(`正在索引 ${currentPath} · 已读取 ${budget.entries} 个目录项 · ${budget.files} 个文件`);
+          nextReport = Date.now() + 250;
+        }
         const child = current ? `${current}/${entry.name}` : entry.name;
         let safeChild: string;
         try { safeChild = normalizeLocalScopeRelative(child); }
@@ -307,6 +321,7 @@ async function listLocalScopeFileNames(
         } else if (childStat.isFile()) {
           if (++budget.files > LOCAL_SCOPE_MAX_FILES) throw new Error(`本机清单超过文件上限 ${LOCAL_SCOPE_MAX_FILES}，拒绝生成不完整清单。`);
           names.push(safeChild);
+          metadata?.file(safeChild, childStat);
         } else unverified(safeChild, "路径不是普通文件或目录");
       }
     } finally { await directory.close().catch(() => undefined); }
@@ -319,8 +334,24 @@ async function listLocalScopeFileNames(
   return names;
 }
 
+/** Browsing reads stat facts only; never opens content or writes the hash cache. */
+export async function collectLocalScopeMetadata(root: string, relative: string, signal?: AbortSignal, report = (_stage: string) => {}) {
+  const unverifiedFiles: Record<string, string> = {};
+  const files: Record<string, { size: number; modifiedAtMs: number; changedAtMs: number; device: string; inode: string }> = {};
+  const directories: Record<string, { modifiedAtMs: number; changedAtMs: number; device: string; inode: string }> = {};
+  const identity = (stat: Stats) => ({ modifiedAtMs: Math.floor(stat.mtimeMs), changedAtMs: stat.ctimeMs, device: String(stat.dev), inode: String(stat.ino) });
+  // The guarded walk already verifies each entry and rechecks its directory.
+  // Reuse those stat facts instead of walking every file's ancestors a second time.
+  await listLocalScopeFileNames(root, relative, true, (name, reason) => { unverifiedFiles[name] = reason; }, undefined, signal,
+    { file: (name, stat) => { files[name] = { size: stat.size, ...identity(stat) }; },
+      directory: (name, stat) => { directories[name] = identity(stat); }, report });
+  signal?.throwIfAborted();
+  return { files, directories, unverifiedFiles };
+}
+
 export async function hashLocalScopeNames(
   root: string, names: string[], onUnverified?: (relative: string, reason: string) => void, cacheFile?: string,
+  options: { signal?: AbortSignal; concurrency?: number; onFile?: (name: string, file: File) => void; onProgress?: (done: number, total: number) => void } = {},
 ): Promise<Record<string, File>> {
   if (names.length > LOCAL_SCOPE_MAX_ENTRIES) throw new Error(`本机哈希清单超过输入上限 ${LOCAL_SCOPE_MAX_ENTRIES}。`);
   const normalizedNames = [...new Set(names.map(normalizeLocalScopeRelative))];
@@ -333,11 +364,14 @@ export async function hashLocalScopeNames(
   let next = 0;
   let failed = false;
   let fatalError: unknown;
-  await Promise.all(Array.from({ length: Math.min(8, Math.max(1, normalizedNames.length)) }, async () => {
+  let completed = 0;
+  options.signal?.throwIfAborted();
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, Math.min(8, options.concurrency || 8)), Math.max(1, normalizedNames.length)) }, async () => {
     for (;;) {
       const index = next++;
       if (index >= normalizedNames.length || fatalError) break;
       const relative = normalizedNames[index];
+      options.signal?.throwIfAborted();
       let full = path.join(rootInfo.realPath, ...relative.split("/"));
       try {
       if (!scopeInventoryPathAllowed(relative, false)) throw new Error(`本机清单路径属于排除项：${relative}`);
@@ -358,7 +392,8 @@ export async function hashLocalScopeNames(
         const confirmed = scopeHashIdentity(await fs.lstat(full));
         if (!confirmed || !sameScopeHashIdentity({ ...before, sha256: reusable.sha256 }, confirmed))
           throw new Error(`本机文件在复用哈希前发生变化：${relative}`);
-        files[relative] = reusable;
+        files[relative] = { ...reusable, changedAtMs: confirmed.ctimeMs, device: confirmed.dev, inode: confirmed.ino };
+        options.onFile?.(relative, files[relative]);
         activeRows[relative] = { ...confirmed, sha256: reusable.sha256, modifiedAtMs: reusable.modifiedAtMs };
         rememberLocalScopeHash(full, identity, reusable);
         continue;
@@ -373,6 +408,7 @@ export async function hashLocalScopeNames(
         const buffer = Buffer.allocUnsafe(1024 * 1024);
         let remaining = beforeStat.size;
         while (remaining > 0) {
+          options.signal?.throwIfAborted();
           const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, remaining), null);
           if (!bytesRead) throw new Error(`本机文件在校验期间被截断：${relative}`);
           hash.update(buffer.subarray(0, bytesRead));
@@ -383,21 +419,25 @@ export async function hashLocalScopeNames(
       const after = scopeHashIdentity(afterStat);
       if (!afterStat.isFile() || afterStat.isSymbolicLink() || bigintString(afterStat.dev) !== rootInfo.device || !after || !sameScopeHashIdentity({ ...before, sha256: "0".repeat(64) }, after))
         throw new Error(`本机文件在校验时变更：${relative}`);
-      const file = { sha256: hash.digest("hex"), size: after.size, modifiedAtMs: afterStat.mtimeMs };
+      const file = { sha256: hash.digest("hex"), size: after.size, modifiedAtMs: afterStat.mtimeMs,
+        changedAtMs: after.ctimeMs, device: after.dev, inode: after.ino };
       rememberLocalScopeHash(full, identity, file);
       activeRows[relative] = { ...after, sha256: file.sha256, modifiedAtMs: file.modifiedAtMs };
       files[relative] = file;
+      options.onFile?.(relative, file);
       } catch (error) {
+        options.signal?.throwIfAborted();
         const missing = (error as NodeJS.ErrnoException)?.code === "ENOENT";
         if (missing) localHashCache.delete(full);
         else failed = true;
         if (!onUnverified) { fatalError ??= error; continue; }
         try { onUnverified(relative, error instanceof Error ? error.message : String(error)); }
         catch (callbackError) { fatalError ??= callbackError; }
-      }
+      } finally { options.onProgress?.(++completed, normalizedNames.length); }
     }
   }));
   if (fatalError) throw fatalError;
+  options.signal?.throwIfAborted();
   if (cacheFile && !failed) {
     try {
       await writeScopeHashCache(cacheFile, { schemaVersion: SCOPE_HASH_SCHEMA_VERSION, files: boundedScopeHashRows(activeRows, persisted.files, requestedNames) });

@@ -22,7 +22,7 @@ native, virtual = bind_posix_runtime(agent, base)
 plan, revision = "experiments/Plans 中文 / 计划 É.yaml ", " revision "
 source = "experiments/runs/ 中文 É / 指标 %20.csv "
 writes, outputs, events = [], [], []
-agent.agent_dir = lambda root: "/fixture/state/" + root.rsplit("/", 1)[-1]
+agent.agent_dir = lambda root: os.path.join(root, "simple_cluster/agent_state")
 agent.atomic_write = lambda file, value: writes.append((file, copy.deepcopy(value)))
 agent.append_event = lambda root, event: events.append(copy.deepcopy(event))
 agent.publish_dataset_outputs = lambda root, values: outputs.extend(copy.deepcopy(values))
@@ -182,8 +182,12 @@ elif scenario == "handler":
     claims(root, "关联 fixture `" + source + "`\n关联 fixture evidence Run-A")
     summary = agent.parse_results_action(root, None, plan, revision, {"topologyMode": "single_worker", "resultOwnerWorkerId": "fixture-worker"})
     assert summary["resultCount"] == 2 and summary["finalResultCount"] == 2
+    assert summary["projectScientificValidation"] == {"executed": False, "responsibility": "project"}
+    assert not any("claimsPath" in value for _, value in writes)
+    report = actual_evaluate(root, summary)
+    assert report["supportedCount"] == 2
+    agent.apply_claim_evidence_summary(summary, report)
     assert summary["claimEvidenceStatus"] == "passed" and summary["claimSupportedCount"] == 2
-    report = next(value for _, value in writes if "claimsPath" in value)
     assert report["planFile"] == plan and report["resultPathIdentity"] == "posix-v1"
     assert events[-1]["payload"]["planFile"] == plan
     out.update(summary=summary, report=report)

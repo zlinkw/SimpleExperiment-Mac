@@ -1,3 +1,4 @@
+const retainedFixture = require('../_helpers/retainedFixture');
 const test=require('node:test'), assert=require('node:assert/strict'), fs=require('node:fs'), path=require('node:path');
 const vm=require('node:vm'), ts=require('typescript'), crypto=require('node:crypto'), {spawnSync}=require('node:child_process');
 const {createRequire}=require('node:module'), root=path.resolve(__dirname,'../..');
@@ -8,12 +9,12 @@ function candidates(rows,plan,revision='r1') {
     'planFileEquivalenceKeys','samePlanSelection','uniqueStrings','stringFromRecord','planVersionTimestamp','normalizeRemoteResultInspectionPath','usableSelectionKey'];
   const context=vm.createContext({process:{platform:'darwin'},Buffer,Date,Map,Set,
     MacResultOperationScope:require('../../dist/mac/ResultOperationScope'),PosixPath_1:require('../../dist/mac/PosixPath'),
-    FileTransferTypes_1:require('../../dist/tunnel/FileTransferTypes'),WrapperResultBundle:require('../../dist/results/WrapperResultBundle')});
+    ResultOwnershipScope:require('../../dist/results/ResultOwnershipScope'),FileTransferTypes_1:require('../../dist/tunnel/FileTransferTypes'),WrapperResultBundle:require('../../dist/results/WrapperResultBundle')});
   vm.runInContext(names.map(name=>{assert.ok(funcs.has(name),name);return funcs.get(name);}).join('\n')+'\nthis.candidates=remoteResultInspectionCandidates;',context);
   return JSON.parse(JSON.stringify(context.candidates([rows],plan,revision)));
 }
 for(const scenario of ['identity','invalid','physical','jobs','keys','formats','report'])test('isolated actual Agent output contract and compiled Mac candidates: '+scenario,()=>{
-  const directory=path.join(root,'release-artifacts','Agent 回执 '+scenario+' '+crypto.randomUUID());fs.mkdirSync(directory,{recursive:true});
+  const directory=retainedFixture(root, 'Agent 回执 '+scenario);fs.mkdirSync(directory,{recursive:true});
   const result=spawnSync(process.env.PYTHON||'python',['-B','-X','utf8',path.join(__dirname,'macAgentOutputContract.fixture.py'),scenario,
     path.join(root,'dist/runtime/cluster_agent.py'),directory],{encoding:'utf8',timeout:10000,windowsHide:true});
   assert.equal(result.status,0,result.stderr||result.error?.message);const out=JSON.parse(result.stdout);
@@ -34,5 +35,5 @@ for(const scenario of ['identity','invalid','physical','jobs','keys','formats','
   if(scenario==='invalid'||scenario==='report'){assert.equal(out.events,0);assert.equal(out.writes,0);}
   const agent=fs.readFileSync(path.join(root,'dist/runtime/cluster_agent.py'),'utf8');
   assert.match(agent,/if action == "check-output-contract":\s+return output_contract_receipt\(root, payload, operation_id, op_id\)/);
-  assert.match(agent,/started_fields = action_receipt_fields\(action, payload\)/);
+  assert.match(agent,/operation_started[^\n]+action_receipt_fields\(action, payload\)/);
 });

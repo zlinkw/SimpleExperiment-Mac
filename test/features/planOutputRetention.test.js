@@ -221,14 +221,15 @@ test("an inspection must bind a real configured root, exact parent and immutable
 
 test("Host cleanup is manual with double-confirmed guarded deletion; background retirement does nothing", async () => {
   const source = fs.readFileSync(require.resolve("../../dist/extension/legacy.js"), "utf8");
-  const start = source.indexOf("planOutputRetentionMode(root) {");
+  const start = source.indexOf("planOutputRetentionMode(_root) {");
   const end = source.indexOf("async retryDistributedJobFromUi(message)", start);
   assert.ok(start >= 0 && end > start);
-  const methods = source.slice(start, end).trim();
+  const methods = source.slice(start, end).trim() + "\n" + source.slice(source.indexOf("async deleteSyncScopeRemoteCopy("), source.indexOf("async removeSyncScopeCopies("));
   let state = queue(plan("a", 1000), plan("b", 2000));
   const removed = new Set(), apiCalls = [], holds = {}, errors = [];
   let mode = "latest-complete", reviews = 0, expectedCopies = 12, published = true;
-  const sandbox = { PlanOutputRetention: retention, PlanRunFreshness: freshness, PlanVersionComparison: require('../../dist/results/PlanVersionComparison'),
+  const sandbox = { SyncScopeDelete_1: require("../../dist/features/SyncScopeDelete"), deleteConfirmedScopeCopy: require("../../dist/features/SyncScopeDelete").deleteConfirmedScopeCopy,
+    PlanOutputRetention: retention, PlanRunFreshness: freshness, PlanVersionComparison: require('../../dist/results/PlanVersionComparison'),
     remoteActionPendingStatus: (status) => ["accepted", "running"].includes(status), resultStatus: (value) => value.status,
     remoteActionSucceeded: (status) => status === "completed",
     vscode: { workspace: { getConfiguration: () => ({ get: () => mode }) }, Uri: { file: (value) => value }, window: { showInformationMessage() {}, showWarningMessage() {} } },
@@ -239,7 +240,9 @@ test("Host cleanup is manual with double-confirmed guarded deletion; background 
     reviewPlanVersionResults: async (_runs, candidates) => candidates.filter(row => ['/a', '/v0', '/v5', '/not-yet-a'].some(leaf => row.outputDir.endsWith(leaf))) };
   vm.createContext(sandbox);
   vm.runInContext(`class Subject { ${methods} }; this.methods = Object.fromEntries(Object.getOwnPropertyNames(Subject.prototype).filter(name => name !== 'constructor').map(name => [name, Subject.prototype[name]]));`, sandbox);
+  const cleanupRequests = new Map();
   const host = { ...sandbox.methods,
+    simpleSftpCapability: async () => ({methodOptions:{"files.cleanup.preview":{confirmedPathMetadata:1,confirmedPathNestedRepositories:1}}}),
     client: { async postWorkerAction(id, action, payload) { assert.equal(action, "preview-cache-cleanup"); const candidate = { outputDir: payload.planOutputPaths[0] }; return { status: "completed", payload: { planOutputs: [proof(candidate, !removed.has(id + ":" + candidate.outputDir))] } }; } },
     distributedProjectContract: () => ({ requiredPaths: required }),
     workerCodeSyncTargets: () => [{ id: "worker-a" }, { id: "worker-b" }],
@@ -251,7 +254,20 @@ test("Host cleanup is manual with double-confirmed guarded deletion; background 
     distributedOutputHashes: async (_source, paths) => Object.fromEntries(paths.map((file) => [file, hash])),
     async assertSshTransportIdentities() {},
     async updateSyncScopeHolds(_root, fn) { fn(holds); },
-    async simpleSftpApiCall(method, params) { assert.equal(method, "sync.deletePath"); apiCalls.push(params); removed.add(params.target.id + ":" + params.relativePath); },
+    async simpleSftpApiCall(method, params) {
+      if (method === 'files.cleanup.inspect') return {ok:true,executorsChecked:true,executors:[],target:{missing:removed.has(params.node.id+':'+params.target.relativePath)}};
+      if (method === 'files.cleanup.preview') {
+        assert.equal(params.authorizationMode,'confirmed_paths'); assert.equal(params.action,'delete');
+        assert.equal(params.targets.length,1); const target=params.targets[0], token=params.node.id+':'+target.relativePath;
+        const record={token,digest:token,node:params.node,target,phases:[]}; cleanupRequests.set(token,record);
+        return {token,digest:token,safety:{confirmedPathDeletion:1,entryIdentityBind:1,batchedFastDelete:1,directoryTreeIsolateDelete:1,isolationRenameNoReplace:1,fastDeleteBatchLimit:5000},
+          targets:[{absolutePath:params.node.root+'/'+target.relativePath,type:'directory'}]};
+      }
+      const record=cleanupRequests.get(params.token); assert.ok(record); assert.equal(params.digest || params.token,record.digest);
+      if(method==='files.cleanup.confirm') { assert.equal(params.confirm,true); assert.deepEqual(Array.from(params.exactTargets),[root+'/'+record.target.relativePath]);record.phases.push(params.phase);return {ok:true}; }
+      if(method==='files.cleanup.execute') { assert.deepEqual(record.phases,[1,2]);apiCalls.push(record);removed.add(record.token);return {ok:true}; }
+      assert.equal(method,'files.cleanup.check');assert.ok(removed.has(record.token));return {ok:true,state:'completed'};
+    },
     recordActionError(value) { errors.push(value); }, postState() {},
   };
   await host.retainLatestDistributedPlanOutputs("C:/project", ["b"]);
@@ -261,7 +277,7 @@ test("Host cleanup is manual with double-confirmed guarded deletion; background 
   assert.deepEqual(errors, []);
   assert.equal(reviews, 1);
   assert.equal(apiCalls.length, 12);
-  assert.ok(apiCalls.every((value) => value.confirm && value.pathConfirmed && value.secondConfirmation && value.confirmedAbsolutePath === root + "/" + value.relativePath));
+  assert.ok(apiCalls.every(value => value.phases.join(",") === "1,2" && value.target.type === "directory"));
   assert.equal(Object.keys(holds).length, 6);
   assert.ok(state.plans[0].jobs.every((job) => job.outputRetiredAt && !job.artifacts));
   assert.ok(state.plans[1].jobs.every((job) => !job.outputRetiredAt && job.artifacts));
@@ -286,9 +302,9 @@ test("Host cleanup is manual with double-confirmed guarded deletion; background 
   assert.match(errors.at(-1).message, /尚未正式收录/);
 });
 
-test('version notifications are read-only, deduplicated and open the existing review only on user choice', async () => {
+test('background version notifications remain retired without opening reviews or mutating history', async () => {
   const source = fs.readFileSync(require.resolve('../../dist/extension/legacy.js'), 'utf8');
-  const methods = source.slice(source.indexOf('planOutputRetentionMode(root) {'), source.indexOf('async retryDistributedJobFromUi(message)'));
+  const methods = source.slice(source.indexOf('planOutputRetentionMode(_root) {'), source.indexOf('async retryDistributedJobFromUi(message)'));
   let currentRoot = 'C:/project', choice;
   const warnings = [], reviewed = [], errors = [];
   let state = queue(...Array.from({ length: 6 }, (_, index) => plan(`v${index}`, 1000 + index, { codeFingerprint: `code-${index}` })));
@@ -306,25 +322,25 @@ test('version notifications are read-only, deduplicated and open the existing re
   host.notifyPlanOutputVersionReview('C:/project', state);
   host.notifyPlanOutputVersionReview('C:/project', state);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0].message, /超过 5/);
+  assert.equal(warnings.length, 0);
   assert.equal(reviewed.length, 0);
   choice = '审核和清理历史产物';
   state = queue(...state.plans, plan('v6', 3000, { codeFingerprint: 'code-6' }));
+  const before = JSON.stringify(state);
   host.notifyPlanOutputVersionReview('C:/project', state);
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(reviewed.length, 1);
-  assert.deepEqual(Array.from(reviewed[0][1]), ['v6']);
-  assert.deepEqual(Array.from(reviewed[0][2]), ['v0', 'v1']);
-  assert.equal(reviewed[0][3], true);
+  assert.equal(warnings.length, 0);
+  assert.equal(reviewed.length, 0);
+  assert.equal(JSON.stringify(state), before);
   host.distributedQueueStorageDiagnostics = { status: 'stale' };
-  state = queue(...state.plans, plan('v7', 4000, { codeFingerprint: 'code-7' }));
+  currentRoot = 'C:/other-project';
   host.notifyPlanOutputVersionReview('C:/project', state);
-  assert.equal(warnings.length, 2);
+  assert.equal(warnings.length, 0);
+  assert.equal(reviewed.length, 0);
   assert.deepEqual(errors, []);
   assert.match(source, /this\.notifyPlanOutputVersionReview\?\.\(root, queue\)/);
   assert.match(source, /this\.notifyPlanOutputVersionReview\?\.\(root, next\)/);
-  assert.match(source, /this\.notifyPlanOutputVersionReview\?\.\(root, await this\.loadPlanOutputRetentionQueue\(root\)\)/);
+  assert.equal(host.planOutputRetentionMode(currentRoot), "latest-only");
 });
 
 test('cache review exposes the Plan history entry independently of temporary-file deletion', async () => {
@@ -349,10 +365,10 @@ test('cache review exposes the Plan history entry independently of temporary-fil
   disposed();
 });
 
-test("formal publication rebuilds and mirrors without retiring historical attempts", async () => {
+test("retired remote rebuilding cannot publish, mirror, persist or retire historical attempts", async () => {
   const source = fs.readFileSync(require.resolve("../../dist/extension/legacy.js"), "utf8");
   const start = source.indexOf("async rebuildDistributedResults(");
-  const end = source.indexOf("planOutputRetentionMode(root)", start);
+  const end = source.indexOf("planOutputRetentionMode(_root)", start);
   assert.ok(start >= 0 && end > start);
   const sandbox = { PlanOutputRetention: retention, PlanRunFreshness: freshness, DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue"), crypto: require("node:crypto"),
     uniqueStrings: (values) => [...new Set(values)], samePlanSelection: (a, b) => a === b,
@@ -386,7 +402,7 @@ test("formal publication rebuilds and mirrors without retiring historical attemp
   await sandbox.rebuild.call(host, "C:/project", queue(plan("a", 1000), plan("b", 2000)), false);
   assert.deepEqual(errors, []);
   assert.ok(!events.some(event => event.startsWith('retire:')));
-  assert.ok(events.indexOf("publish") < events.indexOf("mirror"));
+  assert.deepEqual(events, [], "aggregation uses the active-query local result workflow");
 });
 
 test("the read-only Worker proof rejects links, mounts, active attempts and content mutation", () => {

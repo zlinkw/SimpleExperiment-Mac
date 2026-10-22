@@ -18,6 +18,9 @@ scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"),
     ["build_jobs", "load_plan", "formal_job_preflight_mode", "formal_job_writer", "run_job", "formal_source_fingerprint", "launch_experiment", "collect_tensorboard_metrics", "jobs_for_args", "wrapper_context"])
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"),
     ["verified_formal_job_command", "accept_durable_plan_job", "prepare_draft_run_plan", "write_durable_plan_queue", "drain_durable_plan_queue_once", "requeue_durable_plan_job"])
+# 非 Windows 上正式运行参数会被 simple_conda_wrapped_args→task_shell_args 包成登录 shell 重绑命令（nt 直接透传）。
+# 本夹具回放正式预检的消息契约，fake RPC 必须拿到裸参数列表；shell 重绑行为由 executionShellEnvironment 专测钉住。
+agent.simple_conda_wrapped_args = lambda args, env: args
 # Retain small isolated fixtures for inspection; no deletion executor is invoked.
 root = pathlib.Path(tempfile.mkdtemp(prefix="simple-formal-contract-")).resolve()
 os.chdir(root)
@@ -209,18 +212,10 @@ _, test_jobs = scheduler.build_jobs(scheduler.load_plan(test_file)); third = tes
 third_id["planRevision"] = third.template_values["plan_revision"]
 test_command = {**command,**third_id,"planFile":test_file,"mode":"test","executionMode":"test","planJobCount":1,
                 "outputDir":third.output_dir,"collectionResultCsv":third.result_csv,"checkpointSource":source,"runKey":third_id["commandId"]}
-def fixture_project_path(base, value, **options):
-    # Only the native filesystem leaf is injected: Linux POSIX names map onto
-    # retained Windows temporary fixtures without weakening logical path checks.
-    agent.durable_plan_path(value, "fixture POSIX path")
-    target = pathlib.Path(base).joinpath(*value.split("/")).resolve()
-    assert target.is_relative_to(pathlib.Path(base).resolve())
-    if options.get("require_file"):
-        assert target.is_file()
-    return str(target)
+# 移植后 Agent 不再在宿主侧解析 Plan 路径（worker_plan_project_path/durable_plan_path 已删除，
+# Plan 存在性与路径安全由真实 Scheduler 的 load_plan 在子进程内把关），夹具不再注入该解析器。
 with patch.object(agent,"cluster_scheduler_path",lambda _: str(runtime/"cluster_scheduler.py")), \
      patch.object(agent,"scalar_scheduler_module",lambda:scheduler), \
-     patch.object(agent,"worker_plan_project_path",fixture_project_path), \
      patch.object(agent.subprocess,"run",scheduler_rpc), \
      patch.object(agent,"simple_runtime_env",lambda value:value), patch.object(agent,"simple_runtime_python",lambda _:sys.executable), \
      patch.object(agent,"read_durable_plan_queue",read_queue), patch.object(agent,"durable_plan_queue_path",lambda _:"fixture-queue.json"), \

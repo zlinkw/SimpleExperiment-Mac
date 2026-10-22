@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("node:crypto");
 
 const DEFAULT_PATH = path.join("docs", "target-mode-plan.md");
 const MAX_LINES = 80;
@@ -34,7 +35,7 @@ function sectionKind(title) {
   if (/^目标模式当前计划/.test(value) || value.startsWith("目标模式")) return "title";
   if (value === "固定边界" || value === "范围与保护") return "fixed";
   if (value === "后续优先级" || value === "当前状态") return "priority";
-  if (/^当前批次/.test(value) || value === "当前目标") return "current";
+  if (/^当前(?:批次|授权)/.test(value) || value === "当前目标") return "current";
   if (value === "本批记录" || value === "批次完成条件") return "record";
   if (/历史|已完成|流水|归档|验证日志|旧批次|过往/.test(value)) return "history";
   return "other";
@@ -161,12 +162,14 @@ function compactMacTargetModePlan(text, cap) {
   const sections = splitSections(text);
   const title = sections.find(section => sectionKind(section.title) === "title");
   const fixed = sections.find(section => sectionKind(section.title) === "fixed");
-  const current = sections.find(section => sectionKind(section.title) === "current");
+  // This persistent plan appends newer authorizations after older batches.
+  // Keeping the first match can silently restore obsolete restrictions.
+  const current = sections.filter(section => sectionKind(section.title) === "current").at(-1);
   if (!title || !fixed || !current || /待刷新|待填写/.test(current.lines.join("\n"))) {
     throw new Error("Persistent Mac plan lacks a valid active goal; source preserved.");
   }
   // Do not trim active facts, approvals or boundaries to a bullet/line count.
-  // Completed batch detail remains in Git; the active batch and record remain verbatim.
+  // File-level compaction retains the original bytes before dropping history.
   const selected = new Set([title, fixed, current, ...sections.filter(section =>
     ["priority", "record"].includes(sectionKind(section.title)) || section.title === "下一边界")]);
   const output = sections.filter(section => selected.has(section)).map(section => section.lines.join("\n").trimEnd()).join("\n\n") + "\n";
@@ -193,7 +196,20 @@ function compactTargetModePlanFile(options = {}) {
   if (characterCap && result.text.length >= Number(characterCap[1])) {
     throw new Error("Persistent plan still exceeds character cap; preserve the source and condense completed history before continuing.");
   }
-  if (result.changed && !dryRun) fs.writeFileSync(filePath, result.text, "utf8");
+  if (result.changed && !dryRun) {
+    if (characterCap) {
+      const hash = crypto.createHash("sha256").update(original, "utf8").digest("hex");
+      const history = path.join(root, "release-artifacts", "plan-history");
+      fs.mkdirSync(history, { recursive: true });
+      const snapshot = path.join(history, hash + ".md");
+      try { fs.writeFileSync(snapshot, original, { encoding: "utf8", flag: "wx" }); }
+      catch (error) {
+        if (error.code !== "EEXIST" || !fs.lstatSync(snapshot).isFile()
+            || fs.lstatSync(snapshot).isSymbolicLink() || fs.readFileSync(snapshot, "utf8") !== original) throw error;
+      }
+    }
+    fs.writeFileSync(filePath, result.text, "utf8");
+  }
   return { root, filePath, dryRun, changed: result.changed, reason: result.reason, lineCount: result.lineCount || result.text.split("\n").length };
 }
 

@@ -96,18 +96,18 @@ test('lost move receipts are observed without settlement; confirmed continuation
   const approved=await f.confirm(restore);assert.equal((await f.service.execute(approved.id)).state,'completed');assert.equal(f.mutations,4);
 });
 
-test('each connection edge checks persisted signals; heartbeats and an unanswered notification never trigger cleanup or block later checks',async()=>{
+test('the retired connection hook never checks or prompts for cleanup on heartbeats, reconnects or execution edges',async()=>{
   const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};let checks=0,notices=0;
   const vscode={workspace:{workspaceFolders:[{uri:{fsPath:'C:/fixture'}}]},window:{showWarningMessage:()=>{notices++;return new Promise(()=>{});}}};
   vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>name==='vscode'?vscode:name==='./PlanCleanupPanel'?{}:from(name)});
   const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}}},'C:/fixture');
   host.service.recheckNode=async()=>{checks++;return [{operationId:'a'.repeat(48)}]};
   const online={id:'worker',streamStatus:'polling',reconnectCount:0};
-  await host.observeConnections([online]);await host.observeConnections([online]);assert.equal(checks,1);assert.equal(notices,1);
-  await host.observeConnections([{...online,streamStatus:'disconnected'}]);await host.observeConnections([online]);assert.equal(checks,2);assert.equal(notices,1);
-  await host.observeConnections([{...online,reconnectCount:1}]);assert.equal(checks,3);
-  host.executing=true;await host.observeConnections([{...online,reconnectCount:2}]);assert.equal(checks,3);
-  host.executing=false;await host.observeConnections([{...online,reconnectCount:2}]);assert.equal(checks,4);
+  await host.observeConnections([online]);await host.observeConnections([online]);assert.equal(checks,0);assert.equal(notices,0);
+  await host.observeConnections([{...online,streamStatus:'disconnected'}]);await host.observeConnections([online]);assert.equal(checks,0);assert.equal(notices,0);
+  await host.observeConnections([{...online,reconnectCount:1}]);assert.equal(checks,0);
+  host.executing=true;await host.observeConnections([{...online,reconnectCount:2}]);assert.equal(checks,0);
+  host.executing=false;await host.observeConnections([{...online,reconnectCount:2}]);assert.equal(checks,0);assert.equal(notices,0);
 });
 
 test('reconnect review opens the existing operation and waits for explicit continuation and confirmation clicks',async()=>{

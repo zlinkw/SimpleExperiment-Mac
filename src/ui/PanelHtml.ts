@@ -3,6 +3,7 @@
  * 紧急回退：直接委托 legacy，确保握手 JS 完整
  * 工厂路径仅在显式开启时使用，待 JS 补全后再切回
  */
+import { withRunConfirmation } from "./RunConfirmation";
 export function renderPanelHtml(): string {
   let factoryFailure = "";
   let legacyFailure = "";
@@ -20,10 +21,11 @@ export function renderPanelHtml(): string {
       const renderer = new PanelHtmlRenderer(sections as any, escaper);
       const html = renderer.render(String(Date.now()));
       // 功能门禁：必须含握手三件套才视为可用，否则回退
-      if (html && html.includes("acquireVsCodeApi") && html.includes("requestInitialPanelState") && html.includes("handleIncomingWebviewMessage")) {
+      if (html && html.includes("data-manual-dispatch") && !html.includes('data-command="startHub"')
+        && html.includes("acquireVsCodeApi") && html.includes("requestInitialPanelState") && html.includes("handleIncomingWebviewMessage")) {
         // 额外 vm 校验
         new (require("vm").Script)(renderer.renderScript());
-        return html;
+        return withRunConfirmation(html);
       }
     }
   } catch (e) {
@@ -34,7 +36,7 @@ export function renderPanelHtml(): string {
   try {
     const legacy = require("./PanelHtml.legacy");
     if (legacy && typeof legacy.renderPanelHtml === "function") {
-      return legacy.renderPanelHtml();
+      return withRunConfirmation(legacy.renderPanelHtml());
     }
   } catch (e) {
     legacyFailure = String((e as Error)?.message || e).slice(0, 400);

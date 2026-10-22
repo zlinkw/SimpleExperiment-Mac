@@ -13,7 +13,7 @@ from extractRuntimeFunctions import extract_runtime_functions
 from posixRuntimeFixture import bind_posix_runtime
 
 scenario, runtime, base = sys.argv[1:4]
-agent = extract_runtime_functions(runtime, ["run_quality_gate_action", "compute_statistics_action", "export_paper_table_action", "parse_results_action"])
+agent = extract_runtime_functions(runtime, ["run_quality_gate_action", "compute_statistics_action", "export_paper_table_action", "parse_results_action", "evaluate_claim_evidence"])
 base = os.path.abspath(base)
 if os.name == "nt" and not base.startswith("\\\\?\\"):
     base = "\\\\?\\" + base
@@ -22,7 +22,7 @@ native, virtual = bind_posix_runtime(agent, base)
 plan, revision = "experiments/Plans 中文 / 计划 É.yaml ", " revision "
 source = "experiments/runs/ 中文 É / 指标 %20.csv "
 writes, outputs, events = [], [], []
-agent.agent_dir = lambda root: "/fixture/state/" + root.rsplit("/", 1)[-1]
+agent.agent_dir = lambda root: os.path.join(root, "simple_cluster/agent_state")
 agent.atomic_write = lambda file, value: writes.append((file, copy.deepcopy(value)))
 agent.append_event = lambda root, event: events.append(copy.deepcopy(event))
 agent.publish_dataset_outputs = lambda root, values: outputs.extend(copy.deepcopy(values))
@@ -187,7 +187,10 @@ elif scenario == "inputs":
     root, summary = workspace("large"); save(root, source, b"x" * (5 * 1024 * 1024 + 1), True)
     reject(lambda: agent.compute_statistics_action(root, plan, revision))
     root, summary = workspace("claims-invalid"); claims(root, b"\xff")
-    reject(lambda: agent.export_paper_table_action(root, plan, revision))
+    paper = agent.export_paper_table_action(root, plan, revision)
+    assert paper["resultCount"] == 2
+    assert latest_summary()["projectScientificValidation"] == {"executed": False, "responsibility": "project"}
+    assert not any("claimsPath" in value for _, value in writes)
 elif scenario == "legacy":
     root = virtual(os.path.join(base, "legacy")); os.makedirs(native(root))
     summary = {"results": [{"resultId": "legacy", "runKey": "Legacy", "suite": "demo", "dimensions": {"method": "Legacy", "dataset": "BUS"}, "metrics": {"accuracy": {"value": .75}}, "finalEvidenceState": "archived", "eligibleForFinalAnalysis": True}], "planFile": "legacy.yaml"}

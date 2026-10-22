@@ -15,6 +15,7 @@ export const tunnelActions = [
   "inspect-dataset", "export-plotting-contract", "infer-config-from-run", "recover-plan-from-run", "diagnose-result-anomaly", "compare-with-best-config",
   "start-worker-task", "register-code-sync-proof", "stop-worker-task", "retry-worker-task", "delete-worker-artifacts", "archive-worker-artifacts", "finalize-worker-operation",
   "rebuild-distributed-results",
+  "configure-gpu-quota",
   "start-tensorboard", "stop-tensorboard", "get-tensorboard-status",
   "preview-cache-cleanup", "delete-cache-candidates",
 ] as const;
@@ -99,7 +100,9 @@ export interface TunnelClient {
   getDiagnostics(): Promise<unknown>;
   getAuditTail(): Promise<unknown>;
   getOperation(operationId: string): Promise<unknown>;
-  getWorkerTasks?(options?: { signal?: AbortSignal }): Promise<unknown>;
+  getWorkerTasks?(options?: { signal?: AbortSignal; executionOnly?: boolean; selectedOnly?: boolean; retiredCommandIds?: string[]; queries?: any[]; discovery?: { planFile: string; condaEnv?: string } }): Promise<unknown>;
+  getPlanCodeScope?(query: unknown, options?: { signal?: AbortSignal }): Promise<any>;
+  getSyncScopeIndex?(query: unknown, options?: { signal?: AbortSignal }): Promise<any>;
   getRunEvidence?(params: { operationId?: string; planFile?: string; pid?: number | string; tmuxSession?: string }): Promise<unknown>;
   postAction<T>(action: TunnelAction, body: unknown, options?: { signal?: AbortSignal }): Promise<T>;
   postAvailabilityBatch<T>(body: unknown): Promise<T>;
@@ -120,6 +123,7 @@ const getPurposeByPath = new Map<string, TunnelRequestPurpose>([
 ]);
 
 const actionPurpose: Partial<Record<TunnelAction, TunnelRequestPurpose>> = {
+  "configure-gpu-quota": "manual_refresh",
   "validate-plan": "run_plan",
   "preflight-worker-task": "manual_refresh",
   "dry-run-plan": "run_plan",
@@ -253,14 +257,32 @@ export class HttpTunnelClient implements TunnelClient {
   getOperation(operationId: string): Promise<unknown> {
     const id = String(operationId || "").trim();
     if (!id) throw new Error("operationId is required.");
-    return this.requestJson(`/api/operations/${encodeURIComponent(id)}`, "diagnostics", undefined, {
+    return this.requestJson(`/api/operations/${encodeURIComponent(id)}`, "operation_status", undefined, {
       method: "GET",
       userInitiated: true,
     });
   }
 
-  getWorkerTasks(options: { signal?: AbortSignal } = {}): Promise<unknown> {
-    return this.requestJson("/api/worker/tasks", "job_reconcile", undefined, {
+  getPlanCodeScope(query: unknown, options: { signal?: AbortSignal } = {}): Promise<any> {
+    return this.requestJson("/api/code-sync/plan-scope", "manual_refresh", query,
+      { method: "POST", userInitiated: true, signal: options.signal, timeoutMs: 15000 });
+  }
+  getSyncScopeIndex(query: unknown, options: { signal?: AbortSignal } = {}): Promise<any> {
+    return this.requestJson("/api/sync-scope/index", "manual_refresh", query,
+      { method: "POST", userInitiated: true, signal: options.signal, timeoutMs: 5000 });
+  }
+  getWorkerTasks(options: { signal?: AbortSignal; executionOnly?: boolean; selectedOnly?: boolean; observationOnly?: boolean; diagnosticsOnly?: boolean; declarationOnly?: boolean; retiredCommandIds?: string[]; queries?: any[]; declarations?: any[]; discovery?: { planFile: string; condaEnv?: string } } = {}): Promise<unknown> {
+    const ids = [...new Set(options.retiredCommandIds || [])].sort();
+    if (ids.length > 500 || ids.some(id => !/^[A-Za-z0-9._:-]{1,128}$/.test(id))) throw new Error("INVALID_RETIRED_COMMAND_SELECTION");
+    if (options.executionOnly || options.selectedOnly || options.diagnosticsOnly || options.declarationOnly || options.queries?.length || options.declarations || options.discovery) return this.requestJson(options.diagnosticsOnly ? "/api/worker/tasks/diagnostics" : "/api/worker/tasks/query", options.diagnosticsOnly ? "task_diagnostics" : options.executionOnly ? "job_reconcile" : "manual_refresh",
+      { queries: options.queries || [], executionOnly: options.executionOnly, selectedOnly: options.selectedOnly, observationOnly: options.observationOnly, diagnosticsOnly: options.diagnosticsOnly, ...(options.observationOnly ? { compact: true } : {}), declarationOnly: options.declarationOnly, declarations: options.declarations, discovery: options.discovery, retiredCommandIds: ids },
+      { method: "POST", userInitiated: true, signal: options.signal });
+    const params = new URLSearchParams();
+    if (ids.length) params.set("retiredCommandIds", ids.join(","));
+    if (options.queries?.length) params.set("queries", JSON.stringify(options.queries));
+    if (options.discovery) params.set("discovery", JSON.stringify(options.discovery));
+    const query = params.size ? "?" + params.toString() : "";
+    return this.requestJson("/api/worker/tasks" + query, "manual_refresh", undefined, {
       method: "GET",
       userInitiated: true,
       signal: options.signal,
@@ -314,7 +336,8 @@ export class HttpTunnelClient implements TunnelClient {
     body: unknown,
     options: { method: "GET" | "POST"; userInitiated?: boolean; timeoutMs?: number; signal?: AbortSignal },
   ): Promise<T> {
-    if (options.method === "GET") return this.subscribeRead<T>(apiPath, purpose, body, options);
+    if (options.method === "GET" || options.method === "POST" && ["/api/worker/tasks/query", "/api/worker/tasks/diagnostics", "/api/code-sync/plan-scope"].includes(apiPath))
+      return this.subscribeRead<T>(apiPath, purpose, body, options);
     return this.executeRequestJson<T>(apiPath, purpose, body, options);
   }
 
@@ -325,7 +348,7 @@ export class HttpTunnelClient implements TunnelClient {
     options: { method: "GET" | "POST"; userInitiated?: boolean; timeoutMs?: number; signal?: AbortSignal },
   ): Promise<T> {
     if (options.signal?.aborted) return Promise.reject(callerAbortError(options.signal));
-    const readKey = `${purpose}\0${options.userInitiated === true ? "user" : "background"}\0${apiPath}`;
+    const readKey = `${purpose}\0${options.userInitiated === true ? "user" : "background"}\0${apiPath}\0${options.method === "POST" ? JSON.stringify(body) : ""}`;
     let shared = this.reads.get(readKey);
     if (shared) {
       this.budget.noteCoalescedRequest();
@@ -377,9 +400,11 @@ export class HttpTunnelClient implements TunnelClient {
   ): Promise<T> {
     if (!apiPath.startsWith("/api/")) throw new Error("Only Hub Agent API paths are allowed.");
     const base = localBaseUrl(this.endpoint);
+    const requestedAt = new Date().toISOString();
     return this.budget.run(
         purpose,
         async () => {
+          const networkStartedAt = new Date().toISOString();
           const controller = new AbortController();
           const configuredTimeoutMs = Number(options.timeoutMs ?? this.endpoint.timeoutMs ?? 30_000);
           const timeoutMs = Number.isFinite(configuredTimeoutMs) ? Math.max(1, configuredTimeoutMs) : 30_000;
@@ -405,10 +430,14 @@ export class HttpTunnelClient implements TunnelClient {
                 const message = failure?.message || failure?.error?.message || failure?.error;
                 if (typeof message === "string" && message.trim()) detail = message;
               } catch { /* Keep a bounded plain-text reason for non-JSON responses. */ }
-              throw new Error(`Hub Agent HTTP ${response.status}: ${detail.slice(0, 2000)}`);
+              throw new Error(`Worker Agent HTTP ${response.status}: ${detail.slice(0, 2000)}`);
             }
             if (!text.trim()) return {} as T;
-            return JSON.parse(text) as T;
+            const value = JSON.parse(text);
+            if (apiPath.startsWith("/api/worker/tasks") && value && typeof value === "object")
+              value.localQueryTiming = { requestedAt, networkStartedAt, receivedAt: new Date().toISOString(),
+                requestBytes: body === undefined ? 0 : Buffer.byteLength(JSON.stringify(body), "utf8"), responseBytes: Buffer.byteLength(text, "utf8") };
+            return value as T;
           } finally {
             inactivity.dispose();
             options.signal?.removeEventListener("abort", abortFromCaller);
