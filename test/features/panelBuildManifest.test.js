@@ -62,3 +62,17 @@ for (const changed of ["dist/ui/PanelHtml.legacy.js", "dist/extension/legacy.js"
     assert.notEqual(after.manifest.manifestHash, before.manifest.manifestHash);
   });
 }
+
+test("runtime closure follows lazy factories, computed feature hints, worker entrypoints and require.resolve", () => {
+  const contents = {
+    'dist/entry.js': 'tryRequire("./factory"); new worker_threads.Worker(path.join(__dirname, "worker.js")); require.resolve("./delete");',
+    'dist/factory.js': 'const featureImplHints = {a: "feature", b: "nested/index"}; function load(hint) { return tryRequire(`../${hint}`); }',
+    'dist/worker.js': 'require("./worker-dependency");', 'dist/worker-dependency.js': 'module.exports = {};',
+    'dist/delete.js': 'module.exports = {};', 'feature.js': 'module.exports = {};', 'nested/index.js': 'module.exports = {};',
+    'dist/build-only.js': 'module.exports = "not runtime";',
+  };
+  const closure = collectLocalRuntimeClosure(root, ['./dist/entry.js', 'dist/entry.js'], [], createFs(contents));
+  assert.deepEqual(closure.map(row => row.file), Object.keys(contents).filter(file => file !== 'dist/build-only.js').sort((a,b) => a.localeCompare(b)));
+  assert.ok(closure.find(row => row.file === 'dist/worker-dependency.js').chain.includes('dist/worker.js'));
+  assert.throws(() => collectLocalRuntimeClosure(root, ['dist/factory.js'], [], createFs({'dist/factory.js': 'tryRequire(`../${hint}`)'})), /hints cannot be resolved/);
+});

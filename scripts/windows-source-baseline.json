@@ -16,10 +16,10 @@
       "files": [
         {
           "path": ".vscodeignore",
-          "localSha256": "1b5ef353925f74b2cac1eaa872e3d54a993a8c8df02d3b028e3691b51b46572c",
+          "localSha256": "07e0bcc4448eeacfda3e41598bdd4aff7afd13f601051662616cf166fa6d23a0",
           "windowsSha256": "c91526b85b1e92de45330b216a460891aa6894296b751d75dcf12970976cacc7",
           "classification": "platform-overlay",
-          "reason": "Mac exclusion policy matches Windows; retain existing native runtime exclusions."
+          "reason": "Mac runtime set derives from its entrypoints, lazy factories, require.resolve and catalog Worker. Exclude 99 unreachable compiled JS, publisher-only preview.json and the Windows launcher; retain templates, generated Python, build manifests and legal resources. Frozen Windows policy SHA remains unchanged."
         },
         {
           "path": "package-lock.json",
@@ -2652,5 +2652,5 @@
     }
   ],
   "sourceGaps": [],
-  "validation": "430 current local source fingerprints; 386/386 exact frozen LF-normalized source bytes recovered and rehashed. Release inventory 178 files. Original 33 failures closed (421 tests, no skip); native Windows browser-independent closure and required skipped routes passed. Real Linux Chromium three-theme assertions passed after palette-only repair. Final impact, archive and publication checks still required; no published preview claimed."
+  "validation": "430 source fingerprints and 386/386 exact frozen sources verified. Prior candidate 178 mandatory files / 1422 tests passed without skip. Packaging audit then strengthened lazy factory/Worker closure and excluded 99 unreachable compiled modules; actual inventory now 180 files. Final archive candidate requires renewed exact-input validation before publication."
 }

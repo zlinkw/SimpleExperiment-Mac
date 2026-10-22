@@ -31,6 +31,7 @@ if (!Array.isArray(listed) || listed.some(file => typeof file !== "string" || !f
   throw new Error("VSCE returned an invalid package inventory");
 }
 const packaged = new Set(listed.map(file => file.replace(/^\.\//, "").replace(/\\/g, "/")));
+if (packaged.has("preview.json") || packaged.has("simpleex.cmd")) throw new Error("VSIX contains a publisher index or Windows launcher");
 const entrypoints = [packageJson.main, ...Object.values(packageJson.bin || {})]
   .filter(Boolean)
   .map((entry) => String(entry).replace(/^\.\//, "").replace(/\\/g, "/"));
@@ -49,6 +50,9 @@ for (const candidate of spawnCandidates) {
   }
 }
 const closure = collectLocalRuntimeClosure(root, entrypoints, spawnCandidates.filter((candidate) => fs.existsSync(path.join(root, candidate))));
+const runtimeModules = new Set(closure.map(item => item.file));
+const unexpectedModules = [...packaged].filter(file => file.startsWith("dist/") && file.endsWith(".js") && !runtimeModules.has(file));
+if (unexpectedModules.length) throw new Error("VSIX includes unreachable compiled modules: " + unexpectedModules.join(", "));
 for (const item of closure) {
   const normalized = item.file;
   if (!packaged.has(normalized) && !packaged.has(`extension/${normalized}`)) {

@@ -99,6 +99,8 @@ function runValidationTests(execute, roots, nodeExecutable, alreadyRun = new Set
   for (const file of ["test/features/projectResultPublication.test.js", "test/core/hostOperationLease.test.js", "test/core/resourceLeaseCompatibility.test.js"])
     run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", file], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/hostOperationLease.test.js"], SFTP_ROOT, { inherit: true, timeout: 20000 });
+  run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/panelBuildManifest.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/panelBuildIdentity.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
 }
 
 function getReleaseValidationInventory(roots = { experiment: EXPERIMENT_ROOT, sftp: SFTP_ROOT }) {
