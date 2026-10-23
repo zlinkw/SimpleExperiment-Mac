@@ -112,13 +112,13 @@ test("debug output isolation uses snapshot hash and writes to debug_runs", async
     // verify debug output isolation via agent runtime: materialize snapshot should be under simple_cluster/drafts/snapshots
     const script = [
       "import importlib.util, json, os",
-      `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-      "agent = importlib.util.module_from_spec(spec)",
-      "spec.loader.exec_module(agent)",
+      `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "event_is_debug_run", "materialize_draft_snapshot"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+      "agent = spec",
+      "pass",
       `root = r'${root.replace(/\\/g, "/")}'`,
       `print(json.dumps(agent.materialize_draft_snapshot(root, 'tmp/plan/d.yaml')))`
     ].join("\n");
-    const result = spawnSync("python", ["-c", script], { encoding: "utf8" });
+    const result = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(result.status, 0, result.stderr);
     const snap = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
     assert.ok(snap.executionPlan.startsWith("simple_cluster/drafts/snapshots/"));
@@ -132,12 +132,12 @@ test("debug output isolation uses snapshot hash and writes to debug_runs", async
     writeFileSync(root, "experiments/results/results.csv", "a,b\n3,4\n");
     const discScript = [
       "import importlib.util, json",
-      `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-      "agent = importlib.util.module_from_spec(spec)",
-      "spec.loader.exec_module(agent)",
+      `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "event_is_debug_run", "materialize_draft_snapshot"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+      "agent = spec",
+      "pass",
       `print(json.dumps(agent.discover_result_files(r'${root.replace(/\\/g, "/")}')))`
     ].join("\n");
-    const disc = spawnSync("python", ["-c", discScript], { encoding: "utf8" });
+    const disc = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, discScript, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(disc.status, 0, disc.stderr);
     const files = JSON.parse(disc.stdout.trim().split(/\r?\n/).at(-1));
     assert.ok(files.includes("experiments/results/results.csv"));
@@ -311,12 +311,12 @@ test("debug results not entering archive/statistics/paper evidence/PPT", async (
     writeFileSync(root, "tmp/result/preview.png", "fake");
     const script = [
       "import importlib.util, json",
-      `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-      "agent = importlib.util.module_from_spec(spec)",
-      "spec.loader.exec_module(agent)",
+      `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "event_is_debug_run", "materialize_draft_snapshot"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+      "agent = spec",
+      "pass",
       `print(json.dumps(agent.discover_result_files(r'${root.replace(/\\/g, "/")}')))`
     ].join("\n");
-    const disc = spawnSync("python", ["-c", script], { encoding: "utf8" });
+    const disc = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(disc.status, 0, disc.stderr);
     const files = JSON.parse(disc.stdout.trim().split(/\r?\n/).at(-1));
     assert.ok(!files.some(f => f.includes("debug_runs")), "debug_runs should be excluded");
@@ -324,14 +324,14 @@ test("debug results not entering archive/statistics/paper evidence/PPT", async (
     // ensure debug event not triggers auto completion
     const agentScript = [
       "import importlib.util, json",
-      `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-      "agent = importlib.util.module_from_spec(spec)",
-      "spec.loader.exec_module(agent)",
+      `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "event_is_debug_run", "materialize_draft_snapshot"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+      "agent = spec",
+      "pass",
       `print(json.dumps(agent.event_is_debug_run({'payload': {'debugMode': True}})))`,
       `print(json.dumps(agent.event_is_debug_run({'payload': {'path': 'simple_cluster/debug_runs/a/b.txt'}})))`,
       `print(json.dumps(agent.event_is_debug_run({'payload': {'path': 'experiments/results/c.csv'}})))`
     ].join("\n");
-    const ev = spawnSync("python", ["-c", agentScript], { encoding: "utf8" });
+    const ev = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, agentScript, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(ev.status, 0, ev.stderr);
     const lines = ev.stdout.trim().split(/\r?\n/).slice(-3).map(l => JSON.parse(l));
     assert.equal(lines[0], true);
@@ -414,12 +414,12 @@ test("tmp/result not considered formal result whitelist", async () => {
     writeFileSync(root, "tmp/result/analysis.csv", "a,b\n1,2\n");
     const script = [
       "import importlib.util, json",
-      `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-      "agent = importlib.util.module_from_spec(spec)",
-      "spec.loader.exec_module(agent)",
+      `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "event_is_debug_run", "materialize_draft_snapshot"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+      "agent = spec",
+      "pass",
       `print(json.dumps(agent.discover_result_files(r'${root.replace(/\\/g, "/")}')))`
     ].join("\n");
-    const disc = spawnSync("python", ["-c", script], { encoding: "utf8" });
+    const disc = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(disc.status, 0, disc.stderr);
     const files = JSON.parse(disc.stdout.trim().split(/\r?\n/).at(-1));
     assert.ok(!files.includes("tmp/result/analysis.csv"));

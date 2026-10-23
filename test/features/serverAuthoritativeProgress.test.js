@@ -9,18 +9,26 @@ require.extensions['.ts'] = (loaded, filename) => loaded._compile(ts.transpileMo
 }).outputText, filename);
 const queue = require('../../src/features/DistributedPlanQueue.ts');
 const policy = require('../../src/features/DistributedSchedulingPolicy.ts');
+const workerTaskQuery = require('../../src/features/WorkerTaskQuery.ts');
+const progressQuery = require('../../src/features/WorkerProgressQuery.ts');
+const { cleanupDigest } = require('../../src/features/PlanCleanup.ts');
 const { LatestSnapshotWriter } = require('../../src/core/LatestSnapshotWriter.ts');
 require.extensions['.ts'] = original;
 const now = Date.now();
 const iso = new Date(now).toISOString();
 function intent() {
   const result = queue.enqueuePlan(queue.emptyDistributedQueue(), {projectId:'project',schedulingMode:'server_prequeue',
-    planFile:'p.yaml',revision:'r',codeFingerprint:'f',jobs:[0,1].map(index=>({index,case:'bus',seed:42+index,outputDir:`runs/${index}`}))},'p',iso);
-  return policy.allocateServerPrequeue(result,[{workerId:'a',online:true,weight:1,codeFingerprint:'f'},
-    {workerId:'b',online:true,weight:1,codeFingerprint:'f'}]).queue;
+    planFile:'p.yaml',revision:'r',codeFingerprint:'f',jobs:[0,1].map(index=>({index,case:'bus',seed:42+index,collectionResultCsv:`tmp/result/${index}.csv`,outputDir:`runs/${index}`}))},'p',iso);
+  return policy.allocateServerPrequeue(result,[{workerId:'a',declaredJobPaths:true,online:true,weight:1,codeFingerprint:'f'},
+    {workerId:'b',declaredJobPaths:true,online:true,weight:1,codeFingerprint:'f'}]).queue;
 }
 function snapshot(plan, job, status='running', overrides={}) {
-  return {workerId:job.workerId,generatedAt:iso,fetchedAt:iso,capabilities:{durablePlanQueue:true,schemaVersion:1},tasks:[{
+  return {workerId:job.workerId,generatedAt:iso,fetchedAt:iso,queryComplete:true,capabilities:{durablePlanQueue:true,taskLifecycle:2,schemaVersion:1},tasks:[{
+    lifecycleProtocol:2,resultPathPolicy:'declared',globalJobId:job.globalJobId,collectionResultCsv:job.collectionResultCsv,
+    observation:{commandId:job.commandId,projectId:plan.projectId,workerId:job.workerId,lifecycleProtocol:2,observedAt:iso,
+      ...(status==='completed'?{tmux:{windowId:'@'+job.index,paneId:'%'+job.index,dead:true,exitCode:0},result:{runId:job.commandId,status:'completed',present:true,verified:true,identityMatches:true,exitCode:0},
+        runtimeDiagnostics:{schemaVersion:1,commandId:job.commandId,runId:job.commandId,state:'clear',count:0,scanComplete:true}}
+        :{tmux:{windowId:'@'+job.index,paneId:'%'+job.index,dead:status==='failed',exitCode:status==='failed'?1:undefined,phase:status==='queued'?'queued':'running'}})},
     projectId:plan.projectId,workflowId:plan.id,planFile:plan.planFile,planRevision:plan.revision,
     codeFingerprint:plan.codeFingerprint,planJobCount:plan.planJobCount,enqueuedAt:plan.enqueuedAt,
     experimentIndex:job.index,attempt:job.attempt,case:job.case,seed:job.seed,outputDir:job.outputDir,
@@ -36,23 +44,28 @@ test('all-server projection immediately supersedes local running, while one fail
   const partial=policy.serverAuthoritativeProgress(input,[snapshots[0],{...snapshots[1],error:'disconnected'}],'project',now);
   assert.deepEqual(partial[0].jobs.map(job=>job.status),['completed','unknown']);
   assert.equal(partial[0].jobs[1].commandId,plan.jobs[1].commandId);
-  const expired=policy.serverAuthoritativeProgress(input,snapshots,'project',now+5001);
-  assert.ok(expired[0].jobs.every(job=>job.status==='unknown'));
+  const expired=policy.serverAuthoritativeProgress({...input,plans:projected},snapshots,'project',now+policy.PROGRESS_FRESHNESS_MS+1);
+  assert.deepEqual(expired[0].jobs.map(job=>job.status),['completed','unknown'],'TTL expiry cannot revoke a verified completion; an active query becomes unknown');
 });
-test('a poll predating a verified dispatch receipt does not undo queued status, but newer or untrusted evidence does', () => {
+test('native dispatch receipts cannot replace current observations, including an empty or failed query', () => {
   const input=intent(), plan=input.plans[0], job=plan.jobs[0];
   job.status='queued';job.dispatchAcknowledgedAt=iso;job.lastDispatchAttemptAt=iso;
   const before=snapshot(plan,job,'queued',{tasks:[],generatedAt:new Date(now-100).toISOString(),fetchedAt:new Date(now-100).toISOString()});
   const other=snapshot(plan,plan.jobs[1]);
   const project=owner=>policy.serverAuthoritativeProgress(input,[owner,other],'project',now+1000)[0].jobs[0];
-  assert.equal(project(before).status,'queued');
+  assert.equal(project(before).status,'unknown');
   assert.equal(project({...before,fetchedAt:new Date(now+1).toISOString()}).status,'unknown','newer empty poll is unresolved ownership');
   assert.equal(project({...before,error:'disconnected'}).status,'unknown');
-  assert.equal(project({...before,fetchedAt:new Date(now-6000).toISOString()}).status,'unknown');
-  const mismatch=snapshot(plan,job,'running');mismatch.tasks[0].seed++;
-  assert.equal(project(mismatch).status,'unknown','receipt grace cannot hide conflicting identity');
+  assert.equal(project({...before,fetchedAt:new Date(now-policy.PROGRESS_FRESHNESS_MS-1).toISOString()}).status,'unknown');
+  for (const [field, value] of [['seed',999],['case','foreign'],['planFile','other.yaml'],['workflowId','foreign-workflow'],['experimentIndex',99],['globalJobId','foreign:0'],['workerId','foreign-worker']]) {
+    const mismatch=snapshot(plan,job,'running'); mismatch.tasks[0][field]=value;
+    const result=project(mismatch); assert.equal(result.status,'unknown',field); assert.match(result.statusQueryError,/身份/);
+    assert.equal(result.commandId,job.commandId); assert.equal(input.plans[0].jobs[0].status,'queued');
+  }
+  const historical=snapshot(plan,job,'running');historical.tasks[0].planRevision='old-revision';historical.tasks[0].codeFingerprint='old-code';
+  assert.equal(project(historical).status,'running','historical source provenance does not block a current exact command observation');
   assert.equal(policy.serverAuthoritativeProgress(input,[before,other],'project',now+11000)[0].jobs[0].status,'unknown');
-  job.status='dispatching';assert.equal(project(before).status,'dispatching');
+  job.status='dispatching';assert.equal(project(before).status,'unknown');
   job.status='unknown';assert.equal(project(before).status,'unknown','unconfirmed RPC never fabricates an accepted state');
 });
 test('cold restart rebuilds hosted identities across servers without duplicate jobs or fabricated completion', () => {
@@ -60,8 +73,8 @@ test('cold restart rebuilds hosted identities across servers without duplicate j
   let restored=queue.emptyDistributedQueue();
   for(let index=0;index<3;index++) restored={...restored,plans:policy.serverAuthoritativeProgress(restored,snapshots,'project',now)};
   assert.equal(restored.plans.length,1); assert.equal(restored.plans[0].jobs.length,2);
-  assert.equal(restored.plans[0].schedulingMode,'server_prequeue');
-  assert.equal(restored.plans[0].remoteAcceptedJobCount,2);
+  assert.notEqual(restored.plans[0].schedulingMode,'server_prequeue','remote history cannot re-enable the old hosting policy');
+  assert.ok(restored.plans[0].jobs.every(job=>job.lifecycleProtocol===2 && job.completionState==='verified'));
   assert.deepEqual(restored.plans[0].jobs.map(job=>job.commandId),plan.jobs.map(job=>job.commandId));
   assert.equal(policy.serverAuthoritativeProgress(input,[],'project',now)[0].jobs[0].status,'unknown');
 });
@@ -69,7 +82,7 @@ test('known unassigned local intent remains waiting rather than missing server s
   const input=intent(); const plan=input.plans[0];
   Object.assign(plan.jobs[1],{status:'pending',workerId:undefined,commandId:undefined,runKey:undefined});
   const projected=policy.serverAuthoritativeProgress(input,[snapshot(plan,plan.jobs[0])],'project',now)[0];
-  assert.equal(projected.jobs[1].status,'pending'); assert.equal(projected.recoveryMissingCount,0);
+  assert.equal(projected.jobs[1].status,'pending'); assert.equal(queue.distributedPlanRecoveryMissingCount(projected,new Set([0])),0);
 });
 test('hosted unbound GPU receives its first authoritative GPU without false identity conflict', () => {
   const input=intent(); const plan=input.plans[0]; const job=plan.jobs[0]; job.gpuId='';job.status='queued';
@@ -78,10 +91,13 @@ test('hosted unbound GPU receives its first authoritative GPU without false iden
   const bound=policy.serverAuthoritativeProgress(input,[remote,snapshot(plan,plan.jobs[1])],'project',now)[0];
   assert.equal(bound.jobs[0].gpuId,'0');assert.equal(bound.jobs[0].status,'running');assert.equal(bound.jobs[0].recoveryConflict,undefined);
   remote.tasks[0].gpuId='1';assert.equal(queue.remoteTaskMatchesJob(bound,bound.jobs[0],remote.tasks[0]),false);
+  const conflict=policy.serverAuthoritativeProgress({...input,plans:[bound]},[remote],'project',now)[0].jobs[0];
+  assert.equal(conflict.status,'unknown','a later different GPU cannot reuse the original binding');
+  assert.equal(conflict.gpuId,'0','a contradictory response cannot replace the original stop target');
   plan.schedulingMode='local_idle';assert.equal(queue.remoteTaskMatchesJob(plan,job,remote.tasks[0]),false);
 });
 
-test('fresh matching receipts clear a resolved code-proof block without erasing retry provenance', () => {
+test('fresh observations replace cached code-proof warnings without erasing retry provenance', () => {
   const input=intent(), plan=input.plans[0], job=plan.jobs[0];
   const error='code-sync proof identity mismatch or stale runtime generation';
   Object.assign(job,{status:'queued',error,automaticRetry:{failureCount:1,failedAttempt:1,lastError:'CUDA failure'},
@@ -95,14 +111,15 @@ test('fresh matching receipts clear a resolved code-proof block without erasing 
     assert.deepEqual(result.automaticRetry,job.automaticRetry);assert.deepEqual(result.history,job.history);
   }
   const stillBlocked=snapshot(plan,job,'queued');stillBlocked.tasks[0].error=error;
-  assert.equal(project(stillBlocked).error,error,'current server rejection remains visible');
+  assert.equal(project(stillBlocked).error,undefined,'a queued observation cannot resurrect a stale receipt error');
   const missingError=snapshot(plan,job,'queued');
-  assert.equal(project({...missingError,error:'disconnected'}).error,error);
-  assert.equal(project({...missingError,fetchedAt:new Date(now-6000).toISOString()}).error,error);
+  assert.equal(project({...missingError,error:'disconnected'}).statusQueryError,'disconnected');
+  assert.ok(project({...missingError,fetchedAt:new Date(now-policy.PROGRESS_FRESHNESS_MS-1).toISOString()}).statusQueryError);
   const mismatch=snapshot(plan,job,'queued');mismatch.tasks[0].seed++;
-  assert.equal(project(mismatch).error,error);
+  assert.equal(project(mismatch).status,'unknown');
   job.status='failed';job.trustedTerminalStatus='failed';job.error='CUDA failure';
-  assert.equal(project(snapshot(plan,job,'failed')).error,'CUDA failure','terminal failure evidence is preserved');
+  const failed=snapshot(plan,job,'failed'); failed.tasks[0].error='CUDA failure';
+  assert.equal(project(failed).error,'CUDA failure','current terminal failure evidence is preserved');
 });
 
 function providerMethods(names, extra={}) {
@@ -114,16 +131,16 @@ function providerMethods(names, extra={}) {
     {AbortController,setTimeout,clearTimeout,workspaceRoot:()=>'/project',mapLimited:async(rows,_limit,callback)=>Promise.all(rows.map(callback)),...extra});
 }
 test('actual provider read-only progress lane publishes a fast server while dispatch and another server stay pending', async () => {
-  const Provider=providerMethods(['refreshServerPlanProgress']); const provider=new Provider();
+  const Provider=providerMethods(['refreshServerPlanProgress'],{DistributedSchedulingPolicy:policy}); const provider=new Provider();
   provider.distributedQueueRoot='/project';provider.distributedQueueCache={plans:[{}]};provider.isRealtimeMode=()=>true;
   provider.workerActionTargets=()=>[{id:'fast'},{id:'slow'}];provider.postState=()=>{};
   let release;let fast=false;let calls=0;
   const slow=new Promise(resolve=>release=resolve);
   provider.distributedQueueTickPromise=new Promise(()=>{});
-  provider.readWorkerTaskSnapshot=async id=>{calls++;if(id==='slow')await slow;else fast=true;};
+  provider.readWorkerTaskSnapshot=async (id,options)=>{calls++;if(options.executionOnly) provider.executionReads=(provider.executionReads||0)+1;else provider.metadataReads=(provider.metadataReads||0)+1;if(id==='slow')await slow;else fast=true;};
   const first=provider.refreshServerPlanProgress(); const second=provider.refreshServerPlanProgress();
-  await Promise.resolve();assert.equal(fast,true);assert.equal(calls,2);
-  release();await Promise.all([first,second]);assert.equal(provider.progressRefreshPromise,undefined);
+  await Promise.resolve();assert.equal(fast,true);assert.equal(provider.metadataReads,2,'full pending metadata reads are shared');assert.equal(provider.executionReads,4,'execution reads remain independent of blocked full rounds');
+  release();await Promise.all([first,second]);assert.equal(provider.progressRefreshRequests.size,0);
 });
 
 test('automatic progress polling ignores terminal history and targets only live ownership', async () => {
@@ -132,7 +149,7 @@ test('automatic progress polling ignores terminal history and targets only live 
   provider.distributedQueueRoot='/project'; provider.isRealtimeMode=()=>true;
   provider.workerActionTargets=()=>[{id:'a'},{id:'b'},{id:'c'}];
   provider.postState=()=>{};
-  const calls=[]; provider.readWorkerTaskSnapshot=async id=>calls.push(id);
+  const calls=[]; provider.readWorkerTaskSnapshot=async (id,options)=>{if(!options.executionOnly)calls.push(id);};
   provider.distributedQueueCache={plans:Array.from({length:28},()=>({jobs:[{status:'completed',workerId:'a'}]}))};
   for(let tick=0;tick<30;tick++) await provider.refreshServerPlanProgress({automatic:true});
   assert.deepEqual(calls,[]);
@@ -156,12 +173,14 @@ test('automatic progress still probes uncertain ownership and recall, but not re
 });
 test('actual snapshot reader deduplicates fresh reads, publishes immediately and invalidates cached running on failure', async () => {
   const Provider=providerMethods(['readWorkerTaskSnapshot','refreshWorkerTaskSnapshot','storeWorkerTaskSnapshot','queueWorkerTaskSnapshotPersistence','workerTaskSnapshotWriters'],{
-    LatestSnapshotWriter,
+    LatestSnapshotWriter, WorkerTaskQuery:workerTaskQuery, WorkerProgressQuery:progressQuery, cleanupDigest,
+    errorMessage:error=>String(error?.message||error),
     workerTaskSnapshotPayload:row=>row,workerTaskLooksRunning:row=>row.status==='running',RequestBudget_1:{RequestBudgetDeniedError:class extends Error{}},
     noteWorkerTaskPlanStatus() {},
   });
   const provider=new Provider();provider.workerTaskRequests=new Map();provider.lastWorkerTaskSnapshots=new Map();
   provider.noteWorkerTaskPlanStatus=()=>{};
+  provider.loadDistributedQueue=async()=>({plans:[]});
   provider.workerTaskSnapshotDiskCache=new Map();provider.workerTaskPlanStatusSignatures=new Map();
   provider.cachedWorkerTaskSnapshot=(_worker,_root,key)=>provider.lastWorkerTaskSnapshots.get(key);
   let releaseDisk; const diskGate=new Promise(resolve=>{releaseDisk=resolve;});
@@ -178,7 +197,7 @@ test('actual snapshot reader deduplicates fresh reads, publishes immediately and
   assert.equal(count,1);assert.equal(posts,1);
   provider.client.getWorkerTasks=async()=>{throw new Error('offline');};
   const failed=await provider.readWorkerTaskSnapshot('w',{fresh:true});
-  assert.equal(failed.error,'Worker task snapshot unavailable');
+  assert.equal(failed.error,'Worker w · /api/worker/tasks/query：offline','the failed round records its real per-Worker query error');
   assert.equal(provider.lastWorkerTaskSnapshots.get('/project\u0000w').error,failed.error);assert.equal(posts,2);
 });
 

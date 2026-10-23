@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..", "..");
 
 test("agent isolates incremental event cursors for concurrent SSE readers", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) {
     t.skip("python unavailable");
     return;
@@ -19,9 +19,10 @@ test("agent isolates incremental event cursors for concurrent SSE readers", (t) 
   fs.writeFileSync(script, `
 import importlib.util, json, pathlib
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["EVENT_CURSOR_CACHE", "path_for", "read_events_since"])
 
 root = ${JSON.stringify(project)}
 journal = pathlib.Path(agent.path_for(root, "events.jsonl"))
@@ -62,7 +63,7 @@ print(json.dumps({
     "gapSeq": gap[0].get("seq"),
 }))
 `, "utf8");
-  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.deepEqual(result.firstA, [3, 4, 5]);

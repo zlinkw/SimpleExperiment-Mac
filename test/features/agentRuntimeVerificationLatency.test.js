@@ -17,9 +17,13 @@ test("runtime verification overlaps Workers without dropping SHA256 or version c
     fetch: async (url) => {
       requests.push(url); active++; maxActive = Math.max(maxActive, active);
       await new Promise(resolve => setTimeout(resolve, 10)); active--;
+      // Mac 适配：Mac Worker 的版本接口额外携带 schedulerRuntime 控制报告（独立调度器运行证据），
+      // 生产校验要求 protocol=1、status=current 且运行版本/文件摘要与期望一致。
       return { ok: true, json: async () => url.includes("sha256")
         ? { ok: true, sha256: (mismatch && url.includes(':2/') ? 'b' : 'a').repeat(64) }
-        : { agentVersion: "v1", runtimeVersion: mismatch && url.includes(':3/') ? 'old' : "v1", pluginVersion: "v1" } };
+        : { agentVersion: "v1", runtimeVersion: mismatch && url.includes(':3/') ? 'old' : "v1", pluginVersion: "v1",
+            schedulerRuntime: { protocol: 1, status: "current", runningVersion: "v1",
+              runtimeFiles: { "cluster_agent.py": "a".repeat(64), "cluster_scheduler.py": "a".repeat(64) } } } };
     } };
   vm.createContext(sandbox);
   vm.runInContext("this.verify = ({" + source.slice(start, end) + "}).verifyDeployedAgentRuntime", sandbox);

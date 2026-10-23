@@ -14,7 +14,7 @@ const execFileAsync = promisify(execFile);
 function runCli(args, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
-      env: { ...process.env, ...extraEnv },
+      env: { ...process.env, ...extraEnv }, timeout:10000, windowsHide:true,
     });
     let stdout = "";
     let stderr = "";
@@ -66,7 +66,7 @@ async function startServer(methods = {}, options = {}) {
     token: discovery.token,
     cleanup: async () => {
       await server.dispose();
-      // Retain the isolated fixture and discovery evidence after closing the listener.
+      // Keep the private API fixture directory for audit.
     },
   };
 }
@@ -317,10 +317,10 @@ test("live output Local API returns the direct Worker response before cached log
 });
 
 test("SimpleExperiment accepts topology aliases and keeps configured remote roots authoritative", () => {
-  // Mac working-tree contract: worker_pool is the only executable mode; legacy values stay readable and collapse to it.
   assert.equal(topologyMode.normalizeTopologyMode("standalone"), "worker_pool");
   assert.equal(topologyMode.normalizeTopologyMode("worker_only"), "worker_pool");
   assert.equal(topologyMode.normalizeTopologyMode("hub_available"), "worker_pool");
+  // Mac working-tree contract: worker_pool is the only executable mode; legacy values stay readable and collapse to it.
   assert.equal(topologyMode.normalizeTopologyMode("banana"), undefined);
   assert.equal(workflow.resolveApiRemoteRoot("/data/qgking/zlk", { id: "nwpu3" }), "/data/qgking/zlk");
   assert.equal(workflow.resolveApiRemoteRoot("/data/custom", { id: "nwpu3" }), "/data/custom");
@@ -496,6 +496,7 @@ test("SimpleExperiment uses one configured root across workflow, runtime and SFT
   // Retired Hub is never a preparation target (HUB_REMOVED contract); only Worker endpoints are resolved.
   assert.doesNotMatch(targetBody, /hub\.remotePath/);
   assert.doesNotMatch(targetBody, /role: "hub"/);
+  assert.doesNotMatch(targetBody, /resolveApiRemoteRootWithPolicy\(hub\.remotePath/);
   assert.match(targetBody, /resolveApiRemoteRootWithPolicy\(target\.remotePath, worker/);
   assert.match(targetBody, /workDir: this\.agentRuntimeDirs\(remoteRoot\)\.workDir \|\| ""/);
 
@@ -558,10 +559,9 @@ test("one-shot workflow can auto prepare only after explicit confirmation", () =
   assert.match(extensionSource, /await this\.apiProjectPrepare\(\{ \.\.\.params, confirm: true \}\)/);
 });
 
-test("SimpleExperiment exposes a modal-confirmed standard experiment runner", () => {
+test("SimpleExperiment exposes a standard runner with explicit output confirmation in the main panel", () => {
   assert.match(extensionSource, /"workflow\.plan": async \(params\) => this\.apiWorkflowPlan\(params\)/);
   assert.match(extensionSource, /"workflow\.run": async \(params\) => this\.apiWorkflowRun\(params\)/);
-  // Frozen 0.5.400 runner receipt: submission proceeds detached and output-path confirmation happens in the main panel.
   assert.match(extensionSource, /confirmation: "main_panel_if_outputs_exist"/);
   assert.match(extensionSource, /await this\.runActionCommand\("runPlan", route\.calls\[0\]\.params\)/);
   assert.match(extensionSource, /status: "checking_workers"/);
@@ -631,6 +631,10 @@ test("SimpleExperiment parameterized onboarding uses one structured confirmation
   assert.match(extensionSource, /PROJECT_FLOW_STATE_PATH = "simple_cluster\/ui\/flow_state\.json"/);
   // The retired-Hub gate no longer fabricates saved-session identity in prepare; identity stays at the manual boundary.
   assert.match(extensionSource, /HUB_REMOVED/);
+  // Mac contract: apiMergedSetupConfig derives the Worker agent project directory
+  // from the resolved remote root through the Mac runtime layout (workDir child),
+  // instead of copying the raw row paths the Windows baseline stores.
+  assert.match(extensionSource, /agentProjectDir: remoteRoot \? this\.agentRuntimeDirs\(remoteRoot\)\.workDir : ""/);
 
   const start = extensionSource.indexOf("async runApiBootstrapOperation");
   const end = extensionSource.indexOf("async apiProjectBootstrapOperation", start);

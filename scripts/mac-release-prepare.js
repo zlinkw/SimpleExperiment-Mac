@@ -101,6 +101,14 @@ function runValidationTests(execute, roots, nodeExecutable, alreadyRun = new Set
   run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/hostOperationLease.test.js"], SFTP_ROOT, { inherit: true, timeout: 20000 });
   run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/panelBuildManifest.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
   run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", "test/features/panelBuildIdentity.test.js"], EXPERIMENT_ROOT, { inherit: true, timeout: 20000 });
+  // Frozen .403/.107 reverse-impact inventory, plus the full companion suite.
+  // This list contains only additions to the original gates; run() rejects duplicates.
+  for (const row of require("./mac-release-regressions.json")) {
+    if (!["experiment", "sftp"].includes(row.component) || !/^test\/[^\\:]+\.test\.js$/.test(row.file)
+      || row.file.split("/").includes("..")) throw new Error("Unsafe release regression path");
+    run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", row.file],
+      row.component === "experiment" ? EXPERIMENT_ROOT : SFTP_ROOT, { inherit: true, timeout: 20000 });
+  }
 }
 
 function getReleaseValidationInventory(roots = { experiment: EXPERIMENT_ROOT, sftp: SFTP_ROOT }) {
@@ -118,12 +126,13 @@ function buildReleaseNotes(commits, versions) {
   return `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-同步 Windows Experiment 0.5.400/30626e78ea2f4b8a3e19e2cb09ae6aefcc6deb39 及 SFTP 0.2.104/13ef630a12c6ea02ad9277452e75dbf443b9a34b，采用正式任务身份/精确停止、进度与真实shell预检、人工拒绝恢复、失败job审核、全部正式Plan成功后的Worker镜像及更新等待优化。批次、平台边界与提交矩阵见docs/windows-alignment-2026-10-22.md。另修复隧道 -L 改按 ssh -G 单源判定、隧道生命周期身份/nonce与kill/取消只报告已验证事实、同步范围整树冻结与写前复查、macOS尾空格Plan文件选择及workflow工作区严格POSIX身份。保留Mac独立身份/preview静态索引/Termius手动端点/POSIX/认证/本机中转/共享租约/GPU内部标签，未复制Windows发布或自动部署。
+新增机器级GPU单源采集与请求绑定准入、项目/程序/机器状态/产物四根保护、独立隔离重跑审核与批次账本，精确busy拒绝及系统Python解析修复。Mac保留精确POSIX身份与合法尾空格；冷构建从已跟踪源码生成checksum，用户模板不依赖随包文档。
+同步 Windows Experiment 0.5.403/c30d607f1b63d224e8a65ab94371d86b4dd81c0d 及 SFTP 0.2.107/fc962236210ca692397dd58eefbefd0bf108f85a，采用正式任务身份/精确停止、进度与真实shell预检、人工拒绝恢复、失败job审核、全部正式Plan成功后的Worker镜像及更新等待优化。批次、平台边界与提交矩阵见docs/windows-alignment-2026-10-24.md。另修复隧道 -L 改按 ssh -G 单源判定、隧道生命周期身份/nonce与kill/取消只报告已验证事实、同步范围整树冻结与写前复查、macOS尾空格Plan文件选择及workflow工作区严格POSIX身份。保留Mac独立身份/preview静态索引/Termius手动端点/POSIX/认证/本机中转/共享租约/GPU内部标签，未复制Windows发布或自动部署。
 正式任务身份通过独立shell传递，清除继承的其他job环境与Agent token；停止只针对原command绑定Pane，不关闭共享GPU容器。正式控制无需attempt；历史attempt只读，现有任务不迁移。Worker缺匹配正式身份/停止/环境预检能力时明确拒绝新控制。
 启动前预检只按真实资产进度延长等待，重复阶段心跳/停滞/计数倒退/坏JSON/取消都拒绝并保留neverStarted回执。预检和执行使用同一配置shell/解释器，缺环境先失败。tasks.preflight、tasks.preflight.status、tasks.preflight.cancel仅诊断原失败job，不训练或改队列；environmentOnly只检查原环境，调用前须读discovery和live capabilities。
 失败卡片“重新排队此 job”遇占用输出可进入“审核遗留文件”。只读预览冻结workflow/index/command，只处理独占正式目录和声明CSV，经完整终态owner及SHA核验。归档batch纳入不可变摘要/精确确认，CSV先于owner目录；成功同伴、PLAN和共享引用保留。全部节点完成后仍需返回原卡片人工确认重排，不自动清理或重跑。
 全部正式Plan成功后通过SimpleSFTP在启用Worker间镜像其声明权重、日志、配置和CSV，冻结原run身份、路径、owner/hash，持久回执合并、重连只补缺项。失败/运行中/取消/不可用/恢复不完整/历史attempt不触发；活动writer、清理hold、来源身份或目标内容冲突均阻止覆盖。本机解析、汇总、归档及论文发布继续手动，原始指标不自动下载到本机。
-更新门禁保留已有传输续租/验主，可取消更新等待且原传输继续。未知安装回执即使首项无完成记录也保持业务封锁；原批次/清单冻结，重载后仅提示用户点击补装，不自动安装。未完成入场ticket和存活/无法证明退出的持有者都要等待；协议要求SFTP Mac至少0.2.102。
+更新门禁保留已有传输续租/验主，可取消更新等待且原传输继续。未知安装回执即使首项无完成记录也保持业务封锁；原批次/清单冻结，重载后仅提示用户点击补装，不自动安装。未完成入场ticket和存活/无法证明退出的持有者都要等待；本版配套最低要求SFTP Mac至少0.2.103；共同更新等待协议继续兼容已安装的0.2.102，以便正常升级本配套。
 macOS清理已接入原生句柄证明及整树冻结；权限、ABI或句柄证据不完整时仍报HANDLE_CHECK_UNAVAILABLE并阻断。本轮未验证真机libproc或实际删除。永久删除两次完整路径确认、物理直接父目录与最短子项执行器不放宽。
 
 本地验证

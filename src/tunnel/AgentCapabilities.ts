@@ -10,6 +10,10 @@ export interface AgentHealthResponse {
   uptimeSeconds: number;
   projectRoot: string;
   agentInstallDir?: string;
+  agentStateDir?: string;
+  workerStateDir?: string;
+  workerId?: string;
+  gpuCollectorProtocol?: number;
   schedulerDependencies?: unknown;
   status: "ok" | "degraded";
 }

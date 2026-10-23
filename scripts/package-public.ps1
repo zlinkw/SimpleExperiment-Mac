@@ -64,27 +64,14 @@ foreach ($file in @($sftpVsix, $experimentVsix)) {
 }
 
 foreach ($source in @(
-        (Join-Path $root "scripts\\install-public-release.ps1"),
-        (Join-Path $root "docs\\simple-experiment-setup.md")
+        (Join-Path $root "scripts\\install-public-release.ps1")
     )) {
     $destination = Join-Path $bundle (Split-Path -Leaf $source)
     [System.IO.File]::Copy($source, $destination, $false)
 }
 
-$readme = @(
-    "# SimpleExperiment Offline Bundle",
-    "",
-    "1. Run install-public-release.ps1 from this directory.",
-    "2. In every open VS Code window, run Developer: Reload Window.",
-    "3. Run SimpleExperiment: Open Setup Guide from VS Code Command Palette.",
-    "4. Configure Xshell sessions, then set Hub/Worker project parent directories in SimpleExperiment.",
-    "",
-    "This bundle installs SimpleSFTP and SimpleExperiment together.",
-    "The installer removes legacy simple-local extension IDs after the public extensions are verified.",
-    "Before reload, an already-running legacy extension host can temporarily leave old private status-bar items beside the new UI."
-) -join [Environment]::NewLine
-
-$readmePath = Join-Path $bundle "README.md"
-[System.IO.File]::WriteAllText($readmePath, $readme, [System.Text.UTF8Encoding]::new($false))
+# 0.5.400 用户裁决：离线 bundle 不再附带 setup 指南、不再生成 bundle README（均非 vsce 强制项）；终端提示在线指南 URL。
+$onlineGuideUrl = "https://github.com/zlinkw/SimpleExperiment-Mac/blob/master/docs/simple-experiment-setup.md"
 
 Write-Host "Offline bundle created: $bundle"
+Write-Host "Setup guide (online): $onlineGuideUrl"

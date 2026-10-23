@@ -5,7 +5,7 @@ import * as crypto from "crypto";
 import * as fs from "fs/promises";
 import * as fsNode from "fs";
 import * as path from "path";
-import { projectFileIndex } from "./ProjectFileIndex";
+import { localFileIndexIdentity, projectFileIndex } from "./ProjectFileIndex";
 
 export type LocalCodeManifestEntry = { size: number; sha256: string };
 export type LocalCodeManifest = Record<string, LocalCodeManifestEntry>;
@@ -168,7 +168,7 @@ export async function hashLocalCodeFiles(
     }
   }
   if (cacheFile && path.basename(path.dirname(cacheFile)) === "code-manifest-cache") {
-    const index = projectFileIndex({ workspace: root, endpointId: "local", projectRoot: root, connection: "local:" + process.pid }, path.dirname(path.dirname(cacheFile)));
+    const index = projectFileIndex(localFileIndexIdentity(root), path.dirname(path.dirname(cacheFile)));
     await index.read({ method: "local.code-manifest", paths: files, signal }, async () => ({ files: Object.fromEntries(Object.entries(manifest).map(([name, row]) =>
       [name, { ...row, modifiedAtMs: nextFiles[name]?.mtimeMs, changedAtMs: nextFiles[name]?.ctimeMs, device: nextFiles[name]?.dev, inode: nextFiles[name]?.ino }])) }));
   }

@@ -147,14 +147,15 @@ test("all SimpleExperiment SFTP write paths pass through the strong confirmation
   const prepareSftp = source.slice(source.indexOf("async prepareSftpTargets"), source.indexOf("    sftpServerOptions"));
 
   assert.ok(preparation.indexOf("confirmRemoteWriteTargets") < preparation.indexOf("writeXshellAgentStartupCommands"));
-  assert.match(preparation, /deployLatestAgentRuntime\(false, true, \[\], true\)/);
+  assert.match(preparation, /deployLatestAgentRuntime\(false, true, \[\], true(?:,|\))/);
   assert.ok(startup.indexOf("confirmRemoteWriteTargets") < startup.indexOf("updateXshellSessionLoginCommand"));
   assert.match(startup, /写入 Agent 自启动路径/);
   assert.match(startup, /agentStartupWriteConfirmationDetail\(targets, runtimeTargets, false\)/);
   assert.match(preparation, /agentStartupWriteConfirmationDetail\(targets, runtimeTargets, true\)/);
-  assert.ok(deploy.indexOf("confirmRemoteWriteTargets") < deploy.indexOf('executeCommand("simpleSftp.uploadFiles"'));
-  assert.ok(downloadScope.indexOf("confirmRemoteWriteTargets") < downloadScope.indexOf('executeCommand("simpleSftp.configureDownloadScope"'));
-  assert.ok(sync.indexOf("confirmRemoteWriteTargets") < sync.indexOf('executeCommand("simpleSftp.uploadWorkspace"'));
+  // Mac 适配：Mac 侧 SFTP 编排命令身份为 simpleSftpMac.*，门禁顺序与计数契约不变。
+  assert.ok(deploy.indexOf("confirmRemoteWriteTargets") < deploy.indexOf('executeCommand("simpleSftpMac.uploadFiles"'));
+  assert.ok(downloadScope.indexOf("confirmRemoteWriteTargets") < downloadScope.indexOf('executeCommand("simpleSftpMac.configureDownloadScope"'));
+  assert.ok(sync.indexOf("confirmRemoteWriteTargets") < sync.indexOf('simpleSftpApiCall("upload.workspace"'));
   assert.match(confirm, /showWarningMessage\(remoteWriteConfirmationDetail\(operation, normalized, localProjectRoot\), \{ modal: true \}/);
   assert.match(confirm, /assertSingleProjectWorkspace\(operation\)/);
   assert.match(prepareSftp, /assertSingleProjectWorkspace\("SFTP 上传或目录配置"\)/);
@@ -163,8 +164,8 @@ test("all SimpleExperiment SFTP write paths pass through the strong confirmation
   assert.match(confirm, /persistProjectRemotePathConfirmationsState\(\)/);
   assert.match(prepareSftp, /assertSingleProjectWorkspace\("SFTP 上传或目录配置"\)[\s\S]{0,180}ensureSimpleSftpReadyForSetup\("文件传输"\)/);
   assert.match(source, /loadProjectRemotePathConfirmationsState\(\)\.catch\(\(\) => undefined\)/);
-  assert.equal([...source.matchAll(/executeCommand\("simpleSftp\.(?:uploadWorkspace|uploadFiles)"/g)].length, 6);
-  assert.equal([...source.matchAll(/executeCommand\("simpleSftp\.configureDownloadScope"/g)].length, 1);
+  assert.equal([...source.matchAll(/executeCommand\("simpleSftpMac\.(?:uploadWorkspace|uploadFiles)"|simpleSftpApiCall\("upload.workspace"/g)].length, 6);
+  assert.equal([...source.matchAll(/executeCommand\("simpleSftpMac\.configureDownloadScope"/g)].length, 1);
   assert.match(legacyNotes, /所有由 SimpleExperiment 发起的项目代码和 Agent runtime SFTP 上传都会先经过强制路径确认窗口/);
   assert.match(legacyNotes, /simple_cluster\/ui\/remote_path_confirmations\.json/);
   assert.match(legacyNotes, /取消窗口不会上传远端文件，也不会留下运行中状态/);
@@ -179,24 +180,24 @@ test("path confirmation precedes profile writes and upload-start state", () => {
 
   assert.ok(preparation.indexOf("confirmRemoteWriteTargets") < preparation.indexOf("writeSftpManagerServerProfiles("));
   assert.ok(deploy.indexOf("confirmRemoteWriteTargets") < deploy.indexOf("writeSftpManagerServerProfiles("));
-  assert.ok(deploy.indexOf("writeSftpManagerServerProfiles(") < deploy.indexOf('executeCommand("simpleSftp.uploadFiles"'));
+  assert.ok(deploy.indexOf("writeSftpManagerServerProfiles(") < deploy.indexOf('executeCommand("simpleSftpMac.uploadFiles"'));
   assert.ok(downloadScope.indexOf("confirmRemoteWriteTargets") < downloadScope.indexOf("writeSftpManagerServerProfiles("));
-  assert.ok(downloadScope.indexOf("writeSftpManagerServerProfiles(") < downloadScope.indexOf('executeCommand("simpleSftp.configureDownloadScope"'));
+  assert.ok(downloadScope.indexOf("writeSftpManagerServerProfiles(") < downloadScope.indexOf('executeCommand("simpleSftpMac.configureDownloadScope"'));
   assert.ok(sync.indexOf("confirmRemoteWriteTargets") < sync.indexOf("writeSftpManagerServerProfiles("));
   assert.ok(sync.indexOf("writeSftpManagerServerProfiles(") < sync.indexOf("notifyLocalActionStarted"));
-  assert.ok(sync.indexOf("notifyLocalActionStarted") < sync.indexOf('executeCommand("simpleSftp.uploadWorkspace"'));
+  assert.ok(sync.indexOf("notifyLocalActionStarted") < sync.indexOf('simpleSftpApiCall("upload.workspace"'));
   assert.doesNotMatch(prepareSftp, /writeSftpManagerServerProfiles/);
   assert.ok(prepareSftp.indexOf('ensureSimpleSftpReadyForSetup("文件传输")') < prepareSftp.indexOf("ensureSftpManagerCommand"));
   assert.doesNotMatch(prepareSftp, /syncXshellConfigBeforeNetwork|writeSftpManagerServerProfiles/);
   assert.ok(prepareSftp.indexOf("ensureSftpManagerCommand") < prepareSftp.indexOf("assertTopologyActualWorkRoots"));
-  assert.match(source, /writeSftpManagerServerProfiles\(targetIds\)[\s\S]{0,300}requestedIds\.has\(target\.id\)/);
+  assert.match(source, /writeSftpManagerServerProfiles\(targetIds\)[\s\S]{0,600}requestedIds\.has\(target\.id\)/);
   assert.match(legacyNotes, /操作确认前不会更新对应 SimpleSFTP 共享目标或显示上传已开始/);
   assert.match(legacyNotes, /操作确认前不会更新对应 SimpleSFTP 共享目标、修改 `\.xsh` 或显示上传已开始/);
 });
 
 test("remembered remote paths can be reset from project settings", () => {
   assert.match(source, /this\.confirmedRemotePaths = mergeRemotePathConfirmations\(/);
-  assert.match(source, /REMOTE_PATH_CONFIRMATIONS_WORKSPACE_KEY = "simpleExperiment\.remotePathConfirmations"/);
+  assert.match(source, /REMOTE_PATH_CONFIRMATIONS_WORKSPACE_KEY = "simpleExperimentMac\.remotePathConfirmations"/);
   assert.match(source, /mergeRemotePathConfirmations\(\s*loaded\.value,\s*this\.context\.workspaceState\.get\(REMOTE_PATH_CONFIRMATIONS_WORKSPACE_KEY, \[\]\),\s*\)/);
   assert.match(source, /await this\.context\.workspaceState\.update\(\s*REMOTE_PATH_CONFIRMATIONS_WORKSPACE_KEY,\s*mergeRemotePathConfirmations\(this\.confirmedRemotePaths\),\s*\)/);
   assert.match(source, /remotePathConfirmations: \{\s*count: this\.confirmedRemotePaths\.length/);

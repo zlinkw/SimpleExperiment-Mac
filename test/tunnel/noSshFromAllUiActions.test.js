@@ -17,8 +17,9 @@ test("all new ui actions use the current transport boundaries", () => {
   ];
   for (const command of commands) assert.match(extension + panel, new RegExp(command), command);
   assert.match(extension, /postTunnelAction\(action, body/);
-  assert.match(extension, /executeCommand\("simpleSftp\.uploadWorkspace"/);
-  assert.match(extension, /executeCommand\("simpleSftp\.uploadFiles"/);
+  // Mac 适配：上传编排调用配套扩展命令 simpleSftpMac.*（Windows 为 simpleSftp.*）。
+  assert.match(extension, /executeCommand\("simpleSftpMac\.uploadWorkspace"/);
+  assert.match(extension, /executeCommand\("simpleSftpMac\.uploadFiles"/);
   assert.doesNotMatch(extension, /\b(?:runSsh|execFile|spawn)\s*\(/i);
   assert.doesNotMatch(panel, /\b(?:runSsh|execFile|spawn)\s*\(/i);
 });

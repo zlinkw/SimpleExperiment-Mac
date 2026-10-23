@@ -171,28 +171,20 @@ test('persisted same-target blocker is settled before the new operation is submi
   } finally { global.fetch = saved; }
 });
 
-test('unknown mapped metric download reconciles its exact target before dispatching one fresh request', async () => {
-  const saved = global.fetch;
-  const discovery = { endpoint: new URL('http://127.0.0.1:1'), headers: {}, instanceId: 'host:new',
-    features: { transferSettlementReceipts: true, transferSettlementReconciliation: true } };
-  let starts = 0, proofs = 0;
-  global.fetch = async (url, options) => {
-    if (String(url).endsWith('/events')) return new Response(null, { status: 204 });
-    const request = JSON.parse(options.body);
-    if (request.method === 'transfers.cancel') return Response.json({ result: { ok: true, status: 'outcomeUnknown', operationId: 'old-read', operationInstanceId: 'host:old' } });
-    if (request.method === 'transfers.reconcile') {
-      proofs++;
-      assert.equal(request.params.retryMethod, 'sync.downloadMappedPaths');
-      assert.equal(request.params.retryParams.localPath, 'C:/projects/example');
-      return Response.json({ result: { ok: true, status: 'settled', settled: true, operationId: 'old-read', operationInstanceId: 'host:old', instanceId: 'host:new' } });
-    }
-    if (starts++ === 0) return Response.json({ error: { data: { blockedOperationId: 'old-read', operationInstanceId: 'host:old', notStarted: true } } });
-    return Response.json({ result: { ok: true, memoryOnly: true, fileCount: 1 } });
+test('a memory-only metric read cannot cancel a writer; explicit refresh submits one fresh read',async()=>{
+  const saved=global.fetch,retry=new SafeRequestRetry(),calls=[];let reads=0;
+  const discovery={endpoint:new URL('http://127.0.0.1:1'),headers:{},instanceId:'host:new',features:{transferSettlementReceipts:true,transferSettlementReconciliation:true}};
+  global.fetch=async(url,options)=>{
+    if(String(url).endsWith('/events'))return new Response(null,{status:204});
+    const request=JSON.parse(options.body);calls.push(request.method);assert.equal(request.method,'sync.downloadMappedPaths','a read must never cancel or reconcile another writer');
+    if(++reads===1)return Response.json({error:{message:'legacy read blocker',data:{blockedOperationId:'old-writer',operationInstanceId:'host:old',notStarted:true}}});
+    return Response.json({result:{ok:true,memoryOnly:true,fileCount:1}});
   };
   try {
-    const result = await callSftpWithProgress('sync.downloadMappedPaths', { localPath: 'C:/projects/example', memoryOnly: true, metricsOnly: true }, async () => discovery);
-    assert.equal(result.fileCount, 1); assert.equal(starts, 2); assert.equal(proofs, 1);
-  } finally { global.fetch = saved; }
+    const work=()=>callSftpWithProgress('sync.downloadMappedPaths',{localPath:'C:/projects/example',memoryOnly:true,metricsOnly:true},async()=>discovery);
+    await assert.rejects(retry.run('read',work),/legacy read blocker/);assert.equal(reads,1);assert.equal(retry.requests.size,0);
+    assert.equal((await retry.run('read',work)).fileCount,1);assert.deepEqual(calls,['sync.downloadMappedPaths','sync.downloadMappedPaths']);assert.equal(retry.requests.size,0);
+  }finally{global.fetch=saved;}
 });
 
 test('legacy server transfer unknown is reconciled before exactly one fresh dispatch', async () => {
@@ -306,30 +298,20 @@ test('replacement during reconciliation drains the old caller and never dispatch
   } finally { global.fetch = saved; }
 });
 
-for (const method of ['sync.projectInventory', 'sync.projectTree', 'sync.projectFileStats']) test(`explicit retry of legacy ${method} uses producer exit proof before dispatch`, async () => {
-  const saved = global.fetch, order = [], retry = new SafeRequestRetry();
-  const discovery = { endpoint: new URL('http://127.0.0.1:1'), headers: {}, instanceId: 'host:new',
-    features: { transferSettlementReceipts: true, transferSettlementReconciliation: true, transferReconciliationMethods: [method] } };
-  let starts = 0;
-  global.fetch = async (url, options) => {
-    if (String(url).endsWith('/events')) return new Response(null, { status: 204 });
-    const request = JSON.parse(options.body); order.push(request.method);
-    if (request.method === 'transfers.cancel') return Response.json({ result: { ok: true, status: 'outcomeUnknown', operationId: 'old', operationInstanceId: 'host:old' } });
-    if (request.method === 'transfers.reconcile') {
-      assert.equal(request.params.retryMethod, method); assert.equal(request.params.requestKey.length, 64);
-      assert.equal(request.params.retryParams.source.remotePath, '/project');
-      return Response.json({ result: { ok: true, settled: true, status: 'settled', operationId: 'old', operationInstanceId: 'host:old', instanceId: 'host:new' } });
-    }
-    if (starts++ === 0) return Response.json({ error: { data: { notStarted: true, blockedOperationId: 'old', operationInstanceId: 'host:old' } } });
-    return Response.json({ result: { ok: true, files: {} } });
+for(const method of ['sync.projectInventory','sync.projectTree','sync.projectFileStats'])test(`explicit ${method} refresh has no writer receipt or saved cancellation fence`,async()=>{
+  const saved=global.fetch,retry=new SafeRequestRetry(),calls=[];let reads=0;
+  const discovery={endpoint:new URL('http://127.0.0.1:1'),headers:{},instanceId:'host:new',features:{transferSettlementReceipts:true,transferSettlementReconciliation:true,transferReconciliationMethods:[method]}};
+  global.fetch=async(url,options)=>{
+    if(String(url).endsWith('/events'))return new Response(null,{status:204});
+    const request=JSON.parse(options.body);calls.push(request.method);assert.equal(request.method,method,'metadata refresh cannot authorize cancelling a writer');
+    if(++reads===1)return Response.json({error:{message:'legacy metadata blocker',data:{notStarted:true,blockedOperationId:'old-writer',operationInstanceId:'host:old'}}});
+    return Response.json({result:{ok:true,files:{}}});
   };
   try {
-    const params = { source: { host: 'server', username: 'owner', remotePath: '/project' } };
-    assert.equal((await retry.run('publish', () => callSftpWithProgress(method, params, async () => discovery))).ok, true);
-    assert.deepEqual(order, [method, 'transfers.cancel', 'transfers.reconcile', method]);
-    assert.equal(retry.requests.size, 0);
-    starts = 0; discovery.features.transferReconciliationMethods = [];
-    await assert.rejects(retry.run('publish', () => callSftpWithProgress(method, params, async () => discovery)), /更新 SimpleSFTP/);
-    assert.equal(starts, 1, 'unsupported producer must not dispatch a second request');
-  } finally { global.fetch = saved; }
+    const params={source:{host:'server',username:'owner',remotePath:'/project'}};
+    const work=()=>callSftpWithProgress(method,params,async()=>discovery);
+    await assert.rejects(retry.run('read',work),/legacy metadata blocker/);assert.equal(reads,1);assert.equal(retry.requests.size,0);
+    discovery.features.transferReconciliationMethods=[];
+    assert.equal((await retry.run('read',work)).ok,true);assert.deepEqual(calls,[method,method]);assert.equal(retry.requests.size,0);
+  }finally{global.fetch=saved;}
 });

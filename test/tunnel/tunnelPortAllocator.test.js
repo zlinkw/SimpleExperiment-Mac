@@ -16,7 +16,8 @@ test("all enabled tunnel endpoints have unique local ports", async () => {
   });
   const ports = result.assignments.map((item) => item.localForwardPort);
   assert.equal(new Set(ports).size, ports.length);
-  assert.equal(result.assignments.find((item) => item.endpointId === "hub").localForwardPort, 18765);
+  assert.equal(result.assignments.find((item) => item.endpointId === "hub"),undefined);
+  assert.deepEqual(result.assignments.map(row=>row.endpointId),["w1","w2","w3"]);
   assert.ok(result.conflicts.some((item) => item.conflictType === "duplicate_in_config"));
   assert.equal(result.conflicts.some((item) => item.conflictType === "reserved_for_hub"), false);
   assert.ok(result.conflicts.every((item) => item.suggestion));

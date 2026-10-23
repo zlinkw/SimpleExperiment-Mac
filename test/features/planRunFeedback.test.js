@@ -8,7 +8,7 @@ const panel = fs.readFileSync(path.join(__dirname, "../../src/ui/PanelHtml.legac
 const scope = fs.readFileSync(path.join(__dirname, "../../src/features/SyncScopeTree.ts"), "utf8");
 
 test("runPlan reports click, sync, validate, dry-run, then scheduler start in order", () => {
-  const submit = extension.slice(extension.indexOf("        if (PLAN_SUBMISSION_COMMANDS.has(command)) {\n            this.planRunStageStartedAt"), extension.indexOf("const danger = command === \"deleteArtifacts\";"));
+  const submit = extension.slice(extension.indexOf("    async runActionCommand(command, message)"), extension.indexOf("const danger = command === \"deleteArtifacts\";"));
   const marks = [
     "已收到校验并提交运行",
     "正在选择调度 Worker",
@@ -55,7 +55,7 @@ test("github completion names the pre-transfer stages and still uploads only cha
   const localAt = sync.indexOf("正在建立本地代码清单并核对文件哈希");
   const remoteAt = sync.indexOf("正在比对");
   const transferAt = sync.indexOf("正在传输");
-  const uploadAt = sync.indexOf('executeCommand("simpleSftp.uploadWorkspace"');
+  const uploadAt = sync.indexOf('this.simpleSftpApiCall("upload.workspace"');
   assert.ok(localAt > 0 && remoteAt > localAt && transferAt > remoteAt && uploadAt > transferAt);
   assert.match(sync, /changedManifestFiles\(manifest, remoteFiles\)/);
   assert.ok(sync.indexOf("if (!Object.keys(uploadManifest).length)") < uploadAt);

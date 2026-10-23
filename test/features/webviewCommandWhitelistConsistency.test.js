@@ -60,10 +60,11 @@ test("training recovery click reaches the Host dispatcher with its exact target 
   const dispatch = vm.runInNewContext(gate + '\n({' + handler + '})', {
     console: { log() {} }, stringField: (message, key) => String(message[key] || ''),
     commandNeedsUiStatus: () => true, hostOperationLeaseActionForUiCommand: () => '',
+    readOnlyHostLeaseUiCommand: () => false,
   }).handleMessage;
   const message = { command: 'retryDistributedJob', clientActionId: 'recovery-click', planId: 'run', jobIndex: 0 };
   let received, statusChannel;
-  const owner = { recordActionError: error => assert.fail(error.message), postState() {}, postUiCommandStatus() {},
+  const owner = { recordActionError: error => assert.fail(error.message), postState() {}, postUiCommandStatus() {}, beginSimpleSftpCapabilityLaunch() {},
     withUiCommandStatus: async (id, command, payload, work) => { statusChannel = id; return work(); },
     withSafeTransferRetry: async (_, __, work) => work(),
     handleMessageCore: async (payload, command) => { received = { ...payload, command }; },
@@ -94,7 +95,7 @@ test("training recovery reports real completion, cancellation and rejected evide
   const api = vm.runInNewContext(compiled + "\nsubject;", scope);
   const payload = { command: "retryDistributedJob", planId: "run", jobIndex: 0, clientActionId: "recovery-status" };
   const owner = { ...api, panelLifecycleState: "ready", extensionRuntimeVersionState: () => ({ reloadRequired: false }),
-    postUiCommandStatus: (id, status, command, message) => statuses.push({ id, status, command, message }),
+    postUiCommandStatus: (id, status, command, message) => statuses.push({ id, status, command, message }), beginSimpleSftpCapabilityLaunch: () => undefined,
     finishPlanSubmissionProgress() {}, recordActionError() {}, postState() {},
   };
   for (const status of ["completed", "cancelled", "failed"]) {
@@ -134,15 +135,16 @@ test("extension safety whitelist stays covered by webview declarations (reverse)
     "webviewReady", "webviewBootstrapError", "webviewRenderError", "reloadPanel",
     "copyPanelDiagnostics", "reloadPanelLowEffects", "webviewBootstrapPhase",
     "webviewLayoutEvidence", "webviewRuntimeIncident", "webviewSectionInterest",
-    "webviewSectionTelemetry", "webviewStateRendered",
+    "webviewSectionTelemetry", "webviewStateRendered", "answerRunConfirmation",
   ]);
-  // Pre-existing gaps (follow-up, not this change): declared in SAFE whitelist and
-  // sent by webview buttons, but missing from webviewHandledCommands. Any NEW gap fails.
-  const KNOWN_GAPS_TODO = new Set([
-    "startTensorBoard", "runDraftDebug", "promoteDraft", "rejectDraft",
-    "reviewDraft", "cleanupDrafts", "resetPptPathConfirmations",
-  ]);
-  const uncovered = [...safeOnly].filter((command) => !webview.has(command) && !KNOWN_EXTENSION_ONLY.has(command) && !KNOWN_GAPS_TODO.has(command)).sort();
+  const retired = new Map([['startHub', 'startHubTunnel'], ['uploadProjectToHub', 'uploadProjectToHub']]);
+  const compiled = fs.readFileSync(path.join(root, 'dist/extension/legacy.js'), 'utf8');
+  for (const method of retired.values()) {
+    const body = require('../_helpers/legacyMethod')(compiled, method + '(');
+    assert.match(body, /throw new Error\("HUB_REMOVED/);
+  }
+  assert.match(fs.readFileSync(path.join(root, 'dist/ui/RunConfirmation.js'), 'utf8'), /command:\s*'answerRunConfirmation'/);
+  const uncovered = [...safeOnly].filter((command) => !webview.has(command) && !KNOWN_EXTENSION_ONLY.has(command) && !retired.has(command)).sort();
   assert.deepEqual(uncovered, []);
   for (const command of ["runCheckStatic", "openLastCheckStaticReport", "copyLastCheckStaticReport"]) {
     assert.ok(webview.has(command), `webview must declare ${command}`);

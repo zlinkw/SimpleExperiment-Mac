@@ -56,12 +56,7 @@ test("scheduler accepts a configured run wrapper", () => {
     write("experiments/simple_project.yaml", "adapter:\n  runWrapper: experiments/simple_adapter/run_wrapper.py\n"),
     write("experiments/simple_adapter/run_wrapper.py", "print('wrapper')\n"),
   );
-  const result = spawnSync("python", [schedulerRuntime, "--validate-plan", "--plan", "experiments/plans/smoke.yaml"], {
-    cwd: project,
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-  });
+  const result = spawnSync("python", [schedulerRuntime, "--validate-plan", "--plan", "experiments/plans/smoke.yaml"], { cwd: project, encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.outputInterface.ok, true);
@@ -77,12 +72,7 @@ test("scheduler accepts a direct AST-verified adapter call", () => {
     "",
     "main()",
   ].join("\n")));
-  const result = spawnSync("python", [schedulerRuntime, "--validate-plan", "--plan", "experiments/plans/smoke.yaml"], {
-    cwd: project,
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-  });
+  const result = spawnSync("python", [schedulerRuntime, "--validate-plan", "--plan", "experiments/plans/smoke.yaml"], { cwd: project, encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.outputInterface.ok, true);
@@ -93,9 +83,9 @@ test("dry-run worker temp cleanup only removes exact runtime-generated files", (
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "simple-experiment-temp-cleanup-"));
   const script = [
     "import importlib.util, json, os, sys, time",
-    `spec = importlib.util.spec_from_file_location('cluster_agent', ${JSON.stringify(path.join(root, "dist/runtime/cluster_agent.py"))})`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["Job", "cleanup_dry_run_worker_temp_files", "collect_tensorboard_metrics", "state_child_path", "tensorboard_conversion_available"]))('cluster_agent', ${JSON.stringify(path.join(root, "dist/runtime/cluster_agent.py"))})`,
+    "agent = spec",
+    "pass",
     `root = ${JSON.stringify(project)}`,
     "actions = os.path.dirname(agent.state_child_path(root, 'actions', ''))",
     "old = os.path.join(actions, f'dry-run-workers-{int(time.time())}-{\"a\" * 12}.json')",
@@ -145,10 +135,10 @@ test("TensorBoard final scalars are converted to the standard result contract", 
     "backend.event_processing = processing",
     "processing.event_accumulator = accumulator",
     "sys.modules.update({'tensorboard': fake, 'tensorboard.backend': backend, 'tensorboard.backend.event_processing': processing, 'tensorboard.backend.event_processing.event_accumulator': accumulator})",
-    `spec = importlib.util.spec_from_file_location('cluster_scheduler', ${JSON.stringify(schedulerRuntime)})`,
-    "scheduler = importlib.util.module_from_spec(spec)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["Job", "cleanup_dry_run_worker_temp_files", "collect_tensorboard_metrics", "state_child_path", "tensorboard_conversion_available"]))('cluster_scheduler', ${JSON.stringify(schedulerRuntime)})`,
+    "scheduler = spec",
     "sys.modules['cluster_scheduler'] = scheduler",
-    "spec.loader.exec_module(scheduler)",
+    "pass",
     "scheduler.tensorboard_conversion_available = lambda: True",
     "os.makedirs('experiments/results', exist_ok=True)",
     "formal = 'experiments/results/baseline.csv'",

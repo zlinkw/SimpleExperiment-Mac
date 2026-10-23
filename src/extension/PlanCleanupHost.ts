@@ -8,8 +8,15 @@ import { cleanupTaskEvidence, replacementEvidenceQueue, replacementJobGroups, re
 import { planSyncLedgerStoragePath, emptyPlanSyncLedger } from "../features/PlanArtifactSync";
 import { atomicWriteText } from "../state/StateStore";
 import { openPlanCleanupPanel } from "./PlanCleanupPanel";
-import { assertFastDeletePreviewSafety, fastDeleteUpgradeError, isFastDeleteUpgradeCode } from "../features/FastDeleteContract";
+import { isUnderMachineStatePrefixes } from "../features/ProjectRootMap";
 import { discoverManifestCandidates, recordedDeclarations, type ManifestDeclaration } from "../features/ManifestCleanup";
+import { type IsolatedReviewEvent } from "../features/PlanIsolatedBatchLedger";
+// 2026-10-23 行数门禁返修：以下四个模块是逐行原样提取的独立职责（守卫绑定/应答安全/独立审核/逐目标核验），
+// 语义与错误码保持原样，本类的公开方法与行为不变。
+import { collectNodeTargets, nodesForTargets, bindMachineStateByNode, managedNodes as managedNodesOf, machineStateForNode as machineStateForNodeOf } from "./PlanCleanupNodeGuards";
+import { guardCleanupSftpCall } from "./PlanCleanupSftpGuard";
+import { assertIsolatedReviewBinding, recordIsolatedReviewEventFor, verifyIsolatedTargetsAbsence, openIsolatedBatchReviewFlow, type IsolatedReviewContext } from "./PlanCleanupIsolatedReviews";
+import { verifyDeclaredTargetsOnNodes } from "./PlanCleanupTargetVerification";
 
 async function json(file: string, fallback: any): Promise<any> {
   const text = await fs.readFile(file, "utf8").catch((error: any) => { if (error.code === "ENOENT") return ""; throw error; });
@@ -20,44 +27,25 @@ async function json(file: string, fallback: any): Promise<any> {
 export class PlanCleanupHost {
   readonly service: PlanCleanup;
   executing = false;
+  private independentExecuting = false;
+  get blocksTaskScheduling() { return this.executing && !this.independentExecuting; }
   constructor(private readonly host: any, readonly root: string) {
     const storage = host.context.globalStorageUri.fsPath;
     this.service = new PlanCleanup({ storageRoot: path.join(storage, "plan-cleanup", cleanupDigest(root)),
       collect: (file, options) => this.collect(file, Boolean(options?.removedMetadata), options?.archivedFiles, options?.removedMetadata, options?.onProgress, options?.job, options?.nativeDeclarations, options?.authorizationMode),
-      sftp: async (method, params) => {
-        let result: any;
-        try { result = await host.simpleSftpApiCall(method, params); }
-        catch (error: any) {
-          // 旧引擎以 UNKNOWN_ACTION / UPDATE_REQUIRED 拒绝确认快速链时：统一"需要更新"错误，零确认零执行。
-          if (method === "files.cleanup.preview" && params.authorizationMode === "confirmed_paths" && params.action === "delete"
-            && isFastDeleteUpgradeCode(error?.apiData?.code ?? error?.code)) fastDeleteUpgradeError();
-          throw error;
-        }
-        if (method === "files.cleanup.preview" && params.authorizationMode === "confirmed_paths" && params.action === "delete") {
-          // v1.9：确认路径快速链以其应答的快标志块为唯一契约；旧通用链门禁（managedObservation、
-          // Git 祖先预检、归档批次、正式 job 属主）属于已退役链路，快速路径不再套用。
-          assertFastDeletePreviewSafety(result?.safety, Array.isArray(params.targets) ? params.targets.length : 0);
-          return result;
-        }
-        if (method === "files.cleanup.preview" && params.observationMode === "managed_tmux" && result.safety?.managedObservation !== 1)
-          cleanupError("SFTP_MANAGED_OBSERVATION_REQUIRED", "请更新配套 SimpleSFTP；尚未执行清理。");
-        if (method === "files.cleanup.preview" && (result.safety?.gitRepositoryAncestors !== true || result.safety?.readOnlyReceiptCheck !== true))
-          cleanupError("SFTP_SAFE_CLEANUP_UPGRADE_REQUIRED", "当前 SimpleSFTP 缺少 Git 祖先仓库预检或只读回执核查；请更新配套插件后重新预览。");
-        if (method === "files.cleanup.preview" && params.targets?.some((target: any) => target.expectedOwner?.resultPathPolicy === "declared") && result.safety?.formalJobOwner !== true)
-          cleanupError("SFTP_FORMAL_OWNER_UPGRADE_REQUIRED", "需要支持正式 job 身份核验的 SimpleSFTP，尚未执行任何清理。");
-        if (method === "files.cleanup.preview" && params.targets?.some((target: any) => target.archiveBatch) && result.safety?.immutableArchiveBatch !== true)
-          cleanupError("SFTP_ARCHIVE_BATCH_UPGRADE_REQUIRED", "需要支持预先确定的归档批次布局的 SimpleSFTP，尚未执行任何清理。");
-        if (method === "files.cleanup.preview" && params.targets?.some((target: any) => target.expectedOwner?.expectedState === "completed")
-          && !(Number(result.safety?.batchPreviewCapacity) >= 4096))
-          cleanupError("SFTP_BATCH_PREVIEW_UPGRADE_REQUIRED", "需要 SimpleSFTP 0.2.79 的批次预览保留能力，未执行清理。");
-        return result;
-      },
+      sftp: async (method, params) => guardCleanupSftpCall(host, method, params),
       restoreGate: (preview, operation) => this.restoreGate(preview, operation),
       currentNode: async id => this.currentNode(id),
       validateScope: async scope => {
         this.assertWorkspace();
         if (scope.candidates.some(row => row.category === "PLAN 文件" && !row.scopeProtectedReason))
           cleanupError("PLAN_CLEANUP_SCOPE_CHANGED", "旧审核包含 PLAN 文件，请重新审核；本次不会处理 PLAN 或共享配置。");
+        for (const row of scope.candidates.filter(row => !row.scopeProtectedReason && row.nodeId !== "pluginState")) {
+          const node = scope.nodes.find(node => node.id === row.nodeId);
+          const guard = this.machineStateForNode(node);
+          if (guard.unknown || isUnderMachineStatePrefixes(row.relativePath, guard.prefixes, true))
+            cleanupError("MACHINE_STATE_PATH_PROTECTED", row.relativePath);
+        }
         const configs = scope.candidates.filter(row => !row.scopeProtectedReason && ["专用配置", "远端配置同步副本"].includes(row.category));
         if (!configs.length) return;
         const fresh = await collectPlanCleanupEvidence({ root: this.root, planFile: scope.planFile, queue: emptyDistributedQueue(),
@@ -68,6 +56,7 @@ export class PlanCleanupHost {
             || proof.expectedSha256 !== config.expectedSha256) cleanupError("CONFIG_SCOPE_CHANGED", config.relativePath + "：配置已变化或已被其他 PLAN 引用，请重新审核");
         }
       },
+      validateIsolationReview: async id => { await this.assertIsolatedReview(id); },
       updateIndexes: (operation, restore) => this.updateIndexes(operation, restore) });
   }
   private assertWorkspace() {
@@ -85,6 +74,17 @@ export class PlanCleanupHost {
   /** Retired compatibility hook. File review is explicitly requested, never triggered by a connection. */
   observeConnections(_endpoints: Array<{ id: string; streamStatus: string; reconnectCount?: number }>): Promise<void> {
     return Promise.resolve();
+  }
+  /**
+   * 返修（2026-10-21）P0：单 job「删除并重新排队」的逐目标不存在核验。
+   * 缺失的声明目录不会进候选（ManifestCleanup 只报告存在的产物）——「候选缺失」不等于「已删除」。
+   * 本方法是唯一被允许的 absence 证据来源：对原预览冻结的物理节点集合 × 完整声明路径逐一
+   * files.cleanup.inspect（只读），节点身份必须先与当前配置一致（endpoint/安全根漂移即 error）；
+   * 后端必须回 target.missing===true 才算 absent；任何异常/含糊应答都是 error，绝不推断不存在。
+   * 它不产生删除候选、不改变审核范围，也不替代预览。
+   */
+  async verifyDeclaredTargets(params: { job: CleanupJobSelection; declared: Array<{ relativePath: string; type: string }>; nodes: any[] }) {
+    return verifyDeclaredTargetsOnNodes({ host: this.host, assertWorkspace: () => this.assertWorkspace(), currentNode: id => this.currentNode(id) }, params);
   }
   async replacementGroups(queue: DistributedQueue, file: string, declarations: any[], projectId: string, stablePlanId: string) {
     this.assertWorkspace();
@@ -111,14 +111,8 @@ export class PlanCleanupHost {
     const queue = await json(distributedQueuePath(storage, this.root), emptyDistributedQueue());
     const ledger = await json(planSyncLedgerStoragePath(storage, this.root), emptyPlanSyncLedger());
     const registry = await json(path.join(this.root, "simple_cluster/results/project_table_registry.json"), undefined);
-    const targets: any[] = [];
-    // Include disabled Workers: historical ownership never disappears with the current selection.
-    for (const worker of (this.host.setupConfig.workerTunnels || []).filter((row: any) => row.enabled !== false)) {
-      try { targets.push(this.host.workerCodeSyncTarget(worker)); }
-      catch { targets.push({ id: worker.id, error: "当前服务器身份或项目安全根未核实" }); }
-    }
-    const nodes: any[] = [{ id: "local", kind: "local", root: this.root }, ...targets.map(target => ({ id: target.id, kind: "remote",
-      host: target.host, user: target.user, port: target.port, root: target.remotePath || "", ...(target.error ? { error: target.error } : {}) }))];
+    const targets = collectNodeTargets(this.host);
+    const nodes = nodesForTargets(this.root, targets);
     const remoteNodes = nodes.filter(node => node.kind === "remote");
     let checkedNodes = 0;
     onProgress?.({ phase: "tasks", message: "并行读取各节点当前任务与传输状态…", completed: 0, total: remoteNodes.length });
@@ -149,6 +143,7 @@ export class PlanCleanupHost {
     const evidenceQueue = job?.purpose === "replace_outputs" ? replacementEvidenceQueue(queue, snapshots, canonicalProjectId(this.root)) : queue;
     const scope = await collectPlanCleanupEvidence({ root: this.root, planFile: file, queue: evidenceQueue, ledger, registry,
       resultDir: this.host.resultCsvDirectory || "experiments/results", nodes, snapshots: snapshots.map(cleanupTaskEvidence), operations, allowMissing, archivedFiles, removedMetadata, job });
+    bindMachineStateByNode(this.host, nodes, targets, scope);
     if (job?.purpose === "replace_outputs") {
       const owner = evidenceQueue.plans.find((plan: any) => plan.id === job.workflowId)?.jobs.find((row: any) => row.commandId === job.commandId);
       const snapshot = snapshots.find(row => row.workerId === owner?.workerId);
@@ -172,15 +167,7 @@ export class PlanCleanupHost {
     scope.revision = cleanupDigest([scope.revision, scope.nodes, scope.candidates.filter(row => row.nodeId === "pluginState")]);
     return scope;
   }
-  private managedNodes() {
-    const nodes: any[] = [{ id: "local", kind: "local", root: this.root }];
-    for (const worker of this.host.setupConfig.workerTunnels || []) {
-      if (worker.enabled === false) continue;
-      try { nodes.push({ ...this.currentNode(worker.id) }); }
-      catch { nodes.push({ id: worker.id, kind: "remote", root: "", error: "当前服务器身份或安全根未核实" }); }
-    }
-    return nodes;
-  }
+  private managedNodes() { return managedNodesOf(this.host, this.root, id => this.currentNode(id)); }
   private async collectManaged(file: string, allowMissing: boolean, archivedFiles?: Record<string, string>, removedMetadata?: CleanupRemovedMetadata,
     onProgress?: CleanupProgressSink, job?: CleanupJobSelection, nativeDeclarations?: ManifestDeclaration[], authorizationMode?: "confirmed_paths") {
     this.assertWorkspace();
@@ -233,6 +220,7 @@ export class PlanCleanupHost {
       scope.notices!.push(...scope.blockers.filter(row => !pathErrors.has(row.code)));
       scope.blockers = scope.blockers.filter(row => pathErrors.has(row.code));
     }
+    scope.machineStateByNode = Object.fromEntries(nodes.map(node => [String(node.id), this.machineStateForNode(node)]));
     scope.runIds = queue.plans.filter((plan: any) => plan.planFile === file).map((plan: any) => plan.id);
     scope.observationMode = "managed_tmux"; scope.nativeDeclarations = discovered.declarations;
     if (job) scope.job = { ...job, manifest: { declarations: discovered.declarations, replacement: true } };
@@ -247,6 +235,7 @@ export class PlanCleanupHost {
       nodes.map(({ error, ...node }: any) => node)]);
     return scope;
   }
+  private machineStateForNode(node: any): { prefixes: string[]; unknown: boolean } { return machineStateForNodeOf(this.host, node); }
   private async restoreGate(preview: CleanupPreview, operation?: CleanupOperation) {
     const archivedFiles = Object.fromEntries(preview.rows.filter(row => row.node.kind === "local" && ["PLAN 文件", "专用配置"].includes(row.category)
       && operation?.targets[row.id]?.state !== "completed")
@@ -264,6 +253,8 @@ export class PlanCleanupHost {
   }
   private async updateIndexes(operation: CleanupOperation, restore: boolean) {
     this.assertWorkspace();
+    // An old registered isolation tree has no authority to retire, clear or rewrite the new PLAN/job.
+    if (operation.preview.registeredIsolationOperationId) return;
     const originalId = operation.preview.originalOperationId || operation.id;
     const restoreChain = restore ? await this.service.history(originalId) : [];
     const restoreIds = new Set(restoreChain.map(row => row.id));
@@ -335,6 +326,30 @@ export class PlanCleanupHost {
     if (this.executing) cleanupError("OPERATION_BUSY");
     this.executing = true;
     try {
+      const registered = await this.service.registeredIsolationSource(id);
+      this.independentExecuting = Boolean(registered);
+      const initial = await this.service.status(id);
+      const independent = initial.preview.registeredIsolationOperationId;
+      if (independent !== registered) cleanupError("ISOLATED_OPERATION_IDENTITY_CHANGED");
+      if (independent) {
+        await this.assertIsolatedReview(independent);
+        if (initial.state === "completed") { await this.verifyIsolatedAbsence(independent); await this.isolatedReviewEvent(independent, "completed", id); return initial; }
+        if (initial.state === "paused") cleanupError("ISOLATED_DELETE_RECONFIRM_REQUIRED", "该审核已取消；请重新预览并两次确认，不沿用旧授权执行。");
+        if (initial.executionRequestedAt) cleanupError("ISOLATED_DELETE_QUERY_REQUIRED", "该删除请求已经发出；本次只允许刷新核实，不重复发送。重新审核仍须两次确认。");
+        this.host.assertArtifactSyncPathsIdle?.(this.root, initial.preview.rows.filter(row => row.disposition === "delete").map(row => row.relativePath));
+        await this.isolatedReviewEvent(independent, "executing", id);
+        try {
+          const result = await this.service.execute(id);
+          if (result.state === "completed") await this.verifyIsolatedAbsence(independent);
+          await this.isolatedReviewEvent(independent, result.state === "completed" ? "completed" : result.state === "paused" ? "cancelled"
+            : /BUSY/.test(result.error || "") ? "busy" : result.state === "blocked" ? "failed" : "unknown", id, result.error);
+          return result;
+        } catch (error: any) {
+          await this.isolatedReviewEvent(independent, /BUSY/.test(String(error?.apiData?.code || error.message)) ? "busy" : "failed", id,
+            String(error.message || error)).catch(() => undefined);
+          throw error;
+        }
+      }
       const pending = this.host.distributedQueueTickPromise;
       if (pending) await pending;
       const operation = await this.service.status(id);
@@ -358,8 +373,18 @@ export class PlanCleanupHost {
         { resources: [{ server: "local", project: this.root, target: this.root }] });
       if (operation.preview.action === "delete") return await this.service.status(id);
       return result;
-    } finally { this.executing = false; }
+    } finally { this.executing = false; this.independentExecuting = false; }
   }
-  open(file: string, operationId?: string, job?: CleanupJobSelection) { return openPlanCleanupPanel(this, file, operationId, job); }
+  private isolatedReviewContext(): IsolatedReviewContext {
+    return { host: this.host, vscode, root: this.root, service: this.service,
+      assertWorkspace: () => this.assertWorkspace(), currentNode: id => this.currentNode(id), open: (file, operationId, job, isolatedOperationId) => this.open(file, operationId, job, isolatedOperationId) };
+  }
+  async assertIsolatedReview(id: string) { return assertIsolatedReviewBinding(this.isolatedReviewContext(), id); }
+  async isolatedReviewEvent(originalId: string, kind: IsolatedReviewEvent["kind"], reviewId?: string, detail?: string) {
+    return recordIsolatedReviewEventFor(this.isolatedReviewContext(), originalId, kind, reviewId, detail);
+  }
+  async verifyIsolatedAbsence(originalId: string) { return verifyIsolatedTargetsAbsence(this.isolatedReviewContext(), originalId); }
+  async openIsolatedBatchReviews() { return openIsolatedBatchReviewFlow(this.isolatedReviewContext()); }
+  open(file: string, operationId?: string, job?: CleanupJobSelection, isolatedOperationId?: string) { return openPlanCleanupPanel(this, file, operationId, job, isolatedOperationId); }
   openJob(file: string, job: CleanupJobSelection) { return this.open(file, undefined, job); }
 }

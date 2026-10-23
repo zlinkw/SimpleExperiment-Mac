@@ -37,6 +37,9 @@ function extractMethod(source, signature) {
 
 function createContext(extra = {}) {
   const context = {
+    require: require("node:module").createRequire(path.join(__dirname,"../../dist/extension/legacy.js")),
+    DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue"),
+    workspaceRoot: () => "C:/project",
     Error,
     Set,
     String,
@@ -116,11 +119,11 @@ test("single-worker stop routes by Plan to the sole Worker without Hub", async (
     },
     runOperationWorkerId: (row) => String(row.schedulerOwnerWorkerId || ""),
     stopExperimentMatchesTarget: (row, target) => runOperationMatchesTarget(row, target),
-    // Frozen 0.5.400 routing: every routed stop request carries stopBoundary "local_command" and posts via the client.
-    client: { async postWorkerAction(workerId, action, request) {
+    // .403 routing: contextStop wires provider.client.postWorkerAction onto this recorder (frozen body stamps stopBoundary).
+    async postWorkerTunnelAction(workerId, action, request) {
       calls.push({ workerId, action, request });
       return { status: "completed", matchedOperations: ["run-plan-old"], terminatedSessions: ["simple-scheduler-old"] };
-    } },
+    },
     markLocalOperationsDirty() {},
     postState() {},
   };
@@ -152,9 +155,9 @@ test("single-worker orphan stop stays running with manual hint when no process i
     },
     runOperationWorkerId: (row) => String(row.schedulerOwnerWorkerId || ""),
     stopExperimentMatchesTarget: (row, target) => runOperationMatchesTarget(row, target),
-    client: { async postWorkerAction() {
+    async postWorkerTunnelAction() {
       return { status: "completed", matchedOperations: ["run-plan-orphan"] };
-    } },
+    },
     markLocalOperationsDirty() {},
     postState() {},
   };
@@ -188,10 +191,10 @@ test("single-worker stop still matches a reconciled submission staying running w
     },
     runOperationWorkerId: (row) => String(row.schedulerOwnerWorkerId || ""),
     stopExperimentMatchesTarget: (row, target) => runOperationMatchesTarget(row, target),
-    client: { async postWorkerAction(workerId, action, request) {
+    async postWorkerTunnelAction(workerId, action, request) {
       calls.push({ workerId, action, request });
       return { status: "completed", matchedOperations: ["run-plan-stale"] };
-    } },
+    },
     markLocalOperationsDirty() {},
     postState() {},
   };
@@ -215,6 +218,7 @@ async function contextStop(provider, body) {
   });
   const method = extractMethod(extensionSource, "async stopExperimentRouted(body)");
   vm.runInContext(`const methods = { ${method} };\nthis.stopExperimentRouted = methods.stopExperimentRouted;`, context);
+  provider.client = { postWorkerAction: (...args) => provider.postWorkerTunnelAction(...args) };
   return context.stopExperimentRouted.call(provider, body);
 }
 
@@ -262,29 +266,22 @@ test("result parse idempotency keys include workspace, Plan version, and owner",
   }));
 });
 
-test("concurrent result parses merge into one active operation", async () => {
-  // Frozen 0.5.400 wiring: parse/refresh route through the shared result-collection host, whose update()
-  // merges every concurrent caller into the single in-flight collection and starts fresh after completion.
-  assert.match(extensionSource, /return this\.rebuildProjectResultTablesFromUi\(\{ title: "更新结果汇总" \}\)/);
-  assert.match(extensionSource, /return resultCollectionHost\(this\)\.update\(\)/);
-  const { ResultCollectionHost } = require("../../dist/extension/ResultCollectionHost");
-  let calls = 0;
-  const host = new ResultCollectionHost({ panelDisposed: true });
-  host.collect = async () => {
-    calls += 1;
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    return { operationId: "operation", ok: true };
-  };
-  const first = host.update();
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  const second = host.update();
-  const [firstResult, secondResult] = await Promise.all([first, second]);
-  assert.equal(calls, 1);
-  assert.equal(secondResult, firstResult);
-  assert.equal(firstResult.operationId, "operation");
-  const third = await host.update();
-  assert.equal(calls, 2);
-  assert.equal(third.operationId, "operation");
+test("concurrent result parses share actual collection and do not create operation receipts", async () => {
+  require('../_helpers/registerTsRequire');
+  const f = require('../_helpers/freshResultHost').fixture();
+  const context = createContext({ RESULT_PARSE_COMMANDS: new Set(["parseResults", "refreshResults"]), PLAN_SUBMISSION_COMMANDS: new Set() });
+  const method = extractMethod(extensionSource, "async runActionCommand(command, message)");
+  vm.runInContext(`const methods = { ${method} }; this.run = methods.runActionCommand;`, context);
+  let release; const pending = new Promise(resolve => release = resolve); f.block(pending);
+  f.host.rebuildProjectResultTablesFromUi = () => f.service.update();
+  f.host.localOperations = {};
+  const first = context.run.call(f.host, "parseResults", {});
+  const second = context.run.call(f.host, "refreshResults", {});
+  release(); const [one,two] = await Promise.all([first,second]);
+  assert.strictEqual(one,two);
+  assert.equal(f.calls.filter(row => row[0] === "tasks").length,2, "one discovery and one declaration query");
+  assert.equal(f.calls.filter(row => row[0] === "sync.downloadMappedPaths").length,1);
+  assert.deepEqual(f.host.localOperations,{});
 });
 
 test("runActionCommand executes the default action branch and returns its result", async () => {

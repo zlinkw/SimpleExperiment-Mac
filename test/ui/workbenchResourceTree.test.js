@@ -122,7 +122,6 @@ test("right inspector supports pinned actions and publish sync command group", (
     "publishGithub",
     "syncGithub",
     "overwriteGithub",
-    "uploadProjectToHub",
     "uploadProjectToWorkers",
     "distributeCodeToWorkers",
     "deployLatestAgent",
@@ -190,9 +189,10 @@ test("resource tree includes stable semantic sections including publish sync", (
 
   // 目标序：sync→plans→gpu→tmux→execution→results→diagnostics→settings（settings 恒尾）；
   // servers 仅以 hidden 兼容节保留（data-legacy="servers-hidden-merged-into-sync"），overview 仅后端尾兼容，前端不再断言
-  for (const section of ["sync", "plans", "gpu", "tmux", "execution", "results", "diagnostics", "settings"]) {
+  for (const section of ["sync", "plans", "gpu", "tmux", "execution", "results", "diagnostics"]) {
     assert.match(source, new RegExp(`item\\("${section}"`));
   }
+  assert.doesNotMatch(source, /item\("settings"/);
   assert.match(source, /data-legacy="servers-hidden-merged-into-sync"/);
   assert.match(source, /normalizeUiLayout\(currentUiLayout\)\.order/);
   assert.doesNotMatch(source, /normalizeUiLayout\(currentUiLayout\)\.order\.concat\(\["sync"\]\)/);

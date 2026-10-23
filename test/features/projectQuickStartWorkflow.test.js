@@ -41,6 +41,8 @@ function bootstrapPlanSelection(plans, planFileInput, selectedPlanId) {
 
 function projectOnboardingState(options) {
   const sandbox = {
+    // Mac 适配：serverSetupMissingItems 经 ../platform/Terminal 判定 Termius 转发端点，沙箱注入生产实现。
+    require: (id) => id === "../platform/Terminal" ? require("../../dist/platform/Terminal.js") : require(id),
     path: require("node:path"),
     EMPTY_PROJECT_ONBOARDING_SOURCE: Object.freeze({}),
     projectOnboardingStateForWebviewCache: new WeakMap(),
@@ -74,9 +76,13 @@ test("configured single-project workspaces keep onboarding visible until explici
   const setup = {
     savedSessionPath: "C:/Sessions/hub.xsh",
     agentProjectDir: "/srv/projects",
+    // Mac 适配：Worker 就绪走 Termius 转发端点字段（等价 Windows savedSessionPath 语义）。
     workerTunnels: [{
       id: "worker-a",
-      savedSessionPath: "C:/Sessions/worker-a.xsh",
+      workerHost: "10.0.0.2",
+      workerUser: "zlk",
+      localForwardPort: 18080,
+      remoteAgentPort: 8080,
       agentProjectDir: "/srv/projects",
       enabled: true,
     }],

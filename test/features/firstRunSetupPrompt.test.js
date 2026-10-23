@@ -21,9 +21,10 @@ function extractFunction(name) {
 }
 
 test("first activation offers the exact missing setup or SimpleSFTP action", () => {
-  assert.match(source, /firstRunSetupPrompt: "simpleExperiment\.firstRunSetupPromptVersion"/);
-  assert.match(source, /projectOnboardingCompleted: "simpleExperiment\.projectOnboardingCompleted"/);
-  assert.match(source, /legacySftpNoticeShown: "simpleExperiment\.legacySftpNoticeShown"/);
+  // Mac 适配：workspaceState 键使用 simpleExperimentMac 身份前缀
+  assert.match(source, /firstRunSetupPrompt: "simpleExperimentMac\.firstRunSetupPromptVersion"/);
+  assert.match(source, /projectOnboardingCompleted: "simpleExperimentMac\.projectOnboardingCompleted"/);
+  assert.match(source, /legacySftpNoticeShown: "simpleExperimentMac\.legacySftpNoticeShown"/);
   assert.match(source, /const FIRST_RUN_SETUP_PROMPT_VERSION = 4/);
   assert.match(source, /void provider\.runActivationOnboarding\(\)/);
   const activationFlow = source.slice(source.indexOf("async runActivationOnboarding()"), source.indexOf("async recordOnboardingBackgroundError"));
@@ -66,7 +67,7 @@ test("first activation offers the exact missing setup or SimpleSFTP action", () 
   assert.match(source, /needsWorker\s*\? await vscode\.window\.showInformationMessage\(message, "打开服务器设置", "打开配置说明", "不再提示"\)/);
   assert.match(source, /choice === "打开服务器设置"\)\s*await this\.openPanelAt\("settings", "settings-servers", \{ userInitiated: true \}\)/);
   assert.match(source, /const afterWorkerCount = this\.enabledWorkerConfigs\(\)\.length/);
-  assert.match(source, /workspaceRoot\(\) && initialServerSetupComplete\(this\.setupConfig, this\.projectTopologyAssessment\(\)\.hubAllowed\) && afterSftp\.ready && afterWorkerCount > 0/);
+  assert.match(source, /workspaceRoot\(\) && initialServerSetupComplete\(this\.setupConfig, false\) && afterSftp\.ready && afterWorkerCount > 0/);
   assert.match(source, /choice === "不再提示"[\s\S]{0,140}globalState\.update/);
   assert.match(source, /afterSftp = simpleSftpIntegrationReadiness\(\)/);
   assert.match(source, /async markProjectOnboardingComplete\(projectContext\)/);
@@ -79,14 +80,18 @@ test("first activation offers the exact missing setup or SimpleSFTP action", () 
   assert.match(source, /choice === "打开扩展管理"[\s\S]{0,140}workbench\.extensions\.search/);
   assert.doesNotMatch(promptFlow, /开始一键配置/);
 
-  const sandbox = {};
+  // Mac 适配：serverSetupMissingItems 经 platform/Terminal 判定 Worker 传输就绪，注入真实编译产物。
+  const sandbox = { require: (id) => id === "../platform/Terminal" ? require("../../dist/platform/Terminal.js") : require(id) };
   vm.createContext(sandbox);
   vm.runInContext(`${extractFunction("serverSetupMissingItems")}\n${extractFunction("initialServerSetupComplete")}\nthis.check = initialServerSetupComplete;\nthis.missing = serverSetupMissingItems;`, sandbox);
   const check = sandbox.check;
-  assert.equal(check({}), false);
-  assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects" }), true);
+  assert.equal(check({}), true, "no enabled Worker fields to validate; onboarding separately requires enabledWorkerCount > 0");
+  assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects" }), check({}), "retired Hub fields cannot change Worker setup readiness");
   assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", enabled: true }] }), false);
   assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", enabled: false }] }), true);
-  assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", savedSessionPath: "w1.xsh", agentProjectDir: "/srv/worker", enabled: true }] }), true);
-  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.missing({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", displayName: "GPU 服务器", enabled: true }] }))), ["GPU 服务器 Xshell 会话", "GPU 服务器 项目父目录"]);
+  // Mac 适配：Mac 端 Worker 就绪以 Termius 转发端点字段完整为准（Windows 用 savedSessionPath），
+  // 契约同为“会话/端点 + 项目父目录齐备才算完成”。
+  assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", workerHost: "10.0.0.2", workerUser: "zlk", localForwardPort: 18080, remoteAgentPort: 8080, agentProjectDir: "/srv/worker", enabled: true }] }), true);
+  // Mac 适配：Mac 端 Worker 传输缺口按 Termius 转发端点表述（Windows 为 Xshell 会话），结构断言一致。
+  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.missing({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", displayName: "GPU 服务器", enabled: true }] }))), ["GPU 服务器 Termius 转发端点", "GPU 服务器 项目父目录"]);
 });

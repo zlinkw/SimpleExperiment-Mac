@@ -12,6 +12,12 @@ const schedulerRuntime = path.join(root, "dist", "runtime", "cluster_scheduler.p
 
 test("scheduler resolves config inheritance and renders nested job config values", (t) => {
   const python = process.env.PYTHON || "python";
+  const dependencies = spawnSync(python, ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, "import yaml", "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
+  if (dependencies.status !== 0) {
+    t.skip("python or PyYAML unavailable");
+    return;
+  }
+
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "simple-experiment-scheduler-config-"));
   const variants = path.join(project, "configs", "variants");
   fs.mkdirSync(variants, { recursive: true });
@@ -24,10 +30,10 @@ test("scheduler resolves config inheritance and renders nested job config values
   const script = String.raw`
 import importlib.util, json, os, sys
 
-spec = importlib.util.spec_from_file_location("cluster_scheduler", ${JSON.stringify(schedulerRuntime)})
-scheduler = importlib.util.module_from_spec(spec)
-sys.modules[spec.name] = scheduler
-spec.loader.exec_module(scheduler)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+scheduler = extract_runtime_functions(${JSON.stringify(schedulerRuntime)}, ["build_jobs", "load_config"])
 os.chdir(${JSON.stringify(project)})
 
 plan = {
@@ -71,11 +77,7 @@ print(json.dumps({
 }, ensure_ascii=False))
 `;
 
-  const run = spawnSync(python, [writePythonFixture(isolatePythonRuntime(script, "scheduler"))], {
-    cwd: root, timeout: 10000, windowsHide: true,
-    encoding: "utf8",
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const run = spawnSync(python, ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result.depth, 18);

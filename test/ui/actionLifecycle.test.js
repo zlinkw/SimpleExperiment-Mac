@@ -56,8 +56,8 @@ test("extension action operations use stable ids and watchdog terminal states", 
   const source = readSource("src/extension.ts");
   assert.match(source, /operationId\?: string/);
   assert.match(source, /request\.operationId = request\.opId/);
-  assert.match(source, /scheduleOperationWatchdog\(request\.opId, action\)/);
-  assert.match(source, /status: "stalled"/);
+  assert.match(source, /scheduleOperationWatchdog\(request\.opId, action, workerId\)/);
+  assert.match(source, /status: "outcome_pending", outcomePending: true/);
   assert.match(source, /operationTerminalStatus/);
   assert.match(source, /"stalled"/);
   assert.match(source, /"unsupported"/);
@@ -73,7 +73,8 @@ test("extension compacts operation payload without dropping active operations", 
   assert.match(source, /const STATE_OPERATION_RECORD_LIMIT = 120/);
   assert.match(source, /const TERMINAL_OPERATION_RECORD_LIMIT = 80/);
   assert.doesNotMatch(runtimeEvidence, /queueProjectLocalOperationsStatePersistence\(|persistProjectLocalOperationsState\(/);
-  assert.match(runtimeEvidence, /const operations = compactOperationRecords\(/);
+  assert.match(runtimeEvidence, /const mergedOperations = compactOperationRecords\(/);
+  assert.match(runtimeEvidence, /const operations = withoutRetiredOperations\(mergedOperations, this\.retiredOperationIds\(\)\)/);
   assert.match(compact, /entries\.length <= limit\)\s*return record && typeof record === "object" \? record : \{\}/);
   assert.match(compact, /if \(!operationTerminal\(entry\[1\]\)\)\s*active\.push\(entry\)/);
   assert.match(compact, /operationFailureTerminalStatus\(operationStatusOf\(entry\[1\]\)\)/);
@@ -119,7 +120,7 @@ test("local toolbar commands wait for extension terminal status", async () => {
   vm.runInContext(extractConst(source, "LOCAL_COMMAND_RELEASES_AFTER_TRIGGER") + "\n" + extractFunction(source, "localCommandReleasesAfterTrigger"), context);
   const run = vm.runInContext(emitted, context);
   const statuses = [];
-  const host = { postUiCommandStatus: (_id, status) => statuses.push(status) };
+  const host = { postUiCommandStatus: (_id, status) => statuses.push(status), beginSimpleSftpCapabilityLaunch: () => undefined };
   let finish;
   const pending = run.call(host, "tmux-click", "fetchTmuxList", {}, () => new Promise((resolve) => { finish = resolve; }));
   await new Promise((resolve) => setImmediate(resolve));

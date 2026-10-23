@@ -188,7 +188,7 @@ test("GPU task close survives capture and still selects a Worker button", () => 
   // Pruning the task snapshot must not remove the ability to close its real server window.
   context.tmuxSelectedWorkerId = 'worker-a';
   context.tmuxListCache = context.tmuxListsByWorker['worker-a'];
-  context.tmuxWindowFilter = 'all';
+  context.tmuxWindowFilter = 'zlk-gpu-0';
   vm.runInNewContext('renderTmuxOverview(tmuxListCache.sessions);', context);
   const oldTag = elements.tmuxOverview.innerHTML.match(/<button[^>]+data-tmux-close="zlk-gpu-0:4"[^>]*>/)?.[0];
   assert.ok(oldTag, 'overview offers an explicit server close for an unbound historical window');

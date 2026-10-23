@@ -73,7 +73,7 @@ test("upload path does not inspect Git conflicts and verifies transferred source
   const syncStart = source.indexOf("async syncCodeTargets(");
   const syncEnd = source.indexOf("async inspectCodeSyncTarget(", syncStart);
   const sync = source.slice(syncStart, syncEnd);
-  const uploadAt = sync.indexOf('executeCommand("simpleSftp.uploadWorkspace"');
+  const uploadAt = sync.indexOf('simpleSftpApiCall("upload.workspace"');
   const verifyAt = sync.indexOf("await this.inspectCodeSyncTarget(target, requiredSources)");
   assert.ok(uploadAt > 0 && verifyAt > uploadAt);
   assert.doesNotMatch(sync.slice(0, uploadAt), /inspectCodeSyncTarget|codeSyncConflicts|远端代码冲突/);

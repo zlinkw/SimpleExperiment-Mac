@@ -60,9 +60,9 @@ test("Hub Agent output gate and adapter policy reject metadata-only candidates",
   const script = path.join(tmp, "check.py");
   fs.writeFileSync(script, [
     "import importlib.util, json",
-    `spec = importlib.util.spec_from_file_location('agent', ${JSON.stringify(agentPath)})`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["default_result_candidates_for_dir", "discover_result_files", "discover_result_files_under", "parse_results_action", "parseable_result_candidate", "plan_declared_result_candidates", "plan_output_capture_evidence", "policy_explicit_result_candidates", "read_project_metric_policy", "structured_result_candidate"]))('agent', ${JSON.stringify(agentPath)})`,
+    "agent = spec",
+    "pass",
     `root = ${JSON.stringify(root)}`,
     "plan = 'experiments/plans/metadata.yaml'",
     "policy = agent.read_project_metric_policy(root)",
@@ -75,7 +75,7 @@ test("Hub Agent output gate and adapter policy reject metadata-only candidates",
     "  'internal': agent.parseable_result_candidate('simple_cluster/results/by_plan/metadata/statistics.json'),",
     "}))",
   ].join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
   assert.equal(payload.gate.ok, false);
@@ -91,8 +91,8 @@ test("stdout and stderr stay valid evidence but cannot generate structured resul
   const agentPath = path.resolve(__dirname, "../../dist/runtime/cluster_agent.py");
   const script = [
     'import importlib.util, pathlib, tempfile',
-    'spec = importlib.util.spec_from_file_location("agent", pathlib.Path(' + JSON.stringify(agentPath) + '))',
-    'agent = importlib.util.module_from_spec(spec); spec.loader.exec_module(agent)',
+    ("spec = (lambda _name, _file: __import__(\"runpy\").run_path(" + JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py")) + ")[\"extract_runtime_functions\"](_file, [\"default_result_candidates_for_dir\",\"discover_result_files\",\"discover_result_files_under\",\"parse_results_action\",\"parseable_result_candidate\",\"plan_declared_result_candidates\",\"plan_output_capture_evidence\",\"policy_explicit_result_candidates\",\"read_project_metric_policy\",\"structured_result_candidate\"]))(\"agent\", pathlib.Path(") + JSON.stringify(agentPath) + '))',
+    "agent = spec; pass",
     'with tempfile.TemporaryDirectory() as root:',
     '    output = pathlib.Path(root, "work_dirs/demo")',
     '    output.mkdir(parents=True)',
@@ -118,6 +118,6 @@ test("stdout and stderr stay valid evidence but cannot generate structured resul
     '    assert selected["sources"] == [csv_rel], selected',
     'print("diagnostic logs excluded from structured results")',
   ].join("\n");
-  const result = spawnSync("python", ["-c", script], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
+  const result = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }, timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });

@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..", "..");
 
 test("agent Worker command reader resumes from a bounded file cursor", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) {
     t.skip("python unavailable");
     return;
@@ -19,9 +19,10 @@ test("agent Worker command reader resumes from a bounded file cursor", (t) => {
   fs.writeFileSync(script, `
 import importlib.util, json, pathlib
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["AGENT_STATE_DIR", "MAX_WORKER_COMMAND_CURSOR_RECORDS", "WORKER_COMMAND_CURSOR_CACHE", "WORKER_COMMAND_CURSOR_TTL_SECONDS", "_is_pid_alive", "_read_run_plan_registry", "execute_worker_command", "prune_worker_command_cursor_cache", "read_worker_commands", "start_worker_local_command_processor", "threading", "time", "worker_command_path"])
 
 root = ${JSON.stringify(project)}
 worker = "worker-a"
@@ -58,7 +59,7 @@ print(json.dumps({
     "cursorActive": "active-old" in agent.WORKER_COMMAND_CURSOR_CACHE,
 }))
 `, "utf8");
-  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result.firstSeqs.length, 20);
@@ -75,7 +76,7 @@ print(json.dumps({
 
 test("single Worker command processor does not replay old commands after Agent restart", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) {
     t.skip("python unavailable");
     return;
@@ -84,8 +85,10 @@ test("single Worker command processor does not replay old commands after Agent r
   const script = path.join(project, "command-restart.py");
   fs.writeFileSync(script, `
 import importlib.util, json, pathlib, os
-spec = importlib.util.spec_from_file_location("agent", pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))}))
-agent = importlib.util.module_from_spec(spec); spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))}), ["AGENT_STATE_DIR", "MAX_WORKER_COMMAND_CURSOR_RECORDS", "WORKER_COMMAND_CURSOR_CACHE", "WORKER_COMMAND_CURSOR_TTL_SECONDS", "_is_pid_alive", "_read_run_plan_registry", "execute_worker_command", "prune_worker_command_cursor_cache", "read_worker_commands", "start_worker_local_command_processor", "threading", "time", "worker_command_path"])
 root = ${JSON.stringify(project)}
 agent.AGENT_STATE_DIR = os.path.join(root, "state")
 worker = "nwpu3"
@@ -132,7 +135,7 @@ agent.start_worker_local_command_processor(old_root, worker, 1, 0)
 assert executed == [], f"abandoned Plan replayed during cursor migration: {executed}"
 print("durable queue cursor ok")
 `, "utf8");
-  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" } });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   assert.match(run.stdout, /durable queue cursor ok/);
 });

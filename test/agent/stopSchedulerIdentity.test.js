@@ -9,15 +9,8 @@ const agentPath = path.join(root, "src/clusterAgentRuntime.legacy.ts");
 const fixturePath = path.join(__dirname, "stop_scheduler_identity_fixture.py");
 const source = fs.readFileSync(agentPath, "utf8");
 
-test("stop target requires an exact recorded operation and Plan identity", () => {
-  const result = spawnSync("python", ["-X", "utf8", fixturePath], {
-    input: source,
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-    cwd: root,
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+test("historical receipt parsing retains exact recorded operation and Plan identity", () => {
+  const result = spawnSync("python", ["-X", "utf8", fixturePath], { input: source, encoding: "utf8", timeout: 10000, windowsHide: true, cwd: root, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
   assert.equal(result.status, 0, result.stderr || result.stdout || result.error?.message);
   assert.match(result.stdout, /stop identity ok/);
 });
@@ -27,10 +20,10 @@ test("stop never trusts caller PID and legacy admin routes cannot execute broad 
   const stopEnd = source.indexOf("\ndef recent_operations(", stopStart);
   assert.ok(stopStart >= 0 && stopEnd > stopStart);
   const stop = source.slice(stopStart, stopEnd);
-  assert.match(stop, /scheduler_stop_record_identity\(wanted, requested_plan, latest_event\)/);
-  assert.match(stop, /registry_entry = next\(/);
+  assert.match(stop, /task_stop\(root, command, worker\)/);
+  assert.match(stop, /wanted != stop_id/);
   assert.doesNotMatch(stop, /payload\.get\("pid"\)|payload\.get\("tmuxSession"\)/);
-  assert.match(stop, /process_start_identity\(before\["checkedPid"\]\) != expected_pid_start/);
+  assert.doesNotMatch(stop, /os\.kill|kill-session|scheduler_process_evidence|read_operation_events/);
 
   const routeStart = source.indexOf("if route in (\"/api/admin/kill-stale-runtime\", \"/api/admin/exec\"):");
   const routeEnd = source.indexOf("if route.startswith(\"/api/files/\"):", routeStart);

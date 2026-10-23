@@ -16,7 +16,7 @@ function readWithLegacyFallback(primary, legacy) {
 const extensionSource = readWithLegacyFallback("../../src/extension.ts", "../../src/extension/legacy.ts");
 const agentSource = readWithLegacyFallback("../../src/clusterAgentRuntime.ts", "../../src/clusterAgentRuntime.legacy.ts");
 
-test("abortSchedulerFromUi routes through stop-scheduler-operation (tmux kill + SIGTERM/SIGKILL + deregister)", () => {
+test("abortSchedulerFromUi routes through an identity-bound stop and reconciles its result", () => {
   const start = extensionSource.indexOf("async abortSchedulerFromUi(message");
   const end = extensionSource.indexOf("private clearLocalOperationCachesForOp(", start);
   const body = extensionSource.slice(start, end);
@@ -61,12 +61,12 @@ test("normal stop forwards the clicked operation id through actionBody", () => {
   assert.match(extensionSource, /candidates = \[\{ operationId: target\.operationId, planFile: target\.planFile, type: "run-plan"/, "reloaded single Worker can stop an explicit remote operation");
 });
 
-test("stop-scheduler-operation handler reaps empty shells via raw session-alive", () => {
-  const handler = agentSource.slice(agentSource.indexOf("def stop_scheduler_operation("), agentSource.indexOf("def recent_operations(", agentSource.indexOf("def stop_scheduler_operation(")));
-  assert.match(handler, /before\["tmuxShellAlive"\]/, "kill decision uses raw shell-alive, not python-gated tmuxSessionAlive");
-  assert.match(handler, /if not matched_scheduler and recorded_plan != requested_plan:[\s\S]*未清理 GPU 任务/, "unmatched stop does not clean other tasks");
-  assert.match(handler, /if task_plan != requested_plan:\s*continue/, "task cleanup stays within selected Plan");
-  assert.doesNotMatch(handler, /_reap_orphan_gpu_sessions\(root, force_all=True\)/);
+test("stop-scheduler-operation uses the original command and window boundary without session or PID gates", () => {
+  const start=agentSource.indexOf('def stop_scheduler_operation('),handler=agentSource.slice(start,agentSource.indexOf('def recent_operations(',start));
+  assert.match(handler,/task_stop\(root, command, worker\)/);
+  assert.match(handler,/"targetCommandId": wanted/);
+  assert.match(handler,/"matchedOperations": \[wanted\] if ok else \[\]/);
+  assert.doesNotMatch(handler,/os\.kill|kill-session|_reap_|scheduler_process_evidence/);
 });
 
 test("scheduler_process_evidence reports python-gated tmuxSessionAlive plus diagnostics", () => {

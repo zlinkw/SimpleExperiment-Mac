@@ -10,10 +10,10 @@ const { PptPlotBridge } = require("../../dist/PptPlotBridge.js");
 
 const root = path.join(__dirname, "../..");
 
-test("sampler and scheduler timing functions use half-second intervals", () => {
+test("Worker shared-frame consumers use one-second reads while Scheduler polling remains bounded", () => {
   const agentSource = path.join(root, "dist/runtime/cluster_agent.py");
   const schedulerSource = path.join(root, "dist/runtime/cluster_scheduler.py");
-  const scriptPath = path.join(os.tmpdir(), `runtime-refresh-timing-${process.pid}.py`);
+  const scriptPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "runtime-refresh-timing-")), "fixture.py");
   const agentPathLiteral = JSON.stringify(agentSource);
   const schedulerPathLiteral = JSON.stringify(schedulerSource);
   fs.writeFileSync(scriptPath, `
@@ -36,7 +36,7 @@ agent_ns = {"time": SimpleNamespace(sleep=lambda seconds: sleeps.append(seconds)
             "has_running_plan": lambda root: bool(sleeps)}
 sleeps = []
 exec(compile(ast.Module(body=agent_nodes, type_ignores=[]), "agent-functions", "exec"), agent_ns)
-scheduler_ns = {}
+scheduler_ns = {"Any": object}
 exec(compile(ast.Module(body=scheduler_nodes, type_ignores=[]), "scheduler-functions", "exec"), scheduler_ns)
 agent_ns["wait_for_worker_gpu_sample"]("/project", 60, 30, True)
 agent_ns["wait_for_worker_gpu_sample"]("/project", 60, 30, False)
@@ -55,22 +55,16 @@ print(json.dumps({
 `, "utf8");
   let result;
   try {
-    result = spawnSync("python", [scriptPath], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-      timeout: 10000,
-      windowsHide: true,
-    });
+    result = spawnSync("python", [scriptPath], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   } finally {
-    fs.rmSync(scriptPath, { force: true });
+    // Retain the exact function-only fixture for audit.
   }
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.deepEqual(JSON.parse(result.stdout), {
-    samplerInterval: 5.0,
-    activeDelay: 5.0,
-    idleDelay: 90.0,
-    actualSleeps: [5.0, 5.0],
+    samplerInterval: 1.0,
+    activeDelay: 1.0,
+    idleDelay: 1.0,
+    actualSleeps: [1.0, 1.0],
     minimumPoll: 0.5,
     zeroPoll: 0.5,
     fractionalPoll: 1.25,
@@ -80,14 +74,13 @@ print(json.dumps({
 
   const scheduler = readSource("src/clusterSchedulerRuntime.legacy.ts");
   const agent = readSource("src/clusterAgentRuntime.legacy.ts");
-  assert.match(agent, /def start_worker_telemetry_sampler[\s\S]*?interval = sampler_interval_seconds\(poll_seconds, 60\.0\)/);
-  assert.match(agent, /def start_hub_control_sampler[\s\S]*?interval = sampler_interval_seconds\(poll_seconds, 60\.0\)/);
-  assert.match(agent, /def start_worker_hub_uplink[\s\S]*?availability_base = 0\.5[\s\S]*?jitter = 0\.0[\s\S]*?event_delay = 0\.5/);
+  assert.match(agent, /def start_worker_telemetry_sampler[\s\S]*?interval = worker_gpu_sample_delay\(poll_seconds, 0, False\)/);
+  assert.match(agent, /def start_hub_control_sampler[^\n]*\n\s*raise ValueError\("HUB_REMOVED/);
+  assert.match(agent, /def start_worker_hub_uplink[^\n]*\n\s*raise ValueError\("HUB_REMOVED/);
   assert.match(scheduler, /add_argument\("--poll-seconds", type=float, default=600\)/);
-  assert.match(scheduler, /session_check_min_seconds = max\(0\.5, float\(args\.session_check_min_seconds/);
-  assert.doesNotMatch(scheduler, /SCHEDULER_SIGNAL_DEBOUNCE|_last_signal_monotonic|_is_dup_signal|_is_dup_poll/);
-  assert.match(scheduler, /sleep_slice = min\(0\.5, sleep_target - slept\)[\s\S]*?time\.sleep\(sleep_slice\)[\s\S]*?slept \+= sleep_slice/);
-  assert.match(scheduler, /_pending_signal_type = _sig/);
+  // Global dispatch is retired. The extracted timing/signal helpers remain compatibility contracts.
+  assert.match(scheduler, /GLOBAL_SCHEDULER_REMOVED: use the Worker native tmux task queue/);
+
 });
 
 test("PowerPoint launch can repeat after completion and still shares an in-flight launch", async () => {

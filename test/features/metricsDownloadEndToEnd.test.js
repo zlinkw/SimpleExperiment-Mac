@@ -243,6 +243,7 @@ test("pulled completion automatically updates results without mirroring, remote 
   const f=fixture();const {resultCollectionHost}=require('../../src/extension/ResultCollectionHost.ts');
   const service=resultCollectionHost(f.host);
   await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('automatic summary did not complete')),3000);
+    f.host.recordActionError=error=>{clearTimeout(timer);reject(Error(JSON.stringify(error)));};
     f.host.postState=()=>{clearTimeout(timer);resolve();};
     service.observe({workerId:'a',queryComplete:true,capabilities:{resultCollection:1},tasks:[{commandId:'command',observation:{result:{verified:true,runId:'command',status:'completed'},tmux:{dead:true,exitCode:0}}}]});
   });

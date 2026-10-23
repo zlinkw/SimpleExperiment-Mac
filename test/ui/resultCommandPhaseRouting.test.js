@@ -69,7 +69,11 @@ test('results have a stable live outlet outside the rerendered summary and actua
   assert.ok(section.indexOf('id="resultCommandPhaseLine"') < section.indexOf('id="resultSummary"'));
   for (const command of ['refreshLocalResults', 'syncPendingPlanArtifacts'])
     assert.ok(script.includes('data-command="' + command + '" data-action-section="results"'), command + ' button missing result association');
-  assert.equal(script.includes('data-command="rebuildProjectResultTables"'), false, 'retired rebuild control must stay absent');
+  // The legacy rebuild alias remains routable; the toolbar uses the current refresh/sync actions.
+  for (const command of ['refreshLocalResults', 'syncPendingPlanArtifacts', 'rebuildProjectResultTables']) {
+    const f = fixture();
+    assert.equal(f.sandbox.commandInspectorSection(command), 'results');
+  }
   const f = fixture();
   const button = { dataset: { command: 'syncPendingPlanArtifacts', actionSection: 'results' }, textContent: '下载指标并重新汇总',
     disabled: false, closest: () => null, getAttribute: () => null };

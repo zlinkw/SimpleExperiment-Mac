@@ -12,9 +12,10 @@ test("agent writes invalidate cached read-only snapshots even under coarse file 
   const script = String.raw`
 import importlib.util, json, os, types
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["atomic_write", "move_file_replace", "os", "read_runtime_json_cached"])
 
 workdir = ${JSON.stringify(workdir.replace(/\\/g, "/"))}
 snapshot = os.path.join(workdir, "cluster_snapshot.json")
@@ -23,7 +24,7 @@ uploaded = os.path.join(workdir, "uploaded.json")
 
 frozen = types.SimpleNamespace(st_dev=1, st_ino=1, st_size=1, st_mtime=1, st_mtime_ns=1)
 real_stat = os.stat
-agent.os.stat = lambda path: frozen
+agent.os.stat = lambda path, *args, **kwargs: frozen if os.path.abspath(path) in (snapshot, landing, uploaded) else real_stat(path, *args, **kwargs)
 
 agent.atomic_write(snapshot, {"generation": 1})
 first = agent.read_runtime_json_cached(snapshot, {})

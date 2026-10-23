@@ -54,6 +54,7 @@ docs/[m][o][b][a][X][t][e][r][m]-tunnel-full-feature-acceptance.md
 msg.txt
 **/msg.txt
 docs/**
+dist/templates/project-adapter/**
 tests/**
 CHANGELOG.md
 **/*.patched
@@ -111,6 +112,7 @@ dist/results/ProjectResultPublication.js
 dist/results/ResultDirectoryRebuild.js
 dist/runCli.js
 dist/runtime/AgentLifecycle.js
+dist/runtime/GpuCollector.js
 dist/runtime/ArchiveEvidenceRead.js
 dist/runtime/CaseAnalysisRead.js
 dist/runtime/ClaimEvidenceRead.js

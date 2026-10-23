@@ -78,7 +78,8 @@ test("provider selects reload-required UI only for mixed extension versions", ()
   const loadPanel = source.slice(source.indexOf("private loadPanelHtml()"), source.indexOf("private reloadPanelHtml()"));
   const versionState = source.slice(source.indexOf("private extensionRuntimeVersionState()"), source.indexOf("private handleExtensionRegistryChange()"));
   assert.match(versionState, /PanelBuildIdentity_1\.classifyPanelBuildIdentity/);
-  assert.match(versionState, /vscode\.extensions\.getExtension\("simple-local\.simple-experiment"\)/);
+  // Mac 适配：发行扩展 id 为 simple-local.simple-experiment-mac（Windows 为 simple-local.simple-experiment）。
+  assert.match(versionState, /vscode\.extensions\.getExtension\("simple-local\.simple-experiment-mac"\)/);
   assert.match(versionState, /content_mismatch/);
   assert.match(loadPanel, /if \(this\.extensionRuntimeVersionState\(\)\.reloadRequired\)\s*\{\s*this\.showPanelReloadRequired\(\);\s*return;/);
   assert.match(loadPanel, /renderPanelBootstrapDocument\(renderPanelHtml, renderPanelRecoveryHtml\)/);

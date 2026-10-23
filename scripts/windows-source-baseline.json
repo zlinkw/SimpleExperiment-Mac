@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-10-22",
-  "scope": "Current local normalized source fingerprints only. Neither behavioral acceptance nor complete frozen-source comparison; 9 of 386 required frozen Windows raw source exports remain unavailable. Exact normalized SHA recovery: 377/386.",
+  "recordedAt": "2026-10-24",
+  "scope": "Frozen .403/.107 raw source snapshots with normalized Windows SHA and current Mac SHA. Static equality or documented platform overlay only; behavioral acceptance and real macOS validation remain separate.",
   "identityMapping": [
     "simple-local.simple-experiment -> simple-local.simple-experiment-mac",
     "simple-local.simple-sftp -> simple-local.simple-sftp-mac",
@@ -11,29 +11,55 @@
   "components": [
     {
       "name": "experiment",
-      "windowsVersion": "0.5.400",
-      "windowsCommit": "30626e78ea2f4b8a3e19e2cb09ae6aefcc6deb39",
+      "windowsVersion": "0.5.403",
+      "windowsCommit": "c30d607f1b63d224e8a65ab94371d86b4dd81c0d",
       "files": [
         {
           "path": ".vscodeignore",
-          "localSha256": "07e0bcc4448eeacfda3e41598bdd4aff7afd13f601051662616cf166fa6d23a0",
-          "windowsSha256": "c91526b85b1e92de45330b216a460891aa6894296b751d75dcf12970976cacc7",
+          "localSha256": "3bc6a360ad539ff203494539519f6c357d6a21e1a7c7c66bffb6379eea5c4614",
+          "windowsSha256": "d018adb070ef75a7870336551e75f16317b4bf52986d86951f2dfd61c5ce42aa",
           "classification": "platform-overlay",
-          "reason": "Mac runtime set derives from its entrypoints, lazy factories, require.resolve and catalog Worker. Exclude 99 unreachable compiled JS, publisher-only preview.json and the Windows launcher; retain templates, generated Python, build manifests and legal resources. Frozen Windows policy SHA remains unchanged."
+          "reason": "Mac runtime closure and required entrypoints determine packaging. Excludes unreachable generated JS, publisher-only preview index, Windows launcher and all project template documents/resources; legal and toolchain-required root README retained."
         },
         {
           "path": "package-lock.json",
-          "windowsSha256": "4d617f35e40b98d07df2bae5b9d14408b44e20048a8176fc97af0a28beddd1ed",
-          "localSha256": "88a64dc02443069bfa555c8b19e15ff7e2498a02a64a106c1ca8ccb963881cf9",
+          "windowsSha256": "785c1b93f5fdedaa62aa11bd1325c00d86e526b2a1c34da85ded4b7fb4ff6586",
+          "localSha256": "1563aa2b551eec48eebd13bf469c8bf8544216fc34beb1f2dfd65fcf3b16933a",
           "classification": "platform-overlay",
           "reason": "Mac root package identity/version only; common dependency lock retained."
         },
         {
           "path": "package.json",
-          "windowsSha256": "2b1aa113e35d8da33e998e8af704866f117899581cbd588adcfeb08aa8901f3f",
-          "localSha256": "efefab9d2e600dd909bac7dfe3c8d6e6bd8a230b127861c8c5033e03ccf1a0d9",
+          "windowsSha256": "b797c96f7f7d8b6ab993449862db982db1fb574a810a370a30a10f8efd8670e5",
+          "localSha256": "b867a53dd6a50caaf7da45ec20df2fd8066689d54a57e43d55f92f76cbcbb1fb",
           "classification": "platform-overlay",
           "reason": "Mac extension identity, OS entry, CLI/native runtime files and existing scripts; common contributions/defaults copied."
+        },
+        {
+          "path": "scripts/package-content-policy.js",
+          "localSha256": "16d86686893d6e524320b37cfa46fabae7da24b48abc635d5e10eaa5661b139a",
+          "windowsSha256": "16d86686893d6e524320b37cfa46fabae7da24b48abc635d5e10eaa5661b139a",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "scripts/package-content-policy.json",
+          "localSha256": "7a0349d3bb6598991c42bf2501bdeb827777e8e42ab35751f3e953360111853a",
+          "windowsSha256": "0d5888fe35da6f2020c48a22902d5e4fcae450ded0867cac09cc5b1d885935c3",
+          "classification": "platform-overlay",
+          "reason": "Mac uses its actual Bootstrap/CLI entrypoints and forbids packaged project Markdown; legal/root README toolchain exceptions retained."
+        },
+        {
+          "path": "scripts/package_content_policy.py",
+          "localSha256": "0aa25747e906a09e33899c966de8a50ea4a3d25cf924b0e82a25158daf9a41ec",
+          "windowsSha256": "0aa25747e906a09e33899c966de8a50ea4a3d25cf924b0e82a25158daf9a41ec",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "scripts/write-agent-runtime.js",
+          "localSha256": "864c2326d7de61c0bab324936ee79116927886cf6c6cb97bfa43fc487bcc9f09",
+          "windowsSha256": "4c81c241dcf16b399c8cf4b2c176543b223ad4dc8bf8ddb6eee359dfb75ee0c8",
+          "classification": "platform-overlay",
+          "reason": "Mac cold builds create missing checksums; templates come from the tracked compiled producer, never ignored packaged documentation."
         },
         {
           "path": "src/PptPlotBridge.legacy.ts",
@@ -232,8 +258,8 @@
         },
         {
           "path": "src/clusterAgentRuntime.legacy.ts",
-          "windowsSha256": "c85c10c86f9d6e6607426b1d0c2de70a298b0164cff22ab5c4f366bc0dbf7056",
-          "localSha256": "c9903b2cf5e20b836e43507362db77a498c57a8b259bfadc93efb9e857f035c2",
+          "windowsSha256": "7569fe9070d05cd25ebe4cdcad5b0e94bdc98b0e51cd220b4704f876508872d3",
+          "localSha256": "453220b15ea4cba6836920315191f89cc74f6574c5d4fc8b6cad9fbbb0d37159",
           "classification": "platform-overlay",
           "reason": "083 strict POSIX filename identity and physical launch-path adapters; reject typed/conflicting aliases, links and changed Plan parents without trimming legal spaces. Frozen current admission/control and protocol-2 state remain; 1MiB original Plan cap retained. Common used-log root and credential deny policy remains in force before directory creation."
         },
@@ -245,8 +271,8 @@
         },
         {
           "path": "src/clusterSchedulerRuntime.legacy.ts",
-          "windowsSha256": "d7adedf3208cd44a84e7af76f64df902589a7ed7623f2d59595d2b4c798160a8",
-          "localSha256": "6b0ce37c5b87a029fb575d29badf0e96c3c5a9fc0c061002f20615acc2e50e4e",
+          "windowsSha256": "78b1cdb7e79f66f1c00770fbeaa697255e0a5a1be2de6a5a81cfad85345eeda0",
+          "localSha256": "bc326abe048111d6de8bf0cff7cebfe2c1480bacb40f13de6dea2ae5f79de96a",
           "classification": "platform-overlay",
           "reason": "083 preserve raw POSIX path spelling for declared output/cwd/inputs/default result directories and Plan runtime keys; reject malformed types/paths before runtime preparation. Current declared-output binding, retired-attempt rejection and scheduling business remain."
         },
@@ -452,7 +478,8 @@
           "path": "src/extension/GitBackupSetup.ts",
           "windowsSha256": "89414c81c22bb077b7a780bff0516e8612b91e6ed578da3ad61f66baa2a6cfeb",
           "localSha256": "86d661015cc06d3474d837539bae522e40202c24b22e54b7f53a0cf92b029c45",
-          "classification": "windows-identical-after-identity-mapping"
+          "classification": "platform-overlay",
+          "reason": "Retained Mac POSIX/path, identity and runtime boundary from the reviewed three-way adaptation; common .403/.107 behavior retained. Changes require the complete paired regression inventory."
         },
         {
           "path": "src/extension/GpuQuotaPolicyHost.ts",
@@ -474,14 +501,38 @@
         },
         {
           "path": "src/extension/PlanCleanupHost.ts",
-          "windowsSha256": "74194065a101878680e3a0c7ab03cc4de1331a37b36e228b10d9c3b61e44d6d9",
-          "localSha256": "74194065a101878680e3a0c7ab03cc4de1331a37b36e228b10d9c3b61e44d6d9",
+          "windowsSha256": "298be075991ea620b607e194442ba092679bdd1103788621223e021f71c46fb4",
+          "localSha256": "298be075991ea620b607e194442ba092679bdd1103788621223e021f71c46fb4",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/extension/PlanCleanupIsolatedReviews.ts",
+          "localSha256": "ecea5276e7612ce0de2172234da46d4a188021e8e0d6980126a66d10ed9e53f5",
+          "windowsSha256": "ecea5276e7612ce0de2172234da46d4a188021e8e0d6980126a66d10ed9e53f5",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/extension/PlanCleanupNodeGuards.ts",
+          "localSha256": "6227120732d33f06fdbe044a38f232b0bb616fb5f4e09f5d688d67648e800c8e",
+          "windowsSha256": "6227120732d33f06fdbe044a38f232b0bb616fb5f4e09f5d688d67648e800c8e",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanCleanupPanel.ts",
-          "windowsSha256": "dab32d7d877570cada22123cd7b4853208fe692025f6efb577516582772a896e",
-          "localSha256": "c04b906e63157e58a76825f5328f02f82d14f9b2638477adc1ff1ac167bd8717",
+          "windowsSha256": "2d2e13a494c96a9f9c92b1c5d6f47a85a524d8f1c32a86c2958fb3a2427c6cf3",
+          "localSha256": "9cafc4b8461e5579a336ebe67b826ae823826c01ad71a670a7e98e828ca91b74",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/extension/PlanCleanupSftpGuard.ts",
+          "localSha256": "f6cb86a2af7ff7ebf1f2f1b00c382fa86bbe433c1ee86344350931ae6589fe54",
+          "windowsSha256": "f6cb86a2af7ff7ebf1f2f1b00c382fa86bbe433c1ee86344350931ae6589fe54",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/extension/PlanCleanupTargetVerification.ts",
+          "localSha256": "604342cd42a7b11ed05a0ee0f7ef6f9fc9528cef9c18e4522b4cfafbf47cfb87",
+          "windowsSha256": "604342cd42a7b11ed05a0ee0f7ef6f9fc9528cef9c18e4522b4cfafbf47cfb87",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -492,8 +543,8 @@
         },
         {
           "path": "src/extension/PlanRunHost.ts",
-          "windowsSha256": "954b854fe3f082a902f98ec3f628f2f79e454b39b5d16f72f2853e5e8d0f6877",
-          "localSha256": "954b854fe3f082a902f98ec3f628f2f79e454b39b5d16f72f2853e5e8d0f6877",
+          "windowsSha256": "557e8b95519af29ecbcff3fc6db4d51bd4e41863b8e901d0b836b4d9f238643f",
+          "localSha256": "557e8b95519af29ecbcff3fc6db4d51bd4e41863b8e901d0b836b4d9f238643f",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -546,8 +597,8 @@
         },
         {
           "path": "src/extension/SelectedPlanBatchHost.ts",
-          "windowsSha256": "71419fa530309831c472e31cff43819a4919b88236b065e43d7b83efed24af46",
-          "localSha256": "71419fa530309831c472e31cff43819a4919b88236b065e43d7b83efed24af46",
+          "windowsSha256": "8ba79834082573a06abcdb8c9c6b6accdd9576fd87ea2d9d372217a6de78f8b9",
+          "localSha256": "8ba79834082573a06abcdb8c9c6b6accdd9576fd87ea2d9d372217a6de78f8b9",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -564,16 +615,17 @@
         },
         {
           "path": "src/extension/legacy.ts",
-          "windowsSha256": "5d65a82593ad90db4705643907955e3f442528cd1b05c163feb82d252636dfa2",
-          "localSha256": "69d21beb33cbeb0e1a33f88acac3a1d4b1c47014bbc1f2e486b36492f6693f35",
+          "windowsSha256": "f0ed48819fa4b6901cbcb8de8fe6a535f3ae7719371686b901755791b59ae515",
+          "localSha256": "7ccc7f73a5dda2b97c9052567d0bab8cc596c0866b5fd61f8dc876e4005bec18",
           "classification": "platform-overlay",
-          "reason": "083 Darwin strict POSIX Plan/result I/O and exact summary scope; descriptor/hash publication checks. Summary variants cache keys the original source before scoped derivation; ownership filters still run on misses. Current active-query/protocol-2 lifecycle preserved. Variant keys use a JSON tuple to prevent separator collisions."
+          "reason": "Preserves Mac identity, worker-only entrypoints, strict POSIX spelling, independent authentication and paired preview updates while merging .403 GPU/root-map/isolated-review behavior. Runtime templates no longer read packaged project documentation."
         },
         {
           "path": "src/factories/CommandFactory.ts",
           "windowsSha256": "8dbcf9828cc5b9fcb95895145592e5aec11b89fbaf44e6f262722ab95f0a43a5",
           "localSha256": "cc3506660112d6481bbba4a83b697fde664c93e337714aebec7cdca649836ff1",
-          "classification": "windows-identical-after-identity-mapping"
+          "classification": "platform-overlay",
+          "reason": "Retained Mac POSIX/path, identity and runtime boundary from the reviewed three-way adaptation; common .403/.107 behavior retained. Changes require the complete paired regression inventory."
         },
         {
           "path": "src/factories/FeatureFactory.ts",
@@ -710,8 +762,8 @@
         },
         {
           "path": "src/features/DistributedPlanQueue.ts",
-          "windowsSha256": "24ef27c9c9d8e320c07a45c81938ecd5a1ae630d8fa05f6e10a42124843ba674",
-          "localSha256": "3a25261948a02aad99606a23417338db5ac3314433b8798c2348a0c1a18590a7",
+          "windowsSha256": "5bdd5ca449f08f5a69da43fada713deb533d103614b0298daeb2d0ebaaf239f2",
+          "localSha256": "e007f8af2dee0360edc51b769281a07a55ba9812b49a38f6c4cb34133f7d0c60",
           "classification": "platform-overlay",
           "reason": "Darwin exact POSIX identity in Plan matching, latest grouping and selected manual targets only. Preserve current protocol-2 lifecycle, declared outputs, manual retry and historical-attempt read-only guards."
         },
@@ -852,8 +904,8 @@
         },
         {
           "path": "src/features/LocalCodeManifestCache.ts",
-          "windowsSha256": "4c78da471c8975a4c9347975beb7e0d01b3978808409559aee0da9d692d9de65",
-          "localSha256": "ca66d46177767e5c5a42c3a304774190cfd5bd6a96830ec7326ce86e4bb171a2",
+          "windowsSha256": "7a9394b6defe3dfa03c641fe412dd9b11485d2a373a03dc4e35dc0a8f90201d0",
+          "localSha256": "3753630a533573306167e415164f335870848690f893cd5bf00d7dc53c90f723",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1021,8 +1073,8 @@
         },
         {
           "path": "src/features/PlanCleanup.ts",
-          "windowsSha256": "07b03e3a3378dc3e3116fa3429b9b252e5f88a205b665d156cd687d714a922f8",
-          "localSha256": "07b03e3a3378dc3e3116fa3429b9b252e5f88a205b665d156cd687d714a922f8",
+          "windowsSha256": "05eed21fe237ab89adb637b91c3cfae4bd760dc3ddac167ee6e70e65eaefe646",
+          "localSha256": "05eed21fe237ab89adb637b91c3cfae4bd760dc3ddac167ee6e70e65eaefe646",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1035,6 +1087,18 @@
           "path": "src/features/PlanExecutionMode.ts",
           "windowsSha256": "ac14ebe839d9a337549d97c83559f85992827c65e6a5a9c5eac124f08fc5cc25",
           "localSha256": "ac14ebe839d9a337549d97c83559f85992827c65e6a5a9c5eac124f08fc5cc25",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/features/PlanIsolatedBatchLedger.ts",
+          "localSha256": "0f0bfafbf181d719f100c82236eaf867c4718b460aaf7c55828f57e4bdd31532",
+          "windowsSha256": "0f0bfafbf181d719f100c82236eaf867c4718b460aaf7c55828f57e4bdd31532",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/features/PlanIsolatedReview.ts",
+          "localSha256": "cab525f88e172299701a9a88532d95260697a1405dc9ddce1d155788bd2cf7b8",
+          "windowsSha256": "cab525f88e172299701a9a88532d95260697a1405dc9ddce1d155788bd2cf7b8",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1051,8 +1115,8 @@
         },
         {
           "path": "src/features/PlanRunReplacement.ts",
-          "windowsSha256": "b620d892ceb6f015cba056a4716c330bc0bbf0ebfce84f5902519a95facfee13",
-          "localSha256": "b620d892ceb6f015cba056a4716c330bc0bbf0ebfce84f5902519a95facfee13",
+          "windowsSha256": "f8d092ba0995cffaf07d4fe3ee628736229e06a640228a799deaffbb58a6536f",
+          "localSha256": "f8d092ba0995cffaf07d4fe3ee628736229e06a640228a799deaffbb58a6536f",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1087,8 +1151,8 @@
         },
         {
           "path": "src/features/ProjectFileIndex.ts",
-          "localSha256": "027a041483adae1f4af816c8b778abf2d1daa6a4ef0a4bc02cc6fbe3e8b4ddb8",
-          "windowsSha256": "027a041483adae1f4af816c8b778abf2d1daa6a4ef0a4bc02cc6fbe3e8b4ddb8",
+          "localSha256": "c2a889889cd8a21a743313e944f1b114fbb9958f14e58da31315f3958087acd7",
+          "windowsSha256": "c2a889889cd8a21a743313e944f1b114fbb9958f14e58da31315f3958087acd7",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1096,6 +1160,13 @@
           "windowsSha256": "94a5d46556b3d691096c17b0b56bbba4bad433c0b1b7d2b190c847604b372e4d",
           "localSha256": "94a5d46556b3d691096c17b0b56bbba4bad433c0b1b7d2b190c847604b372e4d",
           "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/features/ProjectRootMap.ts",
+          "localSha256": "077bba3bb1432255401b4f940a55898ca50faa8e150966bd478d1a051fbe2ba4",
+          "windowsSha256": "93724d5d9a4c358dc1ef1dec1acce7e5b2f898ce366bd61af613aa764da2e62c",
+          "classification": "platform-overlay",
+          "reason": "Mac POSIX root identity preserves legal final spaces; Windows drive normalization and conservative state-protection semantics retained. Dedicated root-map/sync/cleanup regressions cover non-alias identity."
         },
         {
           "path": "src/features/ProjectStaticCheck.ts",
@@ -1281,8 +1352,8 @@
         },
         {
           "path": "src/features/SyncScopeStatus.ts",
-          "windowsSha256": "65809de1a991230803da84032bd4573b25bb8c37e17058c5dd748e740c28dd98",
-          "localSha256": "85f611935f21cc3dbd9450a3f097144f6a4e99e732994b972da8675015c603a8",
+          "windowsSha256": "8b62831d6bed45cbcf8c9fa7273318c50e786b9d6df5a6dfb36e4630e7fc7371",
+          "localSha256": "7bf1341f4379ce76b54d343452a9506857753169ca9a02aafd5b4c042e7f58f5",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1652,8 +1723,8 @@
         },
         {
           "path": "src/runtime/AgentLifecycle.ts",
-          "windowsSha256": "967cad965775ff5b210055a1c84bbbda7eadae7a77dca34bdae026a6ddc808b3",
-          "localSha256": "967cad965775ff5b210055a1c84bbbda7eadae7a77dca34bdae026a6ddc808b3",
+          "windowsSha256": "482cadb5513c6f7c85ff0ba6f4edd168fb91b36d289875009c0affe558d68fea",
+          "localSha256": "482cadb5513c6f7c85ff0ba6f4edd168fb91b36d289875009c0affe558d68fea",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1673,6 +1744,12 @@
           "localSha256": "700b32957efb6315da92f6b098162b967cc5c46c90de97a8613ff3463e736483",
           "classification": "platform-only",
           "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+        },
+        {
+          "path": "src/runtime/GpuCollector.ts",
+          "localSha256": "c93aa85b2c86960554748fcca4176848a16f6fd6ea99fdbac3ff3409813a0284",
+          "windowsSha256": "c93aa85b2c86960554748fcca4176848a16f6fd6ea99fdbac3ff3409813a0284",
+          "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/runtime/IncrementalScopeMetadata.ts",
@@ -1724,8 +1801,8 @@
         },
         {
           "path": "src/runtime/RuntimeManifest.ts",
-          "windowsSha256": "20ced9c3ea26e6d398779b9d75796144527ba2ee2d71b4c5a1006897d9b7a2c9",
-          "localSha256": "523a288b14ba6fe22cc0c680e1738160db6f677fa1340d11cb6a45ed0c0f09df",
+          "windowsSha256": "1cc078fe2d0db61573e1b584939af5dc36113f05e10a82a9543cf16b11430706",
+          "localSha256": "986e657917618c42d8a8a9aaa6ca861923dd33b165af22fec650ff613443fc3d",
           "classification": "platform-overlay",
           "reason": "Historical unbuilt Mac version retained; version bump must accompany the next authorized build."
         },
@@ -1743,9 +1820,10 @@
         },
         {
           "path": "src/runtime/TmuxTaskLifecycle.ts",
-          "windowsSha256": "d2cc670188dde9d32fb6dc3d9ede3603b621d8b4fc3abd0db7921db61389980e",
-          "localSha256": "6ecbee2d7045b3286df859482ab0b96b8682667c33bbb465d7a357699754b087",
-          "classification": "windows-identical-after-identity-mapping"
+          "windowsSha256": "a3733410ec749be20279eb6b03039a89bfb31217e8030e688c4eedf6249737ed",
+          "localSha256": "4e920e8f6eb6655d59e1fa5215adc614f064653ce98ce4d91c0ffea579bd068a",
+          "classification": "platform-overlay",
+          "reason": "Retained Mac POSIX/path, identity and runtime boundary from the reviewed three-way adaptation; common .403/.107 behavior retained. Changes require the complete paired regression inventory."
         },
         {
           "path": "src/security/RemotePathPolicy.ts",
@@ -1893,20 +1971,20 @@
         },
         {
           "path": "src/tunnel/AgentCapabilities.ts",
-          "windowsSha256": "dc37a2d4215c7dce7281111a7983d7d00419d5c31dad3fcf5c42a7aa6f30d83f",
-          "localSha256": "dc37a2d4215c7dce7281111a7983d7d00419d5c31dad3fcf5c42a7aa6f30d83f",
+          "windowsSha256": "3c34523ae290f7405f6b37584b9029514e38ddfdcacc7f5e8e66bb88d585dac2",
+          "localSha256": "3c34523ae290f7405f6b37584b9029514e38ddfdcacc7f5e8e66bb88d585dac2",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/tunnel/AgentTmuxPolicy.ts",
-          "windowsSha256": "c1c70adbfa04cbf3576dead7ed1f7e9c62f17219e6cb17c9e63283f2816bbe33",
-          "localSha256": "c1c70adbfa04cbf3576dead7ed1f7e9c62f17219e6cb17c9e63283f2816bbe33",
+          "windowsSha256": "05b34b0b3099ef6d12d9d2e86ae40383c79d8eadd1012c960dfe26d48de52a0c",
+          "localSha256": "05b34b0b3099ef6d12d9d2e86ae40383c79d8eadd1012c960dfe26d48de52a0c",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/tunnel/AuthorityMergePolicy.legacy.ts",
-          "windowsSha256": "707f85f16edde70f0c8edbd2cd87a0fe00d8a62b2950f92b31cc53f085c8ecb1",
-          "localSha256": "707f85f16edde70f0c8edbd2cd87a0fe00d8a62b2950f92b31cc53f085c8ecb1",
+          "windowsSha256": "e7c2c81e7a4f41a57fa17a82a5cd652a41ce1ccca5a7bbfdc2ea2fd033a65c72",
+          "localSha256": "e7c2c81e7a4f41a57fa17a82a5cd652a41ce1ccca5a7bbfdc2ea2fd033a65c72",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1971,8 +2049,8 @@
         },
         {
           "path": "src/tunnel/MultiEndpointRealtimeClient.legacy.ts",
-          "windowsSha256": "24d204325dff0bd9d4190a9303ecb1cef1ddf9efea25a497894e655155255a6f",
-          "localSha256": "24d204325dff0bd9d4190a9303ecb1cef1ddf9efea25a497894e655155255a6f",
+          "windowsSha256": "5cae67bcd493d8960ab9c7435a3dbedaa6148d6d35f6e28c2fabb3abc346eabe",
+          "localSha256": "5cae67bcd493d8960ab9c7435a3dbedaa6148d6d35f6e28c2fabb3abc346eabe",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -2181,8 +2259,8 @@
         },
         {
           "path": "src/tunnel/XshellTunnelPortProbe.legacy.ts",
-          "windowsSha256": "787822b65a8691b2c072508a553441d6f8faa0fd06db213ca3a73c901e7f9928",
-          "localSha256": "ba61e4986ba0644eeb204a509f900653bb98c106c23ea60e728f310b657ebe41",
+          "windowsSha256": "cbd7f1219ff7c3ba8f3179ddd6da7f4af202d03d988491d7e96c46c920bad6fc",
+          "localSha256": "a3c4af53a5319a3be9cf11df0e47adce019167406600cece497470ca758e5898",
           "classification": "platform-overlay",
           "reason": "Probe base URLs go through TunnelGateway.localBaseUrl so IPv6 literal forward hosts are bracketed in the URL authority (released Mac contract); remaining probe logic frozen."
         },
@@ -2194,8 +2272,8 @@
         },
         {
           "path": "src/tunnel/XshellTunnelSetup.legacy.ts",
-          "windowsSha256": "1411215a58f8ce196737387d00727595ab0c3904e1f62897ef01afe5b4018081",
-          "localSha256": "2d9ceb786b725b1a35c6ea09259e75b42ddef4fbb7b170c2e92be7c19b05042d",
+          "windowsSha256": "8814342f42fb777484b4d876547833e94f0b09dee436955feb462c16b2589576",
+          "localSha256": "45786e9db41248af4123ea1f294f1d4be9b9b437b09345ca8cc080d34907c678",
           "classification": "platform-overlay",
           "reason": "Do not require Xshell.exe for the manual native terminal adapter; common endpoint checks retained."
         },
@@ -2231,8 +2309,8 @@
         },
         {
           "path": "src/ui/PanelHtml.legacy.ts",
-          "windowsSha256": "2d1f4c2375f148f49c33665aa4dd2858c3bb233197ff6c179caee56b0969fc55",
-          "localSha256": "9f617bbccbfc14116fbb4c0cbbafd7267cac1c21db248336ebd769c9f556957f",
+          "windowsSha256": "aa663bb180c8108368cd38d14e9509c37b2999d48250b8a68dc915c88841f294",
+          "localSha256": "bc28410d0dc20e1acb21930151911b3e2691ba7702195d9a16cb80ea21367d75",
           "classification": "platform-overlay",
           "reason": "Retain current frozen Windows business script and layout; adapt only VS Code system theme palette, high-contrast borders and focus colors. Real Chromium light/dark/high-contrast contrast assertions pass unchanged; current script and non-color layout bytes preserved."
         },
@@ -2436,20 +2514,20 @@
     },
     {
       "name": "sftp",
-      "windowsVersion": "0.2.104",
-      "windowsCommit": "13ef630a12c6ea02ad9277452e75dbf443b9a34b",
+      "windowsVersion": "0.2.107",
+      "windowsCommit": "fc962236210ca692397dd58eefbefd0bf108f85a",
       "files": [
         {
           "path": "agent-lifecycle.js",
-          "windowsSha256": "04cfe1ed7a6e0dc0c96477fb668212aa7b4daf83f3e625228dfd7f6951914c9d",
-          "localSha256": "0fc98e59ba4cf21455510537eef927bdbedbf8f66534e200f011f1ea41fb6250",
+          "windowsSha256": "a790f295de7dd1bff884bf537cfc93dc801a1a07c95a7d4031088df314213c3a",
+          "localSha256": "ba7995a4d4d26fa57a02c35bd7fbc13560f75a3ef5fb68ed13543a0a4f2ff923",
           "classification": "platform-overlay",
           "reason": "Inject native authenticated SSH launch; lifecycle payload, timing and response rules unchanged."
         },
         {
           "path": "agent-lifecycle.py",
-          "windowsSha256": "c07d4d7bbb0885446593b4d4ed9b88a6580d6bac70b3615d62c008d1b4a6f950",
-          "localSha256": "c07d4d7bbb0885446593b4d4ed9b88a6580d6bac70b3615d62c008d1b4a6f950",
+          "windowsSha256": "3a2e1e2e4e636d5d19a3aa3b4f9bfae470f2b7bb70863c1059bd9d4606317f83",
+          "localSha256": "3a2e1e2e4e636d5d19a3aa3b4f9bfae470f2b7bb70863c1059bd9d4606317f83",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -2467,8 +2545,8 @@
         },
         {
           "path": "cleanup-file-api.js",
-          "windowsSha256": "d6814934ed27fb9d0874461ed19427291567a6b69b6e6a85d6b9f7b5043d2ba2",
-          "localSha256": "d6814934ed27fb9d0874461ed19427291567a6b69b6e6a85d6b9f7b5043d2ba2",
+          "windowsSha256": "9026ac6acb0c497b62c340f6612c24865ec2c23e3bff07051aa2464376f1d0a1",
+          "localSha256": "9026ac6acb0c497b62c340f6612c24865ec2c23e3bff07051aa2464376f1d0a1",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -2492,8 +2570,8 @@
         },
         {
           "path": "extension.js",
-          "windowsSha256": "8c861caa69c9fcf2331455bdf797dbd17e53971f42e602fd96833a25746e718d",
-          "localSha256": "1e645b1ba00e5e7938592c403991324adc52de7f7486b11bc794da03fe1592ff",
+          "windowsSha256": "ed367d30b8118bd20714fd5de12dfd184e9a98d837ea22ba48b26b87b8145eb6",
+          "localSha256": "2c1001afe259f09e2eff607fa79da96f57e03bf4a07d10222eac20aa95e27272",
           "classification": "platform-overlay",
           "reason": "Mac credential/askpass bridge, source/destination relay exit diagnostics, exact old-transfer settlement, and authentication notStarted boundaries reviewed with isolated tests. Existing common inventory/cleanup/task policy remains frozen; missing donor overlay bytes still require host_windows verification."
         },
@@ -2572,15 +2650,15 @@
         },
         {
           "path": "package-lock.json",
-          "windowsSha256": "608a0c3090e18eb2a67798e5c060fa1feba84ca3f34cffc2389d0ea03bec6285",
-          "localSha256": "61d8a917f1b1225f12eda299c2df36237313764a076d242524a5fd21a871161f",
+          "windowsSha256": "a2de6f6a36d3b29185aa3998f48610731d1cc04448c02cca152ec65928c6fba5",
+          "localSha256": "c82043802e1a82651a969a27a90c34fca83c51cdd3606a1c3434a0ec8f9cd954",
           "classification": "platform-overlay",
           "reason": "Mac root package identity/version only; common dependency lock retained."
         },
         {
           "path": "package.json",
-          "windowsSha256": "bdf859877e0c21b8ea6321457b4e611bc9281a2bdcc0c8b018a031a51723a612",
-          "localSha256": "76ee088869a59a919e413df5dac9914e5768bb6d7129c03d55ea3b5d4429af87",
+          "windowsSha256": "2164550a1e15a01343688613fcc2a251fc32b835c73e34d33c40daad43205161",
+          "localSha256": "e147ebe07b183589cbe7b9c3f3d6d8dc7c27b7749390dcfaf3738813f78fd06d",
           "classification": "platform-overlay",
           "reason": "Mac extension identity, OS entry, CLI/native runtime files and existing scripts; common contributions/defaults copied."
         },
@@ -2652,5 +2730,5 @@
     }
   ],
   "sourceGaps": [],
-  "validation": "430 source fingerprints and 386/386 exact frozen sources verified. Prior candidate 178 mandatory files / 1422 tests passed without skip. Packaging audit then strengthened lazy factory/Worker closure and excluded 99 unreachable compiled modules; actual inventory now 180 files. Final archive candidate requires renewed exact-input validation before publication."
+  "validation": "All recorded frozen raw sources available. Complete paired acceptance inventory: 483 unique files; final execution and archive review pending. No prior-version result substitutes for this candidate."
 }

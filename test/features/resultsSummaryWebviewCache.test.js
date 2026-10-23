@@ -30,6 +30,7 @@ function extractDeclaration(name) {
 
 function loadCache() {
   const sandbox = {
+    ResultOwnershipScope:require("../../dist/results/ResultOwnershipScope"),
     RESULTS_SUMMARY_WEBVIEW_VARIANT_CACHE_LIMIT: 3,
     resultsSummaryForWebviewCache: new WeakMap(),
     filterCalls: 0,
@@ -57,6 +58,7 @@ function loadCache() {
 
 function loadActualFilterCache() {
   const sandbox = {
+    ResultOwnershipScope:require("../../dist/results/ResultOwnershipScope"),
     RESULTS_SUMMARY_WEBVIEW_VARIANT_CACHE_LIMIT: 8,
     resultsSummaryForWebviewCache: new WeakMap(),
     compactResultsSummaryForWebview(value) {
@@ -144,7 +146,7 @@ test("cached result summaries preserve mixed-Plan isolation and archived counts"
       { id: "b", planFile: "experiments/plans/b.yaml", finalEvidenceState: "pending_review" },
     ],
   };
-  const result = sandbox.compactForPlan(summary, "experiments/plans/a.yaml", "", "2026-07-30T00:00:00Z");
+  const result = sandbox.compactForPlan(summary, "experiments/plans/a.yaml", "", "");
 
   assert.deepEqual(Array.from(result.results, (row) => row.id), ["a", "a-pending"]);
   assert.deepEqual(Array.from(result.finalResults, (row) => row.id), ["a"]);
@@ -153,7 +155,9 @@ test("cached result summaries preserve mixed-Plan isolation and archived counts"
   assert.equal(result.finalResultCount, 1);
   assert.equal(result.pendingReviewCount, 1);
   assert.equal(result.resultScopeSuppressed, true);
-  assert.strictEqual(sandbox.compactForPlan(summary, "experiments/plans/a.yaml", "", "2026-07-30T00:00:00Z"), result);
+  assert.equal(Object.hasOwn(result, "statistics"), false);
+  assert.equal(sandbox.compactForPlan(summary, "a.yaml").resultCount, 0, "a basename cannot authorize a different full PLAN path");
+  assert.strictEqual(sandbox.compactForPlan(summary, "experiments/plans/a.yaml", "", ""), result);
 
   const source = extractFunction("filterResultsSummaryForSelectedPlan");
   assert.match(source, /for \(const key of RESULT_SUMMARY_RECORD_ARRAY_FIELDS\)/);

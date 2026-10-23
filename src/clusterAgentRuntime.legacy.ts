@@ -10,6 +10,7 @@ import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts"
 import { TASK_SHELL_ENVIRONMENT_PYTHON } from "./runtime/TaskShellEnvironment";
 import { AGENT_LIFECYCLE_PYTHON } from "./runtime/AgentLifecycle";
 import { TMUX_TASK_LIFECYCLE_PYTHON } from "./runtime/TmuxTaskLifecycle";
+import { GPU_COLLECTOR_PYTHON } from "./runtime/GpuCollector";
 import { RUNTIME_LOG_DIAGNOSTICS_PYTHON } from "./runtime/RuntimeLogDiagnostics";
 import { PLAN_CODE_SCOPE_PYTHON } from "./runtime/PlanCodeScope";
 import { SYNC_SCOPE_INDEX_PYTHON } from "./runtime/SyncScopeIndex";
@@ -2377,16 +2378,50 @@ def query_gpu_history(root, server_id="", gpu_id="", start=None, end=None, max_p
 
 def api_worker_gpu(root):
     # One device sample per second, shared by HTTP and the stream sampler.
-    # Disk snapshots and old PLAN/task registrations never determine freshness.
+    # When the independent collector publishes a fresh frame this consumer reads
+    # the frame instead of re-running nvidia-smi. A REGISTERED collector that is
+    # stale/partial/foreign/unreadable returns an honest degraded payload (empty
+    # gpus + error + collectorMode) — this consumer never revives a second sampler
+    # or switches the Agent-side epoch once a collector is registered; only a
+    # legacy runtime without the collector functions keeps the historical direct
+    # sample, visibly marked frameSource=worker_agent_direct_unoptimized.
+    worker_id = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip() or "worker"
     with WORKER_GPU_SAMPLE_LOCK:
         cached = WORKER_GPU_SAMPLE_CACHE.get("sample")
         if cached and 0 <= time.monotonic() - cached[0] < 1.0:
             return copy.deepcopy(cached[1])
+        observed = read_gpu_collector_frame(worker_id, root) if "read_gpu_collector_frame" in globals() else {"mode": "absent", "frame": None}
+        frame = observed.get("frame")
+        if observed.get("mode") == "fresh" and frame:
+            payload = {"schemaVersion": SCHEMA_VERSION, "generatedAt": str(frame.get("collectedAt") or now_iso()),
+                       "source": "worker_telemetry", "frameSource": GPU_COLLECTOR_SOURCE, "collectorMode": "fresh",
+                       "collectorAgeMs": round(float(observed.get("ageMs") or 0.0), 1),
+                       "gpu": frame["gpus"], "gpus": frame["gpus"],
+                       "status": str(frame.get("status") or "ok"), "error": str(frame.get("error") or ""),
+                       "completeness": str(frame.get("completeness") or "full"),
+                       "seq": int(frame["seq"]), "epoch": str(frame["epoch"])}
+            WORKER_GPU_SAMPLE_CACHE["sample"] = (time.monotonic(), payload)
+            return copy.deepcopy(payload)
+        # The SHARED reader is the capability authority (parent C): "absent" only
+        # when registration AND frame are both ENOENT-confirmed. Every other mode
+        # (stalled/unregistered/unknown/unreadable/foreign/partial/stale) is a
+        # registered Worker in a failed state — reported as-is with gpus empty so
+        # no consumer can mistake it for a fresh sample.
+        if "read_gpu_collector_frame" in globals():
+            mode = str(observed.get("mode") or "unknown")
+            payload = {"schemaVersion": SCHEMA_VERSION, "generatedAt": now_iso(),
+                       "source": "worker_telemetry", "frameSource": GPU_COLLECTOR_SOURCE, "collectorMode": mode,
+                       "gpu": [], "gpus": [], "status": "degraded",
+                       "error": "gpu_collector_" + mode, "completeness": "partial",
+                       "seq": int(frame["seq"]) if frame else 0, "epoch": str((frame or {}).get("epoch") or "")}
+            WORKER_GPU_SAMPLE_CACHE["sample"] = (time.monotonic(), payload)
+            return copy.deepcopy(payload)
         gpus, err = collect_local_gpu()
         global WORKER_GPU_SAMPLE_SEQ
         WORKER_GPU_SAMPLE_SEQ += 1
         payload = {"schemaVersion": SCHEMA_VERSION, "generatedAt": now_iso(),
-                   "source": "worker_telemetry", "gpu": gpus, "gpus": gpus,
+                   "source": "worker_telemetry", "frameSource": "worker_agent_direct_unoptimized",
+                   "collectorMode": observed.get("mode") or "absent", "gpu": gpus, "gpus": gpus,
                    "status": "ok" if not err else "degraded", "error": err,
                    "seq": WORKER_GPU_SAMPLE_SEQ, "epoch": WORKER_GPU_SAMPLE_EPOCH}
         WORKER_GPU_SAMPLE_CACHE["sample"] = (time.monotonic(), payload)
@@ -3162,9 +3197,10 @@ def _durable_gpu_busy_reason(root, gpu_id, command_id, gpus=None, util_threshold
     except (TypeError, ValueError):
         raise ValueError("GPU idle thresholds must be finite nonnegative numbers")
     if gpus is None:
-        gpus, error = collect_local_gpu()
-        if error:
-            return "gpu_busy"
+        # Fail closed: a busy-reason check that arrives without a sample must not
+        # secretly run a (possibly waiting) admission probe here — callers decide
+        # where the bounded wait happens, never a lock-holding helper.
+        return "gpu_busy"
     if DISTRIBUTED_GPU_RESERVATIONS.get(gpu_id) not in (None, command_id):
         return "gpu_busy"
     tasks = read_json(path_for(root, "worker_task_snapshot.json"), {})
@@ -3337,7 +3373,7 @@ def accept_durable_plan_job(root, command, worker_id):
             return durable_plan_public_task(row)
         if require_idle_gpu:
             try:
-                gpus, gpu_error = collect_local_gpu()
+                gpus, gpu_error = gpu_admission_probe(root) if "gpu_admission_probe" in globals() else collect_local_gpu()
             except Exception:
                 gpus, gpu_error = [], "unavailable"
             util_threshold = command.get("gpuIdleUtilThreshold", options.get("gpuIdleUtilThreshold", options.get("gpu_idle_util_threshold")))
@@ -3806,7 +3842,7 @@ def fence_queued_idle_gpu_admission(root, row, reason):
 
 def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None, target_command_id=None):
     worker_id = str(worker_id or "worker").strip() or "worker"
-    gpu_probe = gpu_probe or collect_local_gpu
+    gpu_probe = gpu_probe or (lambda: gpu_admission_probe(root, worker_id) if "gpu_admission_probe" in globals() else collect_local_gpu())
     execute = execute or execute_worker_command
     reconcile_worker_task_exit_codes(root)
     data = sync_durable_plan_task_rows(root)
@@ -3837,6 +3873,34 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
                     append_event(root, {"type": "distributed_plan_code_wait", "workerId": worker_id,
                                         "operationId": row.get("commandId"), "payload": {"error": message}})
             continue
+        # Persist renewal on the same queued command before admission. A busy GPU
+        # must not leave an obsolete code error or require another submission.
+        with WORKER_TASK_SNAPSHOT_LOCK:
+            latest = read_durable_plan_queue(root)
+            current = next((item for item in latest["jobs"] if isinstance(item, dict)
+                            and item.get("commandId") == row.get("commandId")), None)
+            if not current or current.get("status") != "queued" or not durable_plan_same_identity(current, row):
+                continue
+            changed = False
+            # Only unstarted queued commands can be migrated. Running processes and
+            # terminal audit records retain their original actual mode and exit status.
+            requested_mode = "test" if current.get("checkpointTestOnly") is True and execution_mode == "train_test" else execution_mode
+            if current.get("executionMode") != execution_mode or current.get("mode") != requested_mode:
+                current.update({"legacyRequestedMode": current.get("mode"), "mode": requested_mode,
+                                "executionMode": execution_mode, "executionModeSource": "matching_plan_revision"})
+                current["options"] = {**(current.get("options") or {}), "mode": requested_mode, "executionMode": execution_mode}
+                changed = True
+            if isinstance(proof, dict) and proof.get("proofId") and proof["proofId"] != current.get("codeSyncProofId"):
+                current.update({"codeSyncProofId": proof["proofId"],
+                                "manifestDigest": proof["manifestDigest"],
+                                "codeSyncProofRuntimeGeneration": proof["runtimeGeneration"]})
+                changed = True
+            if current.pop("codeBlocked", False):
+                current.pop("error", None)
+                changed = True
+            if changed:
+                write_durable_plan_queue(root, latest)
+            row = current
         try:
             # A shared hint can defer idle, untouched directories without starting
             # one Scheduler (and nvidia-smi) per queued job. It NEVER authorizes a
@@ -3888,34 +3952,6 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
                     append_worker_task(root, durable_plan_public_task(current))
                     dispatched.append(durable_plan_public_task(current))
             continue
-        # Persist renewal on the same queued command before admission. A busy GPU
-        # must not leave an obsolete code error or require another submission.
-        with WORKER_TASK_SNAPSHOT_LOCK:
-            latest = read_durable_plan_queue(root)
-            current = next((item for item in latest["jobs"] if isinstance(item, dict)
-                            and item.get("commandId") == row.get("commandId")), None)
-            if not current or current.get("status") != "queued" or not durable_plan_same_identity(current, row):
-                continue
-            changed = False
-            # Only unstarted queued commands can be migrated. Running processes and
-            # terminal audit records retain their original actual mode and exit status.
-            requested_mode = "test" if current.get("checkpointTestOnly") is True and execution_mode == "train_test" else execution_mode
-            if current.get("executionMode") != execution_mode or current.get("mode") != requested_mode:
-                current.update({"legacyRequestedMode": current.get("mode"), "mode": requested_mode,
-                                "executionMode": execution_mode, "executionModeSource": "matching_plan_revision"})
-                current["options"] = {**(current.get("options") or {}), "mode": requested_mode, "executionMode": execution_mode}
-                changed = True
-            if isinstance(proof, dict) and proof.get("proofId") and proof["proofId"] != current.get("codeSyncProofId"):
-                current.update({"codeSyncProofId": proof["proofId"],
-                                "manifestDigest": proof["manifestDigest"],
-                                "codeSyncProofRuntimeGeneration": proof["runtimeGeneration"]})
-                changed = True
-            if current.pop("codeBlocked", False):
-                current.pop("error", None)
-                changed = True
-            if changed:
-                write_durable_plan_queue(root, latest)
-            row = current
         gpus, error = gpu_probe()
         if error:
             if row.get("requireIdleGpu") is True:
@@ -4076,7 +4112,7 @@ def start_durable_plan_queue_processor(root, worker_id, poll_seconds=5, stop_eve
     return processor
 
 def reserve_distributed_gpu(root, gpu_id, command_id, util_threshold=None, mem_threshold=None,
-                            require_idle_gpu=False, max_concurrent_gpus=None):
+                            require_idle_gpu=False, max_concurrent_gpus=None, admission_evidence=None):
     """Reserve one physical GPU before starting a distributed job; never infer ownership from username."""
     with WORKER_TASK_SNAPSHOT_LOCK:
         if any(row.get("commandId") == command_id and row.get("stateRetiredAt") for row in read_worker_recall_tombstones(root)):
@@ -4092,7 +4128,42 @@ def reserve_distributed_gpu(root, gpu_id, command_id, util_threshold=None, mem_t
         if any(isinstance(row, dict) and str(row.get("gpuId") or "") == str(gpu_id)
                and str(row.get("status") or "").lower() in ("running", "dispatching") for row in tasks):
             raise RuntimeError(f"GPU {gpu_id} 已有插件任务运行")
-        gpus, error = collect_local_gpu()
+        # The causality-bound evidence is captured OUTSIDE this lock by the
+        # dispatcher (gpu_admission_probe_bound). Inside the lock only a pure file
+        # revalidation runs: the frame on disk must still be the exact accepted
+        # sample (same epoch+seq+sampling start, still fresh, same published
+        # generation) plus the real occupancy checks below. Without credentials
+        # there is no zero-wait path; confirmed-legacy workers keep the historical
+        # under-lock direct sample (marked unoptimized) exactly as before.
+        worker_now = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip() or "worker"
+        if admission_evidence is not None and "gpu_admission_recheck_evidence" in globals():
+            # The credential is revalidated against THIS request: worker, absolute
+            # root and commandId must all match, every binding field must be
+            # present (parent D — no defaults, no cross-project/cross-command
+            # reuse). The occupancy checks below this block run against the live
+            # snapshot + reservations INSIDE the lock, so two dispatchers that
+            # both probed the same GPU outside the lock cannot both reserve it.
+            gpus, error = gpu_admission_recheck_evidence(
+                root, worker_now, admission_evidence, {"commandId": str(command_id)})
+            if not error and str(gpu_id) not in [str(item) for item in ((admission_evidence or {}).get("gpuIds") or [])]:
+                gpus, error = [], "gpu_admission_evidence_gpu_not_admitted"
+        elif "read_gpu_collector_frame" in globals():
+            # No credentials: the SHARED reader decides capability. Only the
+            # confirmed-legacy state (registration AND frame ENOENT-proven absent)
+            # may sample directly; a frame with a missing/invalid registration,
+            # or any unreadable/unknown state, fails closed — the job stays
+            # queued and NO second sampler runs (parent D).
+            try:
+                capability = str(read_gpu_collector_frame(worker_now, root).get("mode") or "unknown")
+            except Exception:
+                capability = "unreadable"
+            if capability == "unconfigured":
+                gpus, error = [], "gpu_collector_state_unconfigured"
+            else:
+                gpus, error = [], "gpu_admission_evidence_missing" if capability == "stalled" or capability == "fresh" \
+                    else "gpu_admission_capability_not_legacy_" + capability
+        else:
+            gpus, error = collect_local_gpu()
         if error:
             raise RuntimeError(f"GPU 实时检测失败：{error}")
         row = next((item for item in gpus if gpu_row_id(item) == str(gpu_id)), None)
@@ -5945,8 +6016,20 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         gpu_util_threshold = command.get("gpuIdleUtilThreshold", options.get("gpuIdleUtilThreshold", options.get("gpu_idle_util_threshold")))
         gpu_mem_threshold = command.get("gpuIdleMemThresholdMb", options.get("gpuIdleMemThresholdMb", options.get("gpu_idle_mem_threshold")))
         max_concurrent_gpus = command.get("maxConcurrentGpus", options.get("maxConcurrentGpus"))
+        # Capture the causality-bound frame evidence BEFORE the reservation lock
+        # (bounded wait happens here, never under WORKER_TASK_SNAPSHOT_LOCK). A
+        # registered collector that cannot produce a request-after sample raises
+        # here, so the job stays queued instead of dispatching on a stale frame.
+        admission_evidence = None
+        if "gpu_admission_probe_bound" in globals() and "read_gpu_collector_frame" in globals():
+            _probe_worker = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip() or "worker"
+            _bound_gpus, _bound_error, admission_evidence = gpu_admission_probe_bound(
+                root, _probe_worker, {"commandId": str(command_id)})
+            if _bound_error:
+                raise RuntimeError(f"GPU 实时检测失败：{_bound_error}")
         existing_task = reserve_distributed_gpu(root, gpu_id, command_id, gpu_util_threshold, gpu_mem_threshold,
-                                                command.get("requireIdleGpu") is True, max_concurrent_gpus)
+                                                command.get("requireIdleGpu") is True, max_concurrent_gpus,
+                                                admission_evidence=admission_evidence)
         if existing_task:
             return {"commandId": command_id, "status": str(existing_task.get("status") or "unknown"),
                     "message": "相同 job 指令已存在，未重复启动", "gpuId": gpu_id}
@@ -6091,7 +6174,8 @@ def _execute_worker_command_unfenced(root, command, worker_id):
 
 def execute_worker_command(root, command, worker_id):
     action = str(command.get("action") or "").strip()
-    if globals().get("TASK_LIFECYCLE_PROTOCOL") == 2 and command.get("resultPathPolicy") == "declared" and action in ("start-worker-task", "retry-worker-task", "stop-worker-task"):
+    if globals().get("TASK_LIFECYCLE_PROTOCOL") == 2 and (action == "stop-worker-task"
+            or command.get("resultPathPolicy") == "declared" and action in ("start-worker-task", "retry-worker-task")):
         command = {**command, "lifecycleProtocol": 2}
     if command.get("lifecycleProtocol") == 2:
         if action == "stop-worker-task":
@@ -6628,6 +6712,10 @@ def start_worker_telemetry_sampler(root, poll_seconds=1, jitter_seconds=0):
         last_heartbeat = 0.0
         while True:
             try:
+                try:
+                    gpu_collector_self_heal(worker_id_local, root)
+                except Exception:
+                    pass
                 payload = write_worker_gpu_snapshot(root)
                 # 单机 worker_telemetry 模式自刷新 worker_availability.json 避免调度停滞
                 try:
@@ -6779,6 +6867,9 @@ def api_health(root, mode="realtime"):
         "schedulerUpdateError": TASK_SCHEDULER_UPDATE_ERROR,
         "agentInstallDir": agent_install_dir(root),
         "agentStateDir": agent_dir(root),
+        "workerStateDir": gpu_collector_state_root(root),
+        "workerId": str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker"),
+        "gpuCollectorProtocol": 1,
         "status": "ok" if serving or health.get("running") is not False else "degraded",
         "snapshotAge": age if age is not None else 999999,
         "workerCount": (1 if snapshot.get("gpu") or snapshot.get("gpus") else 0) if mode == "worker_telemetry" else len(snapshot.get("workers") or []),
@@ -12839,11 +12930,37 @@ def tb_discover_launch(root, logdir_hint, port, explicit_script):
     return ["tensorboard", "--logdir", logdir, "--port", str(port), "--host", "127.0.0.1", "--path_prefix", TENSORBOARD_BROWSER_PREFIX, "--load_fast=false"], "tensorboard", logdir
 
 
+def close_tensorboard_window(root, session):
+    """Resolve the configured service to one immutable window; preserve other tabs."""
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", session):
+        raise ValueError("TENSORBOARD_WINDOW_IDENTITY_REQUIRED")
+    listed = subprocess.run(["tmux", "list-windows", "-t", "=" + session, "-F",
+                             "#{session_name}|#{window_index}|#{window_id}|#{window_name}"],
+                            cwd=root, capture_output=True, text=True, timeout=5)
+    if listed.returncode:
+        error = (listed.stderr or "").lower()
+        if any(value in error for value in ("can't find session", "no such session", "no server running", "no sessions")):
+            return []
+        raise RuntimeError("TENSORBOARD_WINDOW_QUERY_FAILED: " + error[-500:])
+    rows = [line.split("|", 3) for line in (listed.stdout or "").splitlines()]
+    if len(rows) != 1 or len(rows[0]) != 4 or rows[0][0] != session or not re.fullmatch(r"@\d+", rows[0][2]):
+        raise ValueError("TENSORBOARD_WINDOW_AMBIGUOUS: select the exact service window; other tabs were preserved")
+    row = rows[0]
+    panes = subprocess.run(["tmux", "list-panes", "-t", row[2], "-F", "#{pane_id}"],
+                           cwd=root, capture_output=True, text=True, timeout=5)
+    pane_ids = (panes.stdout or "").splitlines()
+    if panes.returncode or not pane_ids or any(not re.fullmatch(r"%\d+", pane) for pane in pane_ids):
+        raise ValueError("TENSORBOARD_PANE_IDENTITY_REQUIRED")
+    result, status = kill_tmux_window_response({"target": session + ":" + row[1], "session": session,
+        "windowId": row[2], "windowName": row[3], "paneIds": pane_ids}, "worker_telemetry")
+    if status != 200 or result.get("ok") is not True or result.get("verified") is not True:
+        raise RuntimeError("TENSORBOARD_WINDOW_CLOSE_FAILED: " + str(result.get("error") or status))
+    return [row[2]]
+
+
 def tensorboard_action(root, action, payload, operation_id, op_id):
-    # Restart (or report status of) the standalone TensorBoard tmux session. The launch command is
-    # discovered adaptively by the agent (see tb_discover_launch) so it survives project changes and
-    # needs no server-specific path in settings. Session named <prefix>_tb; it is NOT managed by the
-    # agent control loop. Each open kills the old session and recreates a fresh one (low cost).
+    # The configured service owns one window. Never destroy a containing session
+    # or silently replace an ambiguous window set.
     prefix = str(payload.get("sessionPrefix") or payload.get("session_prefix")
                 or _resolve_tmux_prefix(None, None, None))
     # 统一归一：不再信任 payload tmuxSession 原值（避免 ZLK_tb 与 zlk_tb 快照不一致），与 write_snapshots 完全一致
@@ -12869,24 +12986,18 @@ def tensorboard_action(root, action, payload, operation_id, op_id):
             {"tmuxSession": tb_session, "port": port, "running": alive, "listening": listening, "logPath": log_rel},
         )
 
-    if action == "stop-tensorboard":
-        TENSORBOARD_PROXY_PORTS.pop(tb_session, None)
-        if tmux_session_alive(tb_session, root, None):
-            stopped = subprocess.run(["tmux", "kill-session", "-t", tb_session], cwd=root,
-                                     capture_output=True, text=True, timeout=5)
-            if stopped.returncode != 0:
-                return terminal_action(root, action, operation_id, op_id, "failed",
-                                       f"关闭 TensorBoard 会话失败：{stopped.stderr.strip()}",
-                                       {"tmuxSession": tb_session, "running": True, "listening": False})
-        return terminal_action(root, action, operation_id, op_id, "completed",
-                               f"TensorBoard 会话 {tb_session} 已关闭",
-                               {"tmuxSession": tb_session, "running": False, "listening": False})
-
-    # start-tensorboard: kill any previous session (cost ~0) then recreate a fresh one.
     try:
-        subprocess.run(["tmux", "kill-session", "-t", tb_session], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-    except Exception:
-        pass
+        closed_windows = close_tensorboard_window(root, tb_session)
+    except Exception as exc:
+        return terminal_action(root, action, operation_id, op_id, "failed", str(exc),
+                               {"tmuxSession": tb_session, "running": True, "listening": False})
+    TENSORBOARD_PROXY_PORTS.pop(tb_session, None)
+    if action == "stop-tensorboard":
+        return terminal_action(root, action, operation_id, op_id, "completed",
+                               f"TensorBoard 窗口已关闭：{tb_session}",
+                               {"tmuxSession": tb_session, "closedWindowIds": closed_windows,
+                                "running": False, "listening": False})
+
     launch_args, launch_source, resolved_logdir = tb_discover_launch(root, logdir_hint, port, explicit_script)
     env = simple_runtime_env(os.environ.copy())
     if conda_env:
@@ -13098,60 +13209,13 @@ def process_start_identity(pid):
 
 
 def _reap_zombie_scheduler_sessions(root, known_op_ids, target_session=""):
-    # Reap only the exact scheduler session already validated for this stop request.
-    # Scanning every unregistered prefix session races a scheduler between tmux
-    # creation and registry publication, and can kill a different live operation.
-    if not tmux_available():
-        return []
-    name = str(target_session or "").strip()
-    prefix = _tmux_prefix() + "-sch-"
-    if not name.startswith(prefix):
-        return []
-    op = name[len(prefix):]
-    if not op or op in set(str(value) for value in (known_op_ids or [])):
-        return []
-    try:
-        present = subprocess.run(["tmux", "has-session", "-t", name], stdout=subprocess.DEVNULL,
-                                 stderr=subprocess.DEVNULL, timeout=5, cwd=root)
-        if present.returncode != 0 or _tmux_pane_python_running(name, None):
-            return []
-        killed = subprocess.run(["tmux", "kill-session", "-t", name], stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, timeout=5, cwd=root)
-        return [name] if killed.returncode == 0 else []
-    except Exception:
-        return []
+    # Historical registry absence is not authorization to close a terminal.
+    return []
+
 
 def _reap_orphan_gpu_sessions(root, force_all=False):
-    # GPU 窗口与调度窗口同生命周期：调度销毁时回收关联 GPU 窗口，避免孤儿 long-lived 会话
-    if not tmux_available():
-        return []
-    prefix = _tmux_prefix()
-    reaped = []
-    try:
-        out = subprocess.run(["tmux", "ls"], text=True, capture_output=True, timeout=5).stdout or ""
-        for line in out.splitlines():
-            name = line.split(":", 1)[0].strip()
-            # 匹配 prefix-gpu-<id> 或兼容历史 simple-gpu-*/zlk-gpu-*
-            is_gpu = False
-            if name.startswith(prefix + "-gpu-"):
-                is_gpu = True
-            elif name.startswith("simple-gpu-"):
-                is_gpu = True
-            elif name.startswith("zlk-gpu-"):
-                is_gpu = True
-            elif re.match(r"^gpu-\d+$", name):
-                is_gpu = True
-            if not is_gpu:
-                continue
-            # 若 force_all 或无活跃 scheduler，则直接回收
-            try:
-                subprocess.run(["tmux", "kill-session", "-t", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
-                reaped.append(name)
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return reaped
+    # Preserve task consoles; only an explicit identity-bound stop may close one.
+    return []
 
 
 def fence_stale_run_plans(root, new_op_id, new_worker_ids, new_owner):
@@ -14821,6 +14885,7 @@ def read_results_summary(root, plan=None, cached=False):
 def read_current_results_summary(root, plan=None, plan_revision=""):
     summary = read_results_summary(root, plan)
     strict_plan = plan is not None and plan != ""
+    plan_revision = "" if plan_revision is None else plan_revision  # None 表示“未提供修订”，与 0.5.403 宽松实现 str(plan_revision or "") 的缺省容忍一致；非 None 的无效值仍由输出契约校验拒绝。
     identity = output_contract_request_identity({"planFile": plan, "planRevision": plan_revision}) if strict_plan else {}
     revision = identity.get("planRevision", "") if strict_plan else str(plan_revision or "").strip()
     summary_revision = output_contract_request_identity(summary).get("planRevision", "") if strict_plan else str(summary.get("planRevision") or summary.get("plan_revision") or "").strip() if isinstance(summary, dict) else ""
@@ -15632,197 +15697,31 @@ def scheduler_stop_record_identity(wanted, requested_plan, event):
 
 
 def stop_scheduler_operation(root, payload):
-    wanted = str(payload.get("targetOperationId") or payload.get("remoteOperationId") or payload.get("operationId") or payload.get("opId") or "").strip()
+    wanted = str(payload.get("targetCommandId") or payload.get("targetOperationId") or payload.get("remoteOperationId") or "").strip()
     plan = action_plan_file(payload)
-    if payload.get("stopBoundary") == "local_command":
-        worker = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or payload.get("workerId") or "")
-        result = stop_local_worker_task(root, {**payload, "targetCommandId": wanted,
-            "projectId": payload.get("projectId") or os.path.realpath(root), "workerId": worker}, worker)
-        ok = result.get("status") == "completed"
-        if ok:
-            cancel_inactivity_action(root, wanted, plan)
-            deregister_active_run_plan(root, wanted)
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""),
-            "completed" if ok else "failed", result.get("message") or "停止未完成", {"matchedOperations": [wanted] if ok else [],
-            "planFile": plan, "stopBoundary": "local_command", "terminatedWindowIds": [window for row in result.get("stoppedTasks", []) for window in row.get("closedWindowIds", [])],
-            "cacheRetired": ok, "stateRetired": result.get("stateRetired", False), "retiredOperationIds": result.get("retiredOperationIds", []), "remainingActiveEvidence": [] if ok else [result.get("errorCode")]}, request=payload)
-    if wanted and plan and cancel_inactivity_action(root, wanted, plan):
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "completed", "已取消处理中操作", {"matchedOperations": [wanted], "planFile": plan}, request=payload)
-    if not wanted or not plan:
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", "缺少明确的调度记录或 Plan，未执行停止。", {"matchedOperations": [], "planFile": plan}, request=payload)
-    events = read_operation_events(root, wanted, 100) if wanted else []
-    latest_event = next((event for event in reversed(events) if isinstance(event.get("payload"), dict)), {})
-    latest_payload = latest_event.get("payload") if isinstance(latest_event.get("payload"), dict) else {}
-    requested_plan = re.sub(r"^\./", "", str(plan).replace("\\", "/"))
-    try:
-        stop_identity = scheduler_stop_record_identity(wanted, requested_plan, latest_event)
-    except ValueError as exc:
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", f"{exc}，未执行停止。", {"matchedOperations": [], "planFile": plan}, request=payload)
-    recorded_plan = stop_identity["planFile"]
-    target_pid = 0
-    registry_entry = next((entry for entry in _read_run_plan_registry(root) if isinstance(entry, dict) and str(entry.get("opId") or "") == wanted), None)
-    registry_pid = int(registry_entry.get("pid") or 0) if registry_entry else 0
-    event_pid = int(stop_identity.get("pid") or 0) if str(stop_identity.get("pid") or "").strip().lstrip("-").isdigit() else 0
-    pid_candidate = registry_pid if registry_pid > 0 and (not event_pid or event_pid == registry_pid) else 0
-    expected_pid_start = str((registry_entry or {}).get("pidStartIdentity") or stop_identity.get("pidStartIdentity") or "").strip()
-    actual_pid_start = process_start_identity(pid_candidate) if pid_candidate else ""
-    pid_identity_lost = False
-    if pid_candidate > 0 and expected_pid_start and actual_pid_start and expected_pid_start == actual_pid_start:
-        target_pid = pid_candidate
-    recorded_session = str(stop_identity.get("tmuxSession") or "").strip()
-    registry_session = str((registry_entry or {}).get("tmuxSession") or "").strip()
-    if recorded_session and registry_session and recorded_session != registry_session:
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", "调度事件与运行登记中的 tmux 身份不一致，未执行停止。", {"matchedOperations": [], "planFile": plan}, request=payload)
-    target_session = recorded_session or registry_session
-    if not target_session and wanted:
-        # The run-plan scheduler session is named deterministically from the op id; fall back to
-        # deriving it so a stop still works even if the operation events lack the session field.
-        target_session = simple_tmux_name(f"sch-{wanted}")
-    before = scheduler_process_evidence(root, target_pid, target_session)
-    terminated_sessions, terminated_pids = [], []
-    errors = []
-    # 用原始会话存活（tmuxShellAlive）决定 kill：即便 pane 内只是空 shell（无 python 进程），
-    # 也应 kill 掉，避免中止后 tmux 仍残留把面板判活。
-    if before["tmuxShellAlive"]:
-        result = subprocess.run(["tmux", "kill-session", "-t", str(before["checkedTmuxSession"])], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5, check=False)
-        if result.returncode == 0:
-            terminated_sessions.append(before["checkedTmuxSession"])
-        else:
-            errors.append((result.stderr or b"tmux kill failed").decode("utf-8", errors="replace").strip())
-    if before["pidAlive"]:
-        if process_start_identity(before["checkedPid"]) != expected_pid_start:
-            pid_identity_lost = True
-        else:
-            try:
-                os.kill(int(before["checkedPid"]), signal.SIGTERM)
-                terminated_pids.append(before["checkedPid"])
-            except Exception as exc:
-                errors.append(str(exc))
-    time.sleep(0.2)
-    after = scheduler_process_evidence(root, target_pid, target_session)
-    if after["pidAlive"] and before["pidAlive"] and int(before["checkedPid"]) == int(after["checkedPid"]):
-        if process_start_identity(after["checkedPid"]) != expected_pid_start:
-            pid_identity_lost = True
-        else:
-            try:
-                os.kill(int(after["checkedPid"]), signal.SIGKILL)
-                time.sleep(0.1)
-            except Exception:
-                pass
-            after = scheduler_process_evidence(root, target_pid, target_session)
-    remaining_active = []
-    if after["pidAlive"]: remaining_active.append({"kind": "pid", "value": after["checkedPid"]})
-    if pid_identity_lost:
-        remaining_active.append({"kind": "pidIdentityUnknown", "value": pid_candidate})
-    unverified_pids = {value for value in (event_pid, registry_pid) if value > 0 and value != target_pid and _is_pid_alive(value)}
-    for value in sorted(unverified_pids):
-        remaining_active.append({"kind": "pidIdentityUnknown", "value": value})
-    # P1: 双活判定需同时检查 shellAlive，避免空壳（has-session 但无 python）被误判为已清理
-    if after["tmuxSessionAlive"]: remaining_active.append({"kind": "tmuxSession", "value": after["checkedTmuxSession"]})
-    elif after["tmuxShellAlive"]: remaining_active.append({"kind": "tmuxSession", "value": after["checkedTmuxSession"]})
-    if unverified_pids or pid_identity_lost:
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", "调度器 PID 启动身份无法验证，未终止该 PID、未删除运行登记，也未继续清理 Worker 任务。", {
-            "matchedOperations": [], "planFile": plan, "remainingActiveEvidence": remaining_active,
-        }, request=payload)
-    matched_scheduler = bool(terminated_sessions or terminated_pids or before["pidAlive"] or before["tmuxSessionAlive"] or before["tmuxShellAlive"])
-    # A previous stop can have removed the scheduler while leaving its Worker records behind.
-    # Repair that Plan only when its journal identifies it and no newer scheduler is live.
-    if not matched_scheduler and recorded_plan != requested_plan:
-        return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", "未找到目标 Plan 的活动调度进程，未清理 GPU 任务。", {"matchedOperations": [], "planFile": plan, "checkedPid": after["checkedPid"], "checkedTmuxSession": after["checkedTmuxSession"]}, request=payload)
-    if not matched_scheduler:
-        for entry in _read_run_plan_registry(root):
-            if not isinstance(entry, dict) or str(entry.get("opId") or "") == wanted:
-                continue
-            if _is_pid_alive(entry.get("pid")) or tmux_session_alive(str(entry.get("tmuxSession") or ""), cwd=root):
-                return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or ""), str(payload.get("opId") or ""), "failed", "另一个调度器仍在运行，不能按旧记录清理 Worker 任务。", {"matchedOperations": [], "planFile": plan}, request=payload)
-    try:
-        if wanted:
-            deregister_active_run_plan(root, wanted)
-        # also reap any leftover zombie sch-* sessions from this stop
-        remaining = set(str(e.get("opId") or "") for e in _read_run_plan_registry(root) if isinstance(e, dict) and str(e.get("opId") or "").strip())
-        _reap_zombie_scheduler_sessions(root, remaining, target_session)
-    except Exception:
-        pass
-    # A Worker task's pid can be a tmux pane id such as %97. Stop that exact pane;
-    # fixed GPU sessions can contain a newer or unrelated task and must be preserved.
-    stopped_task_count = 0
-    try:
-        data = read_json(path_for(root, "worker_task_snapshot.json"), {})
-        tasks = data.get("tasks") if isinstance(data, dict) and isinstance(data.get("tasks"), list) else []
-        for task in tasks:
-            if not isinstance(task, dict):
-                continue
-            if str(task.get("status") or "").lower() != "running":
-                continue
-            task_plan = re.sub(r"^\./", "", str(task.get("planFile") or task.get("plan") or "").replace("\\", "/"))
-            if task_plan != requested_plan:
-                continue
-            task_run_id = str(task.get("workflowId") or task.get("workflow_id") or task.get("runId") or task.get("run_id") or "").strip()
-            if task_run_id != wanted:
-                # A same-Plan task is not necessarily owned by this scheduler.
-                # Never stop it by Plan name alone. Missing identity remains an
-                # explicit unresolved outcome so callers cannot assume the whole
-                # requested run has settled.
-                if not task_run_id:
-                    remaining_active.append({"kind": "workerTaskIdentityUnknown",
-                                             "commandId": str(task.get("commandId") or task.get("operationId") or "")[:160],
-                                             "workerId": str(task.get("workerId") or "")[:120],
-                                             "planFile": requested_plan})
-                continue
-            sess = str(task.get("tmuxSession") or "").strip()
-            task_pid = str(task.get("pid") or "").strip()
-            pane_id = task_pid if re.fullmatch(r"%[0-9]+", task_pid) else ""
-            task_error = False
-            if pane_id and sess:
-                try:
-                    owner = subprocess.run(["tmux", "display-message", "-p", "-t", pane_id, "#{session_name}"], capture_output=True, text=True, timeout=3, cwd=root)
-                    if owner.returncode == 0 and owner.stdout.strip() == sess:
-                        killed = subprocess.run(["tmux", "kill-pane", "-t", pane_id], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=5, cwd=root)
-                        if killed.returncode == 0:
-                            terminated_sessions.append(pane_id)
-                        else:
-                            errors.append((killed.stderr or b"tmux kill-pane failed").decode("utf-8", errors="replace").strip())
-                            task_error = True
-                except Exception as exc:
-                    errors.append(str(exc))
-                    task_error = True
-            pid = int(task_pid) if task_pid.isdecimal() else 0
-            if pid > 0 and _is_pid_alive(pid):
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                    if pid not in terminated_pids:
-                        terminated_pids.append(pid)
-                except Exception as exc:
-                    errors.append(str(exc))
-                    task_error = True
-            if task_error:
-                continue
-            with WORKER_TASK_SNAPSHOT_LOCK:
-                current = current_worker_task(root, task)
-                if str(current.get("status") or "").lower() == "running":
-                    append_worker_task(root, {**current, "status": "stopped", "finishedAt": now_iso(), "stopReason": "scheduler_aborted", "manualStopType": "scheduler_aborted"})
-                    stopped_task_count += 1
-        if stopped_task_count:
-            try:
-                append_event(root, {"type": "worker_task_stopped", "payload": {"reason": "scheduler_aborted", "terminatedSessions": terminated_sessions}})
-            except Exception:
-                pass
-    except Exception as exc:
-        errors.append(f"Worker 任务清理失败：{exc}")
-    matched = matched_scheduler or stopped_task_count > 0
-    message = "已中止调度并清理当前 Plan 任务" if matched_scheduler else ("已清理当前 Plan 的残留任务" if stopped_task_count else "未找到活动调度或 Worker 任务")
-    status = "completed" if matched and not remaining_active and not errors else "failed"
-    return terminal_action(root, "stop-scheduler-operation", str(payload.get("operationId") or f"stop-{int(time.time() * 1000)}"), str(payload.get("opId") or payload.get("operationId") or f"stop-{int(time.time() * 1000)}"), status, message, {
-        "matchedOperations": [wanted] if wanted else [],
-        "terminatedSessions": terminated_sessions,
-        "terminatedPids": terminated_pids,
-        "stoppedTaskCount": stopped_task_count,
-        "remainingActiveEvidence": remaining_active,
-        "checkedPid": after["checkedPid"],
-        "checkedTmuxSession": after["checkedTmuxSession"],
-        "planFile": plan,
-        **({"errors": errors} if errors else {}),
-    }, request=payload)
+    worker = str(os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or payload.get("workerId") or "").strip()
+    stop_id = str(payload.get("operationId") or payload.get("opId") or "").strip()
+    project = str(payload.get("projectId") or os.path.realpath(root)).strip()
+    result = {"status": "failed", "errorCode": "TASK_STOP_IDENTITY_REQUIRED",
+              "message": "停止需要原 commandId、当前 Worker 与独立停止请求身份；未知旧窗口请在 TMUX 中选择精确标签页。"}
+    if wanted and worker and stop_id and wanted != stop_id and str(payload.get("workerId") or worker) == worker:
+        command = {"targetCommandId": wanted, "operationId": stop_id, "opId": str(payload.get("opId") or stop_id),
+                   "workerId": worker, "projectId": project, "workflowId": payload.get("workflowId"),
+                   "stopBoundary": "local_command", "stopReason": payload.get("stopReason"), "stopSource": "user"}
+        try:
+            # The independent Scheduler receives the cancellation fence before any
+            # window is closed. Never stop by PID, session name or a journal row.
+            result = task_stop(root, command, worker) if globals().get("TASK_LIFECYCLE_PROTOCOL") == 2 else stop_local_worker_task(root, command, worker)
+        except Exception as exc:
+            result = {"status": "failed", "errorCode": "TASK_STOP_NOT_CONFIRMED", "message": str(exc)}
+    ok = result.get("status") == "completed"
+    return terminal_action(root, "stop-scheduler-operation", stop_id, str(payload.get("opId") or stop_id),
+        "completed" if ok else "failed", result.get("message") or ("已核实原任务停止" if ok else "停止未完成"), {
+            "matchedOperations": [wanted] if ok else [], "planFile": plan, "stopBoundary": "local_command",
+            "terminatedWindowIds": [window for row in result.get("stoppedTasks", []) for window in row.get("closedWindowIds", [])],
+            "terminatedPids": [], "cacheRetired": ok, "stateRetired": result.get("stateRetired", False),
+            "retiredOperationIds": result.get("retiredOperationIds", []), "errorCode": result.get("errorCode"),
+            "remainingActiveEvidence": [] if ok else [result.get("errorCode") or "TASK_STOP_NOT_CONFIRMED"]}, request=payload)
 
 
 def recent_operations(root, limit=100):
@@ -16040,7 +15939,15 @@ def manage_tmux_session_response(payload):
         if inventory("=" + session) != rows:
             raise ValueError("session changed during inspection")
         if action == "close":
-            run(["kill-session", "-t", session_id])
+            for row in rows:
+                if inventory(session_id) != [entry for entry in rows if entry[1] not in closed]:
+                    raise ValueError("window set changed during closing")
+                item = next(item for item in expected if item.get("windowId") == row[1])
+                panes = run(["list-panes", "-t", row[1], "-F", "#{pane_id}"]).splitlines()
+                if sorted(item.get("paneIds") or []) != sorted(panes):
+                    raise ValueError("pane identities changed during closing")
+                run(["kill-window", "-t", row[1]])
+                closed.add(row[1])
             after = subprocess.run(["tmux", "has-session", "-t", session_id], capture_output=True, text=True, timeout=5)
             if after.returncode == 0:
                 raise ValueError("session still present")
@@ -16100,6 +16007,12 @@ def serve_http(args):
     # Scheduler, which rebuilds from actual windows rather than replaying history.
     atomic_write(path_for(root, "agent.session.json"), {"tokenConfigured": bool(token), "startedAt": now_iso(), "agentVersion": AGENT_VERSION, "agentInstallDir": agent_install_dir(root), "agentStateDir": agent_dir(root), "stateRetentionSeconds": STATE_RETENTION_SECONDS, "maxAgentStateBytes": MAX_AGENT_STATE_BYTES})
     if mode == "worker_telemetry":
+        try:
+            gpu_collector_ensure(os.environ["SIMPLE_EXPERIMENT_WORKER_ID"], root)
+        except Exception as gpu_collector_exc:
+            # The Agent must stay diagnosable even when the collector window cannot start;
+            # consumers report unknown meanwhile; no second sampler is started.
+            print("[gpu-collector] " + str(gpu_collector_exc), file=sys.stderr, flush=True)
         start_worker_telemetry_sampler(root, getattr(args, "gpu_poll_seconds", 1), 0)
         # P0: worker_telemetry 与 hub_control 均启动 gpu_log_tail 采样，与 GPU 采样同频 60s，写入 live_output/{gid}.json + append_event log_tail
         try:
@@ -17336,6 +17249,16 @@ def main():
         args = parser.parse_args()
         AGENT_STATE_DIR = args.state_dir
         return task_queue_serve(args.project_dir, args.worker_id) if args.cmd == "task-queue" else task_runner(args.project_dir, args.worker_id)
+    if len(sys.argv) > 1 and sys.argv[1] == "gpu-collector":
+        parser = argparse.ArgumentParser()
+        parser.add_argument("cmd")
+        parser.add_argument("--project-dir", required=True)
+        parser.add_argument("--worker-id", required=True)
+        parser.add_argument("--state-dir", default="")
+        parser.add_argument("--poll-seconds", type=float, default=1.0)
+        args = parser.parse_args()
+        AGENT_STATE_DIR = args.state_dir
+        return gpu_collector_main(args.project_dir, args.worker_id, args.poll_seconds)
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     for name in ("run", "snapshot", "health", "inspect", "stop"):
@@ -17402,6 +17325,7 @@ def main():
 
 ${RUNTIME_LOG_DIAGNOSTICS_PYTHON}
 ${PLAN_CODE_SCOPE_PYTHON}
+${GPU_COLLECTOR_PYTHON}
 ${TMUX_TASK_LIFECYCLE_PYTHON}
 
 if __name__ == "__main__":

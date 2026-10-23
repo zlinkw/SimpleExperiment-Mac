@@ -48,22 +48,10 @@ function registry(localPort = 18765) {
   };
 }
 
-test("Hub control summary reuses stable registry and probe inputs", () => {
-  const sandbox = loadBuilders();
-  const endpoints = { actions: true, fileList: true, scheduler: true, resultsSummary: false };
-  const probe = { status: "ok", checkedAt: "2026-07-30T00:00:00Z", capabilities: { endpoints } };
-  const sourceRegistry = registry();
-  const first = sandbox.buildHub(sourceRegistry, probe);
-
-  assert.strictEqual(sandbox.buildHub(sourceRegistry, probe), first);
-  assert.equal(first.localEndpoint, "http://127.0.0.1:18765");
-  assert.equal(first.fileApi, true);
-  assert.equal(first.resultApi, false);
-
-  const refreshed = sandbox.buildHub(sourceRegistry, { ...probe, status: "local_port_closed" });
-  assert.notStrictEqual(refreshed, first);
-  assert.equal(refreshed.health, "local_port_closed");
-  assert.notStrictEqual(sandbox.buildHub(registry(19000), probe), first);
+test("legacy Hub registry and probe inputs never create a current control summary", () => {
+  const sandbox=loadBuilders(),probe={status:"ok",capabilities:{endpoints:{actions:true,fileList:true,scheduler:true}}};
+  for(const candidate of [registry(),registry(19000),undefined])
+    for(const current of [probe,{...probe,status:"local_port_closed"},undefined])assert.equal(sandbox.buildHub(candidate,current),undefined);
 });
 
 test("Worker telemetry summary reuses stable inputs and invalidates every source", () => {
@@ -82,7 +70,7 @@ test("Worker telemetry summary reuses stable inputs and invalidates every source
   const first = sandbox.buildWorkers(sourceRegistry, probes, realtime);
 
   assert.strictEqual(sandbox.buildWorkers(sourceRegistry, probes, realtime), first);
-  assert.deepEqual(first.map((item) => item.status), ["online", "offline"]);
+  assert.deepEqual(Array.from(first,(item) => item.status), ["online", "offline"]);
   assert.equal(first[0].gpuTelemetry, true);
   assert.equal(first[0].workerTaskTelemetry, false);
 

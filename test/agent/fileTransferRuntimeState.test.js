@@ -10,7 +10,7 @@ const { CLUSTER_AGENT_RUNTIME } = require("../../dist/clusterAgentRuntime.js");
 
 test("agent file transfer status is project-scoped and sanitized", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) {
     t.skip("python unavailable");
     return;
@@ -27,9 +27,10 @@ test("agent file transfer status is project-scoped and sanitized", (t) => {
 import importlib.util, json, pathlib, os
 root = pathlib.Path(${JSON.stringify(project)})
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["UPLOADS", "read_transfer_status", "write_transfer_status"])
 item = {"schemaVersion": 1, "transferId": "tx-1", "status": "completed", "direction": "upload", "remotePath": "experiments/results/a.csv", "transferredBytes": 3, "totalBytes": 3, "size": 3, "sha256": "abc", "tmp": "C:/secret/tmp.bin", "targetAtInit": {"sha256": "old"}, "startedAt": "2026-01-01T00:00:00Z", "finishedAt": "2026-01-01T00:00:01Z"}
 public = agent.write_transfer_status(str(root), item)
 agent.UPLOADS.clear()
@@ -38,11 +39,7 @@ files = list((root / "simple_cluster" / "file_transfers").glob("*.json"))
 ledger = json.loads(files[0].read_text(encoding="utf-8"))
 print(json.dumps({"public": public, "restored": restored, "ledger": ledger, "fileCount": len(files)}, ensure_ascii=False))
 `, "utf8");
-  const run = spawnSync(python, [script], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result.fileCount, 1);

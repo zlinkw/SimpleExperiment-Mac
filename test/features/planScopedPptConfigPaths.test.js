@@ -60,9 +60,9 @@ test("export plotting contract stamps summary plottingContractPath", () => {
   const script = path.join(tmp, "check.py");
   const lines = [];
   lines.push("import importlib.util, json");
-  lines.push("spec = importlib.util.spec_from_file_location('agent', " + pyString(agentPath) + ")");
-  lines.push("agent = importlib.util.module_from_spec(spec)");
-  lines.push("spec.loader.exec_module(agent)");
+  lines.push(("spec = (lambda _name, _file: __import__(\"runpy\").run_path(" + JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py")) + ")[\"extract_runtime_functions\"](_file, [\"export_plotting_contract_action\",\"parse_results_action\",\"read_results_summary\"]))('agent', ") + pyString(agentPath) + ")");
+  lines.push("agent = spec");
+  lines.push("pass");
   lines.push("root = " + pyString(root));
   lines.push("plan = 'experiments/plans/smoke.yaml'");
   lines.push("agent.parse_results_action(root, None, plan)");
@@ -74,7 +74,7 @@ test("export plotting contract stamps summary plottingContractPath", () => {
   lines.push("  'planFile': summary.get('planFile'),");
   lines.push("}))");
   fs.writeFileSync(script, lines.join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split("\n").pop());
   assert.match(String(payload.reportPath || ""), /by_plan/);

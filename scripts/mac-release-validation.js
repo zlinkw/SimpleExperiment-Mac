@@ -67,6 +67,7 @@ function testCounts(stdout) {
   return counts;
 }
 const nativeWindows = new Set([
+  "experiment:test/features/panelResultCatalogCache.test.js",
   "experiment:test/features/projectResultPublication.test.js", "experiment:test/core/hostOperationLease.test.js",
   "experiment:test/core/resourceLeaseCompatibility.test.js", "sftp:test/hostOperationLease.test.js",
   "sftp:test/installPolicy.test.js", "sftp:test/mappedBatchDownload.test.js", "sftp:test/cleanupFiles.test.js", "sftp:test/macAuthentication.test.js",

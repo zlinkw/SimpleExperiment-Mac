@@ -58,6 +58,10 @@ test("command palette defaults to the new-project main workflow without removing
     assert.match(extension, new RegExp(`(?:registerCommand|hostCommand)\\("${command.replaceAll(".", "\\.")}"`));
   }
 
+  for (const command of ["simpleExperimentMac.startHubTunnel", "simpleExperimentMac.startXshellRealtimeTunnel"]) {
+    assert.equal(commands.has(command), false, command + " is retired");
+  }
+
   for (const command of primaryCommands) {
     assert.ok(commands.has(command), `${command} must remain contributed`);
     assert.equal(hiddenByDefault.has(command), false, `${command} must remain visible by default`);

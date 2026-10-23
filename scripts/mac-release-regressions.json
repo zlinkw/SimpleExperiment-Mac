@@ -1,0 +1,1214 @@
+[
+  {
+    "component": "experiment",
+    "file": "test/agent/agentHealthLatency.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/auditTailBudget.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/codeSyncInspectRuntime.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/codeSyncProof.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/effectiveTail.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/eventAppendConcurrency.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/eventReadCursor.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/eventSseCursor.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/eventStreamCursor.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/evidenceRuntimeActions.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/exactWindowStopBoundary.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/fileTransferRuntimeState.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/gpuCollectorFrame.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/gpuCollectorRealTmux.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/gpuHistoryRetention.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/gpuHistoryTotalBudget.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/gpuTmuxStartupLatency.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/inactivityActions.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/installRichAction.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/isoEpochTimezone.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/liveLogTailBudget.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/operationJournalIndexCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/planQueue.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/resultCandidateCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/resultRuntimeActions.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/runtimeApiJsonCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/runtimeFileIndexCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/runtimeJsonCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/runtimeReadBoundaryCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/runtimeWriteInvalidation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/samplerPayloadCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/schedulerAtomicWrite.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/schedulerResumePublishedResults.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/schedulerStateCleanupOwnership.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/schedulerStateDirCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/stopSchedulerIdentity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tensorboardAndFence.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tensorboardControls1.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tensorboardControls2.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tensorboardControls3.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tensorboardControls4.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tensorboardControls5.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tmuxCloseHttp.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tmuxCloseRuntime.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/tmuxLogSizeCdFilter.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/transferStallDetection.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/uploadOverwritePolicy.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/workerAvailabilityRetention.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/agent/workerCommandReadCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCli.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliActiveSnapshot.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands1.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands10.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands11.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands12.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands13.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands14.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands15.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands16.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands2.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands3.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands4.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands5.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands6.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands7.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands8.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliCommands9.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliFailureAlerts.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliHealthEvidence.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliHistoryViews.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliInspectSchema.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliLifecycleCommands.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliPersistedHistory.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliQuerySchema.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliRuntimeCapture.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliRuntimeIdentity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliTerminalIdentity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliTrainingProgress.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/workerRunLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/clusterRuntime.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/codeSync.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/config/remoteRootPolicyPrefill.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/core/safeRequestRetry.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/extension/workflowPanelNavigation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/actualWorkRootValidation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/agentFirstRunPreparationWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/agentInstallDirIsolation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/agentProjectRootReadinessWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/agentRuntimeVerificationLatency.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/agentSessionStateCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/agentVersionSafeRestart.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/archivedOnlyResultCsvViews.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/automaticSyncReadiness.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/backendActionCommandSets.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/cleanupIndexInvalidation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/clearedOutputReplacement.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/codeSyncDataManifest.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/communicationTopologyBoundaryClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/completedJobLatestSync.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/configurationChangeWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/datasetAgentTables.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/debugRunIsolationWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/distributedQueueCacheStability.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/distributedQueueStartupMirrors.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/distributedQueueStartupRecovery.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/draftLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/duplicatePlanSubmissionGuard.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/endpointAssignmentCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/executionHistoryControls.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/firstRunSetupPrompt.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/formalIdentityContract.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/formalJobPreflightEnvironment.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/formalJobPreflightRejections.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/formalJobPreflightStructure.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/gpuOwnerConfigCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/gpuSampleCarryRealChain.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/hublessResultsRefresh.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/hubWorkerStatusSummaryCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/idleGpuDurableDispatch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/localIndexSharedIdentity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/manifestCleanup.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/manualWorkerReassignment.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/manualWorkerRefresh.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/multiFormatOutputContract.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/nestedJsonResultParsing.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/nestedPlanDiscovery.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/noHubServerReadiness.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/operationsTerminologyClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/outputInterfacePreflight.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/overviewDiagnosticsDensity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/overviewProjectReadiness.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/packageContentPolicy.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/panelLifecycleDiagnostics.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/panelMessageDispatch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/panelResultCatalogCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/parallelPlanSubmission.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planArchiveBundleWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planBatchDispatchFirst.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planBatchPhysicalPipeline.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planExecutionPhaseLabelClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedBatchLedger.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedBatchLedgerDispatch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedBatchLedgerLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedLedgerLock.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedReview.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedReviewBoundaries.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planIsolatedReviewLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planJobDeleteRequeue.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planJobDeleteRequeueCoverage.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planJobDeleteRequeueProduction.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planOutputReplacementHost.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planPreflightProgressSpeed.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planRunFeedback.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planRunHoldClearedChain.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planRunIsolateRerun.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planRunRerunIntent.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planScopedAnomalyAndUiPaths.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planScopedPptConfigPaths.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planScopedTraceProvenance.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planSeedAggregate.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planStructuralValidationCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planSubmissionOwnerReconcile.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planTerminalStatusRecovery.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planValidationOperationPayload.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planWorkerAndTmuxRouting.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/preflightStages.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/prequeueRecall.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/prequeueRecallBulkSync.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectCodeSyncState.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectCommandPaletteWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectFileIndex.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectManagedPreflight.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectQuickStartWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectRemoteDestinationClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectRootMap.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectRunPreflightWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectServerReadinessWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectWorkspaceChangeIsolation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/publicCliAliases.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/publicReleaseBundle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/publicRuntimeEnvironmentDefault.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/publishAgentReadiness.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/remotePathConfirmationWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/remoteRootPolicyUi.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/resultCandidateMetadataExclusion.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/resultExclusionWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/resultSyncFailureVisibility.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/runCompletionResultRefresh.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/runtimeLogAnalysisHost.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/runtimeRefreshTiming.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/schedulerContract.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/serverAuthoritativeProgress.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/serverConfigSaveContinuation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/serverPlanQueueRecovery.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/serverWorkerPortAdapterDensity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/settingsSecondaryView.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/setupGuideDirectorySemantics.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/setupWorkDirectoryWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/sftpManualTargetAuthority.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/sftpProgressWait.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/simpleSftpCapabilityOncePerLaunch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/singleProjectWorkspaceBoundary.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/staleQueueRoundBehavior.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/syncArtifactPreflightClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/syncScopeBatch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/syncScopeDeletionRefresh.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/syncScopeTransferBatch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/syncScopeWorkerAuthority.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/taskQueryWideReadRealChain.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/taskTimelineStatusLabelClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/tmuxClearTaskTabsStatus.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/topologyModeUi.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/treeOnboardingDensity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/tunnelTestCompletionClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/webviewCommandWhitelistConsistency.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/webviewStableSnapshotCompactionCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/workerCodeVersionIsolation.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/workerFpsyncTaskLabel.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/workerLiveStatusLabelClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/workerPlanSharding.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/workerPreparationPipeline.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/migration/renamedExtensionStateMigration.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/scripts/macRuntimeTemplate.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/agentLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/agentTmuxPolicy.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/authorityMergeHubSchedulerAuthoritative.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/autoConnectRealtimeOnPanelOpen.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/globalConfigPersistence.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/hubControlApiContract.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/multiEndpointRealtimeClient.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/multiXshellCommandBuilder.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/noSshFromAllUiActions.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/postTunnelActionWrapper.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/readOnlyClientAuthority.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/realtimeStateBudget.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/startAllTunnelsPortCheck.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/tunnelClient.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/tunnelEndpointRegistry.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/tunnelPortAllocator.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/tunnelPortConflict.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/vscodeIgnore.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/workerTaskTelemetryEnrichment.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/workerTelemetryApiContract.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/workerTelemetryNoFileActionRequired.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/xshellRealtimeSetup.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/tunnel/xshellSessionPatcher.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/actionButtonsCapability.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/actionLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/configBoundsFeedback.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/disableReasonDerivationCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/fixedUiLookupSets.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/gpuHistoryChart.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/hubWorkerTelemetryStatusRender.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/operationFeedbackHierarchy.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/operationGraceDisplay.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/panelReloadRequired.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/planFileEquivalenceCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/planNoticeLayout.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/planPreflightDisableParity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/planRunTaskStatsReuse.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/planSelectorStatus.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/projectContextSummaryCache.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/remoteFileBrowserWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/resultActionWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/resultDatasetHierarchy.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/serverManagementSchedulerInputs.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/serverSettingsClarity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/tmuxClearTaskTabsClick.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/tmuxGpuTaskGrouping.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/tmuxPaneSwitch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/tmuxTaskTabCloseClick.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/tooltipCompactness.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/webviewButtonsHandled.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/workbenchResourceTree.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/workflowAutoScrollDisabled.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/xshellSessionOverviewRender.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/agentLifecycle.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/agentPythonResolution.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/apiBackpressure.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/cleanupObserveBatch.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/cleanupStatusScale.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/compressionPolicy.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/downloadScope.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/downloadScopePaths.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/explicitScopedDownload.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/hashCacheBenchmark.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/inventoryScopeTransport.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/isolateBusyFailClosedGate.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/persistentEvents.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/planIsolate.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/planIsolateBusyWindow.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/planIsolateWindow.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/stagedTarReceive.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/targetResolution.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/testSerialFailureMetadata.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/testSerialLogIdentity.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/testSerialOutputPreservation.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/transferBusySnapshot.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/transferCapacity.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/transferInactivity.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/transferMetadata.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/transferProgressAccuracy.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/uploadPlan.test.js"
+  }
+]

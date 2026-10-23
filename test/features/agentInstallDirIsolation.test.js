@@ -26,6 +26,9 @@ const sandbox = {
     agentTmuxStartupCommand: ({ installDir }) => `INSTALL_DIR=${installDir}`,
   },
   effectiveWorkerCondaEnv: (worker, hubEnv) => worker.condaEnv || hubEnv,
+  // Mac 适配：Mac 版 agentRuntimeDirs 额外用 ApiWorkflow.normalizeApiRemotePath 归一化 agentInstallDir，
+  // 直接注入真实模块而不是桩，保证隔离语义与生产一致。
+  ApiWorkflow_1: require("../../dist/features/ApiWorkflow.js"),
 };
 vm.createContext(sandbox);
 vm.runInContext(`class Subject {

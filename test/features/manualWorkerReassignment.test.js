@@ -22,7 +22,9 @@ test("manual Worker reassignment keeps an immutable source record and creates a 
   const end = extension.indexOf("async saveHubConfigFromUi", start);
   assert.ok(start >= 0 && end > start);
   const flow = extension.slice(start, end);
-  assert.match(flow, /topology\.mode !== "worker_pool"/);
+  assert.match(flow, /this\.assertTopologyReady\("手动转移任务"\)/);
+  assert.match(flow, /this\.enabledWorkerConfigs\(\)/);
+  assert.doesNotMatch(flow, /postHubAction|lastProbe/);
   assert.match(flow, /new Set\(\["queued", "pending"\]\)/);
   assert.match(flow, /probe\.status === "ok"/);
   assert.match(flow, /missingWorkerActionCapabilities\(worker\.id, "retry-worker-task"\)/);

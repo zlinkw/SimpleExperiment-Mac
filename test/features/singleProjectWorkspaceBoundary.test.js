@@ -23,6 +23,8 @@ function extractFunction(name) {
 function checker(folders) {
   const sandbox = {
     process: { platform: "win32" },
+    // 契约：断言失败统一以 errorMessage 包装为“无法使用当前工作区”，沙箱提供生产同款提取器。
+    errorMessage: (error) => String((error && error.message) || error),
     WorkspacePathMapper_1: require("../../dist/core/WorkspacePathMapper.js"),
     vscode: { workspace: { workspaceFolders: folders } },
   };
@@ -38,9 +40,10 @@ function checker(folders) {
 
 test("remote project operations require exactly one workspace folder", () => {
   assert.throws(() => checker([])("上传项目代码"), /需要先打开一个本地实验项目/);
-  const one = [{ uri: { scheme: "file", path: "/D:/projects/demo", fsPath: "D:/projects/demo" } }];
-  assert.equal(checker(one)("上传项目代码"), "D:\\projects\\demo");
-  const many = [one[0], { uri: { fsPath: "D:/projects/other" } }];
+  // Mac 契约：本地工作区宿主路径即 POSIX 绝对路径（hostPathApi=Mac 宿主），Windows 盘符映射形态属退役模型。
+  const one = [{ uri: { scheme: "file", path: "/Users/zlk/projects/demo", fsPath: "/Users/zlk/projects/demo" } }];
+  assert.equal(checker(one)("上传项目代码"), "/Users/zlk/projects/demo");
+  const many = [one[0], { uri: { fsPath: "/Users/zlk/projects/other" } }];
   assert.throws(() => checker(many)("上传项目代码"), /检测到 2 个工作区文件夹/);
   assert.throws(() => checker(many)("上传项目代码"), /独立 VS Code 窗口中只打开目标实验项目/);
 });
@@ -56,7 +59,9 @@ test("webview state exposes the local project identity and workspace count", () 
   assert.match(source, /singleProject: folders\.length === 1/);
 });
 
-test("remote workspace operations resolve Windows host paths and preserve editor URI", () => {
+test("remote workspace operations fail closed on non-Windows hosts and never execute host writes", () => {
+  // Mac 契约重述（退役 Windows WSL 盘符映射执行模型）：即便映射配置合法，
+  // platform==="darwin" 时远程工作区必须被拒绝执行宿主操作（Windows 折叠语义不再借用）。
   const remote = [{
     uri: {
       scheme: "vscode-remote",
@@ -66,12 +71,14 @@ test("remote workspace operations resolve Windows host paths and preserve editor
     },
   }];
   const sandbox = {
-    process: { platform: "win32" },
+    process: { platform: "darwin" },
+    // 契约：断言失败统一以 errorMessage 包装为“无法使用当前工作区”，沙箱提供生产同款提取器。
+    errorMessage: (error) => String((error && error.message) || error),
     WorkspacePathMapper_1: require("../../dist/core/WorkspacePathMapper.js"),
     vscode: {
       workspace: {
         workspaceFolders: remote,
-        getConfiguration: () => ({ get: (key) => key === "workspaceHostRoot" ? "D:\\GitRepo" : "/workspaces" }),
+        getConfiguration: () => ({ get: (key) => key === "workspaceHostRoot" ? "/Users/zlk/GitRepo" : "/workspaces" }),
       },
     },
   };
@@ -82,7 +89,7 @@ test("remote workspace operations resolve Windows host paths and preserve editor
     extractFunction("assertSingleProjectWorkspace"),
     "this.check = assertSingleProjectWorkspace;",
   ].join("\n"), sandbox);
-  assert.equal(sandbox.check("上传项目代码"), "D:\\GitRepo\\MCP\\demo");
+  assert.throws(() => sandbox.check("上传项目代码"), /远程工作区必须由 Windows UI Extension Host 执行/);
 });
 
 test("workspace file opening keeps the remote URI instead of converting to file URI", () => {
@@ -97,7 +104,8 @@ test("workspace file opening keeps the remote URI instead of converting to file 
     vscode: {
       workspace: {
         workspaceFolders: [{ uri: remoteUri }],
-        getConfiguration: () => ({ get: (key) => key === "workspaceHostRoot" ? "D:\\GitRepo" : "/workspaces" }),
+        // Mac 契约：宿主根为 POSIX 绝对路径（Mac 宿主即本机文件系统），Windows 盘符形态属退役模型。
+        getConfiguration: () => ({ get: (key) => key === "workspaceHostRoot" ? "/Users/zlk/GitRepo" : "/workspaces" }),
       },
       Uri: {
         joinPath: (uri, ...segments) => ({ scheme: uri.scheme, path: [uri.path, ...segments].join("/") }),

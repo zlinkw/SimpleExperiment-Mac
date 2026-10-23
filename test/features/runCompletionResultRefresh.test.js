@@ -62,10 +62,7 @@ test("remote terminal events keep raw metrics intact and create no rebuilt resul
     "    rows.append({'result': result, 'duplicate': duplicate})",
     "print(json.dumps(rows))",
   ].join("\n"));
-  const result = spawnSync("python", ["-X", "utf8", script], {
-    encoding: "utf8", timeout: 10000, windowsHide: true,
-    env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
-  });
+  const result = spawnSync("python", ["-X", "utf8", script], { encoding: "utf8", timeout: 10000, windowsHide: true, env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" } });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const rows = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
   assert.equal(rows.length, 3);

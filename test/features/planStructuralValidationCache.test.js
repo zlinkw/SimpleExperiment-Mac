@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "../..");
 const source = fs.readFileSync(path.join(root, "src/extension/legacy.ts"), "utf8");
 
 function method(name) {
-  const start = source.indexOf(`    async ${name}(`);
+  const start = source.indexOf(`    async ${name}(`) >= 0 ? source.indexOf(`    async ${name}(`) : source.indexOf(`    ${name}(`);
   const end = source.indexOf("\n    }", start) + 6;
   assert.ok(start >= 0 && end > start, name);
   const member = source.slice(start, end);
@@ -20,9 +20,7 @@ function method(name) {
 
 test("verified Agent content cache refreshes outputs, invalidates changed inputs, and stays bounded", () => {
   const agent = require("../../dist/clusterAgentRuntime.legacy.js").CLUSTER_AGENT_RUNTIME;
-  const result = spawnSync("python", ["-X", "utf8", path.join(root, "test/fixtures/plan_preflight_cache_probe.py")], {
-    input: JSON.stringify({ agent }), encoding: "utf8", timeout: 10000, windowsHide: true,
-  });
+  const result = spawnSync("python", ["-X", "utf8", path.join(root, "test/fixtures/plan_preflight_cache_probe.py")], { input: JSON.stringify({ agent }), encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.deepEqual(JSON.parse(result.stdout), { ok: true, cacheEntries: 32, warmSchedulerCalls: 0 });
 });
@@ -59,19 +57,40 @@ test("warm Host preflight still requests fresh artifacts and reads queue/GPU on 
   assert.deepEqual(second.validation.existing, [{ index: 0 }]);
   assert.equal(count, 2); assert.equal(gpuReads, 2); assert.equal(queueReads, 2);
   assert.deepEqual(second.distributedPreview.workers[0].idleGpuIds, [1], "live occupied GPU must remain excluded");
+  const submission = await runner.call(host, body, "run", { previewResources: false });
+  assert.equal(count, 3, 'submission still queries current remote artifacts');
+  assert.equal(gpuReads, 2, 'actual dispatch performs admission; submission avoids a redundant resource-only query');
+  assert.equal(queueReads, 2, 'submission does not simulate allocation against historical queue rows');
+  assert.equal(submission.distributedPreview.admissionDeferred, true);
+  assert.deepEqual(submission.validation.existing, [{ index: 0 }]);
 });
 
-test("warm inline response keeps Worker identity guard and cold/legacy asynchronous fallback", () => {
+test('real capability version enables structural reuse and every relevant change invalidates it', () => {
+  const key = new Function('workspaceRoot', 'normalizePlanSelectionKey', 'pluginProjectAdapterRules', 'crypto',
+    `return {${method('planValidationCacheKey')}};`)(() => 'C:/fixture', String, () => ({}), require('node:crypto')).planValidationCacheKey;
+  const worker = {id:'w',condaEnv:'/env',agentProjectDir:'/project'};
+  const host = {lastWorkerProbes:{w:{capabilities:{agentVersion:'0.5.326'}}},
+    projectTopologyAssessment:()=>({mode:'worker_pool'}),enabledWorkerConfigs:()=>[worker],
+    lastCodeSyncState:{fingerprint:'content',workerVersions:{w:{codeSyncProofRuntimeGeneration:'generation'}}}};
+  const body = {planFile:'experiments/plans/a.yaml',planRevision:'revision'};
+  const first = key.call(host,body,'w'); assert.match(first,/^[a-f0-9]{64}$/);
+  assert.equal(key.call(host,body,'w'),first);
+  for (const change of [()=>body.planRevision='new',()=>host.lastCodeSyncState.fingerprint='new',
+    ()=>host.lastWorkerProbes.w.capabilities.agentVersion='next',()=>worker.condaEnv='/new-env',
+    ()=>host.lastCodeSyncState.workerVersions.w.codeSyncProofRuntimeGeneration='new-generation']) {
+    const previous=key.call(host,body,'w'); change(); assert.notEqual(key.call(host,body,'w'),previous);
+  }
+  host.lastWorkerProbes.w = {}; assert.equal(key.call(host,body,'w'),'');
+});
+
+test("warm and cold validation both return the original async identity before filesystem work", () => {
   const agent = require("../../dist/clusterAgentRuntime.legacy.js").CLUSTER_AGENT_RUNTIME;
   const post = agent.slice(agent.indexOf("        def do_POST(self):"));
-  const warm = post.indexOf('if action == "validate-plan" and not action_debug_mode(payload):');
-  assert.ok(warm > post.indexOf('"local worker scheduler identity mismatch"'));
-  const next = post.indexOf('if action in ("validate-plan", "dry-run-plan", "rebuild-distributed-results")', warm);
-  const block = post.slice(warm, next);
-  assert.match(block, /cached_scheduler_validation/);
-  assert.match(block, /if validation is not None:[\s\S]*terminal_action/);
+  const next = post.indexOf('if action in ("validate-plan", "dry-run-plan", "preflight-worker-task", "rebuild-distributed-results")');
+  assert.ok(next > post.indexOf('"local worker scheduler identity mismatch"'));
+  const block = post.slice(0, next);
+  assert.doesNotMatch(block, /cached_scheduler_validation\(root/);
   assert.match(post.slice(next), /start_inactivity_action/);
-  assert.doesNotMatch(block, /run-plan|start_worker_task|overwriteExisting/);
 });
 
 test("both explicit validation and run preflight send only current proof identities without mutating the request", async () => {

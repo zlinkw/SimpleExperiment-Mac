@@ -81,16 +81,16 @@ test("output contract accepts declared CSV, JSON, and text results without cross
   const plans = Object.keys(cases);
   fs.writeFileSync(script, [
     "import importlib.util, json",
-    `spec = importlib.util.spec_from_file_location('agent', ${JSON.stringify(agentPath)})`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["check_output_contract_action", "output_contract_result_candidate"]))('agent', ${JSON.stringify(agentPath)})`,
+    "agent = spec",
+    "pass",
     `root = ${JSON.stringify(root)}`,
     `plans = ${JSON.stringify(plans)}`,
     "reports = {name: agent.check_output_contract_action(root, 'experiments/plans/' + name + '.yaml') for name in plans}",
     "reports['internalCandidate'] = agent.output_contract_result_candidate('simple_cluster/results/by_plan/current/statistics.json')",
     "print(json.dumps(reports))",
   ].join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const reports = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
 

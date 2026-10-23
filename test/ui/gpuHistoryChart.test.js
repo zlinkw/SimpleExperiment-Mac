@@ -34,7 +34,8 @@ test("GPU history chart leaves missing buckets disconnected and exposes accessib
 
 test("GPU history server styling persists by server id and has fallback patterns", () => {
   const html = renderPanelHtml();
-  assert.match(html, /simpleExperiment\.gpuHistoryServerStyles/);
+  // Mac 适配：面板 localStorage 键统一 simpleExperimentMac.* 前缀（Windows 为 simpleExperiment.*）。
+  assert.match(html, /simpleExperimentMac\.gpuHistoryServerStyles/);
   assert.match(html, /let gpuHistoryServerStylesSaveTimer = 0/);
   assert.match(html, /if \(gpuHistoryServerStylesSaveTimer\) return/);
   assert.match(html, /gpuHistoryServerStylesSaveTimer = setTimeout/);

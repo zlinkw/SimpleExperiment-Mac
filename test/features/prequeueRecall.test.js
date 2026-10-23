@@ -15,15 +15,16 @@ const stamp = new Date(now).toISOString();
 function hostedPlan(count = 2) {
   const enqueued = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {
     projectId: 'project', schedulingMode: 'server_prequeue', planFile: 'plans/queue.yaml', revision: 'rev-1',
-    codeFingerprint: 'fingerprint', jobs: Array.from({ length: count }, (_, index) => ({ index, case: `case-${index}`, seed: 20 + index, outputDir: `runs/${index}` })),
+    codeFingerprint: 'fingerprint', jobs: Array.from({ length: count }, (_, index) => ({ index, case: `case-${index}`, seed: 20 + index, collectionResultCsv: `tmp/result/queue/${index}.csv`, outputDir: `runs/${index}` })),
   }, 'workflow-1', stamp);
-  return policy.allocateServerPrequeue(enqueued, [{ workerId: 'worker-a', online: true, weight: 2, codeFingerprint: 'fingerprint' }]).queue;
+  return policy.allocateServerPrequeue(enqueued, [{ workerId: 'worker-a', declaredJobPaths: true, online: true, weight: 2, codeFingerprint: 'fingerprint' }]).queue;
 }
 function exact(plan, job, overrides = {}) {
   return { projectId: plan.projectId, workflowId: plan.id, planFile: plan.planFile, planRevision: plan.revision, enqueuedAt: plan.enqueuedAt,
     codeFingerprint: plan.codeFingerprint, planJobCount: plan.planJobCount, experimentIndex: job.index,
     case: job.case, seed: job.seed, attempt: job.attempt, outputDir: job.outputDir,
     workerId: job.workerId, gpuId: job.gpuId, commandId: job.commandId, targetCommandId: job.commandId, runKey: job.runKey || job.commandId,
+    resultPathPolicy: job.resultPathPolicy, globalJobId: job.globalJobId, collectionResultCsv: job.collectionResultCsv,
     status: 'cancelled', stopReason: 'requeue', durableAccepted: true, durableReleased: true,
     neverStarted: true, neverStartedEvidence: 'durable_queued_row', ...overrides };
 }
@@ -34,12 +35,12 @@ test('a recalled hosted job stays out of server assignment and can enter local i
   const selected = plan.jobs[0];
   Object.assign(selected, { status: 'queued', localQueueOnly: true, recallRequested: true });
   plan.jobs[1].status = 'pending';
-  const hosted = policy.allocateServerPrequeue(queue, [{ workerId: 'worker-b', online: true, weight: 1, codeFingerprint: 'fingerprint' }]);
+  const hosted = policy.allocateServerPrequeue(queue, [{ workerId: 'worker-b', declaredJobPaths: true, online: true, weight: 1, codeFingerprint: 'fingerprint' }]);
   assert.equal(hosted.dispatches.length, 0);
   assert.equal(hosted.queue.plans[0].jobs[1].status, 'pending');
   selected.recallRequested = false;
   Object.assign(selected, { status: 'pending', workerId: undefined, gpuId: undefined, commandId: undefined, runKey: undefined });
-  const local = queueApi.allocateAvailable(queue, [{ workerId: 'worker-local', online: true, idleGpuIds: ['0'], codeFingerprint: 'fingerprint', idleGpuAdmission: true }],
+  const local = queueApi.allocateAvailable(queue, [{ workerId: 'worker-local', declaredJobPaths: true, online: true, idleGpuIds: ['0'], codeFingerprint: 'fingerprint', idleGpuAdmission: true }],
     { requireIdleGpuAdmission: true, localIdleOnly: true });
   assert.deepEqual(local.dispatches.map((row) => row.jobIndex), [0]);
   assert.equal(local.queue.plans[0].jobs[1].status, 'pending');
@@ -86,7 +87,7 @@ test('server recovery preserves local Plan and job recall intent across restart-
   assert.equal(merged.jobs[0].recallOperationId, 'recall-op-12345678');
 });
 
-test('only an exact release proof creates a fresh attempt and historical output paths gain an attempts segment', () => {
+test('only an exact release proof creates a new command while declared paths and zero attempt remain fixed', () => {
   const queue = hostedPlan();
   const plan = queue.plans[0];
   const job = plan.jobs[0];
@@ -101,8 +102,9 @@ test('only an exact release proof creates a fresh attempt and historical output 
   const released = queueApi.releaseQueuedForReassignment(queue, plan.id, job.index, proof, 'attempt-next-1234');
   const next = released.plans[0].jobs[0];
   assert.equal(next.status, 'pending');
-  assert.equal(next.attempt, job.attempt + 1);
-  assert.equal(next.outputDir, `${job.outputDir}/attempts/attempt-next-1234`);
+  assert.equal(next.attempt, 0);
+  assert.equal(next.nextCommandId, "attempt-next-1234");
+  assert.equal(next.outputDir, job.outputDir);
   assert.equal(next.workerId, undefined);
   assert.equal(next.commandId, undefined);
   assert.equal(next.localQueueOnly, true);
@@ -134,5 +136,7 @@ test('legacy release proof accepts historical aliases only when the target, plan
   assert.equal(queueApi.isExactQueuedReleaseProof(plan, job, { ...proof, planId: 'other-workflow' }), false);
   const released = queueApi.releaseQueuedForReassignment({ schemaVersion: 1, plans: [plan] }, plan.id, job.index,
     proof, 'attempt-legacy-1234');
-  assert.equal(released.plans[0].jobs[0].outputDir, 'runs/old-output/attempts/attempt-legacy-1234');
+  assert.equal(released.plans[0].jobs[0].outputDir, 'runs/old-output');
+  assert.equal(released.plans[0].resultPathPolicy, undefined);
+  assert.equal(queueApi.allocateAvailable(released,[{workerId:'worker-a',declaredJobPaths:true,online:true,idleGpuIds:['0'],codeFingerprint:'f'}]).dispatches.length,0,'historical release cannot authorize new execution');
 });

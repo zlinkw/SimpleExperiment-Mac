@@ -12,9 +12,10 @@ test("aggregate history points stay under the total budget", () => {
   const script = String.raw`
 import importlib.util, json
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["GPU_HISTORY_MAX_TOTAL_POINTS", "enforce_gpu_history_total_budget", "gpu_history_path", "record_gpu_history"])
 
 def build(series_count, points_per_series):
     servers = {}
@@ -51,7 +52,7 @@ print(json.dumps({
     "tinyTotal": tiny_total,
 }))
 `;
-  const run = spawnSync("python", ["-c", script], { encoding: "utf8", timeout: 120000 });
+  const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr);
   const result = JSON.parse(run.stdout.trim());
 
@@ -71,9 +72,10 @@ test("recorded history survives a round trip through the compact writer", () => 
   const script = String.raw`
 import importlib.util, json, os
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["GPU_HISTORY_MAX_TOTAL_POINTS", "enforce_gpu_history_total_budget", "gpu_history_path", "record_gpu_history"])
 
 root = ${JSON.stringify(root.replace(/\\/g, "/"))}
 gpu_by_server = {"worker-a": [{"index": 0, "utilizationPercent": 42, "memoryUsedMb": 1024, "memoryTotalMb": 8192}]}
@@ -95,7 +97,7 @@ print(json.dumps({
 }))
 `;
   try {
-    const run = spawnSync("python", ["-c", script], { encoding: "utf8", timeout: 120000 });
+    const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr);
     const result = JSON.parse(run.stdout.trim());
     assert.equal(result.pointCount, 2, "consecutive buckets must both persist");

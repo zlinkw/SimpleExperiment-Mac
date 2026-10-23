@@ -100,11 +100,16 @@ test("configured request timeout aborts stalled tunnel actions", async () => {
 
 test("coalesced reads survive one caller cancelling and cancel when last subscriber leaves", async () => {
   let calls = 0;
+  let firstReceived, secondReceived;
+  const firstArrived = new Promise(resolve => { firstReceived = resolve; });
+  const secondArrived = new Promise(resolve => { secondReceived = resolve; });
   let lastRequestClosed;
   const closed = new Promise((resolve) => { lastRequestClosed = resolve; });
   const server = http.createServer((req, res) => {
     calls += 1;
-    req.on("close", () => { if (req.aborted) lastRequestClosed(); });
+    if (calls === 1) firstReceived();
+    if (calls === 2) secondReceived();
+    res.on("close", () => { if (!res.writableEnded) lastRequestClosed(); });
     if (req.url !== "/api/snapshot") { res.statusCode = 404; return res.end("{}"); }
     setTimeout(() => { if (!res.destroyed) res.end(JSON.stringify({ schemaVersion: 1, schedulerStates: [] })); }, 80);
   });
@@ -116,7 +121,7 @@ test("coalesced reads survive one caller cancelling and cancel when last subscri
     const secondController = new AbortController();
     const first = client.getSnapshot({ signal: firstController.signal });
     const second = client.getSnapshot({ signal: secondController.signal });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await firstArrived;
     assert.equal(calls, 1);
     firstController.abort();
     await assert.rejects(first, (error) => error.name === "AbortError");
@@ -125,7 +130,7 @@ test("coalesced reads survive one caller cancelling and cancel when last subscri
 
     const finalController = new AbortController();
     const finalRead = client.getSnapshot({ signal: finalController.signal });
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await secondArrived;
     finalController.abort();
     await assert.rejects(finalRead, (error) => error.name === "AbortError");
     await Promise.race([closed, new Promise((_, reject) => setTimeout(() => reject(new Error("request was not cancelled")), 500))]);

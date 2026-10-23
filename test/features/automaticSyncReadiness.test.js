@@ -58,13 +58,13 @@ test("pending code sync is informational because plan submission synchronizes au
   });
   assert.deepEqual(readiness({ setup, codeSync: { hub: "failed: permission denied", workers: "待同步" } }), {
     ready: false,
-    failure: true,
-    status: "失败",
+    failure: false,
+    status: "运行时自动同步",
   });
   assert.deepEqual(readiness({ setup, codeSync: { hub: "同步失败：权限不足", workers: "待同步", fingerprint: "abc" } }), {
     ready: false,
-    failure: true,
-    status: "失败",
+    failure: false,
+    status: "运行时自动同步",
   });
 });
 

@@ -1,16 +1,6 @@
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const path = require('node:path');
-const { spawnSync } = require('node:child_process');
-function run(variant) {
-  const proc = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-B', '-X', 'utf8',
-    path.join(__dirname, 'formalJobPreflightProgress.fixture.py'), variant], {
-    cwd: path.join(__dirname, '../..'), encoding: 'utf8', timeout: 10000, windowsHide: true,
-  });
-  assert.equal(proc.status, 0, proc.stderr || proc.stdout || String(proc.error));
-  return JSON.parse(proc.stdout.trim());
-}
-test('real Worker admission runs the structural preflight under the stderr inactivity watchdog instead of a fixed wall-clock budget', () => {
+const { test, assert, path, spawnSync, run } = require("./formalJobPreflightProgress.support.cjs");
+
+test('real Worker startup accepts asset progress beyond the previous fixed ten-second budget', () => {
   const result = run('grow');
   assert.equal(result.receipt.durableAccepted, true, JSON.stringify(result));
   // 资产核实归项目 hook（project_owned，运行时执行）：准入预检只做结构与身份核实，

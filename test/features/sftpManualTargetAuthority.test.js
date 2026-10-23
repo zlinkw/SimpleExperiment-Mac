@@ -22,7 +22,7 @@ test("SFTP target preparation uses saved plugin fields without external config s
   assert.doesNotMatch(worker, /sessionInfoForPath/);
   assert.doesNotMatch(identity, /sessionInfoForPath|sshConfigServers|refreshLocalSshConfig/);
   assert.match(worker, /worker\.workerHost/);
-  assert.match(hub, /config\.hubHost/);
+  assert.match(hub, /HUB_REMOVED/);
   assert.match(worker, /host: firstNonEmpty\(worker\.workerHost, worker\.hubHost, worker\.transferHost\)/);
-  assert.match(hub, /host: firstNonEmpty\(config\.hubHost, config\.transferHost\)/);
+  assert.doesNotMatch(hub, /host: firstNonEmpty/);
 });

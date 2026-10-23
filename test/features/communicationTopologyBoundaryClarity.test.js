@@ -6,9 +6,13 @@ const { readSource } = require("../_helpers/sourceReader");
 
 const panel = readSource("src/ui/PanelHtml.ts");
 
-test("communication topology explains telemetry and file transfer boundaries", () => {
-  assert.match(panel, /\["Worker -> Hub", "可用性批量上报"\]/);
-  assert.match(panel, /\["Worker -> 本机", "实时日志\/GPU\/任务（WebSocket\/SSE；快照备用）"\]/);
-  assert.match(panel, /\["SFTP 文件", "低频代码\/配置\/结果\/日志包"\]/);
-  assert.doesNotMatch(panel, /\["Worker -> Hub", "availability"\]/);
+const panelFunction=require('../_helpers/panelFunction');
+const vm=require('node:vm');
+test("rendered topology uses enabled Workers and never creates a Hub hop",()=>{
+  let html;
+  const scope={EMPTY_WORKER_TUNNELS_FOR_ALIAS:[],enabledWorkerTunnelsCacheSource:null,enabledWorkerTunnelsCacheValue:[],
+    esc:value=>String(value),setHtmlIfChanged:(id,value)=>{assert.equal(id,'serverTopologyMap');html=value;}};
+  vm.runInNewContext(panelFunction('enabledWorkerTunnelsForState')+'\n'+panelFunction('renderServerTopologyMap')+'\nthis.render=renderServerTopologyMap;',scope);
+  scope.render({topology:{mode:'hub_worker'},setup:{hubHost:'historical',workerTunnels:[{id:'a',enabled:true},{id:'b',enabled:false}]}});
+  assert.match(html,/Worker 模式/);assert.match(html,/本机插件 → 1 台 Worker → 各自的任务窗口与产物/);assert.doesNotMatch(html,/Hub|historical/);
 });

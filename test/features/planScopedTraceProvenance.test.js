@@ -19,7 +19,7 @@ test("Agent enriches experiment traces with unambiguous Plan revision provenance
   for (const text of [source, built]) {
     assert.match(text, /def enrich_trace_plan_provenance\(root, rows, scheduler=None\):/);
     assert.match(text, /def collect_traces\(root, scheduler=None\):/);
-    assert.match(text, /traces = collect_traces\([^,]+, scheduler\)/);
+    assert.match(text, /data = enrich_trace_plan_provenance\(root, data, scheduler\)/);
   }
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "simple-experiment-trace-plan-"));
@@ -42,15 +42,15 @@ test("Agent enriches experiment traces with unambiguous Plan revision provenance
   const script = path.join(tmp, "check.py");
   fs.writeFileSync(script, [
     "import importlib.util, json",
-    `spec = importlib.util.spec_from_file_location('agent', ${JSON.stringify(agentPath)})`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["collect_scheduler", "collect_traces", "mark_archive_state"]))('agent', ${JSON.stringify(agentPath)})`,
+    "agent = spec",
+    "pass",
     `root = ${JSON.stringify(root)}`,
     "agent.mark_archive_state(root, ['work_dirs/c'], 'archive-artifacts', 'experiments/plans/c.yaml', 'rev-c')",
     "rows = agent.collect_traces(root, agent.collect_scheduler(root))",
     "print(json.dumps({str(row.get('run_id')): {'plan': row.get('planFile'), 'revision': row.get('planRevision')} for row in rows}))",
   ].join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
   assert.deepEqual(payload.a, { plan: "experiments/plans/a.yaml", revision: "rev-a" });

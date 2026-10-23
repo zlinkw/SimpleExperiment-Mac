@@ -6,6 +6,7 @@ import { constants as fsConstants } from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { SyncHolds, chosenSyncHash, isSyncHeld, safeSyncPath } from "./SyncResolution";
+import { isUnderMachineStatePrefixes } from "./ProjectRootMap";
 import { HostOperationLeaseManager } from "../core/HostOperationLease";
 import { atomicWriteText } from "../state/StateStore";
 
@@ -143,7 +144,14 @@ export type ScopeInventories = {
   workers: Record<string, Record<string, File>>;
   unverified?: Record<string, Record<string, string>>;
 };
-export function scopeInventoryPathAllowed(relative: string, directory = false): boolean {
+export function scopeInventoryPathAllowed(relative: string, directory = false,
+  machineStatePrefixes: readonly string[] = []): boolean {
+  // Machine state is excluded ONLY from the verified mapping: prefixes come from
+  // the resolved absolute state root of this project/Worker (ProjectRootMap),
+  // never from directory-name guessing, so a legitimate work_dirs/run/state/...
+  // tree stays syncable while a custom-nested state directory is excluded by its
+  // mapped prefix.
+  if (machineStatePrefixes.length && isUnderMachineStatePrefixes(relative, machineStatePrefixes)) return false;
   const parts = relative.toLowerCase().split("/");
   const basename = parts.at(-1) || "";
   if (!directory && (basename.endsWith(".writing") || basename.endsWith(".pending") || /\.tmp(?:\.|$)/.test(basename) || basename.includes(".upload."))) return false;
@@ -162,9 +170,10 @@ export function scopeInventoryPathAllowed(relative: string, directory = false): 
 
 export async function collectLocalScopeInventory(
   root: string, relative = ".", recursive = true, onUnverified?: (relative: string, reason: string) => void, cacheFile?: string,
+  machineStatePrefixes: readonly string[] = [],
 ): Promise<Record<string, File>> {
-  const names = await listLocalScopeFileNames(root, relative, recursive, onUnverified);
-  return hashLocalScopeNames(root, names, onUnverified, cacheFile);
+  const names = await listLocalScopeFileNames(root, relative, recursive, onUnverified, undefined, undefined, undefined, machineStatePrefixes);
+  return hashLocalScopeNames(root, names, onUnverified, cacheFile, {}, machineStatePrefixes);
 }
 
 /** One hash pool for every confirmed file and directory. Directory walks only list names. */
@@ -172,12 +181,13 @@ export async function collectSelectedLocalScopeFiles(
   root: string,
   items: Array<{ path: string; directory?: boolean }>,
   cacheFile?: string,
+  machineStatePrefixes: readonly string[] = [],
 ): Promise<Record<string, File>> {
   const names = new Set<string>();
   const budget = { directories: 0, entries: 0, files: 0 };
   for (const item of items) {
     if (item.directory) {
-      const found = await listLocalScopeFileNames(root, item.path, true, undefined, budget);
+      const found = await listLocalScopeFileNames(root, item.path, true, undefined, budget, undefined, undefined, machineStatePrefixes);
       if (!found.length) throw new Error(`来源目录没有可同步文件：${item.path}`);
       for (const relative of found) {
         names.add(relative);
@@ -188,7 +198,7 @@ export async function collectSelectedLocalScopeFiles(
       if (names.size > LOCAL_SCOPE_MAX_FILES) throw new Error(`本机选择超过文件上限 ${LOCAL_SCOPE_MAX_FILES}。`);
     }
   }
-  return hashLocalScopeNames(root, [...names], undefined, cacheFile);
+  return hashLocalScopeNames(root, [...names], undefined, cacheFile, {}, machineStatePrefixes);
 }
 
 type LocalScopeRoot = { realPath: string; device: string };
@@ -251,6 +261,7 @@ async function listLocalScopeFileNames(
   budget: LocalScopeScanBudget = { directories: 0, entries: 0, files: 0 },
   signal?: AbortSignal,
   metadata?: { file: (name: string, stat: Stats) => void; directory: (name: string, stat: Stats) => void; report: (stage: string) => void },
+  machineStatePrefixes: readonly string[] = [],
 ): Promise<string[]> {
   const root = await resolveLocalScopeRoot(rootPath);
   const start = normalizeLocalScopeRelative(relative);
@@ -280,7 +291,7 @@ async function listLocalScopeFileNames(
       continue;
     }
     if (initial.isFile()) {
-      if (current && scopeInventoryPathAllowed(current, false)) { names.push(current); metadata?.file(current, initial); }
+      if (current && scopeInventoryPathAllowed(current, false, machineStatePrefixes)) { names.push(current); metadata?.file(current, initial); }
       continue;
     }
     if (!initial.isDirectory()) { unverified(currentPath, "目标不是普通文件或目录"); continue; }
@@ -304,7 +315,7 @@ async function listLocalScopeFileNames(
         let safeChild: string;
         try { safeChild = normalizeLocalScopeRelative(child); }
         catch (error) { unverified(child, error instanceof Error ? error.message : String(error)); continue; }
-        if (!scopeInventoryPathAllowed(safeChild, entry.isDirectory())) continue;
+        if (!scopeInventoryPathAllowed(safeChild, entry.isDirectory(), machineStatePrefixes)) continue;
         const childPath = path.join(candidate, entry.name);
         const childStat = await fs.lstat(childPath);
         if (childStat.isSymbolicLink() || (root.device && bigintString(childStat.dev) !== root.device)) {
@@ -352,6 +363,7 @@ export async function collectLocalScopeMetadata(root: string, relative: string, 
 export async function hashLocalScopeNames(
   root: string, names: string[], onUnverified?: (relative: string, reason: string) => void, cacheFile?: string,
   options: { signal?: AbortSignal; concurrency?: number; onFile?: (name: string, file: File) => void; onProgress?: (done: number, total: number) => void } = {},
+  machineStatePrefixes: readonly string[] = [],
 ): Promise<Record<string, File>> {
   if (names.length > LOCAL_SCOPE_MAX_ENTRIES) throw new Error(`本机哈希清单超过输入上限 ${LOCAL_SCOPE_MAX_ENTRIES}。`);
   const normalizedNames = [...new Set(names.map(normalizeLocalScopeRelative))];
@@ -374,7 +386,7 @@ export async function hashLocalScopeNames(
       options.signal?.throwIfAborted();
       let full = path.join(rootInfo.realPath, ...relative.split("/"));
       try {
-      if (!scopeInventoryPathAllowed(relative, false)) throw new Error(`本机清单路径属于排除项：${relative}`);
+      if (!scopeInventoryPathAllowed(relative, false, machineStatePrefixes)) throw new Error(`本机清单路径属于排除项：${relative}`);
       const verified = await verifyLocalScopeEntry(rootInfo, relative, "file");
       full = verified.fullPath;
       const beforeStat = verified.stat;

@@ -1,0 +1,118 @@
+{
+  "version": 1,
+  "comment": "发行包内容策略单源数据（2026-10-21 用户裁决）。JS(scripts/package-content-policy.js) 与 Python(scripts/package_content_policy.py) 共同加载；规则语义、大小写、例外完全一致。诊断只输出路径与类别。",
+  "normalize": {
+    "strip_dot_slash_and_extension_prefix_to_fixpoint": true,
+    "case_insensitive": true
+  },
+  "legal_root_basenames": [
+    "license",
+    "license.txt",
+    "license.md",
+    "license.rst",
+    "notice",
+    "notice.txt"
+  ],
+  "toolchain_readme_exception": {
+    "root_basenames": [
+      "readme.md",
+      "readme"
+    ],
+    "evidence": "vsce 4.0.0 collectFiles 恒加否定式 '!README.md'（@vscode/vsce/out/package.js:1343-1345），VSIX 内重命名为 extension/readme.md；非本仓自愿保留。"
+  },
+  "markdown_runtime_allow_evidence": "No packaged project Markdown is required; tracked runtime producers supply minimal user templates and online guide links.",
+  "forbidden_ordered": [
+    {
+      "category": "forensics",
+      "basename_contains": "forensics"
+    },
+    {
+      "category": "backup",
+      "suffixes": [
+        ".patched",
+        ".bak",
+        ".orig"
+      ]
+    },
+    {
+      "category": "python-cache",
+      "path_segments": [
+        "__pycache__"
+      ],
+      "suffixes": [
+        ".pyc",
+        ".pyo"
+      ]
+    },
+    {
+      "category": "scratch",
+      "basenames": [
+        "msg.txt"
+      ],
+      "path_prefixes": [
+        ".packaging-"
+      ],
+      "basename_prefixes": [
+        ".tmp-"
+      ],
+      "suffixes": [
+        ".exitcode"
+      ]
+    },
+    {
+      "category": "changelog",
+      "basenames": [
+        "changelog",
+        "changelog.md"
+      ]
+    },
+    {
+      "category": "dev-tests",
+      "path_prefixes": [
+        "test/",
+        "tests/"
+      ]
+    },
+    {
+      "category": "docs",
+      "path_prefixes": [
+        "docs/"
+      ]
+    },
+    {
+      "category": "archive",
+      "suffixes": [
+        ".vsix",
+        ".tgz"
+      ]
+    },
+    {
+      "category": "log",
+      "suffixes": [
+        ".log"
+      ]
+    },
+    {
+      "category": "doc-markdown",
+      "extension": ".md"
+    }
+  ],
+  "required": [
+    "package.json",
+    "LICENSE.txt",
+    "scripts/check-static.js",
+    "dist/runtime/RuntimeManifest.json",
+    "dist/runtime/RuntimeManifest.js",
+    "dist/runtime/cluster_agent.py",
+    "dist/runtime/cluster_agent.py.sha256",
+    "dist/runtime/cluster_scheduler.py",
+    "dist/runtime/cluster_scheduler.py.sha256",
+    "dist/panel-build-manifest.json",
+    "dist/extension.js",
+    "dist/mac/Bootstrap.js",
+    "dist/cli.js"
+  ],
+  "markdown_runtime_allow_files": [],
+  "normalize_comment": "单一规范化语义(幂等)：反斜杠→/，整体转小写，反复交替剥离 './' 与 'extension/' 前缀直到不动点；规范化后的表示唯一，checkListing→classify 重复规范化结果不变。",
+  "markdown_runtime_allow_files_note": "Only the root toolchain README and legal notices are exceptions."
+}

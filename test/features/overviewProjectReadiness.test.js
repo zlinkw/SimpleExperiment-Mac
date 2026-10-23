@@ -12,7 +12,7 @@ test("overview prioritizes an active Plan over newly introduced readiness blocke
   const end = panel.indexOf("function renderServerObjectOverview", start);
   const source = panel.slice(start, end);
   assert.match(source, /const activeRun = selectedPlan \? planActiveRunEvidence\(state, planFile, selectedPlan\)/);
-  assert.match(source, /activeRun\.taskCount > 0 \? "运行中" : "提交中"/);
+  assert.match(source, /activeStage\.executionLabel \|\| "提交中"/);
   assert.ok(source.indexOf("if (activeRun.active)") < source.indexOf("if (!serverReadiness.ready)"));
   assert.ok(source.indexOf("if (activeRun.active)") < source.indexOf("if (!outputGate.ok)"));
   assert.ok(source.indexOf('const terminalPhase =') < source.indexOf("const simpleSftp = simpleSftpReadinessForState(state)"));
@@ -105,10 +105,12 @@ test("overview project readiness reflects execution and result phases", () => {
   const readiness = loadReadiness();
   const base = readyState();
 
-  const running = readiness({ ...base, _stage: { phase: "monitor", status: "计划已提交，调度器正在运行" } });
+  const running = readiness({ ...base, _stage: { phase: "monitor", executionLabel: "运行中", status: "任务窗口正在执行命令" } });
   assert.equal(running.status, "运行中");
   assert.equal(running.blocking, false);
   assert.equal(running.tone, "info");
+  assert.equal(readiness({ ...base, _stage: { phase: 'monitor', executionLabel: '排队中' } }).status, '排队中');
+  assert.equal(readiness({ ...base, _stage: { phase: 'monitor' } }).status, '提交中');
 
   const results = readiness({ ...base, _stage: { phase: "results", status: "进入结果解析、筛选与归档流程" } });
   assert.equal(results.status, "结果待处理");

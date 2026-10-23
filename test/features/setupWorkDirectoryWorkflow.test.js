@@ -7,9 +7,9 @@ const { readSource } = require("../_helpers/sourceReader");
 const source = readSource("src/extension.ts");
 
 test("Xshell setup requires project parent directories before code sync", () => {
-  assert.match(source, /inputActualWorkRoot\("Hub 项目父目录"/);
+  assert.doesNotMatch(source, /inputActualWorkRoot\("Hub 项目父目录"/);
   assert.match(source, /inputActualWorkRoot\("Worker 项目父目录"/);
-  assert.match(source, /agentProjectDir: hubActualWorkDir/);
+  assert.match(source, /workerActualWorkRootTarget\(worker/);
   assert.match(source, /agentProjectDir,/);
   assert.match(source, /function inputRequired\(/);
   assert.match(source, /simpleSftpIntegrationReadiness\(\)/);
@@ -17,9 +17,10 @@ test("Xshell setup requires project parent directories before code sync", () => 
 });
 
 test("quick setup writes current-project profiles to the public SimpleSFTP location", () => {
-  assert.match(source, /"SimpleSFTP", "server-profiles"/);
+  // Mac 适配：profile 目录经 HostPaths.componentDirectory("sftp") 解析 Mac 支持目录（Windows 为 APPDATA 下 "SimpleSFTP" 字面量）。
+  assert.match(source, /componentDirectory\("sftp"\), "server-profiles"/);
   assert.doesNotMatch(source, /"ZLK", "server-profiles"/);
-  assert.match(source, /targets\.push\(this\.hubCodeSyncTarget\(\)\)/);
+  assert.doesNotMatch(source, /targets\.push\(this\.hubCodeSyncTarget\(\)\)/);
   assert.match(source, /targets\.push\(this\.workerCodeSyncTarget\(worker\)\)/);
   assert.match(source, /workerActualWorkRootTarget\(worker\)/);
   assert.match(source, /targets\.some\(\(target\) => target\.id === existingActiveServerId\)/);

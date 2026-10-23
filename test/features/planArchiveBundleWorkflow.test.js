@@ -26,6 +26,9 @@ function extractFunction(name) {
 
 function loadPlanArchiveGate() {
   const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
     uniqueStrings: (values) => [...new Set(values.filter(Boolean))],
     usableSelectionKey: (value) => String(value || "").trim(),
     objectRecord: (value) => value && typeof value === "object" && !Array.isArray(value) ? value : undefined,
@@ -62,7 +65,7 @@ test("plan archive creates a reusable bundle from archived-only effective result
   assert.match(archive, /"evidence\/result_selection\.json"/);
   assert.match(archive, /schemaVersion: 5/);
   assert.match(archive, /excludedResultsTotalCount: resultSelection\.notIncludedCount/);
-  assert.match(archive, /remoteProjectRetained: evidenceMode === "hub_download"/);
+  assert.match(archive, /remoteProjectRetained: false/);
   assert.match(archive, /await fs\.rename\(sourcePath, targetPath\)/);
   assert.match(archive, /await fs\.rename\(stagingDir, bundleDir\)/);
   assert.match(archive, /restoreMovedPlanArchiveFiles\(root, stagingDir, movedArchiveFiles\)/);
@@ -70,6 +73,9 @@ test("plan archive creates a reusable bundle from archived-only effective result
 
 test("plan archive evidence plan is Plan-scoped and requires preview plus effective CSV", () => {
   const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
     FileTransferTypes_1: { isSafeRemotePath },
     uniqueStrings: (values) => [...new Set(values.filter(Boolean))],
     usableSelectionKey: (value) => String(value || "").trim(),
@@ -129,7 +135,7 @@ test("Plan archive synchronizes evidence only after modal confirmation and befor
   assert.doesNotMatch(extractFunction("nextAvailableDirectory"), /fs\.mkdir/);
 });
 
-test("Plan archive materializes local or Hub evidence inside the bundle", async () => {
+test("Plan archive copies exact local evidence and rejects retired Hub downloads", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "simple-experiment-evidence-"));
   try {
     const relative = "simple_cluster/results/by_plan/smoke/results_effective_archived.csv";
@@ -137,6 +143,9 @@ test("Plan archive materializes local or Hub evidence inside the bundle", async 
     fs.mkdirSync(path.dirname(sourceFile), { recursive: true });
     fs.writeFileSync(sourceFile, "metric,value\nAUC,0.9\n", "utf8");
     const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
       fs: fs.promises,
       path,
       PLAN_ARCHIVE_EVIDENCE_MAX_BYTES: 4 * 1024 * 1024,
@@ -168,14 +177,13 @@ test("Plan archive materializes local or Hub evidence inside the bundle", async 
         return { ok: true, fileCount: params.entries.length };
       },
     };
-    await sandbox.materialize(client, root, remoteBundle, [relative, "simple_cluster/results/by_plan/smoke/statistics.json"], "hub_download");
-    assert.equal(calls.length, 2, "unknown sizes are conservatively sent as one-file bounded batches");
-    assert.ok(calls.every((call) => call.method === "sync.downloadMappedPaths"));
-    assert.deepEqual(calls.map((call) => call.params.entries.length), [1, 1]);
-    assert.ok(calls.every((call) => call.params.maxFileBytes === 4 * 1024 * 1024));
-    assert.equal(fs.readFileSync(path.join(remoteBundle, "evidence", ...relative.split("/")), "utf8"), "metric,value\nAUC,0.95\n");
+    await assert.rejects(() => sandbox.materialize(client, root, remoteBundle,
+      [relative, "simple_cluster/results/by_plan/smoke/statistics.json"], "hub_download"), /HUB_REMOVED/);
+    assert.deepEqual(calls, [], 'retired remote archive cannot transfer files');
+    assert.equal(fs.existsSync(remoteBundle), false);
+
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    // Retain the exact private fixture for audit.
   }
 });
 
@@ -195,6 +203,9 @@ test("Plan archive rollback restores migrated Plan, configs, and local evidence"
     fs.writeFileSync(path.join(bundle, "configs", config), "epochs: 3\n", "utf8");
     fs.writeFileSync(path.join(bundle, "evidence", evidence), "metric,value\nAUC,0.9\n", "utf8");
     const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
       fs: fs.promises,
       path,
       safeWorkspaceChildPath: (workspace, file) => path.resolve(workspace, file),
@@ -214,7 +225,7 @@ test("Plan archive rollback restores migrated Plan, configs, and local evidence"
     assert.equal(fs.readFileSync(path.join(root, config), "utf8"), "epochs: 3\n");
     assert.equal(fs.readFileSync(path.join(root, evidence), "utf8"), "metric,value\nAUC,0.9\n");
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    // Retain the exact private fixture for audit.
   }
 });
 
@@ -243,6 +254,9 @@ test("plan archive requires at least one archived effective result", () => {
 
 test("plan archive preserves the complete Plan-scoped result selection", () => {
   const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
     uniqueStrings: (values) => [...new Set(values.filter(Boolean))],
     usableSelectionKey: (value) => String(value || "").trim(),
     objectRecord: (value) => value && typeof value === "object" && !Array.isArray(value) ? value : undefined,
@@ -423,6 +437,9 @@ test("plan archive keeps implicit defaults, destinations, duplicate declarations
 
 test("plan archive discovers entry scripts from scalar, block, flow-map, and torchrun commands", () => {
   const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
     path,
     uniqueStrings: (values) => [...new Set(values)],
     PLAN_TRAIN_MODE_TOKENS: new Set(["train", "training", "train_only"]),
@@ -523,6 +540,9 @@ test("plan archive snapshot includes argparse declared in an imported module", a
       "    return parser",
     ].join("\n"), "utf8");
     const sandbox = {
+    // Mac 适配：normalizePlanSelectionKey/planFileEquivalenceKeys 按 platform==="darwin" 走 POSIX 严格单键身份，
+    // 沙箱注入 Mac 生产值以覆盖 Mac 分支（与发行环境一致）。
+    process: { platform: "darwin" },
       fs: fs.promises,
       path,
       PlanBuilder_1: require("../../dist/features/PlanBuilder.js"),
@@ -562,6 +582,6 @@ test("plan archive snapshot includes argparse declared in an imported module", a
     assert.equal(snapshot.entries.find((entry) => entry.file === "package/options.py").parameters[0].defaultValue, 12);
   }
   finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    // Retain the exact private fixture for audit.
   }
 });

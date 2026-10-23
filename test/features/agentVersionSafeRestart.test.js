@@ -10,5 +10,7 @@ test("Agent version mismatch preserves scheduler and GPU tmux sessions", () => {
   const reconcile = extension.slice(start, end);
   assert.doesNotMatch(reconcile, /killRemoteAgentAndTmux|kill-stale-runtime|kill-session/);
   assert.match(reconcile, /agent_restart_required/);
-  assert.match(reconcile, /准备 Agent 并启动/);
+  assert.match(reconcile, /准备 Agent/);
+  assert.match(reconcile, /this\.lastHealth =/);
+  assert.match(reconcile, /未重复部署或启动/);
 });

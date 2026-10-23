@@ -19,7 +19,11 @@ test("backend Worker action confirmation reuses one fixed command set", () => {
   assert.match(source, /const WORKER_ACTION_CONFIRM_COMMANDS = new Set\(\["stopExperiment", \.\.\.WORKER_ARTIFACT_COMMANDS\]\)/);
   assert.equal((body.match(/WORKER_ACTION_CONFIRM_COMMANDS\??\.has\(command\)/g) || []).length, 2);
   assert.doesNotMatch(body, /\["stopExperiment", "archiveArtifacts", "deleteArtifacts"\]\.includes\(command\)/);
-  assert.match(methodBody("canFallbackTaskActionToHub(command, body, missingWorkerCapabilities)", "async postMultiWorkerTunnelAction(workerIds, action, body, options)"), /WORKER_ARTIFACT_COMMANDS\??\.has\(command\)/);
+  const retiredFallback = require('../_helpers/legacyMethod')(fs.readFileSync(path.join(__dirname, '../../dist/extension/legacy.js'), 'utf8'), 'canFallbackTaskActionToHub(');
+  const canFallback = new Function('return (' + retiredFallback.replace('canFallbackTaskActionToHub(', 'function(') + ')')();
+  for (const command of ['stopExperiment', 'retryExperiment', 'archiveArtifacts', 'deleteArtifacts', 'syncArtifacts']) {
+    assert.equal(canFallback(command, { workerId: 'missing-worker' }, ['file_api']), false, command);
+  }
 });
 
 test("backend action routing reuses composed confirmation and scheduler sets", () => {

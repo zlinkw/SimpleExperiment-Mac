@@ -34,7 +34,7 @@ test("remote root policy prefill derives allow and deny lists from prior server 
 
 function createPrefillHarness({ setupConfig, allowed, denied, folders = ["D:/GitRepo/MultiModal"] } = {}) {
   const values = new Map([
-    ["simpleExperiment.remoteRootPolicyPrefillVersion", 0],
+    ["simpleExperimentMac.remoteRootPolicyPrefillVersion", 0],
   ]);
   const updates = [];
   const makeConfig = (section) => ({
@@ -79,13 +79,13 @@ test("prefill writes only unset policy arrays from saved roots", async () => {
   assert.deepEqual(value.allowedRoots, ["/media/npu/Data/zlk", "/data/qgking/zlk"]);
   assert.deepEqual(value.deniedRoots, ["/media/npu/Data/simple", "/data/qgking/simple"]);
   assert.deepEqual(first.updates, [
-    { section: "simpleExperiment", key: "remote.allowedRoots", value: value.allowedRoots },
-    { section: "simpleExperiment", key: "remote.deniedRoots", value: value.deniedRoots },
+    { section: "simpleExperimentMac", key: "remote.allowedRoots", value: value.allowedRoots },
+    { section: "simpleExperimentMac", key: "remote.deniedRoots", value: value.deniedRoots },
   ]);
-  assert.equal(first.values.get("simpleExperiment.remoteRootPolicyPrefillVersion"), 1);
+  assert.equal(first.values.get("simpleExperimentMac.remoteRootPolicyPrefillVersion"), 1);
 
   const second = createPrefillHarness({ setupConfig, allowed: undefined, denied: undefined });
-  second.values.set("simpleExperiment.remoteRootPolicyPrefillVersion", 1);
+  second.values.set("simpleExperimentMac.remoteRootPolicyPrefillVersion", 1);
   assert.equal(await prefillRemoteRootPolicy(second.context, setupConfig, second.vscode, {
     readServerProfiles: () => ({}),
   }), undefined);

@@ -23,6 +23,7 @@ function extractFunction(source, name) {
 }
 
 function loadAgentRootHelpers() {
+  // Mac 适配：normalizeAgentProjectRoot 委托 ApiWorkflow.normalizeApiRemotePath（POSIX 精确字节语义）。
   const sandbox = { ApiWorkflow_1: require("../../dist/features/ApiWorkflow"), ENDPOINT_READY_PROBE_STATUSES: new Set(["ok", "file_api_unavailable"]) };
   vm.createContext(sandbox);
   vm.runInContext([
@@ -54,6 +55,8 @@ function loadEndpointReadiness() {
 
 test("Agent project roots normalize separators and trailing slashes", () => {
   const { normalizeAgentProjectRoot } = loadAgentRootHelpers();
+  // Mac 适配：POSIX 根保留精确字节（叶尾随空格合法），带前导空格/Windows 盘符/.. 的输入按无效处理；
+  // 与 Windows .403 的 trim+盘符归一分支对应同一“非法输入必须拒绝、合法输入去冗余斜杠”契约。
   assert.equal(normalizeAgentProjectRoot("/remote//experiments/project/"), "/remote/experiments/project");
   assert.equal(normalizeAgentProjectRoot("/remote/中文 Project "), "/remote/中文 Project ");
   for (const invalid of [" /remote/project", "C:\\Experiments\\Project\\", "/", "/remote/../project"])
@@ -93,12 +96,14 @@ test("Hub-only checks and execution checks use different endpoint scopes", () =>
   assert.ok(handlerStart >= 0 && validateStart > handlerStart && runStart > validateStart);
   const validateGuard = extension.slice(validateStart, runStart);
   const runGuard = extension.slice(runStart, runStart + 5000);
-  const runAll = extension.slice(extension.indexOf("async runAllPlansFromUi()"), extension.indexOf("async generatePlanGuideFromUi("));
+  const runAll = extension.slice(extension.indexOf("async runAllPlansFromUi("), extension.indexOf("async generatePlanGuideFromUi("));
   assert.match(validateGuard, /assertPlanSchedulerAgentReady\(command,\s*body\)/);
   assert.doesNotMatch(validateGuard, /assertExecutionAgentProjectsReady\(\)/);
   assert.match(runGuard, /assertExecutionAgentProjectsReady\(body\)/);
-  assert.match(runAll, /assertExecutionAgentProjectsReady\(candidate\.body\)/);
-  assert.ok(runAll.indexOf("assertExecutionAgentProjectsReady(candidate.body)") < runAll.indexOf("confirmPlanBatchRunSubmission"));
+  assert.match(runAll, /return runAllPlans\(this, message\)/);
+  const batch = fs.readFileSync(path.join(__dirname, "../../src/extension/SelectedPlanBatchHost.ts"), "utf8");
+  assert.match(batch, /await host\.runActionCommand\("runPlan", message\)/);
+  assert.ok(runGuard.indexOf("assertExecutionAgentProjectsReady(body)") < runGuard.indexOf("ensureSimpleSftpReadyForSetup"));
   const applySetup = extension.slice(extension.indexOf("async applySetupDraft(patch, options = {})"), extension.indexOf("currentUiLayoutState()"));
   assert.match(applySetup, /enforceExpectedAgentProjectRoot\(this\.lastProbe/);
   assert.match(applySetup, /enforceExpectedAgentProjectRoot\(this\.lastWorkerProbes\[worker\.id\]/);

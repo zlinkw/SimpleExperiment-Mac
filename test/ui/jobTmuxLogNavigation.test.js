@@ -102,13 +102,13 @@ test("missing real tmux windows report a bounded toast without a showToast Refer
   assert.equal(f.elements.simpleExperimentToast.hidden, true);
 });
 
-test("formal failed recall payload and pending state retain the original job and command without attempt", () => {
+test("manual recall keeps the exact command identity and cannot forward a historical attempt override", () => {
   const sandbox = { RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS: new Set(), ARTIFACT_SCOPE_COMMANDS: new Set(), el: () => null };
   vm.createContext(sandbox);
   vm.runInContext(["payloadFromButton", "pendingKeyForAction", "pendingKeyFromButtonDataset"].map(fn).join("\n"), sandbox);
   const button = { dataset: { command: "recallFailedJob", planFile: "plans/cpsc.yaml", planId: "workflow", jobIndex: "0", commandId: "old-command" } };
   const payload = sandbox.payloadFromButton(button);
-  assert.equal(Object.hasOwn(payload, "attempt"), false); assert.equal(payload.jobIndex, 0); assert.equal(payload.commandId, "old-command");
+  assert.equal(Object.hasOwn(payload,"attempt"), false); assert.equal(payload.jobIndex, 0); assert.equal(payload.commandId, "old-command");
   const key = sandbox.pendingKeyForAction(button.dataset.command, payload);
   assert.equal(sandbox.pendingKeyFromButtonDataset(button), key);
   const next = { ...payload, commandId: "new-command" };

@@ -62,6 +62,16 @@ test("bounded fields state their allowed range", () => {
   assert.equal(config.hint(null), "");
 });
 
+test('GPU memory parameters have the same input limits globally and in Worker overrides',()=>{
+ const config=loadBounds();
+ for(const scope of ['scheduler','worker:h20']){
+  assert.equal(config.boundsFor(scope,'gpuMemoryPerJobGb').min,1);
+  assert.equal(config.boundsFor(scope,'gpuMemoryMaxJobsPerGpu').min,0);
+  assert.equal(config.boundsFor(scope,'gpuMemoryReserveGb').min,0);
+  assert.equal(config.boundsFor(scope,'gpuMemoryTolerancePercent').max,5);
+ }
+});
+
 test("out-of-range values are named precisely", () => {
   const config = loadBounds();
   const port = config.boundsFor("hub", "localForwardPort");
@@ -79,7 +89,7 @@ test("scheduler ranges match the documented policy bounds", () => {
 
   const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "../../package.json"), "utf8"));
   for (const field of ["pollSeconds", "workerStatusTtlSeconds", "localAvailabilityPushSeconds", "workerAvailabilityPushSeconds", "operationEventMaxDelayMs", "workerActionMinIntervalMs"]) {
-    assert.equal(config.boundsFor("scheduler", field).min, manifest.contributes.configuration.properties[`simpleExperiment.scheduler.${field}`].minimum, field);
+    assert.equal(config.boundsFor("scheduler", field).min, manifest.contributes.configuration.properties[`simpleExperimentMac.scheduler.${field}`].minimum, field);
   }
 
   const jitter = config.boundsFor("scheduler", "jitterSeconds");

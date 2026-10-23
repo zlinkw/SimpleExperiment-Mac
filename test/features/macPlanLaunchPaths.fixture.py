@@ -107,11 +107,24 @@ if scenario in ("physical", "agent", "changed", "revision"):
                        defaultResultCsvDir=result_dir, logPath="tmp/tmux_logs/中文 log ", options={"distributedResults": True})
         def probe(*args):
             if scenario == "changed": nodes[root + "/experiments/Plans"] = stat.S_IFLNK
+        admission_probes = []
+        def bound_probe(actual_root, worker, request):
+            assert actual_root == root and worker == "worker"
+            assert request == {"commandId": command["commandId"]}
+            admission_probes.append(request)
+            return ([{"id": "0"}], "", {"fixture": "request-bound-admission"})
+        def reserve_probe(actual_root, gpu, command_id, *args, admission_evidence=None):
+            assert actual_root == root and gpu == "0" and command_id == command["commandId"]
+            assert admission_evidence == {"fixture": "request-bound-admission"}
+            return None
         replacements = {
+            # This fixture isolates path handling; collector causality and evidence
+            # validation are covered by the dedicated GPU admission regressions.
+            "gpu_admission_probe_bound": bound_probe,
             "agent_install_dir": lambda _: root + "/runtime ",
             "verified_formal_job_command": lambda *args, **kwargs: {"identity": {"globalJobId": "workflow:0"}},
             "simple_runtime_python": lambda _: "virtual-python", "verified_durable_execution_mode": lambda *args: probe() or "train",
-            "reserve_distributed_gpu": lambda *args: None, "release_distributed_gpu_reservation": lambda *args: None,
+            "reserve_distributed_gpu": reserve_probe, "release_distributed_gpu_reservation": lambda *args: None,
             "tmux_available": lambda: True, "start_job_in_gpu_pane": lambda window, args, *rest: launched.append((args, rest)) or "%virtual",
             "worker_task_tmux_location": lambda *args: {"tmuxPane": "%virtual", "tmuxWindowId": "@virtual", "tmuxSession": "session"},
             "append_worker_task": lambda _, task: saved.append(task), "append_event": lambda *args: None,
@@ -125,6 +138,7 @@ if scenario in ("physical", "agent", "changed", "revision"):
             else:
                 response = agent._execute_worker_command_unfenced(root, command, "worker")
                 assert response["status"] == "running" and len(launched) == 1
+                assert len(admission_probes) == 1
                 args, rest = launched[0]
                 assert args[args.index("--plan") + 1] == plan_name
                 assert args[args.index("--output-dir-override") + 1] == attempt

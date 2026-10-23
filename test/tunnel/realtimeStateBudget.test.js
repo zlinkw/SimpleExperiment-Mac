@@ -58,10 +58,11 @@ test("snapshot and authority merge apply realtime state budgets", () => {
   assert.equal(state.lastKnownGood.schedulerStates.length, REALTIME_SCHEDULER_RECORD_LIMIT);
 
   const merged = mergeAuthorityRealtimeStates([
-    { endpoint: { id: "hub", role: "hub" }, state },
-    { endpoint: { id: "w1", role: "worker" }, state: { ...createRealtimeState(), lastHeartbeatAt: new Date().toISOString(), workerTasks: { w1: workerTasks } } },
+    { endpoint: { id: "old-hub", role: "hub" }, state: createRealtimeState({schedulerStates:[{runKey:"ghost"}]}) },
+    { endpoint: { id: "w1", role: "worker" }, state: { ...state, lastHeartbeatAt: new Date().toISOString(), workerTasks: { w1: workerTasks } } },
   ]);
   assert.equal(merged.schedulerStates.length, REALTIME_SCHEDULER_RECORD_LIMIT);
+  assert.equal(merged.schedulerStates.some(row=>row.runKey==="ghost"),false);
   assert.equal(merged.experimentTraces.length, REALTIME_TRACE_RECORD_LIMIT);
   assert.equal(merged.workerTasks.w1.length, REALTIME_WORKER_TASK_RECORD_LIMIT);
   assert.equal(merged.lastKnownGood.experimentTraces.length, REALTIME_TRACE_RECORD_LIMIT);

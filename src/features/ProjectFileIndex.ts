@@ -338,6 +338,15 @@ export function normalizeFileIndexResult(value: any, observedAt: string, observa
 }
 
 const indexes = new Map<string, ProjectFileIndex>();
+/**
+ * The one local observation identity. Every entry point observing the local project must join through
+ * this helper: the storage file only keys on endpointId+projectRoot, so any second literal identity
+ * with a different property set builds a second instance for the same file and steals `owners`,
+ * turning concurrent reads on the other instance into FILE_INDEX_CONNECTION_REPLACED.
+ */
+export function localFileIndexIdentity(workspaceRoot: string): FileIndexIdentity {
+  return { workspace: workspaceRoot, endpointId: "local", projectRoot: workspaceRoot, connection: "local:" + process.pid, endpointBinding: "local" };
+}
 export function projectFileIndex(identity: FileIndexIdentity, storageRoot: string): ProjectFileIndex {
   const key = hash([storageRoot, identity]);
   let index = indexes.get(key);

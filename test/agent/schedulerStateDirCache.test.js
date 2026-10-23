@@ -11,10 +11,10 @@ test("scheduler agent state dir resolution is memoized per absolute project and 
 import importlib.util, json, os, sys
 from pathlib import Path
 
-spec = importlib.util.spec_from_file_location("cluster_scheduler", ${JSON.stringify(schedulerPath)})
-scheduler = importlib.util.module_from_spec(spec)
-sys.modules["cluster_scheduler"] = scheduler
-spec.loader.exec_module(scheduler)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+scheduler = extract_runtime_functions(${JSON.stringify(schedulerPath)}, ["AGENT_STATE_DIR_CACHE", "MAX_AGENT_STATE_DIR_CACHE_RECORDS", "compute_scheduler_agent_state_dir", "resolve_scheduler_agent_state_dir"])
 
 computes = {"count": 0}
 real_compute = scheduler.compute_scheduler_agent_state_dir
@@ -54,7 +54,7 @@ print(json.dumps({
 }))
 `;
 
-  const run = spawnSync("python", ["-c", script], { encoding: "utf8" });
+  const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result.cachedComputes, 1);

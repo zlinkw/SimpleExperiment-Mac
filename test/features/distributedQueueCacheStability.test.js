@@ -15,7 +15,19 @@ function sourceBlock(startMarker, endMarker) {
   return source.slice(start, end);
 }
 
-const memoryFiles = new Map();
+// 跨平台等价夹具：原子写入器对路径做 path.resolve 规范化（Windows 上 join/resolve 同形，
+// POSIX 下 resolve 会前缀 cwd），故内存键统一按 resolve 规范化——同一物理路径=同一键。
+// 断言与覆盖范围保持原强度，仅消除 Windows 专属的键形态巧合。
+const memoryFilesMap = new Map();
+const memKey = (file) => path.resolve(String(file)).toLowerCase();
+const memoryFiles = {
+  clear: () => memoryFilesMap.clear(),
+  delete: (file) => { memoryFilesMap.delete(memKey(file)); },
+  get: (file) => memoryFilesMap.get(memKey(file)),
+  has: (file) => memoryFilesMap.has(memKey(file)),
+  set: (file, value) => { memoryFilesMap.set(memKey(file), value); },
+  get size() { return memoryFilesMap.size; },
+};
 const retryDelays = [];
 let renameCount = 0;
 const memoryStat = () => ({ dev: 1, ino: 1, nlink: 1, isFile: () => true, isSymbolicLink: () => false });
@@ -38,8 +50,18 @@ const memoryFs = {
     }
     return memoryStat();
   },
-  async open(file) {
-    if (!memoryFiles.has(file)) memoryFiles.set(file, "");
+  async open(file, flag) {
+    // 跨平台等价夹具：写入器以数字 flags（含 O_CREAT）打开暂存文件；POSIX 目录 fsync 分支
+    // 以字符串 "r" 打开父目录，内存夹具不得为此虚构文件条目（Windows 路径本就不执行该分支）。
+    const creates = typeof flag === "number" ? true : /[wa]/.test(String(flag ?? "w"));
+    if (!memoryFiles.has(file)) {
+      if (!creates) {
+        const error = new Error("missing");
+        error.code = "ENOENT";
+        throw error;
+      }
+      memoryFiles.set(file, "");
+    }
     return {
       async stat() { return memoryStat(); },
       async truncate() { memoryFiles.set(file, ""); },
@@ -125,6 +147,61 @@ function makeHost() {
     cachedWorkerTaskSnapshot: () => undefined,
   };
 }
+
+test('parallel stop deltas share one live batch fence and merge every fresh disk update without advancing each other away',async()=>{
+  memoryFiles.clear();memoryFiles.set(file,JSON.stringify(makeQueue(8)));
+  const host=makeHost(),lease={};host.distributedPlanStopEpoch=7;host.planStopClearBatchLease=lease;host.distributedQueueGeneration=4;
+  await Promise.all(Array.from({length:8},(_,index)=>host.saveDistributedQueue(root,undefined,{controlMutation:true,
+    stopBatchEpoch:7,stopBatchLease:lease,stopBatchCurrent:()=>true,
+    mutateLatest:latest=>({...latest,plans:latest.plans.filter(plan=>plan.id!=='plan-'+index)})})));
+  assert.equal(JSON.parse(memoryFiles.get(file)).plans.length,0);assert.equal(host.distributedQueueGeneration,4);
+  assert.equal(host.distributedPlanStopEpoch,7);
+});
+
+test('revoking the stop batch during an atomic rename retry prevents its pending publication',async()=>{
+  memoryFiles.clear();const original=JSON.stringify(makeQueue(2));memoryFiles.set(file,original);
+  const host=makeHost(),lease={},rename=memoryFs.rename;host.distributedPlanStopEpoch=7;host.planStopClearBatchLease=lease;
+  memoryFs.rename=async()=>{host.planStopClearBatchLease=undefined;throw Object.assign(new Error('sharing violation'),{code:'EPERM'});};
+  try {await assert.rejects(host.saveDistributedQueue(root,undefined,{controlMutation:true,stopBatchEpoch:7,stopBatchLease:lease,
+    stopBatchCurrent:()=>true,mutateLatest:latest=>({...latest,plans:[]})}),/批次已变化/);assert.equal(memoryFiles.get(file),original);}
+  finally {memoryFs.rename=rename;}
+});
+
+test('missing-only append preserves five original native jobs and admits only the absent sixth job of the same PLAN',async()=>{
+  memoryFiles.clear();
+  const declarations=Array.from({length:6},(_,index)=>({index,case:index<3?'bus':'pad',seed:42+index%3,
+    outputDir:'work/qa/'+index,collectionResultCsv:'work/qa/'+index+'/metrics.csv'}));
+  const spec={projectId,planFile:'plans/qa_moe.yaml',revision:'r',codeFingerprint:'code',executionMode:'train_test'};
+  const initial=queueApi.enqueuePlan(queueApi.emptyDistributedQueue(),{...spec,planJobCount:6,jobs:declarations.slice(0,5)},'original');
+  initial.plans[0].jobs.forEach((job,index)=>Object.assign(job,{status:'completed',workerId:'w',commandId:'completed-'+index}));
+  memoryFiles.set(file,queueApi.serializeDistributedQueue(initial));
+  const host=makeHost(),current=await host.loadDistributedQueue(root);
+  assert.ok(current.plans[0].jobs.every(job=>job.status==='unknown'),'disk terminal labels are not current server truth');
+  const missing=queueApi.enqueuePlan(current,{...spec,planJobCount:1,fullPlanJobCount:6,jobs:[declarations[5]]},'missing');
+  await host.saveDistributedQueue(root,missing,{appendPlanId:'missing'});
+  const disk=JSON.parse(memoryFiles.get(file));
+  assert.deepEqual(disk.plans[0].jobs.map(job=>job.commandId),initial.plans[0].jobs.map(job=>job.commandId));
+  assert.deepEqual(disk.plans.find(p=>p.id==='missing').jobs.map(job=>job.index),[5]);
+  const allocated=queueApi.allocateAvailable(queueApi.restoreFormalJobQueue(disk),[{workerId:'w',online:true,
+    codeFingerprint:'code',declaredJobPaths:true,idleGpuAdmission:true,idleGpuIds:['0']}],{requireIdleGpuAdmission:true,localIdleOnly:true});
+  assert.equal(allocated.dispatches.length,1);assert.equal(allocated.dispatches[0].planId,'missing');assert.equal(allocated.dispatches[0].jobIndex,5);
+});
+
+test('same-PLAN append still rejects overlapping output, metric and ancestor paths even at a different job index',async()=>{
+  for(const paths of [{outputDir:'work/shared',collectionResultCsv:'tmp/new.csv'},
+    {outputDir:'work/other',collectionResultCsv:'tmp/shared.csv'},
+    {outputDir:'work/shared/child',collectionResultCsv:'tmp/new.csv'}]){
+    memoryFiles.clear();
+    const spec={projectId,planFile:'plans/qa_moe.yaml',revision:'r',codeFingerprint:'code',executionMode:'train_test'};
+    const old=queueApi.enqueuePlan(queueApi.emptyDistributedQueue(),{...spec,jobs:[{index:0,case:'bus',seed:42,
+      outputDir:'work/shared',collectionResultCsv:'tmp/shared.csv'}]},'original');
+    Object.assign(old.plans[0].jobs[0],{workerId:'w',commandId:'old',status:'running'});
+    const before=queueApi.serializeDistributedQueue(old);memoryFiles.set(file,before);
+    const duplicate=queueApi.enqueuePlan(queueApi.emptyDistributedQueue(),{...spec,jobs:[{index:5,case:'pad',seed:44,...paths}]},'duplicate');
+    await assert.rejects(makeHost().saveDistributedQueue(root,duplicate,{appendPlanId:'duplicate'}),/阻止重复提交/);
+    assert.equal(memoryFiles.get(file),before);
+  }
+});
 
 test("confirmed clear markers survive the production atomic writer, a new Host and repeated recovery", async () => {
   memoryFiles.clear();
@@ -247,6 +324,23 @@ test("an intervening business-state write cannot be rebased as artifact metadata
   await host.saveDistributedQueue(root, fresh);
   await assert.rejects(host.saveDistributedQueue(root, stale), /另一窗口已更新/);
   assert.equal(JSON.parse(memoryFiles.get(file)).plans[1].jobs[0].status, "failed");
+});
+
+test('a committed control delta fences an older tick and preserves unrelated latest queue changes',async()=>{
+  memoryFiles.clear();memoryFiles.set(file,JSON.stringify(makeQueue(2)));
+  const host=makeHost(),other=makeHost(),stale=await host.loadDistributedQueue(root);
+  const changed=await other.loadDistributedQueue(root);changed.plans[1].jobs[0].status='failed';
+  await other.saveDistributedQueue(root,changed);
+  let aborted=0,detached=0;
+  host.distributedTickAbort={abort(){aborted++;}};
+  host.distributedQueueTickPromise=Promise.resolve();
+  host.detachStaleDistributedTick=task=>{assert.equal(task,host.distributedQueueTickPromise);detached++;host.distributedQueueTickPromise=undefined;};
+  await host.saveDistributedQueue(root,undefined,{controlMutation:true,mutateLatest:latest=>({...latest,plans:latest.plans.map((p,index)=>index?p:
+    {...p,jobs:p.jobs.map(j=>({...j,status:'pending',commandId:undefined,workerId:undefined,nextCommandId:'explicit-new'}))})})});
+  assert.equal(host.distributedQueueGeneration,1);assert.equal(aborted,1);assert.equal(detached,1);
+  assert.equal(JSON.parse(memoryFiles.get(file)).plans[1].jobs[0].status,'failed');
+  await assert.rejects(host.saveDistributedQueue(root,stale,{queueGeneration:0}),/过期调度轮次/);
+  assert.equal(JSON.parse(memoryFiles.get(file)).plans[0].jobs[0].nextCommandId,'explicit-new');
 });
 
 test("terminal task logs remain bound to their attempt over ten repeated Worker snapshots", async () => {

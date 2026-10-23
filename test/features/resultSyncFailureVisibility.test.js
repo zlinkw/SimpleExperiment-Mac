@@ -33,7 +33,7 @@ function fixture() {
     method("async runActionCommandCore(", "async runPlanPreflight("),
     method("\n    assertPlanSubmissionNotDuringResultSync(", "\n    async finishDistributedPlanSubmission("),
     method("async finishDistributedPlanSubmission(", "async activeDeferredForSubmission("),
-    method("async distributedCodeVersionHold(", "planValidationCacheKey("),
+    method("async distributedCodeVersionHold(", "legacySourceFreezeWorkerNames("),
   ].join(",")} };`, sandbox);
   const host = {
     ...sandbox.methods, localOperations: {}, manualResultSyncCounts: new Map(),
@@ -41,6 +41,7 @@ function fixture() {
     planSubmissionOperationId: () => "op", submissionStillCurrent: () => true,
     finishPlanSubmissionProgress(_message, status, detail) { progress.push({ status, detail }); },
     postState() {}, recordActionError() {}, queuePlanArtifactSyncStatusCheck() {},
+    beginSimpleSftpCapabilityLaunch() {}, legacySourceFreezeWorkerNames() { return []; },
   };
   return { host, alerts, warnings, statuses, terminal, progress, information };
 }
@@ -59,34 +60,26 @@ test("replaced result requests finish silently while ordinary cancellations stay
   }
 });
 
-test("run during result sync fails in a modal without navigating, cancelling or touching the sync", async () => {
+test("legacy result-sync submission guard leaves active mirrors and UI untouched", async () => {
   const f = fixture();
   const sync = Promise.resolve("still syncing");
   f.host.distributedPostprocessPromise = sync;
-  let codeSync = false;
-  f.host.ensureCodeReadyForRun = async () => { codeSync = true; };
-  await f.host.withUiCommandStatus("click", "runPlan", {},
-    () => f.host.finishDistributedPlanSubmission("runPlan", {}, {}, {}));
+  f.host.assertPlanSubmissionNotDuringResultSync({});
   assert.equal(f.host.distributedPostprocessPromise, sync);
-  assert.equal(codeSync, false);
-  assert.equal(f.alerts.length, 1);
-  assert.equal(f.alerts[0][1].modal, true);
-  assert.match(f.alerts[0][1].detail, /同步将继续/);
-  assert.equal(f.statuses.at(-1), "failed");
+  assert.equal(f.alerts.length, 0);
+  assert.equal(f.progress.length, 0);
 });
 
-test("the full result download scope blocks submission before rules, Worker selection or client changes", async () => {
+test("memory-only result reads do not reserve a global PLAN submission scope", async () => {
   const f = fixture();
   const client = {};
   f.host.client = client;
   let release;
   const download = f.host.withManualResultSync(() => new Promise(resolve => { release = resolve; }));
-  await f.host.withUiCommandStatus("run-click", "runPlan", {}, () => f.host.runActionCommandCore("runPlan", {}));
+  f.host.assertPlanSubmissionNotDuringResultSync({});
   assert.equal(f.host.client, client);
-  assert.equal(f.host.manualResultSyncCounts.get("C:/project"), 1);
-  assert.equal(f.alerts.length, 1);
-  assert.equal(f.alerts[0][1].modal, true);
-  assert.match(f.alerts[0][1].detail, /同步将继续/);
+  assert.equal(f.host.manualResultSyncCounts.size, 0);
+  assert.equal(f.alerts.length, 0);
   release();
   await download;
   assert.equal(f.host.manualResultSyncCounts.size, 0);

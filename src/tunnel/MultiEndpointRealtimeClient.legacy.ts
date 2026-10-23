@@ -618,6 +618,7 @@ export function mergeRealtimeStates(
 }
 
 export function mergeClusterSnapshots(entries: Array<{ endpoint: NamedTunnelEndpointConfig; snapshot: ClusterSnapshot }>): ClusterSnapshot {
+  entries = entries.filter(entry => entry.endpoint.role === "worker");
   const generatedAt = latest(entries.map((entry) => entry.snapshot.generatedAt));
   const gpu = entries.reduce<Record<string, unknown[]>>((out, entry) => Object.assign(out, snapshotGpu(entry.snapshot, entry.endpoint)), {});
   const schedulerStates = mergeRows([], entries.flatMap((entry) => entry.snapshot.schedulerStates || []));

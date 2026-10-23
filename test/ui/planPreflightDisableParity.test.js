@@ -21,9 +21,9 @@ function extractFunction(name) {
 }
 
 // Minimal sandbox that reproduces the baseline.yaml scenario:
-//  - Hub 报告了 validate-plan 能力，但未上报 dry-run-plan 能力键
+//  - Worker 报告了 validate-plan 能力，但未上报 dry-run-plan 能力键
 //  - plans/recentPlans 列表为空，但用户已选择 baseline.yaml（planFileInput 有值）
-//  - Hub/Worker 可达，SimpleSFTP 就绪
+//  - Worker 可达，SimpleSFTP 就绪
 function loadDisableReason(opts) {
   const actionEndpoints = opts.actionEndpoints || {};
   const hasPlanInput = opts.hasPlanInput !== false;
@@ -74,8 +74,8 @@ function loadDisableReason(opts) {
   return sandbox;
 }
 
-test("dryRun 与 validate 在 Hub 仅上报 validate-plan 时门禁一致", () => {
-  // Hub 报告 validate-plan，但未上报 dry-run-plan（旧/不一致能力面）
+test("dryRun 与 validate 在 Worker 仅上报 validate-plan 时门禁一致", () => {
+  // Worker 报告 validate-plan，但未上报 dry-run-plan（旧/不一致能力面）
   const sandbox = loadDisableReason({ actionEndpoints: { "actions.validate-plan": true } });
   const state = { capabilities: { endpoints: { actions: true }, actionEndpoints: { "actions.validate-plan": true } } };
   assert.equal(sandbox.reason(state, "validatePlan", {}), "", "validate 应可点击");
@@ -94,7 +94,7 @@ test("dryRun 在 validate 能力也缺失时仍被正确拦截", () => {
   const dryRunReason = sandboxStrict.reason(state, "dryRunPlan", {});
   assert.ok(validateReason, "validate 缺失能力应被拦截");
   assert.ok(dryRunReason, "dryRun 缺失能力应同样被拦截");
-  assert.match(dryRunReason, /Hub Agent|validate-plan/);
+  assert.match(dryRunReason, /Worker Agent|validate-plan/);
 });
 
 test("runAllPlans 在 plans 列表为空但已选择 plan 时不应置灰", () => {

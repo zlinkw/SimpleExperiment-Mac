@@ -10,9 +10,10 @@ test("GPU tmux startup does not sleep for idle shell or Conda activation", () =>
 import importlib.util, pathlib, sys, tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
-spec = importlib.util.spec_from_file_location("agent_gpu_latency", sys.argv[1])
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(sys.argv[1], ["os", "start_job_in_gpu_pane", "subprocess", "time", "tmux_session_alive", "simple_conda_env_name", "simple_conda_env_python"])
 calls = []
 def fake_run(args, **kwargs):
     calls.append(args)
@@ -40,7 +41,7 @@ assert sleeps == [0.2], sleeps
 print("gpu pane ready")
 `;
   const python = process.platform === "win32" ? "python" : "python3";
-  const result = spawnSync(python, ["-c", script, agent], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  const result = spawnSync(python, ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })(), agent], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /gpu pane ready/);
 });

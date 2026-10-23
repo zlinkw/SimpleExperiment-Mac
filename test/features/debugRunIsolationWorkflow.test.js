@@ -47,7 +47,7 @@ test("Debug run controls are absent and stale submissions are rejected", () => {
   assert.match(panelSource, /payload\.debugMode = false/);
   assert.match(extensionSource, /if \(body\.debugMode === true\)\s*throw new Error\("Debug 运行模式已移除/);
   assert.match(agentSource, /if debug_mode:\s*return terminal_action\(root, action, operation_id, op_id, "failed", "Debug 运行模式已移除/);
-  assert.match(schedulerSource, /if args\.debug_mode:\s*raise SystemExit\("Debug 运行模式已移除/);
+  assert.match(schedulerSource, /if args\.debug_mode:\s*raise SystemExit\("DRAFT_EXECUTION_RETIRED/);
 });
 
 test("Debug worker execution is rejected before any output is written", () => {
@@ -87,9 +87,22 @@ test("Debug worker execution is rejected before any output is written", () => {
     "",
   ].join("\n"), "utf8");
 
-  const result = spawnSync("python", [schedulerRuntime, "--run-job", "--plan", plan, "--only-index", "0", "--debug-mode", "--debug-run-id", "debug-1"], { cwd: project, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
-  assert.notEqual(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stderr || result.stdout, /Debug 运行模式已移除/);
+  const probe = path.join(project, 'debug-entry-probe.py');
+  fs.writeFileSync(probe, [
+    'import ast,argparse,os,pathlib,sys',
+    `source=pathlib.Path(${JSON.stringify(schedulerRuntime)}).read_text(encoding='utf-8')`,
+    "main=next(node for node in ast.parse(source).body if isinstance(node,ast.FunctionDef) and node.name=='main')",
+    "namespace={'argparse':argparse,'os':os,'normalize_default_result_csv_dir':lambda value:value}",
+    "exec(compile(ast.Module(body=[main],type_ignores=[]),'isolated-debug-entry','exec'),namespace)",
+    `sys.argv=['fixture','--plan',${JSON.stringify(plan)},'--run-job','--only-index','0','--debug-mode','--debug-run-id','debug-1']`,
+    "try: namespace['main']()",
+    "except SystemExit as error: assert 'DRAFT_EXECUTION_RETIRED' in str(error),str(error)",
+    "else: raise AssertionError('debug execution was not rejected')",
+    "print('DRAFT_EXECUTION_RETIRED')",
+  ].join('\n'));
+  const result = spawnSync('python', ['-B', '-X', 'utf8', probe], {cwd:project,encoding:'utf8',timeout:10000,windowsHide:true});
+  assert.equal(result.status, 0, result.stderr || result.stdout || String(result.error));
+  assert.match(result.stdout, /DRAFT_EXECUTION_RETIRED/);
   const debugRoot = path.join(project, "simple_cluster", "debug_runs");
   assert.equal(fs.existsSync(debugRoot), false);
   assert.equal(fs.existsSync(path.join(project, "work_dirs")), false);
@@ -104,9 +117,9 @@ test("Debug requests cannot enter formal result, archive, delete, or PPT actions
   fs.writeFileSync(path.join(project, "work_dirs", "keep", "result.csv"), "metric,value\nAUC,0.9\n", "utf8");
   const script = [
     "import importlib.util, json",
-    `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "handle_action"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+    "agent = spec",
+    "pass",
     `root = r'${project.replace(/\\/g, "/")}'`,
     "actions = ['archive-artifacts', 'delete-artifacts', 'parse-results', 'run-statistics', 'export-plotting-contract']",
     "out = {}",
@@ -115,7 +128,7 @@ test("Debug requests cannot enter formal result, archive, delete, or PPT actions
     "    out[action] = agent.handle_action(root, action, payload, 'op-' + action, 'op-' + action)",
     "print(json.dumps(out, ensure_ascii=False))",
   ].join("\n");
-  const result = spawnSync("python", ["-c", script], { encoding: "utf8" });
+  const result = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
   for (const action of Object.keys(payload)) {
@@ -144,9 +157,19 @@ test("run buttons keep clear labels and submit their explicit mode", () => {
   assert.doesNotMatch(panelSource, /data-command="runPlan" data-debug-mode="true"/);
 });
 
-test("Debug completion skips the formal automatic result pipeline", () => {
-  assert.match(schedulerSource, /if bool\(payload\.get\("debugMode"\) or event\.get\("debugMode"\)\):\s*return/);
-  assert.match(agentSource, /if event_is_debug_run\(event\):\s*return \[\]/);
+test("remote completion hook is inert for both formal and Debug events", () => {
+  assert.match(agentSource, /def maybe_auto_run_completion_pipeline\(root, event\):[\s\S]*?return None/);
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'completion-event-inert-')), probe = path.join(directory, 'probe.py');
+  fs.writeFileSync(probe, [
+    'import ast,pathlib',
+    `source=pathlib.Path(${JSON.stringify(agentRuntime)}).read_text(encoding='utf-8')`,
+    "method=next(n for n in ast.parse(source).body if isinstance(n,ast.FunctionDef) and n.name=='maybe_auto_run_completion_pipeline')",
+    "namespace={};exec(compile(ast.Module(body=[method],type_ignores=[]),'isolated-completion-hook','exec'),namespace)",
+    "for debug in [True,False]: assert namespace['maybe_auto_run_completion_pipeline']('unavailable-root',{'type':'job_completed','payload':{'debugMode':debug}}) is None",
+    "print('ok')",
+  ].join('\n'));
+  const result=spawnSync('python',['-B','-X','utf8',probe],{encoding:'utf8',timeout:10000,windowsHide:true});
+  assert.equal(result.status,0,result.stderr||result.stdout||String(result.error));
 });
 
 test("Formal result discovery excludes debug_runs files", () => {
@@ -157,12 +180,12 @@ test("Formal result discovery excludes debug_runs files", () => {
   fs.writeFileSync(path.join(project, "simple_cluster", "debug_runs", "plan", "run", "artifacts", "results.csv"), "metric,value\nAUC,0.1\n", "utf8");
   const script = [
     "import importlib.util, json",
-    `spec = importlib.util.spec_from_file_location('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["discover_result_files", "handle_action"]))('agent', r'${agentRuntime.replace(/\\/g, "/")}')`,
+    "agent = spec",
+    "pass",
     `print(json.dumps(agent.discover_result_files(r'${project.replace(/\\/g, "/")}')))`
   ].join("\n");
-  const result = spawnSync("python", ["-c", script], { encoding: "utf8" });
+  const result = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const files = JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1));
   assert.equal(files.includes("results/formal.csv"), true);

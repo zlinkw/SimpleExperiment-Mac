@@ -1,10 +1,57 @@
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
+const assert=require('node:assert/strict'),test=require('node:test'),fs=require('node:fs'),path=require('node:path'),ts=require('typescript');
+require('../_helpers/registerTsRequire');
+const {fixture,planFile,planText}=require('../_helpers/freshResultHost');
+const Tables=require('../../src/results/ProjectResultTables.ts');
+const {resultDigest}=require('../../src/results/FreshResults.ts');
+const source=fs.readFileSync(path.join(__dirname,'../../src/extension/legacy.ts'),'utf8');
+const ast=ts.createSourceFile('legacy.ts',source,ts.ScriptTarget.Latest,true);
+const parser=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='parseDownloadedMetricCsv').getText(ast);
+const parse=new Function('ProjectResultTables',parser+';return parseDownloadedMetricCsv;')(Tables);
+function setup(){
+  const f=fixture(),declarations=[42,43].map((seed,index)=>({index,case:'alpha',seed,output_dir:'work_dirs/alpha'+seed,result_csv:'work_dirs/alpha'+seed+'/metrics.csv',planHash:resultDigest(planText)}));
+  for(const job of declarations)f.raw[job.output_dir+'/artifact_manifest.json']=JSON.stringify({simpleExperiment:{runId:'command-'+job.index,status:'completed',mode:'test',job:{index:job.index,case:job.case,seed:job.seed},outputDir:job.output_dir,resultCsv:job.result_csv,weights:[]}});
+  f.host.client.getWorkerTasks=async(_id,options)=>options.discovery?{queryComplete:true,capabilities:{resultCollection:1},declaredJobs:declarations}:
+    {queryComplete:true,capabilities:{resultCollection:1},tasks:[],declaredResults:declarations.map(job=>({index:job.index,outputDir:job.output_dir,completed:true,runId:'command-'+job.index,
+      runtimeDiagnostics:{schemaVersion:1,commandId:'command-'+job.index,runId:'command-'+job.index,state:'clear',count:0,scanComplete:true},
+      files:[job.output_dir+'/artifact_manifest.json',job.result_csv].map(remotePath=>({remotePath,bytes:Buffer.byteLength(f.raw[remotePath]),sha256:resultDigest(f.raw[remotePath])}))}))};
+  f.host.parseFreshResultMetric=(text,job)=>parse(text,{},job);
+  function values(conflict=false){for(const job of declarations){const first=job.index===0;
+    f.raw[job.result_csv]=Tables.writeCsv(['case','seed','method','dataset','metric','value'],(first?[['AUC',.6],['roc_auc',conflict ? .7 : .6],['ECE',.1],['ece',.1]]:[['auc',.8],['ECE',.3]])
+      .map(([metric,value])=>[job.case,job.seed,'demo','set',metric,value]));}}
+  values();return {...f,values};
+}
+test('active collection publishes canonical seed means, sample SD and Markdown without raw cache files',async()=>{
+  const f=setup(),report=await f.service.update();assert.equal(report.completed,2);
+  const output=path.join(f.root,'experiments/results/set/final');
+  const csv=fs.readFileSync(path.join(output,'final.csv'),'utf8'),markdown=fs.readFileSync(path.join(output,'final.md'),'utf8');
+  const parsed=Tables.readCsv(csv);
+  for(const name of ['roc_auc_mean','ece_mean'])assert.equal(parsed.header.filter(column=>column===name).length,1);
+  assert.equal(parsed.rows[0][parsed.header.indexOf('roc_auc_mean')],'0.7');
+  assert.equal(parsed.rows[0][parsed.header.indexOf('ece_mean')],'0.2');
+  for(const name of ['roc_auc_sd','ece_sd'])assert.ok(Math.abs(Number(parsed.rows[0][parsed.header.indexOf(name)])-Math.sqrt(.02))<1e-12);
+  assert.match(markdown,/0\.7000 ± 0\.1414/);
+  assert.equal(fs.existsSync(path.join(f.root,'simple_cluster/results/project_table_registry.json')),false);
+  assert.ok(report.results.every(row=>row.runId&&row.workerId&&row.planFile===planFile));
+  const aliases=new Set(report.results.flatMap(row=>Object.keys(row.metrics)));
+  for(const name of ['AUC','roc_auc','ECE','ece'])assert.ok(aliases.has(name),'original metric alias retained in memory: '+name);
+});
+test('same-seed alias conflict stays explicit and excludes that seed from the current partial export',async()=>{
+  const f=setup();await f.service.update();f.values(true);
+  const report=await f.service.update();
+  assert.equal(report.completed,1);assert.equal(report.expected,2);
+  assert.equal(report.jobs[0].state,'unknown');assert.match(report.jobs[0].error,/冲突/);
+  assert.ok(report.results.every(row=>String(row.dimensions.seed)==='43'),'conflicting seed must never enter a published mean');
+  const parsed=Tables.readCsv(fs.readFileSync(path.join(f.root,'experiments/results/set/final/final.csv'),'utf8'));
+  assert.equal(parsed.rows[0][parsed.header.indexOf('roc_auc_mean')],'0.8','the prior cached 0.7 mean cannot represent this query');
+  const saved=JSON.parse(fs.readFileSync(path.join(f.root,'experiments/results/latest-results.json'),'utf8'));
+  assert.equal(saved.source,'active_query');assert.equal(saved.jobs[0].state,'unknown');
+  assert.ok(saved.jobs[0].error.includes('冲突'));
+});
+
+// Mac coverage cluster: the Mac-only conflicting-seed regression below needs the
+// before-merge loader hook, vscode stub, tablesModule, resultSummary and providerFor.
 const Module = require("node:module");
 const os = require("node:os");
-const path = require("node:path");
-const test = require("node:test");
-const ts = require("typescript");
 Module._extensions[".ts"] = (mod, file) => mod._compile(ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText, file);
 
 const root = path.join(__dirname, "..", "..");
@@ -45,7 +92,6 @@ Module._load = originalLoad;
 if (originalTsLoader) Module._extensions[".ts"] = originalTsLoader;
 else delete Module._extensions[".ts"];
 
-const planFile = "experiments/plans/demo.yaml";
 const rawPath = "simple_cluster/results/w1/raw.csv";
 function resultSummary(metrics) {
   return {
@@ -108,71 +154,6 @@ function providerFor(workspace, previousRegistry, summary) {
   };
 }
 
-test("the production rebuild publishes canonical seed means, sample SD, Markdown, and raw provenance", async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "metric-alias-rebuild-"));
-  try {
-    const summary = resultSummary((index) => index === 0
-      ? { AUC: { value: 0.6 }, roc_auc: { value: 0.6 }, ECE: { value: 0.1 }, ece: { value: 0.1 } }
-      : { auc: { value: 0.8 }, ECE: { value: 0.3 } });
-    const report = await __rebuildProjectResultTablesForTest(providerFor(workspace, { schemaVersion: 1, plans: {} }, summary));
-    assert.equal(report.current, true); assert.equal(report.completed, 2); assert.deepEqual(report.missing, []);
-    const outputRoot = path.join(workspace, "experiments", "results", "set", "final");
-    const csv = fs.readFileSync(path.join(outputRoot, "final.csv"), "utf8");
-    const markdown = fs.readFileSync(path.join(outputRoot, "final.md"), "utf8");
-    const latest = JSON.parse(fs.readFileSync(path.join(workspace, "experiments", "results", "latest-results.json"), "utf8"));
-    const parsed = tablesModule.exports.readCsv(csv);
-    assert.equal(parsed.header.filter((column) => column === "roc_auc_mean").length, 1);
-    assert.equal(parsed.header.filter((column) => column === "ece_mean").length, 1);
-    assert.equal(parsed.rows[0][parsed.header.indexOf("roc_auc_mean")], "0.7");
-    assert.ok(Math.abs(Number(parsed.rows[0][parsed.header.indexOf("roc_auc_sd")]) - Math.sqrt(0.02)) < 1e-12);
-    assert.equal(parsed.rows[0][parsed.header.indexOf("ece_mean")], "0.2");
-    assert.ok(Math.abs(Number(parsed.rows[0][parsed.header.indexOf("ece_sd")]) - Math.sqrt(0.02)) < 1e-12);
-    assert.match(markdown, /0\.7000 ± 0\.1414/);
-    assert.deepEqual([...new Set(report.results.filter(row => row.dimensions.seed === '42').flatMap(row => Object.keys(row.metrics)))].sort(), ['AUC', 'ECE', 'ece', 'roc_auc'].sort());
-    assert.equal(latest.source, 'active_query'); assert.equal(latest.jobs.length, 2);
-    for (const job of latest.jobs) {
-      assert.equal(job.planFile, planFile); assert.equal(job.state, 'complete');
-      assert.equal(job.sources.length, 2);
-      assert.ok(job.sources.every(file => /^[a-f0-9]{64}$/.test(file.sha256) && file.bytes > 0 && file.remotePath.startsWith(job.outputDir + '/')));
-    }
-    assert.equal(fs.existsSync(path.join(workspace, 'simple_cluster/results/project_table_registry.json')), false);
-  } finally {
-    vscode.workspace.workspaceFolders = [];
-  }
-});
-
-test("the production rebuild keeps prior files but excludes them from the current export when every seed has conflicting aliases", async () => {
-  const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "metric-alias-conflict-"));
-  try {
-    const oldRegistry = tablesModule.exports.updateRegistry(tablesModule.exports.emptyTableRegistry(), {
-      planFile, planRevision: "r1", completedRunId: "run-old", rawResultCsvPath: rawPath,
-      workerResultTables: [{ workerId: "w1", rawResultCsvPath: rawPath, aggregateStatus: "ready" }],
-      results: [{ workerId: "w1", runId: "run-old", attempt: "1", planRevision: "r1",
-        dimensions: { case: "alpha", seed: "42", method: "demo", dataset: "set" },
-        metrics: { AUC: { value: 0.5 } }, sourceFiles: [{ path: rawPath }] }],
-    }, planFile, 1);
-    const table = tablesModule.exports.buildTables(oldRegistry)["set/final"];
-    const outputRoot = path.join(workspace, "experiments", "results", "set", "final");
-    fs.mkdirSync(outputRoot, { recursive: true });
-    fs.writeFileSync(path.join(outputRoot, "final.csv"), tablesModule.exports.writeCsv(table.header, table.rows), "utf8");
-    fs.writeFileSync(path.join(outputRoot, "final.md"), table.markdown, "utf8");
-    const beforeCsv = fs.readFileSync(path.join(outputRoot, "final.csv"), "utf8");
-    const beforeMarkdown = fs.readFileSync(path.join(outputRoot, "final.md"), "utf8");
-    const conflict = resultSummary((index) => index === 0
-      ? { AUC: { value: 0.6 }, roc_auc: { value: 0.7 } }
-      : { AUC: { value: 0.8 }, roc_auc: { value: 0.9 } });
-    const report = await __rebuildProjectResultTablesForTest(providerFor(workspace, oldRegistry, conflict));
-    assert.equal(report.completed, 0); assert.equal(report.jobs.length, 2);
-    assert.ok(report.jobs.every(job => job.state === 'unknown' && /指标冲突/.test(job.error)));
-    assert.equal(report.results.length, 0); assert.equal(report.tables.length, 0);
-    const latest = JSON.parse(fs.readFileSync(path.join(workspace, 'experiments/results/latest-results.json'), 'utf8'));
-    assert.deepEqual(latest.tables, []);
-    assert.equal(fs.readFileSync(path.join(outputRoot, "final.csv"), "utf8"), beforeCsv);
-    assert.equal(fs.readFileSync(path.join(outputRoot, "final.md"), "utf8"), beforeMarkdown);
-  } finally {
-    vscode.workspace.workspaceFolders = [];
-  }
-});
 
 test("a conflicting seed cannot supply metrics or suppress the other seed's fresh partial table", async () => {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "metric-alias-partial-"));

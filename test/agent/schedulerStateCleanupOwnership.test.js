@@ -10,14 +10,7 @@ const fixturePath = path.join(__dirname, "scheduler_state_cleanup_ownership_fixt
 const source = fs.readFileSync(agentPath, "utf8");
 
 test("scheduler state cleanup requires exact project, Plan, run, attempt and terminal proof", () => {
-  const result = spawnSync("python", ["-X", "utf8", fixturePath], {
-    input: source,
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-    cwd: root,
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const result = spawnSync("python", ["-X", "utf8", fixturePath], { input: source, encoding: "utf8", timeout: 10000, windowsHide: true, cwd: root, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
   assert.equal(result.status, 0, result.stderr || result.stdout || result.error?.message);
   assert.match(result.stdout, /scheduler state ownership ok/);
 });

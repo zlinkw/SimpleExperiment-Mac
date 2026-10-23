@@ -16,12 +16,13 @@ function loadSnapshotBatchReader() {
   const code = `class Provider { ${method.getText(ast)} }; Provider;`;
   return vm.runInNewContext(ts.transpileModule(code, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
-  }).outputText, { Promise, Map, Set, Number, String, ReturnType: undefined, setTimeout, clearTimeout });
+  }).outputText, { ...require('../_helpers/nativeHostScope'), workspaceRoot: () => '/fixture/project', Date, DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue"), DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy"), Promise, Map, Set, Number, String, ReturnType: undefined, setTimeout, clearTimeout });
 }
 
 test('a batch reads each configured worker once and returns healthy results without waiting for an offline worker', async () => {
   const Provider = loadSnapshotBatchReader();
   const provider = new Provider();
+  provider.cachedWorkerTaskSnapshot=()=>undefined;
   const calls = [];
   provider.readWorkerTaskSnapshot = async (workerId) => {
     calls.push(workerId);
@@ -38,13 +39,14 @@ test('a batch reads each configured worker once and returns healthy results with
   assert.deepEqual(Array.from(snapshots.slice(0, 2), (snapshot) => snapshot.workerId), ['worker-a', 'worker-b']);
   assert.equal(snapshots[2].workerId, 'worker-offline');
   assert.equal(snapshots[2].pending, true);
-  assert.match(snapshots[2].error, /still pending/);
+  assert.equal(snapshots[2].error,undefined,'a pending read is not reported as a completed error');
   assert.deepEqual(Array.from(snapshots[2].tasks), []);
 });
 
 test('a late snapshot cannot replace the unknown result returned for its timed-out worker', async () => {
   const Provider = loadSnapshotBatchReader();
   const provider = new Provider();
+  provider.cachedWorkerTaskSnapshot=()=>undefined;
   let resolveSlow;
   provider.readWorkerTaskSnapshot = async (workerId) => workerId === 'worker-slow'
     ? new Promise((resolve) => { resolveSlow = resolve; })
@@ -55,7 +57,8 @@ test('a late snapshot cannot replace the unknown result returned for its timed-o
   resolveSlow({ workerId: 'worker-slow', tasks: [{ commandId: 'late-proof' }] });
   await Promise.resolve();
 
-  assert.match(slowSnapshot.error, /still pending/);
+  assert.equal(slowSnapshot.pending,true);
+  assert.equal(slowSnapshot.error,undefined);
   assert.deepEqual(Array.from(slowSnapshot.tasks), []);
 });
 
@@ -63,7 +66,7 @@ test('boot reconciliation shares one worker snapshot across recalled jobs and is
   const tickStart = source.indexOf('async tickDistributedQueueCore(');
   const tickEnd = source.indexOf('async syncDistributedJobArtifacts(', tickStart);
   const tick = source.slice(tickStart, tickEnd);
-  assert.match(tick, /this\.readWorkerTaskSnapshotBatch\(snapshotWorkerIds, \{ signal \}\)/);
+  assert.match(tick, /this\.readWorkerTaskSnapshotBatch\(snapshotWorkerIds, \{ signal, executionOnly: this\.taskLifecycleProtocol === 2 \}\)/);
   assert.match(tick, /new Map\(taskSnapshots\.map\(\(snapshot, index\) => \[snapshot\.workerId \|\| snapshotWorkerIds\[index\], snapshot\]\)\)/);
   assert.match(tick, /processDistributedRecall\(root, recall\.planId, recall\.jobIndex, generation,\s*snapshotsByWorker\.get\(recall\.workerId\)\)/);
   assert.doesNotMatch(tick, /mapLimited\(snapshotWorkerIds/);

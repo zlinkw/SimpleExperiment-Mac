@@ -18,9 +18,8 @@ function provider(names, extra = {}) {
   const cls = ast.statements.find((node) => ts.isClassDeclaration(node) && node.name?.text === 'RealtimeTunnelPanelProvider');
   const code = 'class Provider {' + cls.members.filter((node) => names.includes(node.name?.getText(ast))).map((node) => node.getText(ast)).join('\n') + '}; Provider;';
   return vm.runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
-    { DistributedPlanQueue: queueApi, PulledTaskControl: require('../../dist/features/PulledTaskControl'),
-      workspaceRoot: () => root, makeOpId: (kind) => `${kind}-12345678`,
-      errorMessage: (error) => error.message, vscode: { window: { showInformationMessage: () => undefined } }, ...extra });
+    { ...require('../_helpers/nativeHostScope'), DistributedPlanQueue: queueApi, workspaceRoot: () => root, makeOpId: (kind) => `${kind}-12345678`,
+      errorMessage: (error) => error.message, vscode: { window: { showInformationMessage: () => undefined, showWarningMessage: async()=> "确认召回" } }, ...extra });
 }
 function snapshot(plan, job, status = 'queued', aliases = false, extra = {}) {
   const now = new Date().toISOString();
@@ -49,11 +48,14 @@ function providerState(stored, compatibility = true, globals = {}) {
   instance.captureProjectContext = () => ({ root });
   instance.projectContextIsCurrent = context => context.root === root;
   instance.distributedQueueGeneration = 0;
+  const context={root};instance.captureProjectContext=()=>context;instance.projectContextIsCurrent=value=>value===context;
   instance.distributedRecallInFlight = new Set();
   instance.distributedQueueTickPromise = undefined;
   instance.distributedTickAbort = undefined;
   instance.detachStaleDistributedTick = () => undefined;
   instance.postState = () => undefined;
+  instance.captureProjectContext = () => ({root});
+  instance.projectContextIsCurrent = context => context.root === root;
   instance.tickDistributedQueue = async () => undefined;
   instance.loadDistributedQueue = async () => structuredClone(stored.value);
   instance.saveDistributedQueue = async (_root, next) => { stored.value = structuredClone(next); };
@@ -61,13 +63,43 @@ function providerState(stored, compatibility = true, globals = {}) {
   return instance;
 }
 
-test('lost release ACK retains durable intent and restart replays the same operation id', async () => {
+// 085 repair: these .403 native-recall tests need the lifecycleProtocol-2 stamp that the
+// merged queue applies, so they opt out of the durable-v1 compatibility strip (compat=false),
+// matching the Mac native-recall test that already passes compat=false. No assertion changed.
+test('lost stop ACK preserves native recall intent; restart settles only from an active exact query',async()=>{
+  const at=new Date().toISOString();
+  const queue=queueApi.enqueuePlan(queueApi.emptyDistributedQueue(),{projectId:queueApi.canonicalProjectId(root),schedulingMode:'server_prequeue',
+    planFile:'plans/recall.yaml',revision:'r1',codeFingerprint:'f1',jobs:[0,1].map(index=>({index,case:'case-'+index,seed:40+index,outputDir:'runs/'+index,collectionResultCsv:'tmp/result/'+index+'.csv'}))},'plan-recall',at);
+  const plan=queue.plans[0],job=plan.jobs[0];
+  Object.assign(job,{status:'queued',workerId:'worker-a',commandId:'target-command-0001',gpuId:'0'});
+  Object.assign(plan.jobs[1],{status:'running',workerId:'worker-a',commandId:'running-command-0002',gpuId:'1'});
+  const sibling=structuredClone(plan.jobs[1]),stored={value:queue},p=providerState(stored, false),calls=[];
+  p.client={postWorkerAction:async(_w,_a,request)=>{calls.push(request);throw Error('lost ACK');},
+    getWorkerTasks:async()=>{throw Error('active query unavailable');}};
+  await assert.rejects(p.recallPlanToLocalQueueFromUi({planId:plan.id,planFile:plan.planFile,jobIndex:0}),/active query unavailable/);
+  assert.equal(stored.value.plans[0].jobs[0].recallRequested,true);
+  const operationId=stored.value.plans[0].jobs[0].recallOperationId;assert.ok(operationId);
+  assert.equal(stored.value.plans[0].jobs[0].commandId,job.commandId);
+  assert.deepEqual(stored.value.plans[0].jobs[1],sibling);
+  const resumed=providerState(stored, false);
+  resumed.client={postWorkerAction:async(_w,_a,request)=>{calls.push(request);throw Error('lost ACK again');},
+    getWorkerTasks:async()=>({capabilities:{taskLifecycle:2},queryComplete:true,tasks:[{observation:{lifecycleProtocol:2,commandId:job.commandId,
+      projectId:plan.projectId,workerId:job.workerId,observedAt:new Date().toISOString(),cancelled:true,tmux:null,result:null}}]})};
+  await resumed.processDistributedRecall(root,plan.id,0,0);
+  const released=stored.value.plans[0].jobs[0];
+  assert.equal(calls.length,2);assert.equal(calls[1].operationId,operationId);assert.equal(calls[1].targetCommandId,job.commandId);
+  assert.equal(released.status,'pending');assert.equal(released.attempt,0);assert.equal(released.commandId,undefined);
+  assert.ok(released.nextCommandId);assert.equal(released.outputDir,job.outputDir);
+  assert.deepEqual(stored.value.plans[0].jobs[1],sibling);
+});
+test('historical queued release with a lost ACK retains durable intent and restart replays the same operation id', async () => {
   const stamp = new Date().toISOString();
   let queue = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), { projectId: queueApi.canonicalProjectId(root),
     schedulingMode: 'server_prequeue', planFile: 'plans/recall.yaml', revision: 'r1', codeFingerprint: 'f1',
     jobs: [0, 1].map((index) => ({ index, case: `case-${index}`, seed: 40 + index,
       outputDir: `runs/${index}`, collectionResultCsv: `tmp/result/${index}/metrics.csv` })) }, 'plan-recall', stamp);
   const plan = queue.plans[0];
+  for (const job of plan.jobs) delete job.lifecycleProtocol; // Retained pre-protocol2 queue, never a newly admitted native task.
   const [queued, running] = plan.jobs;
   Object.assign(queued, { status: 'queued', workerId: 'worker-a', commandId: 'target-command-0001', runKey: 'target-command-0001', gpuId: '' });
   Object.assign(running, { status: 'running', workerId: 'worker-a', commandId: 'running-command-0002', runKey: 'running-command-0002', gpuId: '0' });
@@ -164,6 +196,36 @@ test('restart reconciles a persisted cancelled requeue tombstone only with its c
   Object.assign(job, { status: 'unknown', workerId: 'worker-a', commandId: 'target-command-tombstone',
     runKey: 'target-command-tombstone', recallRequested: true, recallOperationId: 'saved-operation-1234', reassignmentPending: true });
   const stored = { value: queue };
+  const p = providerState(stored, false);
+  const tombstone = releaseReceipt({ projectId: plan.projectId, workflowId: plan.id, planFile: plan.planFile,
+    planRevision: plan.revision, codeFingerprint: plan.codeFingerprint, planJobCount: plan.planJobCount,
+    experimentIndex: job.index, case: job.case, seed: job.seed, attempt: job.attempt, outputDir: job.outputDir,
+    workerId: job.workerId, gpuId: job.gpuId, runKey: job.runKey, commandId: job.commandId,
+    targetCommandId: job.commandId, opId: job.recallOperationId });
+  p.readWorkerTaskSnapshot = async () => snapshot(plan, job, 'cancelled', false, tombstone);
+  let rpcCalls = 0;
+  p.client = { postWorkerAction: async () => { rpcCalls++; throw new Error('lost ACK'); },
+    getWorkerTasks:async()=>({capabilities:{taskLifecycle:2},queryComplete:true,tasks:[{observation:{lifecycleProtocol:2,commandId:job.commandId,projectId:plan.projectId,workerId:job.workerId,observedAt:new Date().toISOString(),cancelled:true,tmux:null,result:null}}]}) };
+  await p.processDistributedRecall(root, plan.id, job.index, 0);
+  const released = stored.value.plans[0].jobs[0];
+  assert.equal(rpcCalls, 1,'a cached tombstone cannot replace an active native stop/query boundary');
+  assert.equal(released.status, 'pending');
+  assert.equal(released.attempt, 0);
+  assert.equal(released.recallRequested, undefined);
+});
+
+test('historical restart reconciles a cancelled requeue tombstone only with its complete never-started proof', async () => {
+  const stamp = new Date().toISOString();
+  const queue = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), { projectId: queueApi.canonicalProjectId(root),
+    schedulingMode: 'local_idle', localDispatchOverride: true, planFile: 'plans/tombstone.yaml', revision: 'r1',
+    codeFingerprint: 'f1', jobs: [{ index: 0, case: 'case', seed: 3, outputDir: 'runs/case', collectionResultCsv: 'tmp/result/case/metrics.csv' }] },
+  'tombstone-plan', stamp);
+  const plan = queue.plans[0];
+  const job = plan.jobs[0];
+  delete job.lifecycleProtocol; // Persisted pre-protocol2 declared record.
+  Object.assign(job, { status: 'unknown', workerId: 'worker-a', commandId: 'target-command-tombstone',
+    runKey: 'target-command-tombstone', recallRequested: true, recallOperationId: 'saved-operation-1234', reassignmentPending: true });
+  const stored = { value: queue };
   const p = providerState(stored);
   const tombstone = releaseReceipt({ projectId: plan.projectId, workflowId: plan.id, planFile: plan.planFile,
     planRevision: plan.revision, codeFingerprint: plan.codeFingerprint, planJobCount: plan.planJobCount,
@@ -172,10 +234,11 @@ test('restart reconciles a persisted cancelled requeue tombstone only with its c
     targetCommandId: job.commandId, opId: job.recallOperationId });
   p.readWorkerTaskSnapshot = async () => snapshot(plan, job, 'cancelled', false, tombstone);
   let rpcCalls = 0;
-  p.client = { postWorkerAction: async () => { rpcCalls++; throw new Error('tombstone should settle locally'); } };
+  p.client = { postWorkerAction: async () => { rpcCalls++; throw new Error('lost ACK'); },
+    getWorkerTasks: async () => { throw new Error('legacy tombstone recall must not need a native active query'); } };
   await p.processDistributedRecall(root, plan.id, job.index, 0);
   const released = stored.value.plans[0].jobs[0];
-  assert.equal(rpcCalls, 0);
+  assert.equal(rpcCalls, 0, 'a pre-protocol2 tombstone settles from its complete never-started proof without RPC');
   assert.equal(released.status, 'pending');
   assert.equal(released.attempt, 0);
   assert.equal(released.recallRequested, undefined);
@@ -240,3 +303,20 @@ test('historical pending receipts can be recalled through the Agent queued-only 
     const job=stored.value.plans[0].jobs[0];assert.equal(posts.length,1);assert.equal(queries.length,1);assert.equal(job.status,'pending');assert.equal(job.lifecycleProtocol,2);assert.equal(job.commandId,undefined);assert.ok(job.nextCommandId);assert.equal(job.localQueueOnly,true);assert.equal(job.outputDir,'runs/native/0');assert.equal(JSON.stringify(stored.value.plans[0].jobs[1]),sibling);
   }
  });
+
+test('a native recall cannot settle from an old cancelled receipt when the current query fails', async () => {
+  const queue = queueApi.enqueuePlan(queueApi.emptyDistributedQueue(), {projectId:queueApi.canonicalProjectId(root),
+    planFile:'plans/native.yaml',revision:'r',codeFingerprint:'code',jobs:[{index:0,case:'a',seed:1,
+      outputDir:'runs/native',collectionResultCsv:'tmp/result/native.csv'}]}, 'native-recall');
+  const job = queue.plans[0].jobs[0];
+  Object.assign(job,{workerId:'worker-a',commandId:'native-original',status:'unknown',recallRequested:true,recallOperationId:'native-stop-request'});
+  const stored = {value:queue}, p = providerState(stored, false), posts=[];
+  const before = JSON.stringify(queue);
+  p.client = {postWorkerAction: async (worker,action,request) => {posts.push({worker,action,request}); return {status:'completed'};},
+    getWorkerTasks: async () => ({capabilities:{taskLifecycle:2},queryComplete:false,error:'query unavailable',tasks:[]})};
+  p.readWorkerTaskSnapshot = async () => assert.fail('native recall must query protocol2 observation instead of adopting an old receipt');
+  await assert.rejects(p.processDistributedRecall(root,'native-recall',0,0), /query unavailable/);
+  assert.equal(JSON.stringify(stored.value),before);
+  assert.equal(posts.length,1); assert.equal(posts[0].request.targetCommandId,'native-original');
+  assert.equal(posts[0].worker,'worker-a'); assert.equal(posts[0].action,'stop-worker-task');
+});

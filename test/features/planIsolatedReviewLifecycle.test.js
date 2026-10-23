@@ -1,0 +1,11 @@
+const { test, assert, fs, path, vm, world, read, intact } = require("./planIsolatedReview.support.cjs");
+
+test('页面关闭与未知回执独立留痕，迟到完成核实后退出列表',async()=>{const w=await world();await w.host.openIsolatedBatchReviews();const p=(await w.send({type:'deleteIsolated'})).preview;await w.send({type:'confirm',phase:1});await w.send({type:'confirm',phase:2});w.setUnknownExecute(true);await w.send({type:'execute'});await w.dispose();assert.ok((await w.audit()).some(e=>e.kind==='unknown'));await assert.rejects(w.makeHost().execute(p.token),e=>e.apiData?.code==='ISOLATED_DELETE_QUERY_REQUIRED');assert.equal(w.stats.executions,1);w.finish();const reply=await w.send({type:'status',operationId:p.token});assert.equal(reply.operation.state,'completed');await w.host.isolatedReviewEvent(w.originalId,'failed',p.token,'late failure');await w.host.openIsolatedBatchReviews();assert.equal(w.infos.length,1);assert.equal(w.stats.executions,1);});
+
+test('实际不存在但根身份冲突时不能记录删除完成',async()=>{const w=await world(),p=await w.preview();await w.approve(p);w.setBadRoot(true);await assert.rejects(w.host.execute(p.token),e=>e.apiData?.code==='ISOLATED_DELETE_UNVERIFIED');assert.equal((await w.audit()).some(e=>e.kind==='completed'),false);});
+
+test('预览时物理根变化或后端无真写互斥能力均零确认零执行',async()=>{const w=await world();w.setBadRoot(true);await assert.rejects(w.preview(),e=>e.apiData?.code==='ISOLATED_ROOT_IDENTITY_CHANGED');const other=await world({noWriter:true});await assert.rejects(other.preview(),e=>e.apiData?.code==='SFTP_ISOLATE_DELETE_UPGRADE_REQUIRED');assert.equal(w.stats.executions+other.stats.executions,0);assert.equal(w.calls.concat(other.calls).filter(c=>c.method==='files.cleanup.confirm').length,0);});
+
+test('预览忙通过桥接准确留痕且不自动处理 busy',async()=>{const w=await world();await w.host.openIsolatedBatchReviews();w.setBusyPreview(true);const reply=await w.send({type:'deleteIsolated'});assert.match(reply.message,/OPERATION_BUSY/);assert.ok((await w.audit()).some(e=>e.kind==='busy'));assert.equal(w.stats.executions,0);assert.equal(read(w,w.destination),'OLD');});
+
+test('无历史删除回执，真实逐目标不存在仍退出审核列表',async()=>{const w=await world(),before=JSON.stringify(w.queue);w.finish();await w.host.openIsolatedBatchReviews();assert.equal(w.infos.length,1);assert.ok((await w.audit()).some(e=>e.kind==='completed'));assert.equal(w.stats.executions,0);intact(w,before);});

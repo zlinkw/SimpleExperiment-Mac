@@ -80,14 +80,14 @@ test("Hub Agent keeps nested JSON dimensions and split metrics", () => {
   const script = path.join(root, "check.py");
   fs.writeFileSync(script, [
     "import importlib.util, json",
-    `spec = importlib.util.spec_from_file_location('agent', ${JSON.stringify(agentPath)})`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["parse_results_action"]))('agent', ${JSON.stringify(agentPath)})`,
+    "agent = spec",
+    "pass",
     `root = ${JSON.stringify(project)}`,
     "summary = agent.parse_results_action(root)",
     "print(json.dumps({'rows': summary.get('results') or [], 'sources': summary.get('sources') or []}))",
   ].join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
   assert.ok(payload.sources.includes("work_dirs/smoke/results.json"));

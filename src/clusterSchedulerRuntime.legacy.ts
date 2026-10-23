@@ -4216,6 +4216,12 @@ def main() -> None:
     if args.debug_mode:
         raise SystemExit("DRAFT_EXECUTION_RETIRED: use a formal PLAN job; dryRun remains read-only")
     AGENT_STATE_DIR = str(args.agent_state_dir or os.environ.get("SIMPLE_EXPERIMENT_AGENT_STATE_DIR", "")).strip()
+    # Parent A: the standalone Scheduler exec carries the SAME authoritative
+    # Worker machine-state root as the Agent template and the collector command
+    # (explicit env wins, else the managed per-USER anchor), so any tmux child it
+    # starts resolves the identical single-source identity.
+    os.environ.setdefault("SIMPLE_EXPERIMENT_WORKER_STATE_DIR",
+                          os.path.join(os.path.expanduser("~"), ".simple-cluster", "worker-state"))
     if getattr(args, "check_existing", False):
         if not args.plan:
             raise SystemExit("--check-existing 必须同时提供 --plan")

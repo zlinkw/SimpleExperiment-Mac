@@ -24,9 +24,10 @@ test("audit tail reads a bounded window instead of the whole journal", () => {
   const script = String.raw`
 import importlib.util, json, os
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["AUDIT_TAIL_MAX_BYTES", "audit_tail_byte_budget", "open", "read_audit_tail"])
 
 root = ${JSON.stringify(root.replace(/\\/g, "/"))}
 audit = os.path.join(root, "simple_cluster", "logs", "operation_audit.jsonl")
@@ -74,7 +75,7 @@ print(json.dumps({
 `;
 
   try {
-    const run = spawnSync("python", ["-c", script], { encoding: "utf8" });
+    const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr);
     const result = JSON.parse(run.stdout.trim());
     assert.equal(result.lineCount, 100);
