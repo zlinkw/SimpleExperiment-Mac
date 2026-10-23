@@ -15,5 +15,6 @@ test("start all tunnel precheck blocks unknown occupied ports but allows existin
   };
   const result = await allocateTunnelPorts(request, (port) => port === 18765 ? "current_tunnel" : port === 18766 ? "unknown_process" : "available");
   assert.ok(result.conflicts.some((item) => item.conflictType === "occupied_by_unknown_process"));
-  assert.equal(result.assignments.find((item) => item.endpointId === "hub").localForwardPort, 18765);
+  assert.equal(result.assignments.find((item) => item.endpointId === "hub"),undefined);
+  assert.deepEqual(result.assignments.map(row=>row.endpointId),["w1","w2"]);
 });

@@ -67,7 +67,7 @@ test("Extension asks for one Plan target and submits the complete Plan to that W
   assert.match(request, /workers: \[\{/);
   assert.match(request, /schedulerOwnerWorkerId: workerId/);
   assert.match(request, /workerPoolDispatchPolicy: manualPlanTarget \? "manual_plan_target" : "deterministic_shard"/);
-  assert.match(request, /assignedExperimentIndices: manualPlanTarget \? undefined : indices/);
+  assert.match(request, /assignedExperimentIndices: manualPlanTarget \? body\.assignedExperimentIndices : indices/);
   assert.match(request, /automaticBackup: false/);
 });
 
@@ -132,6 +132,6 @@ test("Scheduler limits dry-run and execution queues to assigned indices", () => 
   assert.match(source, /jobs = \[job for job in jobs if int\(job\.index\) in allowed\]/);
   assert.match(source, /missing = sorted\(allowed\.difference\(int\(job\.index\) for job in jobs\)\)/);
   assert.match(source, /jobs_by_index\[int\(experiment_index\)\]/);
-  assert.match(source, /"workerSetRevision": str\(args\.worker_set_revision or ""\)/);
+  assert.match(source, /"workerSetRevision": str\(getattr\(args, "worker_set_revision", ""\) or ""\)/);
   assert.match(source, /"assignedExperimentIndices": only_indices_for_args\(args\)/);
 });

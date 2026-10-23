@@ -1,4 +1,3 @@
-const { isolatePythonGlobals } = require("../_helpers/isolatedPythonFixture");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -13,14 +12,18 @@ function pythonDefinition(name) {
   const start = source.search(new RegExp(`^def ${name}\\(`, "m"));
   assert.notEqual(start, -1, `missing production definition: ${name}`);
   const tail = source.slice(start);
-  const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\\s*=)/m);
+  // Stop at the next top-level def/class/module constant, at an interpolation
+  // placeholder line, or at the String.raw terminator. The previous pattern's
+  // `\\s` matched a literal backslash, so constants never stopped the slice and
+  // `${...}` placeholder lines leaked into the fixture (SyntaxError).
+  const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\s*=|\$\{|`)/m);
   return next === -1 ? tail : tail.slice(0, next + 1);
 }
 
 function fixture(root) {
   const definitions = [
-    "now_iso", "durable_plan_queue_path", "read_durable_plan_queue",
-    "write_durable_plan_queue", "durable_plan_path", "durable_plan_value", "durable_plan_identity",
+    "now_iso", "action_bool", "safe_project_path", "durable_plan_path", "worker_path_value", "durable_plan_public_identity", "durable_plan_queue_path", "read_durable_plan_queue",
+    "write_durable_plan_queue", "durable_plan_value", "durable_plan_identity",
     "durable_plan_same_identity", "gpu_row_busy", "_durable_gpu_busy_reason", "accept_durable_plan_job",
     "requeue_durable_plan_job", "release_distributed_gpu_reservation",
     "durable_plan_public_task", "fence_queued_idle_gpu_admission", "drain_durable_plan_queue_once",
@@ -28,11 +31,11 @@ function fixture(root) {
     "worker_start_claims_path", "read_worker_start_claims", "worker_start_claim", "write_worker_start_claim",
     "_legacy_recall_value", "_legacy_recall_identity", "_legacy_recall_identity_matches", "_legacy_recall_has_execution_marker",
     "_execute_worker_command_unfenced", "execute_worker_command", "action_event_fields", "handle_action", "api_worker_tasks",
-  ];
+  ].map(pythonDefinition);
   const identity = source.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m);
   assert.ok(identity, "missing durable identity contract");
-  return isolatePythonGlobals(path.join(__dirname, "../../dist/runtime/cluster_agent.py"), definitions, String.raw`
-import json, os, threading, time, math
+  return String.raw`
+import json, os, threading, time, math, copy
 from types import SimpleNamespace
 ROOT = ${JSON.stringify(root.replace(/\\/g, "/"))}
 SCHEMA_VERSION = 1
@@ -66,6 +69,8 @@ def invalidate_runtime_json_cache(path): pass
 def now_iso(): return "2026-09-29T00:00:00Z"
 def append_event(root, event): EVENTS.append(event)
 def append_worker_task(root, task): pass
+def active_cleanup_operations(root): return []
+def formal_job_path_capable(root): return True
 def reconcile_worker_task_exit_codes(root): pass
 def read_runtime_json_cached(path, fallback): return read_json(path, fallback)
 def collect_local_gpu():
@@ -81,6 +86,10 @@ def action_event_fields(extra=None, request=None):
 def terminal_action(root, action, operation_id, op_id, status, message, extra=None, request=None):
     return {"schemaVersion": SCHEMA_VERSION, "opId": op_id, "operationId": operation_id, "action": action, "status": status, "message": message, **(extra or {})}
 def signal_durable_plan_queue_processor(root, worker_id): pass
+def verified_formal_job_command(root, command, structure_only=False):
+    assert command["resultPathPolicy"] == "declared" and command.get("attempt", 0) == 0
+    return command
+def verified_durable_execution_mode(root, command): return "train"
 def resolve_durable_code_sync_proof(root, row):
     if row.get("codeSyncProofId") == "proof-test" and row.get("manifestDigest") == row.get("codeFingerprint"):
         return {"proofId":"proof-test"}
@@ -90,7 +99,7 @@ GPU_ROWS = [{"gpuId": "0", "utilizationPercent": 1, "memoryUsedMb": 10, "process
 GPU_ERROR = ""
 ${identity[0]}
 LEGACY_WORKER_STOP_IDENTITY_FIELDS = ("workflowId", "planRevision", "planFile", "case", "seed", "attempt", "outputDir", "workerId", "gpuId")
-
+${definitions.join("\n\n")}
 REAL_EXECUTE_WORKER_COMMAND = execute_worker_command
 def execute_worker_command(root, command, worker_id):
     if command.get("action") == "start-worker-task" and command.get("durablePlanQueue") is not True:
@@ -99,15 +108,18 @@ def execute_worker_command(root, command, worker_id):
     return REAL_EXECUTE_WORKER_COMMAND(root, command, worker_id)
 
 def verified_formal_job_command(*args, **kwargs): return {"identity":{}}
-def verified_durable_execution_mode(root, command): return "train_test"
+# Mac repair: the durable row stores the verified mode, so the post-extraction
+# override must agree with make_job's declared "train" or re-acceptance would
+# raise "commandId 已绑定到不同的运行模式".
+def verified_durable_execution_mode(root, command): return "train"
 
 def make_job(command_id, gpu_id="0"):
     return {"projectId":"project-a", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
-        "executionMode":"train_test", "mode":"train_test", "planRevision":"rev-a", "codeFingerprint":"sha-a", "experimentIndex":0, "case":"case-a",
-        "seed":44, "attempt":0, "resultPathPolicy":"declared", "globalJobId":"workflow-a:0",
-        "collectionResultCsv":"results/"+command_id+".csv", "outputDir":"experiments/runs/"+command_id, "runKey":command_id,
+        "planRevision":"rev-a", "codeFingerprint":"sha-a", "experimentIndex":0, "case":"case-a",
+        "seed":44, "resultPathPolicy":"declared", "executionMode":"train", "outputDir":"experiments/runs/"+command_id, "runKey":command_id,
         "commandId":command_id, "workerId":"worker-a", "planJobCount":1, "durablePlanQueue":True,
         "codeSyncProofId":"proof-test", "manifestDigest":"sha-a",
+        "globalJobId":"workflow-a:0", "collectionResultCsv":"experiments/results/"+command_id+".csv",
         "requireIdleGpu":True, "gpuId":gpu_id, "action":"start-worker-task"}
 
 # Real handle_action -> execute_worker_command -> durable admission envelope.
@@ -282,7 +294,7 @@ for index in (0,1):
 assert len(drain_durable_plan_queue_once(ROOT3, "worker-a")) == 1
 assert [row["status"] for row in read_durable_plan_queue(ROOT3)["jobs"]] == ["running","queued"]
 print(json.dumps({"admission":True,"release":True,"fences":True}))
-`);
+`;
 }
 
 test("Agent atomically admits explicit idle GPUs and proves queued-only release", () => {
@@ -290,14 +302,10 @@ test("Agent atomically admits explicit idle GPUs and proves queued-only release"
   const scriptPath = path.join(os.tmpdir(), `idle-gpu-admission-${process.pid}-${Date.now()}.py`);
   fs.writeFileSync(scriptPath, fixture(root), "utf8");
   try {
-    const run = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], {
-      encoding: "utf8",
-      timeout: 10000,
-      windowsHide: true,
-    });
+    const run = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr || run.error?.message);
     assert.deepEqual(JSON.parse(run.stdout.trim()), { admission: true, release: true, fences: true });
   } finally {
-    // Retain the exact generated fixture for review; no cleanup deletion.
+    // Preserve this bounded probe and its inputs for failure review.
   }
 });

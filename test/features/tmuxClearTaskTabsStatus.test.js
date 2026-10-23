@@ -48,6 +48,7 @@ test("clearTmuxTaskTabs status keeps the real success and partial-failure text",
     tmuxClearTaskTabsInFlight: false,
     clearOutcome: "已关闭 2/2 个任务标签。",
     async clearTmuxTaskTabsFromUi() { return this.clearOutcome; },
+    beginSimpleSftpCapabilityLaunch() {},
     postUiCommandStatus(clientActionId, status, command, message) {
       statuses.push({ clientActionId, status, command, message });
     },

@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..", "..");
 
 test("hub agent evidence actions write checkpoint dataset recovery anomaly and plotting outputs", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) {
     t.skip("python unavailable");
     return;
@@ -51,9 +51,10 @@ test("hub agent evidence actions write checkpoint dataset recovery anomaly and p
 import importlib.util, json, pathlib, os
 root = pathlib.Path(${JSON.stringify(project)})
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["handle_action"])
 outputs = {}
 for action, payload in [
     ("parse-results", {"opId": "parse"}),
@@ -76,11 +77,7 @@ exists = {rel: os.path.exists(root / rel) for rel in [
 ]}
 print(json.dumps({"outputs": outputs, "exists": exists}, ensure_ascii=False))
 `, "utf8");
-  const run = spawnSync(python, [script], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result.outputs["plan-checkpoint-retention"].status, "completed");

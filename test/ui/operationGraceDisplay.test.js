@@ -100,14 +100,14 @@ test("operationDisplayMessage 宽限期文案：active + message 组合", () => 
   const future = new Date(FIXED_NOW + 60 * 1000).toISOString();
 
   // active 且有原 message -> 前缀宽限期 + 原 message 括号
-  const withMsg = h.displayMessage({ status: "running", message: "等待 Hub Agent 回传进度", reconcileGraceExpiresAt: future });
+  const withMsg = h.displayMessage({ status: "running", message: "等待 Worker Agent 回传进度", reconcileGraceExpiresAt: future });
   assert.match(withMsg, /宽限期剩余 60s，等待调度收敛/);
-  assert.match(withMsg, /等待 Hub Agent 回传进度/);
-  assert.match(withMsg, /宽限期剩余 60s.*（等待 Hub Agent 回传进度）/);
+  assert.match(withMsg, /等待 Worker Agent 回传进度/);
+  assert.match(withMsg, /宽限期剩余 60s.*（等待 Worker Agent 回传进度）/);
 
   // active 无 message -> 宽限期 + 默认已提交文案
   const noMsg = h.displayMessage({ status: "running", reconcileGraceExpiresAt: future });
-  assert.equal(noMsg, "宽限期剩余 60s，等待调度收敛（已提交，等待 Hub Agent 回传进度）");
+  assert.equal(noMsg, "宽限期剩余 60s，等待调度收敛（已提交，等待 Worker Agent 回传进度）");
 
   // snake_case 同样生效
   const snake = h.displayMessage({ status: "running", message: "排队中", reconcile_grace_expires_at: future });
@@ -157,7 +157,7 @@ test("operationDisplayMessage 宽限期过期后回退", () => {
   const msg = h.displayMessage({ status: "running", message: "等待中", reconcileGraceExpiresAt: expired });
   assert.equal(msg, "等待中");
   const noMsg = h.displayMessage({ status: "running", reconcileGraceExpiresAt: expired });
-  assert.equal(noMsg, "已提交，等待 Hub Agent 回传进度；可手动刷新数据。");
+  assert.equal(noMsg, "已提交，等待 Worker Agent 回传进度；可手动刷新数据。");
 });
 
 test("operationDisplayMessage 调度已停止优先于宽限期", () => {

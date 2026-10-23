@@ -54,6 +54,9 @@ function selectorSandbox(stateForSummary) {
     naturalCompare: (left, right) => String(left || "").localeCompare(String(right || ""), undefined, { numeric: true }),
     esc: (value) => String(value || ""),
     escAttr: (value) => String(value || ""),
+    // Mac 适配：面板脚本在 webview 顶层注入 MAC_PLAN_IDENTITY=(platform==="darwin")，
+    // 本仓库为 Mac 发行，沙箱按 Mac 生产取值为 true；纯 ASCII 路径下与 Windows 归一化同形。
+    MAC_PLAN_IDENTITY: true,
   };
   vm.createContext(sandbox);
   vm.runInContext(`${planSource}\nthis.selector = { summary: planSelectorRunSummary, index: planSelectorStatusIndex, matches: planSelectorMatchesFilter, progress: planSelectorProgress, sort: planSelectorSortEntries, refresh: refreshPlanFileOptions };`, sandbox);
@@ -62,6 +65,13 @@ function selectorSandbox(stateForSummary) {
   sandbox.summaryState = stateForSummary;
   return sandbox;
 }
+
+test('submission and queued jobs stay distinct from running commands', () => {
+  const sandbox = selectorSandbox(), file = 'plans/queued.yaml';
+  const state = { plans: [{file, revision:'r',jobCount:2}], tasks:[{planFile:file,planRevision:'r',status:'queued'}] };
+  assert.equal(sandbox.selector.summary(state,file).status,'queued');
+  assert.equal(sandbox.selector.summary({plans:state.plans,operations:[{planFile:file,planRevision:'r',type:'run-plan',status:'running'}]},file).status,'submitting');
+});
 
 test("selector derives task progress from the selected Plan revision only", () => {
   const sandbox = selectorSandbox();
@@ -153,7 +163,7 @@ test("completed jobs suppress old operation activity while a newer rerun stays a
     operations: [{ planFile: file, planRevision: "r1", type: "run-plan", status: "running", startedAt: "2026-10-09T01:00:00Z" }] };
   assert.equal(sandbox.selector.summary(state, file).status, "completed");
   const newer = { ...state, operations: [{ ...state.operations[0], startedAt: "2026-10-09T03:00:00Z" }] };
-  assert.equal(sandbox.selector.summary(newer, file).status, "running");
+  assert.equal(sandbox.selector.summary(newer, file).status, "submitting");
 });
 
 test("latest successful retry supersedes an older failure for the same job", () => {

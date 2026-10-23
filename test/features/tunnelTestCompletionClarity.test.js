@@ -48,14 +48,15 @@ test("all enabled endpoints must pass before tunnel detection reports success", 
   assert.deepEqual(passed.issues, []);
 });
 
-test("a failed Worker turns a healthy Hub result into an actionable warning", () => {
+test("a failed Worker produces an actionable warning without a Hub summary", () => {
   const result = completion({ workerTunnels: [{ id: "w1", displayName: "GPU A", enabled: true }] }, { status: "ok" }, {}, {
     w1: { status: "timeout", message: "连接超时", suggestion: "启动 GPU A 的 Xshell 会话" },
   });
   assert.equal(result.ready, false);
   assert.equal(result.hubReady, true);
   assert.equal(result.workerReady, false);
-  assert.match(result.message, /Hub:ok; Worker:GPU A:timeout/);
+  assert.match(result.message, /Worker：GPU A:timeout/);
+  assert.doesNotMatch(result.message,/Hub/);
   assert.deepEqual(result.issues, ["GPU A：启动 GPU A 的 Xshell 会话"]);
 });
 
@@ -63,7 +64,7 @@ test("an enabled Worker without a probe is reported as not tested", () => {
   const result = completion({ workerTunnels: [{ id: "w1", displayName: "GPU A", enabled: true }] }, { status: "local_port_closed", suggestion: "启动 Hub 会话" }, {}, {});
   assert.equal(result.ready, false);
   assert.match(result.message, /GPU A:未检测/);
-  assert.deepEqual(result.issues, ["Hub：启动 Hub 会话", "GPU A：未执行检测，请检查 Xshell 会话配置"]);
+  assert.deepEqual(result.issues, ["GPU A：未执行检测，请检查 Xshell 会话配置"]);
   const toastStart = extension.indexOf("    showTunnelTestToast() {");
   const toast = extension.slice(toastStart, extension.indexOf("    healthFromProbe", toastStart));
   assert.match(toast, /if \(completion\.ready\)[\s\S]*showInformationMessage/);
@@ -75,15 +76,15 @@ test("scheduler dependency failure keeps otherwise healthy endpoints incomplete"
   const result = completion({ workerTunnels: [{ id: "w1", displayName: "GPU A", enabled: true }] }, {
     status: "ok",
     schedulerDependencies: { ok: false, message: "缺少 yaml", installCommand: "python -m pip install PyYAML" },
-  }, {}, { w1: { status: "ok", schedulerDependencies: { ok: true } } });
+  }, {}, { w1: { status: "ok", schedulerDependencies: { ok: false, message: "缺少 yaml", installCommand: "python -m pip install PyYAML" } } });
   assert.equal(result.ready, false);
-  assert.match(result.issues[0], /Hub Scheduler：缺少 yaml/);
+  assert.match(result.issues[0], /GPU A Scheduler：缺少 yaml/);
   assert.match(result.issues[0], /python -m pip install PyYAML/);
 });
 
-test("tunnel completion reuses fixed Hub readiness statuses", () => {
-  assert.match(extension, /const HUB_READY_STATUSES = new Set\(\[\.\.\.ENDPOINT_READY_PROBE_STATUSES, "agent_ok"\]\)/);
-  assert.match(extractFunction("tunnelTestCompletion"), /HUB_READY_STATUSES\??\.has\(hubStatus\)/);
+test("retired Hub observations cannot affect readiness", () => {
+  assert.doesNotMatch(extractFunction("tunnelTestCompletion"), /HUB_READY_STATUSES|hub\.status|hub\.schedulerDependencies/);
+  assert.equal(completion({workerTunnels:[{id:"w1"}]},{status:"offline"},{},{w1:{status:"ok"}}).ready,true);
 });
 
 test("pending scheduler dependency checks never report complete readiness or missing packages", () => {

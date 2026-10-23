@@ -32,9 +32,10 @@ test("hub agent runtime performs real result actions", (t) => {
 import importlib.util, json, pathlib, os
 root = pathlib.Path(${JSON.stringify(project)})
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["handle_action", "paired_metric_comparisons"])
 out = {
     "parse-results": agent.handle_action(str(root), "parse-results", {"opId": "parse-results", "operationId": "parse-results"}, "parse-results", "parse-results"),
     "archive-artifacts": agent.handle_action(str(root), "archive-artifacts", {"opId": "archive-artifacts", "operationId": "archive-artifacts", "selectedArchiveKeys": ["experiments/results/metrics.csv"]}, "archive-artifacts", "archive-artifacts"),
@@ -50,13 +51,7 @@ for action in ["run-quality-gate", "run-statistics", "export-paper-table", "crea
     out[action] = agent.handle_action(str(root), action, {"opId": action, "operationId": action}, action, action)
 print(json.dumps(out, ensure_ascii=False))
 `, "utf8");
-  const run = spawnSync(python, [script], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-    timeout: 10000,
-    windowsHide: true,
-  });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result["parse-results"].status, "completed");

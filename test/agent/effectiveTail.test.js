@@ -23,9 +23,10 @@ test("_is_noise_line preserves Killed/OOM/signal/exit code lines", async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "simple-noise-"));
   const script = `
 import importlib.util, json, os
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["_is_noise_line", "api_runtime_operation_evidence", "scheduler_plan_runtime_key"])
 tests = [
   ("Killed", False),
   ("OOM killed process", False),
@@ -54,7 +55,7 @@ print("ok")
   const { spawnSync } = require("node:child_process");
   const res = spawnSync(process.execPath, ["-e", `require('child_process').spawnSync('python', ['${tmp.replace(/\\/g, "\\\\")}'], {stdio:'inherit'});`], { encoding: "utf8" });
   // Simpler: directly spawn python
-  const py = spawnSync("python", [tmp], { encoding: "utf8" });
+  const py = spawnSync("python", [tmp], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(py.status, 0, `python failed: ${py.stdout} ${py.stderr}`);
   assert.match(py.stdout, /ok/);
 });
@@ -76,9 +77,10 @@ test("_read_effective_tail small Killed log preserved despite <512B", () => {
   fs.writeFileSync(eventsPath, "", "utf8");
   const script = `
 import importlib.util, json, os
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["_is_noise_line", "api_runtime_operation_evidence", "scheduler_plan_runtime_key"])
 root = ${JSON.stringify(root.replace(/\\/g, "/"))}
 # create operation events so api_runtime_operation_evidence can find operation
 import json as _json
@@ -115,7 +117,7 @@ print("ok")
   const tmp = path.join(root, "run2.py");
   fs.writeFileSync(tmp, script, "utf8");
   const { spawnSync } = require("node:child_process");
-  const py = spawnSync("python", [tmp], { encoding: "utf8" });
+  const py = spawnSync("python", [tmp], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(py.status, 0, `python failed stdout=${py.stdout} stderr=${py.stderr}`);
   assert.match(py.stdout, /ok/);
 });
@@ -124,9 +126,10 @@ test("new operation evidence does not fall back to a previous run of the same pl
   const agentPath = path.join(__dirname, "../../dist/runtime/cluster_agent.py");
   const script = `
 import importlib.util, pathlib, tempfile
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["_is_noise_line", "api_runtime_operation_evidence", "scheduler_plan_runtime_key"])
 with tempfile.TemporaryDirectory() as tmp:
     root = pathlib.Path(tmp)
     logs = root / "simple_cluster" / "tmp" / "cluster_scheduler"
@@ -138,9 +141,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "OLD CUDA out of memory" not in evidence.get("liveLogTail", ""), evidence
 print("ok")
 `;
-  const result = spawnSync("python", ["-X", "utf8", "-c", script], {
-    encoding: "utf8", cwd: path.join(__dirname, "../.."), env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const result = spawnSync("python", ["-X", "utf8", "-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", cwd: path.join(__dirname, "../.."), env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 

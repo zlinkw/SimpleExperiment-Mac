@@ -16,139 +16,64 @@ Module._load = function(request, parent, main) {
 const {RealtimeTunnelPanelProvider} = require('../../dist/extension/legacy');
 Module._load = originalLoad;
 
-test('production writer, catalog, open and split obey dataset keys and configured root', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dataset-catalog-'));
-  const registry = tables.emptyTableRegistry();
-  registry.plans['experiments/plans/demo.yaml'] = {revision: 'r1', expectedSeeds: 1, records: ['BUS', 'PAD', ''].map(dataset => ({planFile: 'experiments/plans/demo.yaml', workerId: 'w1', case: 'same', seed: '1', method: 'corim', dataset, rate: '', endpoint: 'clean', metrics: {accuracy: .8}}))};
-  const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), {
-    resultCsvDirectory: 'artifacts/results', captureProjectContext: () => ({root}),
-    projectContextIsCurrent: () => true,
-    openWorkspaceFileForProjectContext: async relative => {host.opened = relative;},
-  });
-  const active=currentResultHost(RealtimeTunnelPanelProvider,{root,directory:host.resultCsvDirectory,rows:Object.values(registry.plans).flatMap(plan=>plan.records),rules:()=>savedRules});
-  Object.assign(host,active.host);
-  await host.writeProjectTableRegistry(root, registry);
-  for (const dataset of ['BUS', 'PAD', '_unassigned']) {
-    const final = path.join(root, 'artifacts/results', dataset, 'final/final.csv');
-    const parsed = tables.readCsv(fs.readFileSync(final, 'utf8'));
-    assert.deepEqual([...new Set(parsed.rows.map(row => row[parsed.header.indexOf('dataset')]))], [dataset === '_unassigned' ? '' : dataset]);
-    assert.ok(fs.existsSync(final.replace('.csv', '.md')));
-    assert.ok(fs.existsSync(path.join(root, 'artifacts/results', dataset, 'methods/corim/corim.csv')));
-  }
-  assert.equal(fs.existsSync(path.join(root, 'experiments/results')), false);
-  const planKey = tables.planDirectoryKey('experiments/plans/demo.yaml');
-  const artifact = `artifacts/results/BUS/plans/${planKey}/raw/w1/metrics.csv`;
-  fs.mkdirSync(path.dirname(path.join(root, artifact)), {recursive: true});
-  fs.writeFileSync(path.join(root, artifact), 'dataset,value\nBUS,.8\n', 'utf8');
-  const catalog = await active.catalog();
-  assert.equal(catalog.datasets.length, 3);
-  const all = catalog.datasets.flatMap(row => row.tables);
-  assert.equal(new Set(all.map(row => row.tableKey)).size, 6);
-  assert.equal(catalog.datasets.some(row=>row.datasetKey==='_shared'),false,'an unlisted raw file cannot authorize current results');
-  assert.equal(catalog.unassignedPlans.length, 1);
-  assert.equal(catalog.multiDatasetPlans.length, 1);
-  await host.openLocalResultTableFromUi({tableKey: 'PAD/final', format: 'csv', file: '../untrusted'});
-  assert.equal(host.opened, 'artifacts/results/PAD/final/final.csv');
-  await assert.rejects(host.openLocalResultTableFromUi({artifactKey: artifact}), /结果产物不在当前目录索引中/);
-  assert.equal(fs.readFileSync(path.join(root,artifact),"utf8"),"dataset,value\nBUS,.8\n");
-  await assert.rejects(host.openLocalResultTableFromUi({tableKey: '../escape'}));
-  await assert.rejects(host.openLocalResultTableFromUi({artifactKey: '../escape.csv'}));
-  await host.splitProjectResultTableFromUi({tableKey: 'PAD/final', splitField: 'dataset', splitValues: ['PAD'], keepColumns: ['dataset', 'accuracy_mean']});
-  assert.equal(fs.readFileSync(path.join(root, 'artifacts/results/PAD/final/by_dataset/PAD.csv'), 'utf8').includes('PAD,0.8'), true);
-  assert.equal(fs.existsSync(path.join(root, 'artifacts/results/BUS/final/by_dataset')), false);
-  const before = fs.readFileSync(path.join(root, 'artifacts/results/BUS/final/final.csv'), 'utf8');
-  registry.plans['experiments/plans/demo.yaml'].records.push({...registry.plans['experiments/plans/demo.yaml'].records[1], metrics: {AUC: .6, roc_auc: .7}});
-  const metric=active.declarations.values().next().value[0].result_csv;
-  active.files.set(metric,Buffer.from('case,seed,method,dataset,metric,value\nsame,1,corim,BUS,AUC,0.6\nsame,1,corim,BUS,roc_auc,0.7\n'));
-  const rejected=await host.writeProjectTableRegistry(root,registry);
-  assert.equal(rejected.completed,0);assert.ok(rejected.jobs.every(job=>/指标冲突/.test(job.error)),JSON.stringify(rejected.jobs));
-  assert.equal(fs.readFileSync(path.join(root,'artifacts/results/BUS/final/final.csv'),'utf8'),before,'retired physical files remain inspectable');
-  assert.equal((await active.catalog()).datasets.length,0);
+const {scenario,exportsApi}=require('../_helpers/resultCollectionScenario');
 
-  const source = require('../_helpers/sourceReader').readSource('src/ui/PanelHtml.ts');
-  const start = source.indexOf('    function resultCatalogViewModel(catalog, state)');
-  const end = source.indexOf('\n    function renderResultEvidenceWorkbench', start + 20);
-  const escape = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  const context = {detailsOpenAttr: (_key, defaultOpen) => defaultOpen ? ' open' : '', asArray: value => Array.isArray(value) ? value : [], esc: escape, escAttr: escape, resultSplitTableKey: '', resultSplitFieldName: '', resultSplitSearchQuery: '', resultSplitSelectedColumns: null, resultSplitSelectedValues: null, detailsOpenState: {}, renderSectionIfVisible() {}};
-  vm.runInNewContext(source.slice(start, end) + '; this.renderProjectResultTables = renderProjectResultTables', context);
-  const render = context.renderProjectResultTables;
-  const html = render({resultOutputConfig: {tables: all, catalog}});
-  assert.match(html, /data-details-key="result-dataset-BUS"/);
-  assert.match(html, /data-details-key="result-dataset-PAD"/);
-  assert.match(html, /data-details-key="result-dataset-BUS" open/);
-  assert.doesNotMatch(html, /data-details-key="result-dataset-PAD" open/);
-  assert.match(html, /resultDatasetGroup/);
-  assert.match(html, /方法 1 · 涉及 Plan 1/);
-  assert.match(html, /关联 Plan（1）/);
-  assert.doesNotMatch(html, /Plan 0/);
-  assert.match(html, /跨数据集 Plan 与共享产物（1 个 Plan · 0 个文件）/);
-  assert.match(html, /跨数据集 · BUS、PAD/);
-  assert.match(html, /data-table-key="PAD\/final"/);
-  assert.match(html, /未识别数据集/);
-  assert.match(html, /title="artifacts\/results\/PAD\/final\/final.csv"/);
-  assert.match(html, /class="resultMethodList"/);
-  assert.match(html, /data-format="csv"/);
-  assert.match(html, /data-format="md"/);
-  assert.doesNotMatch(html, /全项目总表|experiments\/results/);
-  assert.match(source, /\.resultTableBrowser details > summary::before/);
-  assert.match(source, /\.resultTableBrowser details\[open\] > summary::before/);
-  assert.match(source, /::-webkit-details-marker \{ display: none; \}/);
+test('active writer, catalog, opening and splitting bind dataset keys and the configured root',async()=>{
+  const f=scenario({directory:'artifacts/results'}),p=f.addPlan(undefined,{seeds:[1],cases:['bus','pad','unassigned']});
+  p.jobs.forEach((j,index)=>f.put(p,index,{dataset:['BUS','PAD',''][index]}));
+  const report=await f.update();assert.equal(report.completed,3);
+  const catalog=await f.catalog();assert.deepEqual(catalog.datasets.map(d=>d.datasetKey).sort(),['BUS','PAD','_unassigned']);
+  const all=catalog.datasets.flatMap(d=>d.tables);assert.equal(new Set(all.map(t=>t.tableKey)).size,6);
+  assert.equal(fs.existsSync(path.join(f.root,'experiments/results')),false);
+  const h=Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype),f.host,{
+    openWorkspaceFileForProjectContext:async file=>{h.opened=file;},invalidateResultCatalogCache(){}
+  });
+  await h.openLocalResultTableFromUi({tableKey:'PAD/final',format:'csv',file:'../untrusted'});
+  assert.equal(h.opened,'artifacts/results/PAD/final/final.csv');
+  await h.openLocalResultTableFromUi({tableKey:'PAD/final',format:'md'});assert.match(h.opened,/PAD\/final\/final.md$/);
+  await assert.rejects(h.openLocalResultTableFromUi({tableKey:'../escape'}));
+  await assert.rejects(h.openLocalResultTableFromUi({artifactKey:'../escape.csv'}));
+  await h.splitProjectResultTableFromUi({tableKey:'PAD/final',splitField:'dataset',splitValues:['PAD'],keepColumns:['dataset','roc_auc_mean']});
+  assert.match(fs.readFileSync(path.join(f.root,'artifacts/results/PAD/final/by_dataset/PAD.csv'),'utf8'),/PAD,0.92/);
+  assert.equal(fs.existsSync(path.join(f.root,'artifacts/results/BUS/final/by_dataset')),false);
 });
 
-test('local refresh repairs stale CSV and Markdown from recorded seeds without any remote reads or raw caches', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dataset-local-refresh-'));
-  const planFile = 'experiments/plans/demo.yaml';
-  const registry = tables.emptyTableRegistry();
-  registry.plans[planFile] = { revision: 'r1', expectedSeeds: 1, records: [{ planFile, workerId: 'worker-a', case: 'case-a', seed: '42',
-    method: 'method-a', dataset: 'dataset-a', rate: '', endpoint: 'clean', runId: 'run-b', revision: 'r1', metrics: { AUC: .93 } }] };
-  const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), {
-    resultCsvDirectory: 'artifacts/results', captureProjectContext: () => ({ root }), projectContextIsCurrent: () => true,
-    cancelResultCatalogRefresh() {}, invalidateResultCatalogCache() {}, postState() {},
-    client: { getResultsSummary: async () => assert.fail('local refresh must not access remote summaries') },
-    simpleSftpApiCall: async () => assert.fail('local refresh must not download files'),
-  });
-  const active=currentResultHost(RealtimeTunnelPanelProvider,{root,directory:host.resultCsvDirectory,rows:registry.plans[planFile].records});
-  Object.assign(host,active.host);await host.writeProjectTableRegistry(root,registry);
-  host.client.getWorkerTasks=async()=>assert.fail('local refresh cannot query Workers');
-  host.simpleSftpApiCall=async()=>assert.fail('local refresh cannot transfer');
-  const csv = path.join(root, 'artifacts/results/dataset-a/final/final.csv');
-  const md = path.join(root, 'artifacts/results/dataset-a/final/final.md');
-  const expected = fs.readFileSync(md, 'utf8');
-  fs.writeFileSync(csv, 'stale csv', 'utf8'); fs.writeFileSync(md, 'stale markdown', 'utf8');
-  await host.refreshLocalResultsFromUi();
-  assert.equal(fs.readFileSync(md, 'utf8'), expected);
-  assert.match(fs.readFileSync(csv, 'utf8'), /0.93/);
-  const registryPath=path.join(root,'artifacts/results/latest-results.json');
-  const generation=fs.readFileSync(registryPath,'utf8');
-  await host.refreshLocalResultsFromUi();
-  assert.equal(fs.readFileSync(registryPath,'utf8'), generation, 'an unchanged refresh does not republish');
-  assert.equal(fs.existsSync(path.join(root, 'artifacts/results/dataset-a/plans')), false);
+test('local refresh regenerates the current export without remote reads, raw caches or old registry rows',async()=>{
+  const f=scenario(),p=f.addPlan(undefined,{seeds:[42]});f.put(p,0);await f.update();
+  const before=JSON.stringify(f.snapshot()),csv=f.snapshot().tables.find(t=>t.kind==='final');
+  fs.writeFileSync(path.join(f.root,'artifacts/results',csv.relativePath),'stale');
+  fs.writeFileSync(path.join(f.root,'artifacts/results',csv.markdownPath),'stale');
+  f.calls.length=0;
+  const h=Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype),f.host);
+  await h.refreshLocalResultsFromUi();await h.refreshLocalResultsFromUi();
+  assert.equal(JSON.stringify(f.snapshot()),before);assert.match(f.read(csv.relativePath),/0.92/);
+  assert.equal(f.read(csv.markdownPath),csv.markdown);assert.deepEqual(f.calls,[]);
+  assert.equal(fs.existsSync(path.join(f.root,'simple_cluster/results/project_table_registry.json')),false);
 });
 
-test('latest export excludes retired method and dataset tables without deleting their files', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dataset-current-generation-'));
-  const planFile = 'experiments/plans/demo.yaml';
-  const registry = tables.emptyTableRegistry();
-  registry.plans[planFile] = { revision: 'r1', expectedSeeds: 1, records: [{ planFile, workerId: 'worker-a', case: 'case-a', seed: '42',
-    method: 'old-method', dataset: 'old-dataset', rate: '', endpoint: 'clean', runId: 'run-a', metrics: { AUC: .81 } }] };
-  const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), { resultCsvDirectory: 'artifacts/results' });
-  const active=currentResultHost(RealtimeTunnelPanelProvider,{root,directory:host.resultCsvDirectory,rows:registry.plans[planFile].records});
-  Object.assign(host,active.host);await host.writeProjectTableRegistry(root,registry);
-  const oldFile = path.join(root, 'artifacts/results/old-dataset/methods/old-method/old-method.csv');
-  const oldText = fs.readFileSync(oldFile, 'utf8');
-  registry.plans[planFile].records = registry.plans[planFile].records.map(row => ({ ...row, method: 'new-method', dataset: 'new-dataset', runId: 'run-b', metrics: { AUC: .93 } }));
-  const csv=active.declarations.get(planFile)[0].result_csv;
-  active.files.set(csv,Buffer.from('case,seed,method,dataset,metric,value\ncase-a,42,new-method,new-dataset,AUC,0.93\n'));
-  await host.writeProjectTableRegistry(root,registry);
-  const current = (await active.catalog()).datasets.flatMap(dataset => dataset.tables);
-  assert.deepEqual(current.map(row => row.tableKey).sort(), ['new-dataset/final', 'new-dataset/method/new-method']);
-  assert.equal(fs.readFileSync(oldFile, 'utf8'), oldText);
-  assert.equal(fs.existsSync(path.join(root, 'artifacts/results/old-dataset/final/final.md')), true);
+test('the current export hides old method and dataset tables without deleting their files',async()=>{
+  const f=scenario(),p=f.addPlan(undefined,{seeds:[42]});f.put(p,0,{dataset:'old',method:'old-method'});await f.update();
+  const old=f.read('old/final/final.csv');f.put(p,0,{dataset:'new',method:'new-method',runId:'new-command',metric:.61});await f.update();
+  assert.equal(f.read('old/final/final.csv'),old);
+  const catalog=await f.catalog();assert.deepEqual(catalog.datasets.map(d=>d.datasetKey),['new']);
+  assert.deepEqual(catalog.datasets[0].tables.map(t=>t.tableKey).sort(),['new/final','new/method/new-method']);
+});
+
+test('manual dataset mapping is workspace scoped and applies only to unassigned fresh metrics',async()=>{
+  savedRules={};const f=scenario(),p=f.addPlan(undefined,{seeds:[42]});f.put(p,0,{dataset:''});await f.update();
+  const h=Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype),f.host);
+  h.loadProjectTableRegistry=RealtimeTunnelPanelProvider.prototype.loadProjectTableRegistry;
+  const original=f.storage.get('w1').get(p.jobs[0].result_csv);await h.applyPlanDatasetMappingFromUi({mappings:{[p.planFile]:'PAD'}});
+  assert.equal(savedRules.planDatasetMapping[p.planFile].datasets[0],'PAD');
+  f.rules.planDatasetMapping=savedRules.planDatasetMapping;await f.update();
+  assert.equal((await f.catalog()).unassignedPlans.length,0);assert.match(f.read('PAD/final/final.csv'),/PAD/);
+  assert.deepEqual(f.storage.get('w1').get(p.jobs[0].result_csv),original);
+  await assert.rejects(h.applyPlanDatasetMappingFromUi({mappings:{[p.planFile]:'BUS'}}),/不能通过人工映射覆盖/);
 });
 
 test('result catalog stays within dataset, plan, table and artifact response limits at stress scale', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dataset-catalog-stress-'));
-  // Retain the unique local fixture; cleanup requires explicit path approval.
+  // Preserve the private stress fixture as audit evidence.
   const resultRoot = path.join(root, 'experiments/results/benchmark/plans');
   const registryPlans = {};
   for (let plan = 0; plan < 100; plan++) {

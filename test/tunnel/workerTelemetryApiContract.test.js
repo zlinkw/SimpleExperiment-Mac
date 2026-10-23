@@ -26,7 +26,7 @@ function productionWorkerTelemetryCapabilities() {
 test("formal stop capability markers validate without becoming callable controls", async (context) => {
   context.mock.method(global, "fetch", async () => { throw Error("capability marker must never dispatch HTTP"); });
   const capabilities = productionWorkerTelemetryCapabilities();
-  for (const marker of ['stop-worker-task-formal-identity', 'stop-worker-task-formal-no-attempt']) {
+  for (const marker of ['stop-worker-task-formal-identity', 'stop-worker-task-formal-no-attempt', 'stop-worker-task-local-command']) {
     assert.equal(capabilities.actionEndpoints[marker], true);
     assert.equal(isWorkerDirectAction(marker), false);
     assert.equal(isWorkerTelemetryAction(marker), false);
@@ -64,6 +64,7 @@ test("worker telemetry permits bounded worker controls plus local scheduler acti
   assert.ok(workerTelemetryRequiredEndpoints.includes("/api/worker/tasks"));
   assert.ok(workerTelemetryRequiredEndpoints.includes("/api/results/summary"));
   assert.deepEqual([...workerTelemetryAllowedActions].sort(), [
+    "POST /api/actions/configure-gpu-quota",
     "POST /api/actions/start-worker-task",
     "POST /api/actions/preflight-worker-task",
     "POST /api/actions/register-code-sync-proof",
@@ -73,6 +74,7 @@ test("worker telemetry permits bounded worker controls plus local scheduler acti
     "POST /api/actions/stop-worker-task-exact-pane",
     "POST /api/actions/delete-worker-artifacts",
     "POST /api/actions/archive-worker-artifacts",
+    "POST /api/actions/finalize-worker-operation",
     "POST /api/actions/start-tensorboard",
     "POST /api/actions/stop-tensorboard",
     "POST /api/actions/get-tensorboard-status",
@@ -149,7 +151,7 @@ test("Worker-only client requires topology stamp and never substitutes Worker fo
   ], () => new RequestBudget({ ...defaultRequestBudgetConfig, minIntervalByPurpose: {}, disabledPurposes: [] }));
   await assert.rejects(client.postWorkerAction("worker-1", "run-plan", {}), /action not allowed/);
   await assert.rejects(client.postWorkerAction("worker-1", "parse-results", {}), /action not allowed/);
-  await assert.rejects(client.postAction("run-plan", {}), /Hub realtime endpoint not configured/);
+  await assert.rejects(client.postAction("run-plan", {}), /WORKER_ACTION_REQUIRED/);
   await assert.rejects(client.getResultsSummary(), /fetch failed|ECONNREFUSED|AbortError|timeout|No Worker endpoint|worker telemetry does not expose hub control api/);
 });
 

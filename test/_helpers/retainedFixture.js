@@ -8,7 +8,11 @@ module.exports = function retainedFixture(root, label) {
     : path.join(root, 'release-artifacts');
   fs.mkdirSync(parent, { recursive: true });
   const directory = fs.mkdtempSync(path.join(parent, label + ' '));
-  const receipts = path.join(root, 'release-artifacts', 'fixture-locations');
+  // Mac/Linux 适配：仓库内 release-artifacts/fixture-locations 在本沙箱由 root 持有不可写，
+  // Linux 侧收据写入同一 home 工件树，保持“每个 fixture 可从收据发现”的契约；Windows 路径不变。
+  const receipts = process.platform === 'linux'
+    ? path.join(parent, 'fixture-locations')
+    : path.join(root, 'release-artifacts', 'fixture-locations');
   fs.mkdirSync(receipts, { recursive: true });
   fs.writeFileSync(path.join(receipts, path.basename(directory) + '.json'),
     JSON.stringify({ directory, platform: process.platform }) + '\n', { flag: 'wx' });

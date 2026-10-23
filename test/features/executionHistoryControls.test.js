@@ -19,6 +19,7 @@ function methods(answer, saved = {}) {
     stringArrayField: (message, key) => Array.isArray(message[key]) ? message[key] : [],
     uniqueStrings: (values) => [...new Set(values.filter(Boolean))],
     operationHistoryHideableStatus: (status) => ["completed", "failed", "interrupted"].includes(status),
+    RunOperations_1: require("../../dist/features/RunOperations.js"),
     normalizePlanSelectionKey: (value) => String(value).replaceAll("\\", "/"),
     operationResultPlanFile: (row) => row.planFile,
     errorMessage: (error) => String(error.message || error),
@@ -66,7 +67,7 @@ test("clearing selected operations hides exact terminal IDs without touching the
   assert.deepEqual(fixture.getHidden(), ["old"]);
 });
 
-test("stop all routes each active Plan through the manual stop path", async () => {
+test("stop all routes the exact active Plans through the shared batch entry", async () => {
   const fixture = methods("中止所有 Plan");
   const routed = [];
   fixture.provider.longRunningPlanRunOperations = () => [
@@ -74,9 +75,8 @@ test("stop all routes each active Plan through the manual stop path", async () =
     { operationId: "run-b", planFile: "plans/b.yaml", workerId: "nwpu3" },
   ];
   fixture.provider.runOperationWorkerId = (row) => row.workerId;
-  fixture.provider.stopExperimentRouted = async (body) => { routed.push(body); };
+  fixture.provider.stopAndClearPlansFromUi = async (body) => { routed.push(...body.planFiles); };
   await fixture.context.methods.stopAllPlansFromUi.call(fixture.provider);
   assert.equal(routed.length, 2);
-  assert.deepEqual(routed.map((row) => row.operationId), ["run-a", "run-b"]);
-  assert.ok(routed.every((row) => row.manualStopType === "scheduler_aborted"));
+  assert.deepEqual(routed, ["plans/a.yaml", "plans/b.yaml"]);
 });

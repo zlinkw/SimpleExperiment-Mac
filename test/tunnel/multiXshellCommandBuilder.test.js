@@ -5,7 +5,7 @@ const { normalizeXshellSetupConfig } = require("../../dist/tunnel/XshellTunnelSe
 const { buildTunnelEndpointRegistry } = require("../../dist/tunnel/TunnelEndpointRegistry.js");
 const { buildMultiEndpointXshellTunnelCommands, generateXshellStartAllBatScript } = require("../../dist/tunnel/XshellTunnelCommandBuilder.js");
 
-test("multi endpoint command builder emits grouped Hub and Worker tunnel commands", () => {
+test("multi endpoint command builder emits only configured Worker tunnel commands", () => {
   const setup = normalizeXshellSetupConfig({
     xshellExePath: "C:\\Program Files\\NetSarang\\Xshell 8\\Xshell.exe",
     hubHost: "hub.local",
@@ -15,10 +15,9 @@ test("multi endpoint command builder emits grouped Hub and Worker tunnel command
   });
   const endpoints = buildTunnelEndpointRegistry(setup).endpoints;
   const commands = buildMultiEndpointXshellTunnelCommands(setup, endpoints);
-  assert.equal(commands.length, 2);
-  assert.match(commands[0].preview.sshCommand, /127\.0\.0\.1:18765:127\.0\.0\.1:18765/);
-  assert.match(commands[1].preview.sshCommand, /127\.0\.0\.1:18766:127\.0\.0\.1:18765/);
+  assert.equal(commands.length, 1);
+  assert.match(commands[0].preview.sshCommand, /127\.0\.0\.1:18766:127\.0\.0\.1:18765/);
   const script = generateXshellStartAllBatScript(setup, endpoints);
-  assert.match(script, /Hub control tunnel/);
+  assert.doesNotMatch(script,/Hub control tunnel/);
   assert.match(script, /Worker telemetry tunnel/);
 });

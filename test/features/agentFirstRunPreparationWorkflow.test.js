@@ -24,7 +24,7 @@ test("first-run Agent preparation confirms once and preserves operation order", 
   const blocked = flow.indexOf("Agent 自启动命令未就绪");
   const profiles = flow.indexOf("writeSftpManagerServerProfiles(");
   const pathConfirm = flow.indexOf("confirmRemoteWriteTargets");
-  const deploy = flow.indexOf("deployLatestAgentRuntime(false, true, [], true)");
+  const deploy = flow.indexOf("deployLatestAgentRuntime(false, true, [], true,");
   const launch = flow.indexOf("startAllXshellConnections(false, false)");
   const detect = flow.indexOf("this.testTunnel(false)");
   assert.ok(sftp >= 0 && sftp < workspace && workspace < sync);
@@ -41,12 +41,14 @@ test("first-run Agent preparation confirms once and preserves operation order", 
   assert.match(extension, /const AGENT_STARTUP_BLOCKED_SKIP_REASONS = new Set\(\["non_simple_remote_command", "different_simple_agent_session"\]\)/);
   assert.match(flow, /AGENT_STARTUP_BLOCKED_SKIP_REASONS\??\.has\(item\.skippedReason\)/);
   assert.doesNotMatch(flow, /\["non_simple_remote_command", "different_simple_agent_session"\]\.includes/);
-  assert.match(flow, /tunnelTestCompletion\(this\.setupConfig, this\.lastProbe, this\.lastHealth, this\.lastWorkerProbes, topology\.hubAllowed\)/);
+  assert.match(flow, /tunnelTestCompletion\(this\.setupConfig, this\.lastProbe, this\.lastHealth, this\.lastWorkerProbes, false\)/);
+  assert.match(flow, /reportStage: message => progress\.report\(\{ message \}\)/);
   assert.match(flow, /当前拓扑端点健康检测未通过/);
   assert.match(flow, /if \(showMessage\) \{[\s\S]{0,420}"识别工作区", "打开面板"/);
   assert.doesNotMatch(flow, /const next = await vscode\.window\.showInformationMessage\(`Agent 首次准备完成/);
   assert.match(flow, /void vscode\.window\.showInformationMessage\(`Agent 首次准备完成[\s\S]{0,250}\.then\(/);
-  assert.match(flow, /next === "识别工作区"\)[\s\S]{0,120}simpleExperiment\.bootstrapProject/);
+  // Mac 适配：命令身份为 simpleExperimentMac.*，流程顺序断言不变。
+  assert.match(flow, /next === "识别工作区"\)[\s\S]{0,120}simpleExperimentMac\.bootstrapProject/);
   assert.match(flow, /if\s*\(!workspaceRoot\(\)\)\s*\{[\s\S]{0,180}openWorkspaceFolderForContinuation\("准备 Agent",\s*"prepareAgents"\)[\s\S]{0,120}UiCommandCancelled/);
   assert.match(extension, /pending\.action === "prepareAgents"[\s\S]{0,100}prepareAgentsForFirstRun\(true\)/);
   assert.match(flow, /当前项目 SimpleSFTP 目标不完整/);
@@ -98,9 +100,9 @@ test("quick setup and main UI expose preparation while connection keeps literal 
   assert.match(extension, /"准备 Agent 并启动", "仅启动会话", "只检测"/);
   assert.match(extension, /next === "准备 Agent 并启动"\)\s*agentsReady = await this\.prepareAgentsForFirstRun\(showAgentCompletion\)/);
   assert.match(extension, /async quickSetup\(showAgentCompletion = true\)/);
-  assert.match(extension, /async writeXshellAgentStartupCommands\(showMessage = true, requireConfirm = true\)/);
-  assert.match(extension, /async startAllXshellConnections\(requireConfirm = true, scheduleAutoTest = true\)/);
-  assert.equal((extension.match(/this\.schedulePostLaunchAutoTest\(\)/g) || []).length, 3);
+  assert.match(extension, /async writeXshellAgentStartupCommands\(showMessage = true, requireConfirm = true, serverIds = \[\]\)/);
+  assert.match(extension, /async startAllXshellConnections\(requireConfirm = true, scheduleAutoTest = true, serverIds = \[\]\)/);
+  assert.equal((extension.match(/this\.schedulePostLaunchAutoTest\(\)/g) || []).length, 2);
   assert.doesNotMatch(extension, /setTimeout\(\(\) => void this\.testTunnel\(true\), 2500\)/);
   assert.match(extension, /private postLaunchAutoTestTimer\?: ReturnType<typeof setTimeout>/);
   assert.match(extension, /private postLaunchAutoTestGeneration = 0/);
@@ -111,12 +113,15 @@ test("quick setup and main UI expose preparation while connection keeps literal 
   assert.match(extension, /private resetClient\(\)[\s\S]{0,300}this\.cancelPostLaunchAutoTest\(\)/);
   assert.match(extension, /case "prepareAgents":\s*await this\.prepareAgentsForFirstRun\(message\.uiMode !== true\)/);
   assert.match(panel, /data-command="prepareAgents"[^>]*>准备 Agent 并启动<\/button>/);
-  assert.match(panel, /prepareAgents: "部署 Agent、写入受管自启动命令、启动会话并检测全部"/);
+  assert.match(panel, /prepareAgents: "检测并复用健康 Agent；必要时部署独立服务，保留原登录行为，核实运行版本"/);
   assert.match(panel, /command === "prepareAgents".*serverSetupReadiness\(state\)\.ready/);
   assert.doesNotMatch(panel, /一键启动隧道和 Agent|启动 Agent\+隧道/);
-  assert.match(readme, /首次配置推荐点击“准备 Agent 并启动”/);
-  assert.match(readme, /未打开工作区时执行“准备 Agent 并启动”会直接打开 VS Code 文件夹选择器/);
-  assert.match(guide, /Xshell 会话 -> SimpleExperiment 服务器目录 -> SimpleSFTP 目标 -> 准备 Agent/);
-  assert.match(guide, /首次配置使用“准备 Agent 并启动”/);
-  assert.match(guide, /插件不会把 Agent 部署到通用占位项目目录/);
+  // Mac 适配：Windows README 的业务指引段落由 Mac 侧 docs/technical-notes.md 承载；
+  // 接入顺序按 Mac 指南的真实链路表述，语义（服务器→Agent→项目→Plan）与 .403 一致。
+  const technicalNotes = fs.readFileSync(path.join(__dirname, "../../docs/technical-notes.md"), "utf8");
+  assert.match(technicalNotes, /首次配置推荐点击“准备 Agent 并启动”/);
+  assert.match(technicalNotes, /未打开工作区时执行“准备 Agent 并启动”会直接打开 VS Code 文件夹选择器/);
+  assert.match(guide, /确认服务器与端点 → 部署并检测 Agent → 接入本地项目/);
+  assert.match(guide, /⇧⌘P → SimpleExperiment：准备 Agent 并启动\*\*。运行环境准备区域的 \*\*部署Agent\*\* 按钮走同一流程/);
+  assert.match(technicalNotes, /不会使用通用占位项目目录/);
 });

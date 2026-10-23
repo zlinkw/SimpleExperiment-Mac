@@ -102,9 +102,10 @@ test("workspace reset precedes project loaders and stale scans cannot win", () =
   assert.match(source, /generation !== this\.projectContextGeneration \|\| root !== workspaceRoot\(\)/);
   assert.match(source, /if \(this\.localPlanMetadataRefreshPromise === refresh\)/);
   assert.ok([...source.matchAll(/generation !== this\.projectContextGeneration/g)].length >= 6);
-  assert.match(source, /const client = this\.client;[\s\S]{0,340}const summary = await client\.getResultsSummary\(planFile, \{ userInitiated: true \}\);\s*if \(generation !== this\.projectContextGeneration \|\| client !== this\.client\)\s*return;\s*this\.resultsSummary = summary/);
-  assert.match(source, /client\.postAction\(action, request\)[\s\S]{0,260}generation !== this\.projectContextGeneration \|\| client !== this\.client/);
-  assert.match(source, /client\.postWorkerAction\(workerId, action, request\)[\s\S]{0,260}generation !== this\.projectContextGeneration \|\| client !== this\.client/);
+  const collection = fs.readFileSync(path.join(__dirname, "../../src/extension/ResultCollectionHost.ts"), "utf8");
+  assert.match(collection, /h\.projectContextIsCurrent\(context\) && key\(\) === binding/);
+  assert.match(collection, /const check = \(\) => \{ if \(!current\(\)\) throw/);
+  assert.match(source, /client\.postWorkerAction\(workerId, action, request\)[\s\S]{0,400}generation !== this\.projectContextGeneration \|\| client !== this\.client/);
   assert.match(legacyNotes, /切换工作区目录.*清空上一项目/);
   assert.match(legacyNotes, /切换工作区目录.*重新加载/);
 });
@@ -204,18 +205,18 @@ test("archived Plan restore cannot continue in a replacement workspace", () => {
 
 test("batch Plan execution keeps project, SFTP root, and Agent client authority", () => {
   const runAll = methodBody("async runAllPlansFromUi", "async generatePlanGuideFromUi");
-  const codeReady = methodBody("async ensureCodeReadyForRun", "async ensureHubCodeReadyForPlanCheck");
+  const codeReady = methodBody("async ensureCodeReadyForRun", "planSubmissionManifestKey");
   const sync = methodBody("async syncCodeTargets", "async confirmRemoteWriteTargets");
   const preflight = methodBody("async runPlanPreflight", "async confirmPlanRunSubmission");
   const scheduler = methodBody("async postPlanSchedulerAction", "workerPoolActionBody");
   const workerAction = methodBody("async postWorkerTunnelAction", "activeWorkerActionOperation");
   const wait = methodBody("async waitForOperationTerminalResult", "async finishOperationWatchdog");
-  assert.match(runAll, /const projectContext = this\.captureProjectContext\(\);\s*const client = this\.client;\s*const authority = \{ projectContext, authorityClient: client \}/);
-  assert.ok([...runAll.matchAll(/assertCurrent\(\)/g)].length >= 10);
-  assert.match(runAll, /ensureCodeReadyForRun\(projectContext, candidatePlans\.map\(\(candidate\) => candidate\.body\)\)/);
-  assert.match(runAll, /runPlanPreflight\(body, `计划 \$\{planFile\}`, authority\)/);
-  assert.match(runAll, /requiresCapability: capabilityForAction\("run-plan"\),\s*\.\.\.authority/);
-  assert.match(codeReady, /syncCodeTargets\(targets, "run", \{ projectContext, hashCompare: true(?:, progressReport: \(text\) => reportStage\(text\))? \}\)/);
+  assert.match(runAll, /return runAllPlans\(this, message\)/);
+  const batch = fs.readFileSync(path.join(__dirname, "../../src/extension/SelectedPlanBatchHost.ts"), "utf8");
+  assert.match(batch, /const context = host\.captureProjectContext\(\)/);
+  assert.match(batch, /!host\.projectContextIsCurrent\(context\) \|\| targetKey\(\) !== targets/);
+  assert.match(batch, /await host\.runActionCommand\("runPlan", message\);\s*current\(\)/);
+  assert.match(codeReady, /syncCodeTargets\(targets, "run", \{ projectContext, hashCompare: true, progressReport: \(text\) => reportStage\(text\), onTargetReady: targetReady \}\)/);
   assert.match(sync, /const projectContext = options\.projectContext/);
   assert.match(sync, /const root = projectContext\?\.root \|\| workspaceRoot\(\)/);
   assert.match(sync, /confirmRemoteWriteTargets\([\s\S]{0,500}projectContext\)/);
@@ -225,7 +226,7 @@ test("batch Plan execution keeps project, SFTP root, and Agent client authority"
   assert.match(preflight, /waitForOperationTerminalResult\("validate-plan"[\s\S]{0,160}authority\)/);
   assert.ok([...scheduler.matchAll(/assertActionAuthorityCurrent\(options\)/g)].length >= 2);
   assert.match(workerAction, /const client = options\.authorityClient \|\| this\.client/);
-  assert.match(wait, /refreshOperationStatus\(opId, action, workerId, attempt, authority\.authorityClient \|\| this\.client\)/);
+  assert.match(wait, /refreshOperationStatus\(opId, action, workerId, attempt, authority\.authorityClient \|\| this\.client, true\)/);
   assert.match(source, /postWorkerTunnelAction\(workerId, action, scoped, \{ \.\.\.options, title: command, confirm: false, danger: false \}\)/);
 });
 
@@ -303,7 +304,7 @@ test("stale network probes and realtime callbacks cannot overwrite the new proje
   assert.ok([...tunnel.matchAll(/generation !== this\.projectContextGeneration/g)].length >= 4);
   assert.match(tunnel, /const nextWorkerProbes = \{\}/);
   assert.ok(tunnel.indexOf("const nextWorkerProbes") < tunnel.indexOf("this.lastProbe = probe"));
-  assert.match(integration, /generation !== this\.projectContextGeneration/);
+  assert.match(integration, /return this\.testTunnel\(true\)/);
   assert.match(snapshot, /generation !== this\.projectContextGeneration/);
   assert.match(connect, /client !== this\.client/);
   assert.match(client, /generation !== this\.projectContextGeneration \|\| client !== this\.client/);

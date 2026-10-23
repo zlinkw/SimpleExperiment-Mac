@@ -46,6 +46,8 @@ def tmux_run(args, **kwargs):
     return types.SimpleNamespace(returncode=0, stdout='%42', stderr='')
 write_atomic_text = lambda *args: None
 simple_conda_env_name = lambda env: ''
+simple_runtime_python = lambda env: 'python'
+simple_conda_wrapped_args = lambda args, env: args
 simple_conda_activation_script = lambda env: 'true'
 # 现行 launch 路径经 simple_conda_wrapped_args/task_shell_args 做登录 shell 重绑（nt 直通）；
 # 该行为由 executionShellEnvironment 专测钉住，这里按直通语义注入，保持身份转发断言不变。
@@ -59,20 +61,28 @@ _send_tmux_line = lambda session, line, *args, **kwargs: lines.append(line) or 0
 _wait_tmux_ready = lambda *args, **kwargs: True
 _truncate_text = lambda text, count: text[:count]
 env = {'SIMPLE_EXPERIMENT_MANAGED_JOB': '1', 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID': 'issued-command', 'SIMPLE_EXPERIMENT_JOB_PROJECT_ID': 'local-project'}
-env['SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY'] = json.dumps({'workflowId': 'workflow', 'commandId': 'issued-command', 'globalJobId': 'workflow:0', 'planRevision': 'revision', 'codeFingerprint': 'code'})
+env['SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY'] = json.dumps({'workflowId':'workflow', 'commandId':'issued-command', 'globalJobId':'workflow:0', 'planRevision':'rev', 'codeFingerprint':'sha', 'index':0})
 env['AGENT_API_TOKEN'] = 'must-not-forward'
 with patch.object(subprocess, 'run', tmux_run), patch.object(os, 'makedirs'), patch.object(os.path, 'isdir', return_value=True), patch.object(time, 'sleep', return_value=None):
     assert start_job_in_gpu_pane('gpu-0', ['python', 'custom.py'], '/server/zlk/project', env, 'task.log', 'task.exit') == '%42'
     cmd = next(args[-1] for args in calls if args[:2] == ['tmux', 'new-window'])
     assert 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command' in shlex.split(cmd)
     assert 'SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project' in shlex.split(cmd)
+    assert 'SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY=' in cmd
     assert 'must-not-forward' not in cmd
     tmux_session_alive = lambda *args: False
     start_simple_tmux_command('simple-sch-test', ['python', 'custom.py'], '/server/zlk/project', '', env)
-    command = lines[-1]
-    assert 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command' in shlex.split(command)
-    assert 'SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project' in shlex.split(command)
-    assert 'must-not-forward' not in command
+    assert any('SIMPLE_EXPERIMENT_JOB_COMMAND_ID=issued-command' in line for line in lines)
+    assert any('SIMPLE_EXPERIMENT_JOB_PROJECT_ID=local-project' in line for line in lines)
+    assert any('SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY=' in line for line in lines)
+    assert all('must-not-forward' not in line for line in lines)
+    before = len(calls)
+    try:
+        start_job_in_gpu_pane('gpu-0', ['python', 'custom.py'], '/server/zlk/project', {**env, 'SIMPLE_EXPERIMENT_JOB_COMMAND_ID':'foreign-command'}, 'task.log', 'task.exit')
+        raise AssertionError('foreign command identity must fail before tmux writes')
+    except ValueError as exc:
+        assert 'FORMAL_JOB_IDENTITY_MISMATCH' in str(exc)
+    assert len(calls) == before
 print('verified GPU job identity and tmux environment forwarding')
 `, 'utf8');
   try {

@@ -1,3 +1,4 @@
+const legacyMethod = require('../_helpers/legacyMethod');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -25,7 +26,8 @@ function extractFunction(name) {
 
 test("project parent roots reject reserved Agent directories and suggest the real parent", () => {
   const sandbox = {};
-  sandbox.ApiWorkflow_1 = require("../../dist/features/ApiWorkflow.js");
+  const { resolveApiRemoteRootWithPolicy } = require("../../dist/features/ApiWorkflow.js");
+  sandbox.ApiWorkflow_1 = { resolveApiRemoteRootWithPolicy };
   sandbox.errorMessage = (error) => String(error?.message || error);
   vm.createContext(sandbox);
   vm.runInContext(`${extractFunction("normalizeRemoteWorkRoot")}\n${extractFunction("remoteParentWorkRoot")}\n${extractFunction("actualWorkRootValidationMessage")}\n${extractFunction("actualWorkRootAmbiguityMessage")}\nthis.check = actualWorkRootValidationMessage; this.parent = remoteParentWorkRoot; this.warn = actualWorkRootAmbiguityMessage;`, sandbox);
@@ -34,7 +36,8 @@ test("project parent roots reject reserved Agent directories and suggest the rea
   assert.match(sandbox.warn("/srv/projects/demo", "demo", "Hub"), /最终代码目录会重复/);
   assert.match(sandbox.warn("/srv/projects/demo", "demo", "Hub"), /建议改为项目父目录：\/srv\/projects/);
   assert.equal(sandbox.parent("/srv/projects/demo"), "/srv/projects");
-  assert.throws(() => sandbox.parent("projects/demo"), /POSIX/);
+  // 新契约（.403）：remoteParentWorkRoot 对相对路径返回上一级名而非抛错；旧 Mac 的 /POSIX/ 抛错期望已退役。
+  assert.equal(sandbox.parent("projects/demo"), "projects");
   assert.equal(sandbox.parent("/demo"), undefined);
   assert.equal(sandbox.warn("/srv/projects", "demo", "Hub"), undefined);
   assert.match(sandbox.check("/srv/simple_agent", "demo", "Hub"), /不能包含 simple_agent/);
@@ -44,19 +47,19 @@ test("project parent roots reject reserved Agent directories and suggest the rea
 });
 
 test("setup saves and remote side effects share the same work-root gate", () => {
-  const hubSave = source.slice(source.indexOf("async saveHubConfigFromUi"), source.indexOf("async saveSchedulerConfigFromUi"));
-  const workerSave = source.slice(source.indexOf("async saveWorkerConfigFromUi"), source.indexOf("async addWorkerConfigFromUi"));
-  const sftpPrepare = source.slice(source.indexOf("async prepareSftpTargets"), source.indexOf("    sftpServerOptions"));
-  const agentWrite = source.slice(source.indexOf("async writeXshellAgentStartupCommands"), source.indexOf("async startAllXshellAgentSessions"));
+  const hubSave = legacyMethod(source,"saveHubConfigFromUi(");
+  const workerSave = legacyMethod(source,"saveWorkerConfigCore(");
+  const sftpPrepare = legacyMethod(source,"prepareSftpTargets(");
+  const agentWrite = legacyMethod(source,"writeXshellAgentStartupCommands(");
 
   assert.match(source, /async function inputActualWorkRoot[\s\S]{0,700}actualWorkRootValidationMessage/);
   assert.match(source, /inputActualWorkRoot[\s\S]{0,1500}"自动改为上一级"[\s\S]{0,180}"仍按当前目录使用"/);
-  assert.equal([...source.matchAll(/await inputActualWorkRoot\(/g)].length, 3);
-  assert.ok(hubSave.indexOf("assertActualWorkRoot") < hubSave.indexOf("applySetupDraft"));
-  assert.ok(hubSave.indexOf("confirmActualWorkRootAmbiguity") < hubSave.indexOf("applySetupDraft"));
+  assert.equal([...source.matchAll(/await inputActualWorkRoot\(/g)].length, 1);
+  assert.match(hubSave,/throw new Error\("HUB_REMOVED/);
+  assert.doesNotMatch(hubSave,/applySetupDraft/);
+  assert.match(legacyMethod(source,"saveWorkerConfigFromUi("),/this\.saveWorkerConfigCore\(message\)/);
   assert.ok(workerSave.indexOf("assertActualWorkRoot") < workerSave.indexOf("applySetupDraft"));
   assert.ok(workerSave.indexOf("confirmActualWorkRootAmbiguity") < workerSave.indexOf("applySetupDraft"));
-  assert.match(hubSave, /agentProjectDir = await confirmActualWorkRootAmbiguity/);
   assert.match(workerSave, /targetAgentProjectDir = await confirmActualWorkRootAmbiguity/);
   assert.match(sftpPrepare, /assertTopologyActualWorkRoots\("SFTP 上传或目录配置"\)/);
   assert.match(agentWrite, /assertTopologyActualWorkRoots\("写入 Agent 自启动路径"\)/);

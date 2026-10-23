@@ -99,7 +99,7 @@ function fixture() {
       window: { showInformationMessage: () => { throw Error('unexpected UI'); } } } });
   const functionNames = ['readLocalPlans', 'readLocalPlanSummary', 'readArchivedLocalPlans', 'readPlanArchiveBundle', 'archiveManifestFileList', 'walkYaml', 'isArchivedPlanFile', 'mapLimited', 'parseLocalPlanText',
     'sha256Text', 'safeWorkspacePlanPath', 'projectBootstrapPlanSelection', 'operationResultPlanFile', 'planDirSafe', 'normalizePlanSelectionKey', 'stringField'];
-  const methodNames = ['distributedPlanEligible', 'distributedProjectContract', 'enqueueDistributedPlan', 'assertPlanLocalConfigFiles'];
+  const methodNames = ['distributedPlanEligible', 'distributedProjectContract', 'enqueueDistributedPlan', 'commitIsolatedEnqueueLocal', 'assertPlanLocalConfigFiles'];
   vm.runInContext(ts.transpileModule(functionNames.map(name => { assert.ok(functions.has(name), name); return functions.get(name); }).join('\n') +
     '\nclass Subject { ' + methodNames.map(name => methods.get(name)).join('\n') + '\n}\nthis.Subject = Subject;',
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, sandbox);

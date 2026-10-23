@@ -4,9 +4,9 @@ const { readSource } = require("../_helpers/sourceReader");
 
 const panel = readSource("src/ui/PanelHtml.ts");
 
-test("server destinations remain visible for Hub and Worker", () => {
+test("server destinations remain visible for every Worker and omit the retired Hub", () => {
   assert.match(panel, /function renderServerDestinationPreview\(agentState, scope\)/);
-  assert.match(panel, /renderServerDestinationPreview\(hubAgent, "hub"\)/);
+  assert.doesNotMatch(panel, /renderServerDestinationPreview\(hubAgent, "hub"\)/);
   assert.match(panel, /renderServerDestinationPreview\(workerAgent, scope\)/);
 });
 

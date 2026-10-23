@@ -21,9 +21,9 @@ test("preview CSV keeps all parsed records while effective CSV keeps archived re
   const script = path.join(tmp, "check.py");
   fs.writeFileSync(script, [
     "import importlib.util, json, os, csv",
-    "spec = importlib.util.spec_from_file_location('agent', " + JSON.stringify(agentPath) + ")",
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    ("spec = (lambda _name, _file: __import__(\"runpy\").run_path(" + JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py")) + ")[\"extract_runtime_functions\"](_file, [\"archive_state_relpath\",\"atomic_write\",\"mark_archive_state\",\"compute_statistics_action\",\"export_paper_table_action\",\"parse_results_action\",\"read_results_summary\",\"result_final_evidence_decision\",\"run_quality_gate_action\",\"safe_project_path\"]))('agent', ") + JSON.stringify(agentPath) + ")",
+    "agent = spec",
+    "pass",
     "root = " + JSON.stringify(root),
     "plan = 'experiments/plans/smoke.yaml'",
     "initial = agent.parse_results_action(root, None, plan)",
@@ -34,7 +34,8 @@ test("preview CSV keeps all parsed records while effective CSV keeps archived re
     "  emptyStatisticsError = str(exc)",
     "key = initial['results'][0]['resultId']",
     "state_path = agent.safe_project_path(root, agent.archive_state_relpath(plan))",
-    "agent.atomic_write(state_path, {'entries': {key: {'status': 'archived', 'archived': True}}})",
+    "# Mac 适配: strict 归档证据要求条目携带 Plan 身份，走生产写入口 mark_archive_state 而非裸 atomic_write",
+    "agent.mark_archive_state(root, [key], 'archived', plan, initial.get('planRevision') or '')",
     "summary = agent.parse_results_action(root, None, plan)",
     "quality = agent.run_quality_gate_action(root, plan)",
     "paper = agent.export_paper_table_action(root, plan)",
@@ -44,7 +45,7 @@ test("preview CSV keeps all parsed records while effective CSV keeps archived re
     "effective = agent.safe_project_path(root, summary['effectiveResultsCsvPath'])",
     "print(json.dumps({'previewRows': len(list(csv.DictReader(open(preview, encoding='utf-8')))), 'effectiveRows': len(list(csv.DictReader(open(effective, encoding='utf-8')))), 'manualEligible': manual.get('eligibleForFinalAnalysis'), 'policy': summary.get('inclusionPolicy'), 'previewPath': summary.get('previewCsvPath'), 'effectivePath': summary.get('effectiveResultsCsvPath'), 'qualitySource': quality.get('source'), 'qualityRows': quality.get('resultCount'), 'qualityPending': quality.get('pendingReviewCount'), 'emptyStatisticsError': emptyStatisticsError, 'paperRows': paper.get('resultCount'), 'paperSummaryRows': final_summary.get('paperTableResultCount')}))",
   ].join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
   assert.equal(payload.previewRows, 2);

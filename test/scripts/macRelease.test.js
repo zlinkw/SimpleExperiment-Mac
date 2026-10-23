@@ -165,3 +165,13 @@ test("release notes are a real string template built in pure VM use with no raw 
   // 终验脏树门禁必须在写 notes 之后、成功输出之前。
   assert.ok(source.indexOf("status\", \"--porcelain\"") > source.indexOf("release-notes.md\""));
 });
+
+
+test("release keeps every new GPU, root-map and isolated-retry safety domain", () => {
+  const rows = require('../../scripts/mac-release-prepare').getReleaseValidationInventory();
+  const files = new Set(rows.map(row => row.file.replaceAll('\\', '/')));
+  for (const relative of ['agent/gpuCollectorFrame', 'agent/gpuCollectorRealTmux',
+    'features/projectRootMap', 'features/planIsolatedReview', 'features/planIsolatedBatchLedger',
+    'features/planJobDeleteRequeueProduction', 'scripts/macRuntimeTemplate'])
+    assert.ok(files.has(path.resolve(__dirname, '../' + relative + '.test.js').replaceAll('\\', '/')), relative);
+});

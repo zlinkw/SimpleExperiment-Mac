@@ -10,7 +10,7 @@ test("action buttons are capability-driven", () => {
     assert.match(html, new RegExp(command), command);
   }
   assert.doesNotMatch(html, /listRemoteFiles|downloadRemoteFile|uploadRemoteFile|selectRemoteFile/);
-  assert.match(html, /需要升级 Hub Agent/);
+  assert.match(html, /需要升级 Worker Agent/);
   assert.match(html, /button\.disabled/);
 });
 

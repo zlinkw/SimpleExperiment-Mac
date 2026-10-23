@@ -30,6 +30,7 @@ tmp/
 
 # Dependencies (never commit)
 node_modules/
+node_modules
 
 # Local development workflow only; never publish batch planning notes.
 docs/target-mode-plan.md

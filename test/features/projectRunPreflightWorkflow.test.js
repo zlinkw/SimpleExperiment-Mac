@@ -48,36 +48,32 @@ function loadPlanExecutionStage() {
   return stage;
 }
 
-test("project next action follows the real preflight order", () => {
+test('Plan stage distinguishes queued, starting and running windows', () => {
+  const stage = loadPlanExecutionStage(), file = 'plans/native.yaml';
+  for (const [status, executionState, label] of [['queued','queued','排队中'], ['queued','starting','正在启动命令'], ['running','running','运行中'], ['unknown','missing','待核实']]) {
+    const result = stage({distributedPlans:[{planFile:file,jobs:[{status,executionState,workerId:'w'}]}]},file);
+    assert.equal(result.executionLabel,label);
+    if(status !== 'running') assert.doesNotMatch(result.status,/运行中/);
+  }
+});
+
+test("project next action uses Worker preparation before validation and submission", () => {
   const extension = readSource("src/extension.ts");
   assert.match(panel, /function projectEndpointReadiness\(state\)/);
   assert.match(panel, /function projectCodeSyncReadiness\(state\)/);
-  assert.match(extension, /await this\.ensureHubCodeReadyForPlanCheck\(body(?:, \(text\) => this\.reportPlanStage\(message, text\))?\)/);
-  assert.match(extension, /await this\.ensureCodeReadyForRun\(undefined, \[body\](?:, \(text\) => this\.reportPlanStage\(message, text\))?\)/);
-  const preflightStart = extension.indexOf("async runPlanPreflight(body, label, authority = {})");
-  const preflightEnd = extension.indexOf("async openSetupGuide()", preflightStart);
-  assert.ok(preflightStart >= 0 && preflightEnd > preflightStart);
-  const preflight = extension.slice(preflightStart, preflightEnd);
+  const start = extension.indexOf("async runPlanPreflight(body, label, authority = {})");
+  const end = extension.indexOf("async openSetupGuide()", start);
+  assert.ok(start >= 0 && end > start);
+  const preflight = extension.slice(start, end);
+  assert.match(preflight, /this\.enabledWorkerConfigs\(\)/);
   assert.ok(preflight.indexOf('postPlanSchedulerAction("validate-plan"') < preflight.indexOf('postPlanSchedulerAction("dry-run-plan"'));
   assert.match(preflight, /waitForOperationTerminalResult\("validate-plan"/);
   assert.match(preflight, /waitForOperationTerminalResult\("dry-run-plan"/);
-  // LENIENT_RUN 软门禁：校验/预演失败从硬 return 改为可配置 warn+继续
-  assert.match(extension, /runPlanPreflight\(body, "当前计划"(?:, \{ reportStage: \(text\) => this\.reportPlanStage\(message, text\) \})?\)/);
-  {
-    const hasHardReturn = /if \(!await this\.runPlanPreflight\(body, "当前计划"\)\)\s*return;/.test(extension);
-    const hasLenient = /LENIENT_RUN[\s\S]*runPlanPreflight\(body, "当前计划"\)/.test(extension) || /preflightOk/.test(extension);
-    assert.ok(hasHardReturn || hasLenient, "preflight blocking should exist either as hard return or lenient warn");
-  }
-  assert.match(extension, /if \(!await this\.runPlanPreflight\(body, `计划 \$\{planFile\}`, authority\)\)\s*throw new Error\(`计划 \$\{planFile\} 的校验或预演未返回有效结果，已停止整批提交。`\);/);
-  assert.match(extension, /个计划已通过校验与预演，并提交/);
-  assert.match(extension, /topology\.mode === "single_worker"[\s\S]{0,180}postWorkerTunnelAction\(workerId, action, body, options\)/);
-  assert.match(extension, /endpoint\.enabled && \(hubAllowed \|\| endpoint\.role !== "hub_control"\)/);
-  assert.match(extension, /当前拓扑不使用 Hub/);
-  const runtime = fs.readFileSync(path.join(__dirname, "../../dist/runtime/cluster_agent.py"), "utf8");
-  assert.match(runtime, /topology_mode != "single_worker"[\s\S]{0,180}localWorkerScheduler/);
+  assert.match(extension, /new WorkerPreparation\(ready => this\.ensureCodeReadyForRun/);
+  assert.match(extension, /preparation\.first\(\)/);
+  assert.match(extension, /stampWorkerPoolManualTarget\(body, first\)/);
 });
-
-test("Hub-only projects do not require a Worker sync status", () => {
+test("an empty Worker inventory does not invent a missing sync target", () => {
   assert.match(panel, /const workerRequired = enabledWorkerTunnelsForState\(state\)\.length > 0/);
   assert.match(panel, /const workerReady = !workerRequired \|\| syncStatusOk\(sync\.workers\)/);
   assert.match(panel, /ready: hubReady && workerReady && fingerprintReady/);
@@ -93,7 +89,7 @@ test("Plan next action starts with one-click run and preserves manual recovery s
   assert.match(panel, /label: "校验并提交运行"/);
   assert.match(panel, /校验已通过，预演调度与任务展开结果/);
   assert.match(panel, /预演已通过，可以提交正式运行/);
-  assert.match(panel, /计划已提交，调度器正在排队或运行任务/);
+  assert.match(panel, /计划已提交，主动查询任务窗口后确认执行状态/);
   assert.match(panel, /command: "validatePlan"/);
   assert.match(panel, /command: "dryRunPlan"/);
   assert.match(panel, /command: "runPlan"/);
@@ -202,7 +198,7 @@ test("Plan next action advances from validation to dry-run, run, and monitoring"
   assert.match(panel, /准备就绪；确认后自动同步、校验、预演并提交/);
   assert.match(panel, /校验已通过，预演调度与任务展开结果/);
   assert.match(panel, /预演已通过，可以提交正式运行/);
-  assert.match(panel, /计划已提交，调度器正在排队或运行任务/);
+  assert.match(panel, /计划已提交，主动查询任务窗口后确认执行状态/);
   assert.match(panel, /command: "validatePlan"/);
   assert.match(panel, /command: "dryRunPlan"/);
   assert.match(panel, /command: "runPlan"/);

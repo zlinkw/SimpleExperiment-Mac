@@ -19,7 +19,7 @@ function helpers(names) {
 }
 function render(jobs) {
   let html;
-  const sandbox = { operationRowsForState: () => [], taskSectionViewModelForState: () => ({ allRows: [] }),
+  const sandbox = { manualJobSelections:new Map(), operationRowsForState: () => [], taskSectionViewModelForState: () => ({ allRows: [] }),
     taskPlanFile: row => row.planFile, taskSelectionSetsForState: () => ({}), normalizePlanSelectionKey: String,
     samePlanSelection: (a, b) => a === b, selectedExecutionPlanFile: "", collapsedExecutionPlanKeys: new Set(),
     persistWebviewState() {}, taskStatusToken: String, TASK_LIVE_STATUS_TOKENS: new Set(["running"]),
@@ -29,7 +29,7 @@ function render(jobs) {
     detailsOpenAttr: () => "", statusClass: String, loadingPrefix: () => "", renderOperationItem: () => "",
     renderTaskCards: () => "", setHtmlIfChanged: (_, value) => { html = value; } };
   vm.createContext(sandbox);
-  vm.runInContext(panelPrelude() + helpers(["asArray", "esc", "escAttr", "distributedPlanRecoveryView", "executionPlanGroupKey",
+  vm.runInContext(panelPrelude() + helpers(["currentManualJobSelection", "asArray", "esc", "escAttr", "distributedPlanRecoveryView", "executionPlanGroupKey",
     "executionCurrentDistributedJobs", "executionSubmissionLabel", "executionOperationWorkflowId",
     "executionNewerSubmission", "executionDeferredView", "renderExecutionPlanList"]), sandbox);
   sandbox.renderExecutionPlanList({ distributedPlans: [{ id: "run-id", planFile: "plans/tuning/method.yaml",
@@ -45,9 +45,10 @@ test("per-job exclusion and undo render with exact job identity; active jobs hav
     assert.doesNotMatch(render([{ ...base, status }]), /data-command="(?:markJobUnavailable|restoreJobAvailability)"/);
   assert.match(render([{ ...base, status: "pending", workerId: undefined, commandId: undefined }]), /标记不可用/);
   const excluded = render([{ ...base, status: "cancelled", unavailable: { reason: "参数 <invalid>", markedAt: "2026-10-10T00:02:00Z" } },
-    { ...base, index: 1, seed: 43, status: "completed", completionState: "verified" }]);
+    { ...base, index: 1, seed: 43, status: "completed", completionState:"verified" }]);
   assert.match(excluded, /已结束（含不可用 job）/); assert.match(excluded, /成功 1\/2/);
   assert.match(excluded, /不可用 1/); assert.match(excluded, /data-command="restoreJobAvailability"/);
+  assert.match(render([{...base,status:"completed",completionState:"pending"}]), /成功 0\/1/);
   assert.match(excluded, /参数 &lt;invalid&gt;/); assert.doesNotMatch(excluded, /不可用原因：参数 <invalid>/);
   const unverified = render([{ ...base, status: "completed" }]);
   assert.match(unverified, /成功 0\/1/); assert.match(unverified, /运行日志待核实/);

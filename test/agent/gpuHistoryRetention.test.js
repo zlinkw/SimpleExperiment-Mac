@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..", "..");
 
 test("agent GPU history is bucketed, bounded, recoverable, and downsampled", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) {
     t.skip("python unavailable");
     return;
@@ -20,9 +20,10 @@ test("agent GPU history is bucketed, bounded, recoverable, and downsampled", (t)
   fs.writeFileSync(script, `
 import importlib.util, json, os, pathlib
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["AGENT_STATE_DIR", "GPU_HISTORY_BUCKET_SECONDS", "GPU_HISTORY_MAX_POINTS_PER_SERIES", "GPU_HISTORY_MAX_SERIES", "atomic_write", "downsample_gpu_history_points", "fill_gpu_history_points", "gpu_history_iso", "gpu_history_path", "normalize_gpu_history", "query_gpu_history", "record_gpu_history", "update_gpu_history"])
 
 root = ${JSON.stringify(project)}
 agent.AGENT_STATE_DIR = os.path.join(root, "agent-state")
@@ -104,11 +105,7 @@ print(json.dumps({
 }, ensure_ascii=False))
 `, "utf8");
 
-  const run = spawnSync(python, [script], {
-    cwd: root,
-    encoding: "utf8",
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.equal(result.sameBucketCount, 2);

@@ -40,6 +40,8 @@ export interface XshellWorkerTunnelConfig {
   agentSessionPath?: string;
   agentProjectDir?: string;
   agentInstallDir?: string;
+  agentStateDir?: string;
+  workerStateDir?: string;
   /** Opt-in only: preserve custom login while maintaining a separate versioned fragment. */
   agentLoginPolicy?: "preserve" | "managed";
   condaEnv?: string;
@@ -88,6 +90,8 @@ export interface XshellRealtimeTunnelConfig {
   agentSessionPath?: string;
   agentProjectDir?: string;
   agentInstallDir?: string;
+  agentStateDir?: string;
+  workerStateDir?: string;
   agentLoginPolicy?: "preserve" | "managed";
   condaEnv: string;
   authMethod: XshellAuthMethod;
@@ -183,6 +187,8 @@ export function normalizeXshellSetupConfig(input: Partial<XshellTunnelSetupConfi
     agentSessionPath: input.agentSessionPath?.trim() || undefined,
     agentProjectDir: input.agentProjectDir?.trim() || undefined,
     agentInstallDir: input.agentInstallDir?.trim() || undefined,
+    agentStateDir: input.agentStateDir?.trim() || undefined,
+    workerStateDir: input.workerStateDir?.trim() || undefined,
     agentLoginPolicy: input.agentLoginPolicy === "managed" ? "managed" : "preserve",
     condaEnv: normalizeCondaEnvName(input.condaEnv),
     authMethod: normalizeAuthMethod(input.authMethod),
@@ -242,6 +248,8 @@ export function normalizeXshellWorkerTunnelConfig(
     agentSessionPath: input.agentSessionPath?.trim() || undefined,
     agentProjectDir: input.agentProjectDir?.trim() || undefined,
     agentInstallDir: input.agentInstallDir?.trim() || undefined,
+    agentStateDir: input.agentStateDir?.trim() || undefined,
+    workerStateDir: input.workerStateDir?.trim() || undefined,
     agentLoginPolicy: input.agentLoginPolicy === "managed" ? "managed" : "preserve",
     condaEnv: input.condaEnv === undefined ? undefined : normalizeCondaEnvName(input.condaEnv),
     maxConcurrentGpus: normalizePositiveInt(input.maxConcurrentGpus, 1) === 1 && input.maxConcurrentGpus !== 1 ? "auto" : normalizePositiveInt(input.maxConcurrentGpus, 1),
@@ -295,6 +303,8 @@ export function workerTunnelToXshellSetupConfig(base: XshellTunnelSetupConfig, w
     agentSessionPath: worker.agentSessionPath,
     agentProjectDir: worker.agentProjectDir,
     agentInstallDir: worker.agentInstallDir,
+    agentStateDir: worker.agentStateDir,
+    workerStateDir: worker.workerStateDir,
     condaEnv: worker.condaEnv === undefined ? base.condaEnv : worker.condaEnv,
     authMethod: worker.authMethod || base.authMethod,
     workerRealtimeMode: "hub_only",
@@ -419,9 +429,9 @@ function normalizePortConfig(
   hubRemoteHost: unknown,
 ): XshellTunnelSetupConfig["ports"] {
   const range = normalizePortRange(input?.workerLocalPortRange, defaultTunnelPorts.workerLocalPortRange);
-  const validIds = new Set(["hub", ...workers.map((worker) => worker.id)]);
+  const validIds = new Set(workers.map((worker) => worker.id));
   const assignments = Array.isArray(input?.assignments)
-    ? input.assignments.filter((assignment) => validIds.has(assignment.endpointId) && String(assignment.localForwardHost || "").trim() && String(assignment.remoteBindHost || "").trim())
+    ? input.assignments.filter((assignment) => assignment.role === "worker_telemetry" && validIds.has(assignment.endpointId) && String(assignment.localForwardHost || "").trim() && String(assignment.remoteBindHost || "").trim())
     : [];
   const assignedAt = new Date(0).toISOString();
   for (const worker of workers) {
@@ -476,6 +486,8 @@ function mergeWorker(first: XshellWorkerTunnelConfig, second: XshellWorkerTunnel
     agentSessionPath: preferred.agentSessionPath || other.agentSessionPath,
     agentProjectDir: preferred.agentProjectDir || other.agentProjectDir,
     agentInstallDir: preferred.agentInstallDir || other.agentInstallDir,
+    agentStateDir: preferred.agentStateDir || other.agentStateDir,
+    workerStateDir: preferred.workerStateDir || other.workerStateDir,
     enabled: preferred.enabled !== false || other.enabled !== false,
   };
 }

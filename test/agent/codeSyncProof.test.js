@@ -146,11 +146,7 @@ print(json.dumps({"compactStatOnly":True,"missingAndStaleFailClosed":True,"legac
 `;
   fs.writeFileSync(scriptPath, script, "utf8");
   try {
-    const run = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], {
-      encoding: "utf8",
-      timeout: 10000,
-      windowsHide: true,
-    });
+    const run = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr || run.error?.message);
     assert.deepEqual(JSON.parse(run.stdout.trim()), { compactStatOnly: true, missingAndStaleFailClosed: true, legacyHashCount: 1 });
   } finally {

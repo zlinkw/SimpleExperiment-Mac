@@ -91,8 +91,8 @@ test("only GPU configuration changes invalidate the cached owner config", async 
   const first = subject.gpuOwnerConfig();
   const event = (gpuChanged) => ({
     affectsConfiguration(key) {
-      if (key === "simpleExperiment") return true;
-      if (key === "simpleExperiment.gpu") return gpuChanged;
+      if (key === "simpleExperimentMac") return true;
+      if (key === "simpleExperimentMac.gpu") return gpuChanged;
       return false;
     },
   });
@@ -112,5 +112,5 @@ test("only GPU configuration changes invalidate the cached owner config", async 
 
 test("buildState publishes the cached GPU owner configuration", () => {
   assert.match(source, /gpuOwnerConfig: this\.gpuOwnerConfig\(\)/);
-  assert.match(extractMethod("handleConfigurationChanged"), /affectsConfiguration\("simpleExperiment\.gpu"\)[\s\S]{0,100}gpuOwnerConfigCache = undefined/);
+  assert.match(extractMethod("handleConfigurationChanged"), /affectsConfiguration\("simpleExperimentMac\.gpu"\)[\s\S]{0,100}gpuOwnerConfigCache = undefined/);
 });

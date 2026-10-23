@@ -21,9 +21,9 @@ test("current Plan revision can exclude results without deleting preview data or
   const script = path.join(tmp, "check.py");
   fs.writeFileSync(script, [
     "import importlib.util, json, os, csv",
-    `spec = importlib.util.spec_from_file_location('agent', ${JSON.stringify(agentPath)})`,
-    "agent = importlib.util.module_from_spec(spec)",
-    "spec.loader.exec_module(agent)",
+    `spec = (lambda _name, _file: __import__("runpy").run_path(${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py"))})["extract_runtime_functions"](_file, ["handle_action", "mark_archive_state", "mark_result_review_state", "parse_results_action", "read_archive_entries", "safe_project_path"]))('agent', ${JSON.stringify(agentPath)})`,
+    "agent = spec",
+    "pass",
     `root = ${JSON.stringify(root)}`,
     "plan = 'experiments/plans/smoke.yaml'",
     "revision = 'rev-current'",
@@ -49,7 +49,7 @@ test("current Plan revision can exclude results without deleting preview data or
     "  'currentKeys': sorted(current_entries.keys()),",
     "}))",
   ].join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split(/\r?\n/).pop());
   assert.deepEqual(payload.states, ["archived", "excluded"]);

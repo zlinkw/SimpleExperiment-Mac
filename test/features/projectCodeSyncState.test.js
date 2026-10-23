@@ -125,10 +125,10 @@ test("extension wires project code sync load/persist helpers", () => {
   assert.match(source, /loadProjectDebugBundleState\(\)\.catch\(\(\) => undefined\),\s*this\.loadProjectCodeSyncState\(\)\.catch\(\(\) => undefined\),/);
 });
 
-test("separate Hub and Worker uploads preserve same-fingerprint success", () => {
+test("retired Hub upload history cannot become current sync readiness", () => {
   const syncRoleStatus = loadSyncRoleStatus();
   const afterHub = syncRoleStatus([{ role: "hub" }], {}, "fp1");
-  assert.equal(afterHub.hubSuccess, "已同步");
+  assert.equal(afterHub.hubSuccess, undefined);
   assert.equal(afterHub.workersSuccess, "待同步");
 
   const afterWorkers = syncRoleStatus(
@@ -136,7 +136,7 @@ test("separate Hub and Worker uploads preserve same-fingerprint success", () => 
     { fingerprint: "fp1", hub: afterHub.hubSuccess, workers: afterHub.workersSuccess },
     "fp1"
   );
-  assert.equal(afterWorkers.hubSuccess, "已同步");
+  assert.equal(afterWorkers.hubSuccess, undefined);
   assert.equal(afterWorkers.workersSuccess, "已同步 2 台");
 });
 
@@ -147,6 +147,6 @@ test("separate upload does not preserve stale status after fingerprint changes",
     { fingerprint: "old", hub: "已同步", workers: "已同步 1 台" },
     "new"
   );
-  assert.equal(status.hubSuccess, "待同步");
+  assert.equal(status.hubSuccess, undefined);
   assert.equal(status.workersSuccess, "已同步 1 台");
 });

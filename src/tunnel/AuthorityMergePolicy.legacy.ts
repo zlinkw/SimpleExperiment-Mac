@@ -150,8 +150,8 @@ function indexWorkerTasks(tasks: WorkerTaskTelemetry[]): ReadonlyMap<string, Wor
 }
 
 function liveStatusWarning(hubStatus: string, workerStatus: WorkerTaskTelemetry["localStatus"]): string | undefined {
-  if (terminalStatuses.has(hubStatus) && workerStatus === "pid_alive") return "Hub completed, but Worker still detects a process; run self-check.";
-  if ((hubStatus === "running" || hubStatus === "testing") && workerStatus === "process_gone") return "Hub running, but Worker does not detect the process.";
+  if (terminalStatuses.has(hubStatus) && workerStatus === "pid_alive") return "Scheduler completed, but Worker still detects a process; run self-check.";
+  if ((hubStatus === "running" || hubStatus === "testing") && workerStatus === "process_gone") return "Scheduler running, but Worker does not detect the process.";
   return undefined;
 }
 

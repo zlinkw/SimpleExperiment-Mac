@@ -43,8 +43,8 @@ function loadTaskStatusLabel() {
 }
 
 test("task timeline translates task status and preserves the raw value in details", () => {
-  assert.match(panel, /data-task-status-label="true"[^\n]*title="' \+ escAttr\("原始状态：" \+ row\.status\)[^\n]*esc\(taskStatusLabel\(row\.status\)\)/);
-  assert.match(panel, /taskCardClass\(row\.status\)/);
+  assert.match(panel, /data-task-status-label="true"[^\n]*title="' \+ escAttr\("原始状态：" \+ row\.status\)[^\n]*esc\(taskRowStatusLabel\(row\)\)/);
+  assert.match(panel, /taskCardClass\(\['completed', 'done'\]\.includes\(row\.status\) && row\.completionState !== 'verified' \? 'unknown' : row\.status\)/);
   assert.match(panel, /const taskTime = taskTimestampView\(row\)/);
   assert.match(panel, /taskTime\.label \+ "时间：" \+ taskTime\.raw/);
   assert.match(extractFunction("taskTimestampView"), /relativeTimestampView\(row\.updatedAt, taskTerminalStatus\(row\.status\) \? "终态" : "更新"\)/);

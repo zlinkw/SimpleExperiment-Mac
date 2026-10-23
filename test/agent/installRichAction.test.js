@@ -10,9 +10,10 @@ test("install-rich uses only the configured environment Python and fixed require
 import importlib.util, json, sys
 from types import SimpleNamespace
 from unittest.mock import patch
-spec = importlib.util.spec_from_file_location("agent_install_rich_test", sys.argv[1])
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(sys.argv[1], ["install_rich_action", "os", "subprocess"])
 calls = []
 def fake_run(args, **kwargs):
     calls.append(args)
@@ -22,7 +23,7 @@ with patch.object(agent, "simple_runtime_python", return_value="/env/bin/python"
 print(json.dumps({"status": result["status"], "version": result["result"]["version"], "install": calls[0], "verify": calls[1]}))
 `;
   const python = process.platform === "win32" ? "python" : "python3";
-  const result = spawnSync(python, ["-c", script, agent], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  const result = spawnSync(python, ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })(), agent], { encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const value = JSON.parse(result.stdout.trim());
   assert.equal(value.status, "completed");

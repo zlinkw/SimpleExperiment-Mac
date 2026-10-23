@@ -14,7 +14,7 @@ nodes=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in {'app
 lines=[]
 class Journal(io.StringIO):
  def __exit__(self,*args): lines.append(self.getvalue()); self.close()
-ns={'json':json,'os':type('OS',(),{'makedirs':lambda *args,**kwargs:None})(),
+ns={'json':json,'os':type('OS',(),{'makedirs':lambda *args,**kwargs:None,'environ':{}})(),
  'EVENT_APPEND_LOCK':threading.RLock(),'SCHEMA_VERSION':1,'MAX_AGENT_EVENT_RECORD_BYTES':192*1024,
  'prune_runtime_memory_state':lambda:None,'agent_dir':lambda root:root,'read_seq':lambda root:0,
  'write_seq':lambda *args:None,'path_for':lambda *args:'journal','now_iso':lambda:'2026-10-06',
@@ -41,6 +41,9 @@ print('ok')
   assert.equal(result.status, 0, result.stderr); assert.equal(result.stdout.trim(), 'ok');
 });
 
+// Mac 适配：Mac 运行时的 start_inactivity_action 额外调用 action_receipt_fields（Windows .403 中
+// 该调用位于未抽取的 find_run_dir）。桩与真实实现同形：validate-plan 不属于 RESULT_PARSE/READ 动作，
+// 真实实现恒返回 action_operation_fields(request)，故用 passthrough 字典桩。
 test('tracked async actions deduplicate and suppress cancelled terminal/progress events',()=>{
   const source=fs.readFileSync(path.join(__dirname,'../../dist/runtime/cluster_agent.py'),'utf8');
   const script=path.join(os.tmpdir(),`agent-inactivity-${process.pid}.py`);
@@ -56,6 +59,7 @@ class Thread:
 ns={'threading':type('T',(),{'Thread':Thread,'Lock':threading.Lock,'Event':threading.Event})(), 'os':os, 'SCHEMA_VERSION':1,
 'INACTIVITY_ACTIONS':{},'INACTIVITY_ACTIONS_LOCK':threading.Lock(),'INACTIVITY_ACTION_CONTEXT':threading.local(),
 'append_event':lambda root,event:events.append(event),'action_operation_fields':lambda p:p,
+'action_receipt_fields':lambda action,request=None:dict(request or {}),
 'action_plan_file':lambda p:p.get('planFile',''),'action_event_fields':lambda extra,request:extra or {}}
 exec(compile(ast.Module(body=nodes,type_ignores=[]),'functions','exec'),ns)
 a=ns['start_inactivity_action']('/project','validate-plan',{'planFile':'a.yaml'},'id','id')

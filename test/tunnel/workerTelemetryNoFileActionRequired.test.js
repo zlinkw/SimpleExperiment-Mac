@@ -5,7 +5,7 @@ const http = require("node:http");
 const { MultiEndpointRealtimeClient } = require("../../dist/tunnel/MultiEndpointRealtimeClient.js");
 const { RequestBudget, defaultRequestBudgetConfig } = require("../../dist/tunnel/RequestBudget.js");
 
-test("worker telemetry endpoints receive only bounded worker actions and no file operations", async () => {
+test("Worker endpoints own allowed controls and file reads; retired Hub receives no requests", async () => {
   const hubCalls = [];
   const workerCalls = [];
   const hub = http.createServer((req, res) => {
@@ -18,6 +18,7 @@ test("worker telemetry endpoints receive only bounded worker actions and no file
   });
   const worker = http.createServer((req, res) => {
     workerCalls.push(req.url);
+    if(req.url.startsWith("/api/files/list")){res.writeHead(200,{"content-type":"application/json"});res.end(JSON.stringify({schemaVersion:1,path:"simple_cluster",entries:[]}));return;}
     res.setHeader("Content-Type", "application/json");
     res.setHeader("Connection", "close");
     res.end("{}");
@@ -28,17 +29,15 @@ test("worker telemetry endpoints receive only bounded worker actions and no file
     { id: "w1", role: "worker", localHost: "127.0.0.1", localPort: worker.address().port },
   ], () => new RequestBudget({ ...defaultRequestBudgetConfig, minIntervalByPurpose: {}, disabledPurposes: [] }));
   try {
-    await client.postAction("run-plan", { opId: "op-run" });
-    await client.postAction("delete-artifacts", { opId: "op-delete" });
+    await assert.rejects(client.postAction("run-plan",{opId:"op-run"}),/WORKER_ACTION_REQUIRED/);
+    await assert.rejects(client.postAction("delete-artifacts",{opId:"op-delete"}),/WORKER_ACTION_REQUIRED/);
     await client.postWorkerAction("w1", "stop-worker-task", { opId: "op-stop" });
     await assert.rejects(client.postWorkerAction("w1", "run-plan", { opId: "op-invalid" }), /action not allowed/);
     await client.listRemoteFiles("simple_cluster/state.json");
-    assert.ok(hubCalls.some((url) => url === "/api/actions/run-plan"));
-    assert.ok(hubCalls.some((url) => url === "/api/actions/delete-artifacts"));
-    assert.ok(hubCalls.some((url) => url.startsWith("/api/files/list")));
-    assert.ok(workerCalls.some((url) => url === "/api/actions/stop-worker-task"));
-    assert.equal(workerCalls.some((url) => url === "/api/actions/run-plan" || url.startsWith("/api/files/")), false);
-    assert.equal(hubCalls.some((url) => url === "/api/actions/stop-worker-task"), false);
+    assert.deepEqual(hubCalls,[],"historical Hub cannot receive actions or file reads");
+    assert.ok(workerCalls.some(url=>url==='/api/actions/stop-worker-task'));
+    assert.ok(workerCalls.some(url=>url.startsWith('/api/files/list')));
+    assert.equal(workerCalls.some(url=>url==='/api/actions/run-plan'||url==='/api/actions/delete-artifacts'),false);
   } finally {
     await Promise.all([closeServer(hub), closeServer(worker)]);
   }

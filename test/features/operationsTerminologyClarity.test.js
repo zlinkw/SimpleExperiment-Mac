@@ -8,7 +8,7 @@ const panel = readSource("src/ui/PanelHtml.ts");
 
 test("operations surfaces explain the compact Plan view", () => {
   assert.match(panel, /每个 Plan 一张概览卡；详情按需展开/);
-  assert.match(panel, /运行中、排队和异常置顶；手动折叠的 Plan 收进折叠区/);
+  assert.match(panel, /已完成的 Plan 可手动折叠/);
   assert.match(panel, /完整操作记录/);
   assert.match(panel, /失败或卡住的操作需要查看错误和残留/);
   assert.match(panel, /确认耗时按钮在完成、失败、取消或超时后恢复可点击/);

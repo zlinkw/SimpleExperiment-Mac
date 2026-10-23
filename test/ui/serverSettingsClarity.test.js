@@ -15,9 +15,9 @@ const cards = source.slice(cardsStart, cardsEnd);
 const help = vm.runInNewContext(source.slice(helpStart, helpEnd) + "\nconfigHelp;");
 
 test("server form has one network address and one remote parent directory per endpoint", () => {
-  assert.match(cards, /configInput\("hub", "hubHost", "服务器地址"/);
+  assert.doesNotMatch(cards, /configInput\("hub"/);
   assert.match(cards, /configInput\(scope, "workerHost", "服务器地址"/);
-  assert.match(cards, /configInput\("hub", "agentProjectDir", "项目父目录"/);
+  assert.doesNotMatch(cards, /data-command="saveHubConfig"/);
   assert.match(cards, /configInput\(scope, "agentProjectDir", "项目父目录"/);
   assert.doesNotMatch(cards, /configInput\((?:"hub"|scope), "(?:transferHost|sshConfigAlias)"/);
   assert.match(cards, /SSH\/SFTP 文件操作使用服务器地址/);
@@ -26,7 +26,8 @@ test("server form has one network address and one remote parent directory per en
 
 test("every visible server, scheduler and topology field has a useful hover explanation", () => {
   const calls = [...cards.matchAll(/config(?:Input|Select|SessionSelect)\((?:"(hub|scheduler|topology)"|scope),\s*"(\w+)"/g)];
-  assert.ok(calls.length >= 20);
+  const keys = new Set(calls.map(call => call[2]));
+  for (const key of ['workerHost','workerUser','condaEnv','agentProjectDir','gpuMaxConcurrentCards','gpuJobsPerCard','gpuMinFreeMemoryGb','savedSessionPath','enabled']) assert.ok(keys.has(key), key);
   for (const [, scope, key] of calls) {
     const text = help(scope || "worker:example", key);
     assert.ok(text && text.length >= 15, `missing explanation for ${scope || "worker"}.${key}`);

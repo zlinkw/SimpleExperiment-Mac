@@ -126,9 +126,16 @@ test("final result separates evaluation endpoints and keeps the detailed table",
     "import json, csv, sys",
     `sys.path.insert(0, ${JSON.stringify(path.join(__dirname, "../_helpers"))})`,
     "from extractRuntimeFunctions import extract_runtime_functions",
-    `agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ['parse_results_action', 'archive_plan_copy_action', 'atomic_write', 'path_for'])`,
+    `agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ['parse_results_action', 'archive_plan_copy_action', 'atomic_write', 'path_for', 'archive_state_relpath'])`,
     `root = ${JSON.stringify(root)}`,
     "plan = 'experiments/plans/demo.yaml'",
+    // Mac 契约：posix-v1 严格身份下 final 表只计入带当前 Plan 归档证据的行（与 macProjectAggregateRead
+    // “未归档 finalRowCount==0”互证）；Windows 原用例走宽松语义。为在 Mac 上保持 final/projectFinal
+    // 行数断言强度，先写归档状态再解析（.403 归档证据契约，非放宽断言）。
+    "import os as _os",
+    "source_rel = 'experiments/results/raw.csv'",
+    "_state = {'planFile': plan, 'planRevision': '', 'entries': {source_rel: {'path': source_rel, 'planFile': plan, 'planRevision': '', 'archived': True, 'status': 'archived'}}}",
+    "_p = _os.path.join(root, *agent.archive_state_relpath(plan).split('/')); _os.makedirs(_os.path.dirname(_p), exist_ok=True); open(_p, 'w', encoding='utf-8').write(json.dumps(_state))",
     "plain = agent.parse_results_action(root, plan=plan)",
     "plain_rows = list(csv.DictReader(open(agent.safe_project_path(root, plain['finalCsvPath']), encoding='utf-8')))",
     "agent.atomic_write(agent.path_for(root, 'result_policy.json'), {'derivedMetric': {'metric': 'balanced_accuracy', 'leftEndpoint': 'clean', 'rightEndpoint': 'p100_low', 'scale': 100, 'outputName': 'balanced_accuracy_drop_pp'}})",
@@ -236,7 +243,7 @@ test("copy archive confirms exact targets and verifies the local Worker copy", a
     sha256File: async (file) => crypto.createHash("sha256").update(await fs.promises.readFile(file)).digest("hex"),
     UiCommandCancelled: class extends Error {},
   };
-  const method = vm.runInNewContext(`({${source.slice(start, end)}}).archivePlanCopyFromUi`, context);
+  const method = vm.runInNewContext(`${require("typescript").transpileModule("const methods = {" + require("../_helpers/legacyMethod")(source, "archivePlanCopyFromUi(") + "};", {compilerOptions:{target:99}}).outputText}; methods.archivePlanCopyFromUi`, context);
   const host = {
     client, planFileInput: planFile, selectedPlanId: planFile,
     resultsSummary: { aggregateStatus: "ready", availableWorkerIds: ["NWPU3"] },

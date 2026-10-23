@@ -23,17 +23,17 @@ function sliceMethod(source, name) {
 
 function compiled(name) {
   const body = sliceMethod(distSource, name).replace(/^\s{4}/gm, "");
-  const asyncNames = new Set(["syncCodeTargets", "ensureHubCodeReadyForPlanCheck", "beginPlanSubmissionProgress", "patchPlanSubmissionProgress", "finishPlanSubmissionProgress"]);
+  const asyncNames = new Set(["syncCodeTargets", "ensureWorkerCodeReadyForPlanCheck", "beginPlanSubmissionProgress", "patchPlanSubmissionProgress", "finishPlanSubmissionProgress"]);
   const replacement = (body.startsWith("async ") || asyncNames.has(name) ? "async function " : "function ") + name + "(";
   return body.replace(new RegExp("^(?:async )?" + name + "\\("), replacement);
 }
 
 const manifestStart = distSource.indexOf("async function buildLocalCodeManifest(");
 const manifestEnd = distSource.indexOf("function isLocalCodeOwnedPath(", manifestStart);
-const manifestFactory = new Function("fs", "fsNode", "path", "crypto", "LocalCodeManifestCache_1", distSource.slice(manifestStart, manifestEnd) + "\nreturn { buildLocalCodeManifest };");
-const manifestApi = manifestFactory(require("node:fs").promises, require("node:fs"), path, crypto, require("../../dist/features/LocalCodeManifestCache.js"));
+const manifestFactory = new Function("fs", "fsNode", "path", "crypto", "LocalCodeManifestCache_1", "PlanCodeScopeHost", distSource.slice(manifestStart, manifestEnd) + "\nreturn { buildLocalCodeManifest };");
+const manifestApi = manifestFactory(require("node:fs").promises, require("node:fs"), path, crypto, require("../../dist/features/LocalCodeManifestCache.js"), require("../../dist/extension/PlanCodeScopeHost.js"));
 
-const apiFactory = new Function("SyncResolution_1", "CodeSyncDelta_1", "fingerprintFromManifest", "buildLocalCodeManifest", "vscode_1", "LocalCodeManifestCache_1", "SafeRequestRetry_1", "DistributedPlanQueue", "workspaceRoot", `
+const createApi = new Function("SyncResolution_1", "CodeSyncDelta_1", "fingerprintFromManifest", "buildLocalCodeManifest", "vscode_1", "LocalCodeManifestCache_1", "SafeRequestRetry_1", "DistributedPlanQueue", "workspaceRoot", "PlanCodeScopeHost", "ProjectRootMap_1", `
   function stringField(message, key) { return String((message && message[key]) || ""); }
   function operationResultPlanFile(body) { return String((body && (body.planFile || body.selectedPlanId || (body.options && body.options.planFile))) || ""); }
   function errorMessage(error) { return error && error.message ? error.message : String(error || ""); }
@@ -65,6 +65,7 @@ const apiFactory = new Function("SyncResolution_1", "CodeSyncDelta_1", "fingerpr
   ${compiled("trimPlanSubmissionEpochs")}
   return { syncCodeTargets, safeWorkerCodeSyncTargets, syncManualWorkerCode, uploadProjectToWorkers, distributeCodeToWorkers, publishToGitHub, reportPlanStage, planSubmissionOperationId, planSubmissionPlanFile, beginPlanSubmissionProgress, patchPlanSubmissionProgress, finishPlanSubmissionProgress, trimPlanSubmissionEpochs };
 `);
+function apiFactory(...args) { while(args.length<9)args.push(undefined);return createApi(...args,require("../../dist/extension/PlanCodeScopeHost.js"),require("../../dist/features/ProjectRootMap.js")); }
 
 function sha(char) { return char.repeat(64); }
 
@@ -92,6 +93,8 @@ function syncHost(remote) {
     confirmations: [],
     profiles: [],
     builds: 0,
+    localMachineStateGuard: () => ({ prefixes: [], unknown: false }),
+    targetRootGuard: () => ({ prefixes: [], unknown: false }),
   };
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "plan-sync-root-"));
   fs.mkdirSync(path.join(project, "src"), { recursive: true });
@@ -121,6 +124,13 @@ function syncHost(remote) {
   host.planSubmissionManifestKey = (root, includePaths, scopePaths, holds) => JSON.stringify({ root, includePaths, scopePaths, holds });
   host.rememberCodeSyncWarmProof = (key) => host.codeSyncWarmProofs.set(key, Date.now() + 300000);
   host.ensureWorkerCodeSyncProof = async () => undefined;
+  // .403 routes Worker uploads through simpleSftpApiCall instead of the retired
+  // executeCommand bridge; the shared assertions observe one receipt path either way.
+  host.simpleSftpApiCall = async (method, payload) => {
+    assert.equal(method, "upload.workspace");
+    host.uploads.push(Object.keys(payload.manifest)); host.uploadRequests.push(payload);
+    return { ok: true, status: "completed" };
+  };
   host.verifiedSftpProjectInventory = async (request) => {
     host.inventories.push(request);
     return typeof remote === "function" ? remote(request, host.inventories.length) : remote;
@@ -341,9 +351,14 @@ test("a remote inventory failure does not upload and the next check reads invent
 function commandRunner() {
   const start = legacySource.indexOf("        const action = actionCommandMap[command];");
   const end = legacySource.indexOf("        this.throwIfTerminalActionFailure(command, action, resultStatus(finalResult), finalResult);", start);
-  const body = legacySource.slice(start, end).replace(/: any\[\]/g, "").replace(/: any/g, "").replace(/ as any/g, "").replace(/<string\[\]>/g, "");
+  const body = legacySource.slice(start, end).replace(/: any\[\]/g, "").replace(/: any/g, "").replace(/ as any/g, "").replace(/<string\[\]>/g, "").replace(/text: string/g, "text");
   return new Function("PLAN_SUBMISSION_COMMANDS", "PLAN_PREFLIGHT_COMMANDS", "PLAN_SCHEDULER_COMMANDS", "LENIENT_RUN", "operationResultPlanFile", "stringField", "stringArrayField", "uniqueStrings", "usableSelectionKey", "resultStatus", "planCheckAccepted", "remoteActionPendingStatus", "stringFromRecord", "isUiCommandRemotePending", "actionCommandMap", "assertSingleProjectWorkspace", "pluginProjectAdapterRules", "workspaceRoot", "directWorkerActionMap", "WORKER_ACTION_CONFIRM_COMMANDS", "NO_HUB_RESULT_CONFIRM_COMMANDS", "TUNNEL_ACTION_CONFIRM_COMMANDS", "IMMEDIATE_RESULT_SUMMARY_REFRESH_COMMANDS", "RESULT_PARSE_COMMANDS", "actionAffectsResultsSummary", "capabilityForUiCommand", `
-    return async function(command, message) { ${body}
+    return async function(command, message) {
+      const batch = this.planSubmissionBatchFor?.(message);
+      const generation = this.projectContextGeneration;
+      const workflowBinding = undefined;
+      const assertWorkflowCurrent = () => { if (generation !== this.projectContextGeneration) throw new Error('project switched'); };
+      ${body}
       this.throwIfTerminalActionFailure(command, action, resultStatus(finalResult), finalResult);
     };
   `)(new Set(["runPlan"]), new Set(["validatePlan", "dryRunPlan"]), new Set(["validatePlan", "dryRunPlan", "runPlan"]), false,
@@ -364,13 +379,14 @@ test("validate and dry-run publish their own stages and a failed result stays fa
   const calls = [];
   const host = {
     localOperations: {}, distributedSubmissionEpochs: new Map(), stages: [], localPlanMetadata: { detectedProject: {} },
+    beginSimpleSftpCapabilityLaunch: () => undefined,
     actionBody: (item) => ({ planFile: item.planFile, options: {} }),
     refreshLocalPlanMetadataForAction: async () => {},
     stampPlanRevision: () => {},
     assertPlanLocalConfigFiles: async () => {},
     ensureWorkerPoolPlanTarget: async () => {},
     assertPlanSchedulerAgentReady: () => {},
-    ensureHubCodeReadyForPlanCheck: async (_body, report) => report("正在核对本地目录状态…"),
+    ensureWorkerCodeReadyForPlanCheck: async (_body, report) => report("正在核对本地目录状态…"),
     postNoHubResultAction: async () => undefined,
     throwIfRemoteActionPending: () => {},
     throwIfTerminalActionFailure: (_command, _action, status) => { if (String(status || "") === "failed") throw new Error("plan rejected"); },
@@ -403,13 +419,14 @@ test("a submitted validate stays queued with its operation id until the real ter
   class RemotePending extends Error { constructor(message) { super(message); this.remotePending = true; } }
   const host = {
     localOperations: {}, distributedSubmissionEpochs: new Map(), stages: [], localPlanMetadata: { detectedProject: {} },
+    beginSimpleSftpCapabilityLaunch: () => undefined,
     actionBody: (item) => ({ planFile: item.planFile, options: {} }),
     refreshLocalPlanMetadataForAction: async () => {},
     stampPlanRevision: () => {},
     assertPlanLocalConfigFiles: async () => {},
     ensureWorkerPoolPlanTarget: async () => {},
     assertPlanSchedulerAgentReady: () => {},
-    ensureHubCodeReadyForPlanCheck: async () => {},
+    ensureWorkerCodeReadyForPlanCheck: async () => {},
     postNoHubResultAction: async () => undefined,
     throwIfRemoteActionPending: (_command, _action, result) => { if (result.status === "submitted") throw new RemotePending("still submitted"); },
     throwIfTerminalActionFailure: () => {},
@@ -621,4 +638,29 @@ test("rendered plan phase stays locked after 45 seconds and after the backend li
   sandbox.pendingActionsById.click.status = "completed";
   sandbox.ticks.at(-1)();
   assert.equal(sandbox.pendingActionTimeouts.click, undefined);
+});
+
+test("code upload independently protects local and destination machine roots before transfer", async () => {
+  const host = syncHost({ files: {} });
+  host.targetRootGuard = () => ({ prefixes: ["src"], unknown: false });
+  await assert.rejects(host.syncCodeTargets([host.target], "plan-check", { hashCompare: true }), /机器状态/);
+  assert.equal(host.uploads.length, 0);
+  host.targetRootGuard = () => ({ prefixes: [], unknown: true });
+  await assert.rejects(host.syncCodeTargets([host.target], "plan-check", { hashCompare: true }), /机器状态/);
+  assert.equal(host.uploads.length, 0);
+  host.targetRootGuard = () => ({ prefixes: [], unknown: false });
+  host.localMachineStateGuard = () => ({ prefixes: [], unknown: true });
+  await assert.rejects(host.syncCodeTargets([host.target], "plan-check", { hashCompare: true }), /机器状态/);
+  assert.equal(host.uploads.length, 0);
+});
+
+test("local custom state is excluded before hashing while explicit work_dir configuration remains", async () => {
+  const tree = fs.mkdtempSync(path.join(os.tmpdir(), "code-state-boundary-"));
+  for (const file of ["control/collector/frame.json", "work_dir/config.yaml", "train.py"]) {
+    fs.mkdirSync(path.dirname(path.join(tree, file)), { recursive: true });
+    fs.writeFileSync(path.join(tree, file), file);
+  }
+  const manifest = await manifestApi.buildLocalCodeManifest(tree, [], ["control", "work_dir", "train.py"],
+    { machineStateGuard: { prefixes: ["CONTROL/collector"], unknown: false } });
+  assert.deepEqual(Object.keys(manifest).sort(), ["train.py", "work_dir/config.yaml"]);
 });

@@ -11,9 +11,10 @@ const { readSource } = require("../_helpers/sourceReader");
 const CONCURRENCY_SCRIPT = (agentPath, root) => String.raw`
 import importlib.util, json, threading, time
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["append_event", "atomic_write", "json", "maybe_auto_run_completion_pipeline", "path_for", "prune_agent_state", "read_seq"])
 
 root = ${JSON.stringify(root)}
 agent.maybe_auto_run_completion_pipeline = lambda *args, **kwargs: None
@@ -40,7 +41,7 @@ threads = [threading.Thread(target=worker, args=(index,)) for index in range(THR
 for thread in threads:
     thread.start()
 for thread in threads:
-    thread.join(60)
+    thread.join(1)
 
 journal = agent.path_for(root, "events.jsonl")
 lines = [line for line in open(journal, "r", encoding="utf-8").read().split("\n") if line.strip()]
@@ -64,7 +65,7 @@ test("concurrent event appends keep sequence numbers unique and lines intact", (
   const agentPath = path.join(__dirname, "../../dist/runtime/cluster_agent.py");
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "simple-event-append-"));
   try {
-    const run = spawnSync("python", ["-c", CONCURRENCY_SCRIPT(agentPath, root.replace(/\\/g, "/"))], { encoding: "utf8", timeout: 120000 });
+    const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, CONCURRENCY_SCRIPT(agentPath, root.replace(/\\/g, "/")), "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr);
     const result = JSON.parse(run.stdout.trim());
     assert.deepEqual(result.errors, []);
@@ -76,7 +77,7 @@ test("concurrent event appends keep sequence numbers unique and lines intact", (
     assert.equal(result.payloadsIntact, result.expected, "journal lines must not interleave");
     assert.equal(result.threadsSeen, 8, "every appender must be represented");
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    console.log("kept concurrency fixture at " + root);
   }
 });
 
@@ -86,9 +87,10 @@ test("concurrent atomic writes to one target do not clobber each other", () => {
   const script = String.raw`
 import importlib.util, json, os, threading, time
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["append_event", "atomic_write", "json", "maybe_auto_run_completion_pipeline", "path_for", "prune_agent_state", "read_seq"])
 
 target = os.path.join(${JSON.stringify(root.replace(/\\/g, "/"))}, "state", "shared.json")
 real_dump = json.dump
@@ -109,7 +111,7 @@ threads = [threading.Thread(target=writer, args=(index,)) for index in range(8)]
 for thread in threads:
     thread.start()
 for thread in threads:
-    thread.join(60)
+    thread.join(1)
 
 directory = os.path.dirname(target)
 leftovers = [name for name in os.listdir(directory) if ".tmp." in name]
@@ -122,14 +124,14 @@ print(json.dumps({
 }))
 `;
   try {
-    const run = spawnSync("python", ["-c", script], { encoding: "utf8", timeout: 120000 });
+    const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr);
     const result = JSON.parse(run.stdout.trim());
     assert.deepEqual(result.errors, [], "concurrent writers must not collide on the temp path");
     assert.deepEqual(result.leftovers, [], "no temp file may survive a completed write");
     assert.equal(result.finalHasWriter, true, "the target must hold one writer's complete payload");
   } finally {
-    fs.rmSync(root, { recursive: true, force: true });
+    console.log("kept concurrency fixture at " + root);
   }
 });
 
@@ -141,5 +143,5 @@ test("event and worker command appends share one reentrant critical section", ()
   assert.match(source, /with EVENT_APPEND_LOCK:\r?\n {8}with open\(worker_command_path\(root, worker_id\)/);
   // The completion pipeline can re-enter append_event, so it must stay outside the lock.
   assert.match(source, /\r?\n {4}prune_agent_state\(root\)\r?\n {4}maybe_auto_run_completion_pipeline\(root, original_event\)/);
-  assert.match(source, /temporary = path \+ "\.writing"/);
+  assert.match(source, /temporary = path \+ "\.writing\." \+ str\(os\.getpid\(\)\) \+ "\." \+ str\(threading\.get_ident\(\)\)/);
 });

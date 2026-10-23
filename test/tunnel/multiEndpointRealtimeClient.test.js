@@ -6,7 +6,7 @@ const { MultiEndpointRealtimeClient } = require("../../dist/tunnel/MultiEndpoint
 const { createRealtimeState, applyRealtimeEvent } = require("../../dist/tunnel/RealtimeEventReducer.js");
 const { RequestBudget, defaultRequestBudgetConfig } = require("../../dist/tunnel/RequestBudget.js");
 
-test("multi endpoint snapshots merge hub scheduler and worker gpu", () => {
+test("multi endpoint snapshots take GPU and Scheduler state only from Workers", () => {
   const snapshot = mergeClusterSnapshots([
     {
       endpoint: { id: "hub", role: "hub", localHost: "127.0.0.1", localPort: 18765 },
@@ -14,13 +14,13 @@ test("multi endpoint snapshots merge hub scheduler and worker gpu", () => {
     },
     {
       endpoint: { id: "w1", role: "worker", localHost: "127.0.0.1", localPort: 18766 },
-      snapshot: { generatedAt: "2026-01-01T00:00:01Z", gpu: { hub: [{ index: 1 }] } },
+      snapshot: { generatedAt: "2026-01-01T00:00:01Z", gpu: { hub: [{ index: 1 }] },schedulerStates:[{runKey:"worker-run"}] },
     },
   ]);
   assert.equal(snapshot.generatedAt, "2026-01-01T00:00:01Z");
-  assert.equal(snapshot.gpu.hub[0].index, 0);
+  assert.equal(snapshot.gpu.hub,undefined);
   assert.equal(snapshot.gpu.w1[0].index, 1);
-  assert.equal(snapshot.schedulerStates[0].runKey, "r1");
+  assert.equal(snapshot.schedulerStates[0].runKey, "worker-run");
 });
 
 test("multi endpoint realtime state remaps worker default gpu key", () => {
@@ -46,7 +46,7 @@ test("multi endpoint realtime state remaps worker default gpu key", () => {
     { endpoint: { id: "hub", role: "hub", localHost: "127.0.0.1", localPort: 18765 }, state: hubState },
     { endpoint: { id: "w1", role: "worker", localHost: "127.0.0.1", localPort: 18766 }, state: workerState },
   ]);
-  assert.equal(state.gpu.hub[0].index, 0);
+  assert.equal(state.gpu.hub,undefined);
   assert.equal(state.gpu.w1[0].index, 1);
   assert.equal(state.gpu.w1[0].workerDirect, true);
   assert.equal(state.lastSeq, 1);

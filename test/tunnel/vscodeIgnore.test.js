@@ -20,17 +20,13 @@ test("vscodeignore 排除 review_report 与 vsix 以减小包体积", () => {
 });
 
 test("vsce ls 打包清单不含 review_report.md 与 vsix", () => {
-  const { npmCommand } = require("../../scripts/npm-command");
-  const npm = npmCommand(["exec", "--", "@vscode/vsce", "ls", "--no-dependencies"]);
-  const result = spawnSync(npm.command, npm.args, {
-    cwd: root,
-    encoding: "utf8",
-    timeout: 20000,
+  // Use the installed lockfile-pinned CLI; npm exec can wait for consent or
+  // try to fetch a missing package. A missing tool is a failure, never a skip.
+  const cli = require.resolve("@vscode/vsce/vsce");
+  const result = spawnSync(process.execPath, [cli, "ls", "--no-dependencies"], {
+    cwd: root, encoding: "utf8", timeout: 10000, windowsHide: true,
   });
-  if (result.error || result.status !== 0) {
-    console.log("vsce ls unavailable, skipped live check:", result.error || result.stderr || result.stdout);
-    return;
-  }
+  assert.equal(result.status, 0, result.stderr || result.stdout || String(result.error));
   const lines = String(result.stdout || "")
     .split(/\r?\n/)
     .map((l) => l.trim().replace(/^\.\//, "").replace(/\\/g, "/"))

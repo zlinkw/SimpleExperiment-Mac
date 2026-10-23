@@ -32,13 +32,14 @@ test("agent discover_plan_files walks nested plan subfolders", () => {
   const runtime = path.join(__dirname, "../../dist/runtime/cluster_agent.py");
   const py = [
     "import json, sys",
-    "sys.path.insert(0, r'" + path.dirname(runtime).replace(/\\/g, "/") + "')",
-    "import cluster_agent as agent",
+    `sys.path.insert(0, ${JSON.stringify(path.join(__dirname, "../_helpers"))})`,
+    "from extractRuntimeFunctions import extract_runtime_functions",
+    `agent = extract_runtime_functions(${JSON.stringify(runtime)}, ["discover_plan_files"])`,
     "root = r'" + root.replace(/\\/g, "/") + "'",
     "plans = agent.discover_plan_files(root, 'experiments/plans')",
     "print(json.dumps(plans))",
   ].join("; ");
-  const proc = spawnSync("python", ["-c", py], { encoding: "utf8" });
+  const proc = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, py, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(proc.status, 0, proc.stderr || proc.stdout);
   const plans = JSON.parse((proc.stdout || "").trim().split(/\r?\n/).filter(Boolean).pop());
   assert.ok(plans.includes("experiments/plans/top.yaml"), JSON.stringify(plans));

@@ -1,6 +1,8 @@
 """Real Worker admission -> subprocess -> extracted real Scheduler; no runtime entry point or training."""
 import ast
 import copy
+import contextlib
+import io
 import json
 import os
 import pathlib
@@ -80,7 +82,7 @@ p.add_argument('--default-result-csv-dir',default='experiments/results')
 args=p.parse_args()
 print(json.dumps(scheduler.execution_shell_preflight() if args.check_execution_shell_json else scheduler.formal_job_preflight_report(args),ensure_ascii=False),flush=True)
 ''', encoding="utf-8")
-scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["load_plan", "build_jobs", "formal_source_fingerprint"])
+scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["load_plan", "build_jobs", "formal_source_fingerprint", "run_job_mode", "formal_job_writer", "write_job_config"])
 plan_file = "experiments/plans/formal.yaml"
 plan = {"mode": "train_test", "seeds": [42, 43, 44], "base_config": {"runtime": {}, "test": {}},
         "naming": {"sweep_dir": "work_dirs/formal", "job_name": "{case}_seed{seed}"},
@@ -104,7 +106,7 @@ command = {"schemaVersion": 1, "commandId": "owned-command", "runKey": "owned-co
     "durablePlanQueue": True}
 if variant == "identity": command["globalJobId"] = "foreign:0"
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"),
-    ["accept_durable_plan_job", "subprocess_inactivity_run", "preflight_existing_worker_task"])
+    ["accept_durable_plan_job", "subprocess_inactivity_run", "preflight_existing_worker_task", "drain_durable_plan_queue_once", "_execute_worker_command_unfenced"])
 # 移植后 Agent 不再在宿主侧解析 Plan 路径（worker_plan_project_path 已删除），由真实 Scheduler 在子进程内把关。
 queue, events, stderr, children = {"schemaVersion": 1, "jobs": []}, [], [], []
 inactivity_calls = []
@@ -153,7 +155,130 @@ entry = {"cancel": threading.Event(), "processes": set(), "root": str(root), "ac
 agent.INACTIVITY_ACTION_CONTEXT.entry = entry
 if variant == "cancel": threading.Timer(0.4, entry["cancel"].set).start()
 started = time.monotonic()
-if variant in ("api", "api-environment"):
+if variant == "staged":
+    # 0.5.403 staged 契约：真实准入/排空/启动函数全程零项目科学（asset hook）调用。
+    # Real admission/drain/start functions. The tmux boundary is deliberately closed;
+    # final Scheduler path validation uses a sentinel instead of a training command.
+    command.update(action="start-worker-task", condaEnv="/fixture", schedulerPath=str(child))
+    original_command_env = agent.formal_job_command_env
+    def native_probe_env(value):
+        # Native CPU fixture uses the current interpreter, rather than a POSIX conda installation.
+        env = original_command_env(value)
+        env.pop("SIMPLE_EXPERIMENT_CONDA_ENV", None)
+        env.pop("SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV", None)
+        return env
+    agent.formal_job_command_env = native_probe_env
+    def callbacks_so_far():
+        return sum('"callbackIndex"' in line for line in "".join(stderr).splitlines())
+    receipt = agent.accept_durable_plan_job(str(root), command, "worker")
+    assert receipt.get("durableAccepted") is True, receipt
+    assert callbacks_so_far() == 0, "admission ran expensive assets before a GPU was available"
+    for other in jobs[1:3]:
+        other_command = {**command, "commandId": "owned-command-" + str(other.index), "runKey": "owned-command-" + str(other.index),
+            "globalJobId": "owned-workflow:" + str(other.index), "experimentIndex": other.index,
+            "case": other.case, "seed": other.seed, "outputDir": other.output_dir, "collectionResultCsv": other.result_csv}
+        assert agent.accept_durable_plan_job(str(root), other_command, "worker")["durableAccepted"] is True
+    agent.reconcile_worker_task_exit_codes = lambda *args: None
+    agent.sync_durable_plan_task_rows = lambda _: copy.deepcopy(queue)
+    agent.resolve_durable_code_sync_proof = lambda *args: {}
+    agent._durable_gpu_busy_reason = lambda *args, **kw: "busy"
+    before_busy_children = len(children)
+    for _ in range(3):
+        probes = []
+        def gpu_hint():
+            probes.append(True)
+            return ([{"id": "0"}], "")
+        agent.drain_durable_plan_queue_once(str(root), "worker", gpu_probe=gpu_hint)
+        assert len(probes) == 1, "busy queue rescanned GPU telemetry for every waiting job"
+    assert callbacks_so_far() == 0, "busy polling repeated expensive asset verification"
+    assert len(children) == before_busy_children, "busy queue spawned one Scheduler for every waiting job"
+    assert queue["jobs"][0]["commandId"] == command["commandId"]
+    assert queue["jobs"][0]["status"] == "queued"
+    # A free hint cannot authorize launch when the later mandatory fresh probe is busy.
+    freshness_probes = []
+    def changing_gpu():
+        freshness_probes.append(True)
+        return ([{"id": "0", "becameBusy": len(freshness_probes) > 1}], "")
+    agent._durable_gpu_busy_reason = lambda _root, _gpu, _command, gpus, *args, **kw: "busy" if gpus[0].get("becameBusy") else ""
+    def forbidden_launch(*args): raise AssertionError("a stale GPU hint authorized execution")
+    assert not agent.drain_durable_plan_queue_once(str(root), "worker", gpu_probe=changing_gpu,
+        execute=forbidden_launch, target_command_id=command["commandId"])
+    assert len(freshness_probes) == 2 and queue["jobs"][0]["status"] == "queued"
+    assert not agent.DISTRIBUTED_GPU_RESERVATIONS
+    agent.agent_install_dir = lambda _: str(root)
+    agent.worker_task_console_log = lambda _: "tmp/probe/console.log"
+    def forbidden_dependency_gate(*args): raise AssertionError('automatic dependency gate invoked')
+    agent.require_scheduler_dependencies = forbidden_dependency_gate
+    agent.tmux_available = lambda: False
+    try:
+        agent._execute_worker_command_unfenced(str(root), {**command, "durablePlanQueue": False, "gpuId": "0"}, "worker")
+        raise AssertionError("tmux boundary unexpectedly opened")
+    except RuntimeError as exc:
+        assert "refusing silent bash fallback" in str(exc), exc
+    assert callbacks_so_far() == 0, "actual startup invoked project science"
+    args = SimpleNamespace(debug_mode=False, plan=plan_file, plan_revision=loaded["_revision"],
+        mode="train_test", only_index=index, output_dir_override=job.output_dir,
+        default_result_csv_dir="experiments/results", worker_id="worker", gpu_ids="", resume=False)
+    previous = dict(os.environ)
+    capture = io.StringIO()
+    reached = []
+    os.environ.update(environment())
+    os.environ.update(SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS="1")
+    scheduler.run_job = lambda selected, _: reached.append(selected.index)
+    try:
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(capture):
+            scheduler.run_job_mode(args)
+    finally:
+        os.environ.clear(); os.environ.update(previous)
+    stderr.append(capture.getvalue())
+    assert reached == [index]
+    assert callbacks_so_far() == 0, "Scheduler writer invoked project science"
+    # A later PLAN change must still fail at the real gate, before tmux creation.
+    # Scientific assets are deliberately not inspected by this plugin gate.
+    (root / plan_file).write_text((root / plan_file).read_text(encoding="utf-8") + "\n# changed declaration\n", encoding="utf-8")
+    frozen_queue = copy.deepcopy(queue)
+    try:
+        agent.verified_formal_job_command(str(root), command)
+        raise AssertionError("changed PLAN entered the launch boundary")
+    except ValueError as error:
+        assert "PLAN_REVISION_CHANGED" in str(error), error
+    assert queue == frozen_queue, "read-only startup probe altered the queue"
+    assert queue["jobs"][0]["commandId"] == command["commandId"]
+    assert not agent.DISTRIBUTED_GPU_RESERVATIONS, "proven never-started gate kept its own reservation"
+    receipt.update(admissionAssetChecks=0, busyPollAssetChecks=0, startupAssetChecks=0, finalAssetChecks=0)
+elif variant == "api-completed":
+    # .403 完成态输出核验契约：真实 writer 落盘哈希 → 完成回执核验 → 篡改结果必须 COMPLETION_CHANGED 拒绝。
+    raw = hook.read_bytes()
+    command["codeManifest"] = {"validator.py": {"size": len(raw), "sha256": agent.hashlib.sha256(raw).hexdigest()}}
+    command["codeFingerprint"] = agent.durable_code_manifest_digest(command["codeManifest"])
+    previous_identity = os.environ.get("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY")
+    os.environ["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = json.dumps(command)
+    try:
+        with scheduler.formal_job_writer(job, command, "train_test"):
+            scheduler.write_job_config(job)
+            result_file = pathlib.Path(job.result_csv)
+            result_file.parent.mkdir(parents=True)
+            result_file.write_text("metric,value\ncustom,0.7\n", encoding="utf-8")
+    finally:
+        if previous_identity is None: os.environ.pop("SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY", None)
+        else: os.environ["SIMPLE_EXPERIMENT_FORMAL_JOB_IDENTITY"] = previous_identity
+    row = {**command, "status": "completed", "exitCode": 0}
+    queue["jobs"] = [row]
+    frozen_queue = copy.deepcopy(queue)
+    preserved = {str(path): path.read_bytes() for path in pathlib.Path(job.output_dir).rglob("*") if path.is_file()}
+    payload = {"targetCommandId": row["commandId"], "expectedIdentity": copy.deepcopy(row), "completedOutputVerify": True}
+    receipt = agent.preflight_existing_worker_task(str(root), payload, "worker")
+    assert receipt["report"]["completed"] is True
+    assert queue == frozen_queue
+    assert preserved == {str(path): path.read_bytes() for path in pathlib.Path(job.output_dir).rglob("*") if path.is_file()}
+    result_file.write_text("metric,value\ncustom,0.1\n", encoding="utf-8")
+    try:
+        agent.preflight_existing_worker_task(str(root), payload, "worker")
+        raise AssertionError("modified completed result was adopted")
+    except ValueError as error:
+        assert "COMPLETION_CHANGED" in str(error), error
+    receipt["changedResultRejected"] = True
+elif variant in ("api", "api-environment"):
     # Frozen never-started admission rejection, verified again without queue mutation.
     raw = hook.read_bytes()
     command["codeManifest"] = {"validator.py": {"size": len(raw), "sha256": agent.hashlib.sha256(raw).hexdigest()}}
@@ -205,7 +330,7 @@ for line in "".join(stderr).splitlines():
 if variant == "api-environment":
     assert sorted(p.name for p in pathlib.Path(job.output_dir).iterdir()) == ["failure.log"]
     assert (pathlib.Path(job.output_dir) / "failure.log").read_bytes() == b"preserve the original failure bytes"
-else:
+elif variant != "api-completed":
     assert not pathlib.Path(job.output_dir).exists(), "preflight created a training directory"
 assert all(proc.poll() is not None for proc in children), "preflight child is still alive"
 assert not entry["processes"], "preflight child remained registered"

@@ -40,7 +40,7 @@ test("plan execution phases use workflow labels", () => {
   assert.equal(sandbox.phaseLabel("ready"), "可提交");
   assert.equal(sandbox.phaseLabel("validating"), "校验中");
   assert.equal(sandbox.phaseLabel("dry-running"), "预演中");
-  assert.equal(sandbox.phaseLabel("monitor"), "运行中");
+  assert.equal(sandbox.phaseLabel("monitor"), "任务状态");
   assert.equal(sandbox.phaseLabel("results"), "结果待处理");
   assert.equal(sandbox.phaseLabel("review"), "任务需处理");
   assert.equal(Object.isFrozen(sandbox.phaseLabels), true);

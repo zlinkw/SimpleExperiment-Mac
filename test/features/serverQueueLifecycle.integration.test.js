@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 const test = require("node:test");
+require('../_helpers/registerTsRequire');
 const ts = require("typescript");
 const vm = require("node:vm");
 
@@ -28,7 +29,7 @@ try {
 }
 const queue = queueModule.exports;
 const runtimePath = path.join(root, "src", "clusterAgentRuntime.legacy.ts");
-const runtime = fs.readFileSync(runtimePath, "utf8");
+const runtime = fs.readFileSync(path.join(root, "dist/runtime/cluster_agent.py"), "utf8");
 const packageVersion = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 const runtimeManifest = fs.readFileSync(path.join(root, "src", "runtime", "RuntimeManifest.ts"), "utf8");
 const panelRuntime = fs.readFileSync(path.join(root, "src", "ui", "PanelHtml.legacy.ts"), "utf8");
@@ -47,6 +48,12 @@ function pythonDefinition(name) {
   // 运行时模板里模块级 ${...PYTHON} 注入行也是定义边界。
   const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\s*=|\$\{[A-Z_]+\})/m);
   return next < 0 ? tail : tail.slice(0, next + 1);
+}
+
+
+function persistedLegacyPlan(original, input, id, enqueuedAt) {
+  return {...original, plans:[...original.plans,{...input,id,enqueuedAt,resultPathPolicy:"legacy",
+    jobs:input.jobs.map(job=>({...job,attempt:1,status:"pending"}))}]};
 }
 
 function snapshot(projectId, rows, workerId = "worker-a", now = Date.now()) {
@@ -118,9 +125,9 @@ test("cold empty-cache recovery reconstructs complete server identity, caps miss
   ], projectId, now);
   assert.deepEqual(ignored.plans, []);
 
-  const local = queue.enqueuePlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 1,
+  const local = persistedLegacyPlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 1,
     planFile: "experiments/plans/a.yaml", revision: "rev-a", codeFingerprint: "sha256-a",
-    jobs: [{ index: 0, case: "alpha", seed: 42, outputDir: "runs/a/offline" }] }, "workflow-offline", new Date(now).toISOString());
+    jobs: [{ index: 0, case: "alpha", seed: 42, outputDir: "runs/a/attempts/offline" }] }, "workflow-offline", new Date(now).toISOString());
   const assigned = { ...local, plans: local.plans.map((plan) => ({ ...plan, jobs: plan.jobs.map((job) => ({ ...job,
     status: "running", workerId: "worker-a", commandId: "cmd-offline", runKey: "cmd-offline" })) })) };
   const noReceipt = queue.mergeDurableWorkerSnapshots(assigned, [snapshot(projectId, [], "worker-a", now)], projectId, now);
@@ -141,12 +148,11 @@ test("cold conflict stays visible and stale queued state cannot resurrect a loca
   assert.equal(conflicting.plans.length, 1, "conflicting cold Plan must remain actionable instead of disappearing");
   assert.ok(conflicting.plans[0].recoveryConflict || conflicting.plans[0].jobs.some((job) => job.status === "unknown"));
 
-  const local = queue.enqueuePlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 1,
+  const local = persistedLegacyPlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 1,
     planFile: "experiments/plans/a.yaml", revision: "rev-a", codeFingerprint: "sha256-a",
-    jobs: [{ index: 0, case: "alpha", seed: 42, outputDir: "runs/a/one" }] }, "workflow-a", new Date(now).toISOString());
-  // 真实停止协议（PlanSafeRetry）落账 status+trustedTerminalStatus 两字段，夹具必须同形。
+    jobs: [{ index: 0, case: "alpha", seed: 42, outputDir: base.outputDir }] }, "workflow-a", new Date(now).toISOString());
   const assigned = { ...local, plans: local.plans.map((plan) => ({ ...plan, jobs: plan.jobs.map((job) => ({ ...job,
-    status: "cancelled", trustedTerminalStatus: "cancelled", workerId: "worker-a", commandId: "cmd-a", runKey: "cmd-a" })) })) };
+    status: "cancelled", workerId: "worker-a", commandId: "cmd-a", runKey: "cmd-a" })) })) };
   const terminal = queue.mergeDurableWorkerSnapshots(assigned, [snapshot(projectId, [base])], projectId, now);
   assert.equal(terminal.plans[0].jobs[0].status, "unknown", "a stale queue receipt cannot overwrite a trusted cancel ACK");
   assert.equal(terminal.plans[0].jobs[0].trustedTerminalStatus, "cancelled");
@@ -178,44 +184,45 @@ test("retry attempts collapse to the latest receipt while overlapping older acti
 test("an older terminal receipt remains retry history and cannot satisfy a locally declared Plan count", () => {
   const now = Date.now();
   const projectId = queue.canonicalProjectId("C:/research/project");
-  const queued = queue.enqueuePlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 3,
+  const queued = persistedLegacyPlan(queue.emptyDistributedQueue(), { projectId, planJobCount: 3,
     planFile: "experiments/plans/a.yaml", revision: "rev-a", codeFingerprint: "sha256-a",
-    jobs: [{ index: 0, case: "alpha", seed: 42, outputDir: "runs/a/first" }] }, "workflow-a", new Date(now).toISOString());
+    jobs: [{ index: 0, case: "alpha", seed: 42, outputDir: "runs/a/attempts/first" }] }, "workflow-a", new Date(now).toISOString());
   const failed = { ...queued, plans: queued.plans.map((plan) => ({ ...plan, jobs: plan.jobs.map((job) => ({ ...job,
     status: "failed", workerId: "worker-a", commandId: "cmd-first", runKey: "cmd-first" })) })) };
-  const retried = queue.retryVerifiedJob(failed, "workflow-a", 0, "retry-run-1234");
+  assert.throws(()=>queue.retryVerifiedJob(failed, "workflow-a", 0, "retry-run-1234"), /HISTORICAL_ATTEMPT_READ_ONLY/);
+  const old = failed.plans[0].jobs[0];
+  const retried = {...failed,plans:failed.plans.map(p=>({...p,jobs:p.jobs.map(j=>({...j,attempt:2,status:"pending",commandId:undefined,runKey:undefined,workerId:undefined,
+    outputDir:"runs/a/attempts/retry-run-1234",history:[{...old}]}))}))};
   const staleTerminal = { experimentIndex: 0, case: "alpha", seed: 42, attempt: 1,
     outputDir: "runs/a/attempts/first", commandId: "cmd-first", planJobCount: 1, status: "failed" };
   const merged = queue.mergeDurableWorkerSnapshots(retried, [snapshot(projectId, [staleTerminal])], projectId, now);
   const plan = merged.plans[0];
-  // 移植后契约：正式(lifecycleProtocol 2)任务在准入处即拒收历史 durable 回执，
-  // 计数/任务列表/重试意图整体不受影响 —— 比旧协议"合并后加围栏"更强的保护。
   assert.equal(plan.planJobCount, 3, "the fresh server's smaller count cannot replace the local submitted count");
-  assert.deepEqual(plan, retried.plans[0], "an old durable receipt cannot mutate a formal plan in any field");
+  assert.ok(plan.recoveryConflict, "count disagreement must remain fenced");
   assert.equal(plan.jobs.length, 1, "an old attempt must not inflate current jobs");
+  assert.equal(plan.jobs[0].attempt, 2);
   assert.equal(plan.jobs[0].status, "pending", "old terminal state cannot complete the pending retry");
-  assert.equal(plan.jobs[0].nextCommandId, "retry-run-1234", "the formal retry keeps its exact next-command identity");
-  assert.ok(plan.jobs[0].history.some((row) => row.commandId === "cmd-first" && row.status === "failed"),
-    "the older terminal run remains local retry audit");
-  assert.ok(!plan.remoteAcceptedJobCount, "an ignored legacy receipt counts as zero remote acceptance");
-  assert.equal(queue.unfinishedJobs(plan), true, "the unsatisfied retry stays open instead of being satisfied by history");
+  assert.ok(plan.jobs[0].history.some((row) => row.attempt === 1 && row.commandId === "cmd-first"));
+  assert.equal(plan.remoteAcceptedJobCount, 0, "only a receipt for the latest attempt counts as remote acceptance");
+  assert.equal(plan.recoveryMissingCount, 2, "one current retry job remains pending locally, so only two additional jobs are missing");
 });
 
 test("source Agent durably accepts idempotent sparse job identity and drains FIFO within GPU capacity", () => {
-  const definitions = ["durable_plan_path", "worker_path_value", "durable_plan_queue_path", "read_durable_plan_queue", "write_durable_plan_queue",
-    "durable_plan_public_identity", "durable_plan_value", "durable_plan_identity", "durable_plan_public_task", "durable_plan_same_identity",
-    "action_bool", "safe_project_path", "worker_task_stop_identity_mismatches", "fence_queued_idle_gpu_admission",
+  const definitions = ["durable_plan_queue_path", "read_durable_plan_queue", "write_durable_plan_queue",
+    "durable_plan_value", "durable_plan_identity", "durable_plan_public_task", "durable_plan_same_identity",
     "accept_durable_plan_job", "cancel_durable_plan_job", "durable_plan_task_status", "record_durable_plan_task_terminal",
-    "sync_durable_plan_task_rows", "drain_durable_plan_queue_once", "release_distributed_gpu_reservation", "api_worker_tasks"]
-    .map(pythonDefinition);
+    "sync_durable_plan_task_rows", "drain_durable_plan_queue_once", "release_distributed_gpu_reservation", "api_worker_tasks"];
   const identity = runtime.match(/^DURABLE_PLAN_IDENTITY_FIELDS\s*=\s*\([\s\S]*?^\)/m);
   assert.ok(identity, "missing canonical full-identity fields");
-  const legacyStop = runtime.match(/^LEGACY_WORKER_STOP_IDENTITY_FIELDS\s*=.*$/m);
-  assert.ok(legacyStop, "missing legacy stop identity fields");
   const rootDir = path.join(os.tmpdir(), `p6-queue-agent-${process.pid}-${Date.now()}`);
   const scriptPath = path.join(os.tmpdir(), `p6-queue-agent-${process.pid}-${Date.now()}.py`);
   const py = String.raw`
-import copy, hashlib, json, os, threading, time
+import hashlib, json, os, threading, time, sys, re, tempfile, contextlib, uuid, shlex, copy
+from typing import Any
+from collections import deque
+from pathlib import Path
+sys.path.insert(0, ${JSON.stringify(path.join(root,"test/_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
 ROOT = ${JSON.stringify(rootDir.replace(/\\/g, "/"))}
 SCHEMA_VERSION = 1
 WORKER_TASK_SNAPSHOT_LOCK = threading.RLock()
@@ -241,14 +248,6 @@ def replace_with_retry(source, target): os.replace(source, target)
 def invalidate_runtime_json_cache(path): pass
 def append_event(root, event): pass
 def signal_durable_plan_queue_processor(root, worker_id): pass
-def _legacy_recall_identity_matches(identity, tombstone): return False
-def durable_plan_preflight_failure(command, exc, accepted=False):
-    return {**command, "status": "failed", "error": str(exc), "neverStarted": True}
-def collect_local_gpu(): return [], "nvidia-smi unavailable in fixture"
-def verified_formal_job_command(root, command, structure_only=False): return {}
-def formal_job_path_capable(root): return True
-def active_cleanup_operations(root): return []
-def read_worker_recall_tombstones(root): return []
 def atomic_write(path, payload, compact=False):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
@@ -269,6 +268,14 @@ def resolve_durable_code_sync_proof(root, row):
         if digest != expected.get("sha256"):
             raise ValueError("mounted code changed: " + relative)
     return {"proofId": "legacy-test", "manifestDigest": row["codeFingerprint"], "runtimeGeneration": "fixture-runtime"}
+def verified_durable_execution_mode(root, command): return "test"
+def verified_formal_job_command(root, command, structure_only=False):
+    # Queue-only fixture: the Scheduler protocol/preflight boundary has its own
+    # identity suite. No full Scheduler or scientific command is started here.
+    assert command["resultPathPolicy"] == "declared" and command["attempt"] == 0
+    assert command["globalJobId"] == command["workflowId"] + ":" + str(command["experimentIndex"])
+    assert "attempts" not in command["outputDir"].split("/")
+    return {"ok":True,"executionMode":"test"}
 def append_worker_task(root, task):
     path = path_for(root, "worker_task_snapshot.json")
     data = read_json(path, {"tasks": []})
@@ -283,31 +290,32 @@ def reconcile_worker_task_exit_codes(root): return {"changed": 0}
 def read_runtime_json_cached(path, fallback): return read_json(path, fallback)
 def recover_worker_task_launch_paths(root, item): return dict(item)
 def worker_task_failure_message(root, item): return ""
-def worker_task_failure_diagnostic(root, item): return None
 def _resolve_tmux_prefix(*args): return "simple"
 def fixed_gpu_window_name(prefix, gpu_id): return "simple-gpu-" + str(gpu_id)
 def simple_tmux_name(value): return str(value)
 def gpu_row_id(gpu): return str(gpu.get("gpuId") or gpu.get("id") or "")
 def gpu_row_busy(gpu): return bool(gpu.get("busy"))
 ${identity[0]}
-${legacyStop[0]}
-${definitions.join("\n\n")}
-def verified_durable_execution_mode(root, command): return "train_test"
-
+extract_runtime_functions(${JSON.stringify(path.join(root,"dist/runtime/cluster_agent.py"))}, ${JSON.stringify(definitions)}, globals(), include_imports=False)
 def make_job(index, count=1):
     return {"projectId":"p", "workflowId":"workflow-a", "planFile":"experiments/plans/a.yaml",
-      "executionMode":"train_test", "mode":"train_test", "planRevision":"rev-a", "codeFingerprint":fingerprint, "codeManifest":manifest, "experimentIndex":index,
-      "case":"alpha", "seed":42+index, "outputDir":"runs/a/job-"+str(index), "collectionResultCsv":"experiments/results/job-"+str(index)+".csv",
-      "resultPathPolicy":"declared", "globalJobId":"workflow-a-"+str(index),
+      "planRevision":"rev-a", "codeFingerprint":fingerprint, "codeManifest":manifest, "experimentIndex":index,
+      "case":"alpha", "seed":42+index, "attempt":0, "resultPathPolicy":"declared", "globalJobId":"workflow-a:"+str(index), "collectionResultCsv":"tmp/result/job-"+str(index)+".csv", "outputDir":"runs/a/job-"+str(index),
       "runKey":"cmd-"+str(index), "commandId":"cmd-"+str(index), "workerId":"worker-a",
-      "planJobCount":count, "enqueuedAt":now_iso()}
+      "planJobCount":count, "mode":"test", "executionMode":"test", "enqueuedAt":now_iso()}
 try:
     accept_durable_plan_job(ROOT, make_job(5, 1), "worker-a")
 except ValueError as error:
     raise AssertionError("sparse selected job index must survive count-based admission: " + str(error))
 accepted = accept_durable_plan_job(ROOT, make_job(5, 1), "worker-a")
-assert accepted["status"] == "queued" and accepted["durableAccepted"]
-cancelled = cancel_durable_plan_job(ROOT, {**make_job(5, 1), "targetCommandId":"cmd-5", "commandId":"cancel-5"})
+assert accepted["status"] == "queued" and accepted["durableAccepted"], accepted
+cancel_command = {**make_job(5, 1), "targetCommandId":"cmd-5", "commandId":"cancel-5"}
+try:
+    cancel_durable_plan_job(ROOT, cancel_command)
+    raise AssertionError("formal stop must reject an attempt field, including zero")
+except ValueError as error: assert "attempt" in str(error)
+cancel_command.pop("attempt")
+cancelled = cancel_durable_plan_job(ROOT, cancel_command)
 assert cancelled["status"] == "cancelled" and cancelled["experimentIndex"] == 5
 rows = [make_job(0, 3), make_job(1, 3), make_job(2, 3)]
 for item in rows: accept_durable_plan_job(ROOT, item, "worker-a")
@@ -330,10 +338,10 @@ assert [row["status"] for row in read_durable_plan_queue(ROOT)["jobs"][-3:]] == 
 snapshot_path = path_for(ROOT, "worker_task_snapshot.json")
 with open(snapshot_path, "w", encoding="utf-8") as handle:
     json.dump({"generatedAt":"2000-01-01T00:00:00Z", "tasks":[]}, handle)
+TASK_LIFECYCLE_PROTOCOL = 1  # Explicit old API compatibility branch, never new runtime admission.
 api_tasks = api_worker_tasks(ROOT)
-assert api_tasks["capabilities"] == {"controlStateRetirement":1, "durablePlanQueue":True, "codeSyncProof":True,
-    "idleGpuAdmission":True, "queuedJobRecall":True, "failedAttemptQuarantine":True, "declaredJobPaths":True,
-    "sourceDecouple":1, "schemaVersion":1}
+assert api_tasks["capabilities"] == {"controlStateRetirement":1,"durablePlanQueue":True, "codeSyncProof":True,
+    "idleGpuAdmission":True, "queuedJobRecall":True,"failedAttemptQuarantine":True,"declaredJobPaths":False,"sourceDecouple":1, "schemaVersion":1}
 assert api_tasks["generatedAt"] == now_iso(), "fresh durable queue API snapshot must not reuse a stale task snapshot date"
 try:
     accept_durable_plan_job(ROOT, {**make_job(1, 3), "codeFingerprint":"different"}, "worker-a")
@@ -355,6 +363,6 @@ print(json.dumps({"accepted":True,"fifo":calls,"durable":True}))
     assert.equal(result.status, 0, result.stderr || result.error?.message);
     assert.deepEqual(JSON.parse(result.stdout.trim()), { accepted: true, fifo: [["cmd-0", "0"], ["cmd-1", "1"]], durable: true });
   } finally {
-    // Retain the exact generated fixture for review; no cleanup deletion.
+    // Retain the isolated script and fixture for evidence.
   }
 });

@@ -12,7 +12,7 @@ test("task timeline labels Worker live status without changing task status logic
   assert.match(livePills, /TASK_LIVE_STATUS_TOKENS\?\.has\(taskStatusToken\(String\(\(row \|\| \{\}\)\.status \|\| ""\)\)\)/);
   assert.match(livePills, /const worker = \(row \|\| \{\}\)\.serverId/);
   assert.doesNotMatch(livePills, /workerLiveStatus/);
-  assert.match(panel, /taskCardClass\(row\.status\)/);
+  assert.match(panel, /taskCardClass\(\['completed', 'done'\]\.includes\(row\.status\) && row\.completionState !== 'verified' \? 'unknown' : row\.status\)/);
 });
 
 test("task progress card keeps raw Worker status in the tooltip", () => {

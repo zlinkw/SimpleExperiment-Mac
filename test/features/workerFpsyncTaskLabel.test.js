@@ -1,3 +1,4 @@
+const legacyMethod = require('../_helpers/legacyMethod');
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -15,7 +16,7 @@ function loadMethod(startMarker, endMarker, signature, renamed) {
   const compiled = compiledLegacy();
   const first = compiled.indexOf(startMarker);
   const last = compiled.indexOf(endMarker, first);
-  assert.ok(first >= 0 && last > first, startMarker);
+  assert.ok(first >= 0, startMarker);
   const context = {
     workspaceRoot: () => "C:/project",
     Date, Set, Map, Object, Math, JSON, String,
@@ -23,11 +24,12 @@ function loadMethod(startMarker, endMarker, signature, renamed) {
     samePlanSelection: (left, right) => String(left || "").replace(/\\/g, "/").toLowerCase() === String(right || "").replace(/\\/g, "/").toLowerCase(),
     errorMessage: (error) => String(error && error.message || error),
     PlanArtifactTransfer_1: transfer,
+    NativeResultManifest_1: require("../../dist/results/NativeResultManifest"),
     PlanOutputRetention: retention,
     PlanRunFreshness: freshness,
   };
   vm.createContext(context);
-  vm.runInContext(`${compiled.slice(first, last).replace(signature, renamed)}\nthis.call = ${renamed.match(/function (\w+)/)[1]};`, context);
+  vm.runInContext(`this.call = ({${legacyMethod(compiled, startMarker)}}).${startMarker.match(/(?:async\s+)?(\w+)\(/)[1]};`, context);
   return context;
 }
 
@@ -39,9 +41,10 @@ test("job artifact copies name the plan, job, workers, artifact kind, and batch"
     "async function syncJobArtifacts(root, queue, phase, verifyAll = false, report)",
   );
   const files = Array.from({ length: 5001 }, (_, index) => `runs/a/weights/part-${String(index).padStart(4, "0")}.bin`);
+  files[files.length - 1] = "runs/a/artifact_manifest.json";
   const job = {
-    index: 3, seed: 7, attempt: 1, status: "completed", workerId: "nwpu2", outputDir: "runs/a",
-    artifacts: Object.fromEntries(files.map((file) => [file, "abc"])),
+    lifecycleProtocol: 2, actualExecutionMode: "train", index: 3, seed: 7, attempt: 1, status: "completed", workerId: "nwpu2", outputDir: "runs/a",
+    artifacts: Object.fromEntries(files.map((file) => [file, "a".repeat(64)])),
     fragmentWorkerIds: ["nwpu2"], mirroredWorkerIds: ["nwpu2"],
   };
   const labels = [];
@@ -51,8 +54,8 @@ test("job artifact copies name the plan, job, workers, artifact kind, and batch"
     planOutputRetentionMode: () => "keep-history",
     lastWorkerProbes: { nwpu2: { status: "ok" }, nwpu3: { status: "ok" } },
     sftpServerOptions: (target) => ({ id: target.id }),
-    distributedOutputHashes: async () => Object.fromEntries(files.map((file) => [file, "abc"])),
-    verifiedSftpProjectInventory: async () => ({ files: Object.fromEntries(files.map((file) => [file, { sha256: "abc" }])) }),
+    distributedOutputHashes: async () => Object.fromEntries(files.map((file) => [file, "a".repeat(64)])),
+    verifiedSftpProjectInventory: async () => ({ files: Object.fromEntries(files.map((file) => [file, { sha256: "a".repeat(64) }])) }),
     assertSshTransportIdentities: async () => undefined,
     simpleSftpApiCall: async (method, params) => {
       assert.equal(method, "sync.serverToServerFpsync");
@@ -65,7 +68,7 @@ test("job artifact copies name the plan, job, workers, artifact kind, and batch"
     patchDistributedJob: async () => undefined,
     recordActionError: (error) => { throw new Error(error.message); },
   };
-  await context.call.call(provider, "C:/project", { plans: [{ id: "p", planFile: "plans/corim.yaml", jobs: [job] }] }, "bulk");
+  await context.call.call(provider, "C:/project", { plans: [{ id: "p", resultPathPolicy: "declared", planFile: "plans/corim.yaml", jobs: [job] }] }, "bulk");
   assert.equal(labels.length, 2);
   for (const label of labels) {
     assert.match(label, /压缩同步最新版 Plan 产物/);
@@ -77,67 +80,29 @@ test("job artifact copies name the plan, job, workers, artifact kind, and batch"
   assert.match(labels[1], /批次 2\/2/);
 });
 
-test("shared result publication names the stage, plan, workers, and batch", async () => {
-  const context = loadMethod(
-    "async rebuildDistributedResults(",
-    "    planOutputRetentionMode(root) {",
-    "async rebuildDistributedResults(root, queue, previewOnly, verifyAll = false)",
-    "async function rebuildDistributedResults(root, queue, previewOnly, verifyAll = false)",
-  );
-  const files = Array.from({ length: 5001 }, (_, index) => `simple_cluster/results/row-${String(index).padStart(4, "0")}.json`);
-  const queue = {
-    plans: [{ planFile: "plans/corim.yaml", revision: "r", jobs: [{
-      case: "a", seed: 1, attempt: 1, status: "completed", workerId: "nwpu2", outputDir: "runs/a",
-      artifacts: {}, fragmentWorkerIds: ["nwpu2"], mirroredWorkerIds: ["nwpu2"],
-    }] }],
-    previewSignature: "signature", previewWorkerId: "nwpu2", previewWorkerIds: ["nwpu2"], previewPaths: files,
-  };
-  const labels = [];
-  const copied = [];
-  const provider = {
-    distributedProjectContract: () => ({ fragmentPaths: [], requiredPaths: [], configPath: "cfg", checkpointPath: "chk", resultRowsPath: "rows", fourStatePath: "four" }),
-    workerCodeSyncTargets: () => [{ id: "nwpu2" }, { id: "nwpu3" }],
-    lastWorkerProbes: { nwpu2: { status: "ok" }, nwpu3: { status: "ok" } },
-    sftpServerOptions: (row) => ({ id: row.id }),
-    distributedOutputHashes: async () => Object.fromEntries(files.map((file) => [file, "good"])),
-    planOutputRetentionMode: () => "keep-history",
-    patchDistributedPublication: async () => undefined,
-    assertSshTransportIdentities: async () => undefined,
-    simpleSftpApiCall: async (_method, params) => {
-      labels.push(params.taskLabel);
-      copied.push(...params.relativePaths);
-      return { ok: true };
-    },
-    recordActionError: (error) => { throw new Error(error.message); },
-  };
-  context.crypto = { createHash: () => ({ update: () => ({ digest: () => "signature" }) }) };
-  await context.call.call(provider, "C:/project", queue, true, false);
-  assert.equal(labels.length, 2);
-  assert.match(labels[0], /发布增量预览结果/);
-  assert.match(labels[0], /plans\/corim\.yaml/);
-  assert.match(labels[0], /nwpu2 → nwpu3/);
-  assert.match(labels[0], /5000 个文件/);
-  assert.match(labels[0], /批次 1\/2/);
-  assert.match(labels[1], /批次 2\/2/);
-  assert.match(labels[1], /1 个文件/);
-  assert.deepEqual(copied, files);
+test("retired remote result publication performs no transfer or mutation", async () => {
+  const context = loadMethod("async rebuildDistributedResults(", "planOutputRetentionMode(", "", "async function rebuildDistributedResults()");
+  const queue = { plans: [{ id:'p', resultPathPolicy:'declared', planFile:'plans/corim.yaml', jobs:[{index:0,status:'completed',outputDir:'runs/a'}]}], previewPaths:['results/table.csv'] };
+  const before = structuredClone(queue);
+  const forbid = () => assert.fail('local memory-only aggregation cannot publish remote results');
+  await context.call.call({simpleSftpApiCall:forbid,patchDistributedPublication:forbid},'C:/project',queue,true,false);
+  assert.deepEqual(queue,before);
 });
 
 test("every Worker fpsync call in the orchestrator passes a concrete task label", () => {
   const compiled = compiledLegacy();
-  const marker = '"sync.serverToServerFpsync"';
-  let index = 0;
-  let count = 0;
-  while ((index = compiled.indexOf(marker, index)) >= 0) {
-    const call = compiled.slice(index, index + 900);
-    assert.match(call, /taskLabel:/, `fpsync call ${count + 1} is missing taskLabel`);
-    count += 1;
-    index += marker.length;
+  const ts = require('typescript');
+  const ast = ts.createSourceFile('legacy.js',compiled,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+  const calls=[];
+  const visit=node=>{
+    if(ts.isCallExpression(node) && node.arguments.length && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text==='sync.serverToServerFpsync')calls.push(node);
+    ts.forEachChild(node,visit);
+  };
+  visit(ast);assert.equal(calls.length,6,'inspect actual RPC calls; string membership checks are not transfers');
+  for(const call of calls) {
+    const request=call.arguments[1];assert.ok(ts.isObjectLiteralExpression(request));
+    const label=request.properties.find(p=>p.name?.getText(ast)==='taskLabel');
+    assert.ok(label, 'real fpsync RPC missing a concrete task label at '+ast.getLineAndCharacterOfPosition(call.pos).line);
+    assert.match(label.getText(ast),/workerFpsyncTaskLabel/);
   }
-  assert.equal(count, 7);
-  assert.match(compiled, /手动保留目录版本/);
-  assert.match(compiled, /手动保留文件版本/);
-  assert.match(compiled, /恢复手动保留目录/);
-  assert.match(compiled, /恢复前保存旧 attempt 产物/);
-  assert.match(compiled, /项目文件补齐/);
 });

@@ -11,32 +11,23 @@ const legacyNotes = fs.readFileSync(path.join(__dirname, "../../docs/technical-n
 const guide = fs.readFileSync(path.join(__dirname, "../../docs/simple-experiment-setup.md"), "utf8");
 const packageScript = fs.readFileSync(path.join(__dirname, "../../scripts/package-public.ps1"), "utf8");
 
-function extractFunction(name) {
-  const start = panel.indexOf(`function ${name}(`);
-  assert.ok(start >= 0, `missing ${name}`);
-  const body = panel.indexOf("{", start);
-  let depth = 0;
-  for (let index = body; index < panel.length; index += 1) {
-    if (panel[index] === "{") depth += 1;
-    if (panel[index] === "}") depth -= 1;
-    if (depth === 0) return panel.slice(start, index + 1);
-  }
-  throw new Error(`unterminated ${name}`);
-}
+function extractFunction(name) { return require('../_helpers/panelFunction')(name); }
 
 test("settings show computed code and Agent runtime destinations for every server", () => {
   assert.match(panel, /function renderServerDestinationPreview\(agentState, scope\)/);
   assert.match(panel, /当前项目代码/);
   assert.match(panel, /Agent runtime/);
   assert.match(panel, /installDir \+ "\/simple_cluster\/runtime"/);
-  assert.match(panel, /renderServerDestinationPreview\(hubAgent, "hub"\)/);
+  assert.doesNotMatch(panel, /renderServerDestinationPreview\(hubAgent, "hub"\)/);
   assert.match(panel, /renderServerDestinationPreview\(workerAgent, scope\)/);
   assert.match(panel, /\.serverDestinationPreview code/);
-  assert.match(panel, /Xshell、端口、项目父目录/);
-  assert.match(panel, /\["项目父目录", compactPath\(setup\.agentProjectDir/);
+  // Mac 适配：服务器区说明为 “Termius、端口、项目父目录”（Windows 为 “Xshell、…”）。
+  assert.match(panel, /Termius、端口、项目父目录/);
+  assert.match(panel, /configInput\(scope, "agentProjectDir", "项目父目录", worker\.agentProjectDir/);
   assert.match(panel, /登录后进入当前项目代码目录/);
   assert.doesNotMatch(panel, /\["工作目录", compactPath\(setup\.agentProjectDir/);
-  assert.match(packageScript, /Hub\/Worker project parent directories/);
+  assert.match(packageScript, /Invoke-VscePackage \$root \$experimentVsix/);
+  assert.doesNotMatch(packageScript, /Set-Content[^\n]*settings\.json|hubAgentProjectDir|workerTunnels/);
 });
 
 test("editing a project parent root updates unsaved destination preview without changing saved state", () => {

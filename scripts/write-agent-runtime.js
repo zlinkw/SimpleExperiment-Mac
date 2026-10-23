@@ -66,12 +66,10 @@ for (const [modulePath, exportName, targetPath, expectedPrefix] of runtimes) {
     console.log(`[agent-runtime] wrote ${targetPath} unified=${unifiedVersion}`);
   }
   const checksumTarget = `${target}.sha256`;
-  if (fs.existsSync(checksumTarget)) {
-    const checksum = `${crypto.createHash("sha256").update(patched).digest("hex")}  ${path.basename(target)}\n`;
-    if (fs.readFileSync(checksumTarget, "utf8") !== checksum) {
-      writeRuntimeFile(checksumTarget, checksum);
-      console.log(`[agent-runtime] wrote ${path.relative(root, checksumTarget)}`);
-    }
+  const checksum = `${crypto.createHash("sha256").update(patched).digest("hex")}  ${path.basename(target)}\n`;
+  if (!fs.existsSync(checksumTarget) || fs.readFileSync(checksumTarget, "utf8") !== checksum) {
+    writeRuntimeFile(checksumTarget, checksum);
+    console.log(`[agent-runtime] wrote ${path.relative(root, checksumTarget)}`);
   }
 }
 const manifestOut = path.join(root, "dist/runtime/RuntimeManifest.json");
@@ -124,8 +122,6 @@ if (previousManifestText === manifestText) {
   console.log(`[agent-runtime] wrote ${path.relative(root, manifestOut)} unified=${unifiedVersion}`);
 }
 
-const templates = path.join(root, "dist/templates/project-adapter");
-if (!fs.existsSync(templates)) {
-  throw new Error("[agent-runtime] missing dist/templates/project-adapter");
-}
-console.log("[agent-runtime] kept dist/templates/project-adapter");
+// Project templates are produced on demand by the compiled, tracked module.
+// A clean checkout must not depend on ignored files from an older build.
+console.log("[agent-runtime] project templates use the compiled source producer");

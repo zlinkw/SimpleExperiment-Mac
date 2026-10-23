@@ -17,11 +17,13 @@ test("result workflow actions and evidence summary are wired without duplicated 
   assert.match(realtimeRefreshBlock, /void state/);
   assert.doesNotMatch(realtimeRefreshBlock, /getResultsSummary|scheduleResultsSummaryTimer/);
   const manualRefreshBlock = extension.match(/async refreshResultsSummary\(planHint = "", manualRetry = false\)[\s\S]*?scheduleResultsSummaryRefreshFromRealtime/)?.[0] || "";
-  assert.match(manualRefreshBlock, /hasResultsSummaryEndpointCapability/);
-  assert.match(manualRefreshBlock, /client\.getResultsSummary\(planFile, \{ userInitiated: true \}\)/);
-  assert.match(manualRefreshBlock, /generation !== this\.projectContextGeneration \|\| client !== this\.client/);
-  assert.match(manualRefreshBlock, /if \(this\.resultsSummaryRefreshInFlight\)/);
-  assert.match(manualRefreshBlock, /finally \{\s*if \(generation === this\.projectContextGeneration && client === this\.client\)\s*this\.resultsSummaryRefreshInFlight = false;\s*\}/);
+  assert.match(manualRefreshBlock, /resultCollectionHost\(this\)\.update\(\)/);
+  const collector = fs.readFileSync(path.join(root, 'src/extension/ResultCollectionHost.ts'), 'utf8');
+  assert.match(collector, /if \(this\.request\) return this\.request/);
+  assert.match(collector, /if \(this\.request === run\) this\.request = undefined/);
+  assert.match(collector, /context = h\.captureProjectContext\(\)/);
+  assert.match(collector, /h\.projectContextIsCurrent\(context\) && key\(\) === binding/);
+  assert.match(collector, /owners === JSON\.stringify\(runBindings\(\)\)/);
   const timerBlock = extension.match(/scheduleResultsSummaryTimer\(reason, dirtyKey, delayMs\)[\s\S]*?resolveSelectedPlanFile/)?.[0] || "";
   assert.match(timerBlock, /const timerGeneration = \+\+this\.resultsSummaryRefreshTimerGeneration/);
   assert.match(timerBlock, /const generation = this\.projectContextGeneration/);

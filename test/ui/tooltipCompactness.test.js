@@ -25,7 +25,7 @@ test("native title tooltips avoid design notes and long explanations", () => {
     "只影响删除、停止、归档",
   ];
   for (const text of banned) assert.doesNotMatch(source, new RegExp(text), text);
-  for (const expected of ["title=\"通信拓扑\"", "title=\"调度参数\""]) {
+  for (const expected of ["title=\"通信链路\"", "title=\"调度参数\""]) {
     assert.match(source, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), expected);
   }
 });

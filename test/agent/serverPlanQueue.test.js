@@ -13,7 +13,7 @@ function pythonDefinition(name) {
   const start = source.search(new RegExp(`^def ${name}\\(`, "m"));
   assert.notEqual(start, -1, `missing production definition: ${name}`);
   const tail = source.slice(start);
-  const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\s*=)/m);
+  const next = tail.slice(1).search(/^(?:def |class |[A-Z][A-Z_]*\s*=|\$\{|`)/m);
   return next === -1 ? tail : tail.slice(0, next + 1);
 }
 
@@ -43,7 +43,7 @@ function makeFixtureScript(root) {
     "read_worker_recall_tombstones",
     "recalled_worker_command",
     "cancel_durable_plan_job",
-    "worker_task_matches_stop_identity",
+    "worker_task_matches_stop_identity", "worker_task_stop_identity_mismatches",
     "durable_plan_task_status",
     "record_durable_plan_task_terminal",
     "sync_durable_plan_task_rows",
@@ -146,7 +146,14 @@ def idle_gpu(gpu_id):
 ${identity[0]}
 ${legacyIdentity[0]}
 
-
+def verified_formal_job_command(root, command, structure_only=False):
+    assert command.get("resultPathPolicy") == "declared"
+    return command
+def verified_durable_execution_mode(root, command): return "train"
+import sys
+sys.path.insert(0, ${JSON.stringify(path.resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+extract_runtime_functions(${JSON.stringify(path.resolve(__dirname,"../../dist/runtime/cluster_agent.py"))}, ${JSON.stringify(definitions)}, globals())
 
 REAL_RESOLVE_DURABLE_CODE_SYNC_PROOF = resolve_durable_code_sync_proof
 def resolve_durable_code_sync_proof(root, row):
@@ -155,19 +162,19 @@ def resolve_durable_code_sync_proof(root, row):
     return REAL_RESOLVE_DURABLE_CODE_SYNC_PROOF(root, row)
 
 def verified_formal_job_command(*args, **kwargs): return {"identity":{}}
-def verified_durable_execution_mode(root, command): return "train_test"
+def verified_durable_execution_mode(root, command): return "train"
 
 def make_job(index, command_id=None):
     return {
         "projectId": r"D:\\workspace\\project",
         "workflowId": "workflow-1",
         "planFile": "experiments/plans/p.yaml",
-        "executionMode": "train_test", "mode": "train_test", "planRevision": "revision-a",
+        "planRevision": "revision-a",
         "codeFingerprint": "sha256-a",
         "experimentIndex": index,
         "case": "case-a",
         "seed": 40 + index,
-        "attempt": 0, "resultPathPolicy": "declared", "globalJobId": "workflow-1:" + str(index), "collectionResultCsv": "results/job-" + str(index) + ".csv",
+        "resultPathPolicy":"declared", "globalJobId":"workflow-1:"+str(index), "collectionResultCsv":"experiments/results/"+str(index)+".csv", "executionMode":"train",
         "outputDir": "experiments/runs/job-" + str(index),
         "runKey": command_id or "command-" + str(index),
         "commandId": command_id or "command-" + str(index),
@@ -266,7 +273,7 @@ runtime_busy = lambda: ([{"gpuId":"9","processes":[{}]}], "")
 assert not drain_durable_plan_queue_once(runtime_root, "worker-a", gpu_probe=runtime_busy, execute=lambda *args: runtime_calls.append(True))
 renewed_row = read_durable_plan_queue(runtime_root)["jobs"][0]
 assert renewed_row["status"] == "queued" and not runtime_calls
-assert renewed_row["codeSyncProofId"] != runtime_proof["proofId"], repr(renewed_row)
+assert renewed_row["codeSyncProofId"] != runtime_proof["proofId"], repr((renewed_row, code_sync_proof_runtime_generation()))
 assert renewed_row["codeSyncProofRuntimeGeneration"] == code_sync_proof_runtime_generation()
 assert not renewed_row.get("codeBlocked") and not renewed_row.get("error"), "busy GPU must not retain an obsolete code error"
 assert durable_plan_same_identity(renewed_row, runtime_job), "runtime refresh must not create an attempt or change job provenance"
@@ -274,10 +281,10 @@ public_row = next(row for row in api_worker_tasks(runtime_root)["tasks"] if row[
 assert public_row["status"] == "queued" and not public_row.get("error"), "Host snapshot must see the cleared blocker"
 def runtime_execute(root, command, worker_id):
     assert command["attempt"] == 0 and "attempts" not in command["outputDir"].split("/")
-    runtime_calls.append((command["commandId"],command["outputDir"]))
+    runtime_calls.append((command["commandId"],command.get("attempt", 0),command["outputDir"]))
     return {"status":"running"}
 assert len(drain_durable_plan_queue_once(runtime_root, "worker-a", gpu_probe=lambda: ([idle_gpu("9")], ""), execute=runtime_execute)) == 1
-assert runtime_calls == [(runtime_job["commandId"],runtime_job["outputDir"])]
+assert runtime_calls == [(runtime_job["commandId"],runtime_job.get("attempt", 0),runtime_job["outputDir"])]
 assert not drain_durable_plan_queue_once(runtime_root, "worker-a", gpu_probe=lambda: ([idle_gpu("9")], ""), execute=runtime_execute)
 assert len(runtime_calls) == 1, "repeated polling cannot start another copy"
 
@@ -362,11 +369,7 @@ test("server Agent durably accepts, drains, cancels, and fences Plan jobs", () =
   const scriptPath = path.join(os.tmpdir(), `server-plan-queue-${process.pid}-${Date.now()}.py`);
   fs.writeFileSync(scriptPath, makeFixtureScript(root), "utf8");
   try {
-    const run = spawnSync("python", [scriptPath], {
-      encoding: "utf8",
-      timeout: 10000,
-      windowsHide: true,
-    });
+    const run = spawnSync("python", [scriptPath], { encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.equal(run.status, 0, run.stderr || run.error?.message);
     const result = JSON.parse(run.stdout.trim());
     assert.equal(result.accepted, true);
@@ -375,7 +378,7 @@ test("server Agent durably accepts, drains, cancels, and fences Plan jobs", () =
     assert.equal(result.cancelled, "command-3");
     assert.equal(result.conflict, true);
   } finally {
-    // Retain the exact generated fixture for review; no cleanup deletion.
+    // Preserve the exact bounded Python probe.
   }
 });
 

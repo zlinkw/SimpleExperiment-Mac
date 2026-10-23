@@ -10,7 +10,8 @@ const cli = readSource("src/cli.ts");
 const legacyNotes = fs.readFileSync(path.join(root, "docs/technical-notes.md"), "utf8");
 
 test("simpleex is the only published command and keeps recorded runs", () => {
-  assert.deepEqual(packageJson.bin, { simpleex: "./dist/cli.js" });
+  // Mac 适配：发行 CLI 命令名为 simpleex-mac（Windows 为 simpleex）；Usage/文档仍沿用 simpleex 前缀文案。
+  assert.deepEqual(packageJson.bin, { "simpleex-mac": "./dist/cli.js" });
   assert.match(cli, /export function runRecordedCli\(argv: string\[\]\): number/);
   assert.match(cli, /if \(require\.main === module\)/);
   assert.match(cli, /Usage: simpleex status/);

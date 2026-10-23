@@ -3,12 +3,9 @@ const assert = require("node:assert/strict");
 
 const { hubControlRequiredEndpoints, isHubOnlyApiPath, isHubControlAction } = require("../../dist/tunnel/HubControlApi.js");
 
-test("hub control api owns actions files scheduler results and diagnostics", () => {
-  assert.ok(hubControlRequiredEndpoints.includes("/api/scheduler"));
-  assert.ok(hubControlRequiredEndpoints.includes("/api/results/summary"));
-  assert.ok(hubControlRequiredEndpoints.includes("GET /api/files/list?path=<path>"));
-  assert.ok(hubControlRequiredEndpoints.includes("/api/actions/run-plan"));
-  assert.equal(isHubControlAction("delete-artifacts"), true);
-  assert.equal(isHubOnlyApiPath("/api/actions/run-plan"), true);
-  assert.equal(isHubOnlyApiPath("/api/files/download"), true);
+test("compatibility Hub exports cannot declare or authorize current control endpoints",()=>{
+  assert.deepEqual(hubControlRequiredEndpoints,[]);
+  for(const action of ['delete-artifacts','run-plan','validate-plan','start-worker-task'])assert.equal(isHubControlAction(action),false);
+  for(const url of ['/api/actions/run-plan','/api/files/download'])assert.equal(isHubOnlyApiPath(url),true,'retired Hub routes remain recognizable for explicit rejection');
+  assert.equal(isHubOnlyApiPath('/api/worker/tasks'),false);
 });

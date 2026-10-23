@@ -120,10 +120,11 @@ test("WeakMap caches share the non-null object and function key guard", () => {
     ["compactXshellSessionLibraryForWebview", ["library", "setup"]],
     ["compactProbeForWebview", ["probe"]],
     ["compactWorkerProbesForWebview", ["probes"]],
-    ["buildHubControlStatus", ["registry"]],
     ["buildWorkerTelemetryStatus", ["registry"]],
     ["configSummaryTargets", ["files"]],
   ]);
+  const retiredHub = vm.runInNewContext(extractFunction('buildHubControlStatus') + ';buildHubControlStatus;');
+  assert.equal(retiredHub({entries:[{role:'hub',status:'ok'}]}), undefined);
   for (const [name, values] of expectations) {
     const source = extractFunction(name);
     for (const value of values) assert.match(source, new RegExp(`isWeakMapCacheKey\\(${value}\\)`), `${name}:${value}`);

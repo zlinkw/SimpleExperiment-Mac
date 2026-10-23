@@ -11,9 +11,10 @@ function runWithTimezone(timezone) {
   const script = String.raw`
 import importlib.util, json, time
 
-spec = importlib.util.spec_from_file_location("cluster_agent", ${JSON.stringify(agentPath)})
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(${JSON.stringify(agentPath)}, ["iso_age_seconds", "now_iso", "parse_iso_epoch"])
 
 now = time.time()
 def stamp(offset):
@@ -30,7 +31,7 @@ print(json.dumps({
 `;
   const env = { ...process.env };
   if (timezone) env.TZ = timezone;
-  const run = spawnSync("python", ["-c", script], { encoding: "utf8", env });
+  const run = spawnSync("python", ["-B", (() => { const f = require("node:fs"), p = require("node:path"); const d = f.mkdtempSync(p.join(require("node:os").tmpdir(), "se-python-fixture-")); const file = p.join(d, "probe.py"); f.writeFileSync(file, script, "utf8"); console.log("kept Python fixture at " + d); return file; })()], { encoding: "utf8", env, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr);
   return JSON.parse(run.stdout.trim());
 }

@@ -11,8 +11,8 @@ test("extension exposes tunnel-only connection UI", () => {
   assert.match(extensionSource, /检查服务器配置/);
   assert.match(extensionSource, /启动全部隧道/);
   // Mac 发布名的真实持有者：manualRefresh 命令注册于 extension/legacy.ts，
-  // 对外标题为"手动快照"；暂停命令标题为"暂停网络活动"。历史 Windows 串不降级断言。
-  assert.match(extensionSource, /simpleExperimentMac\.manualRefresh/);
+  // 对外标题为“手动快照”；暂停命令标题为“暂停网络活动”。断言按 Mac 命令名前缀保留 .403 的完整注册形态。
+  assert.match(extensionSource, /registerCommand\("simpleExperimentMac\.manualRefresh", \(\) => provider\?\.manualSnapshot\(\)\)/);
   assert.match(extensionSource, /暂停网络活动/);
   assert.match(extensionSource, /导入离线/);
   assert.match(extensionSource, /127\.0\.0\.1/);

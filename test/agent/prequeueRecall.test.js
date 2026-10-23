@@ -197,11 +197,7 @@ test("Agent releases only proven never-started work and fences replay", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "prequeue-recall-"));
   const scriptPath = path.join(os.tmpdir(), `prequeue-recall-${process.pid}-${Date.now()}.py`);
   fs.writeFileSync(scriptPath, fixture(root), "utf8");
-  const run = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], {
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-  });
+  const run = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.error?.message);
   assert.deepEqual(JSON.parse(run.stdout.trim()), {
     taskRecall: true,

@@ -22,6 +22,7 @@ function extractFunction(name) {
 
 function sandboxWithHelpers(extra) {
   const sandbox = Object.assign({
+    statusClass: String,
     esc: (value) => String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
     escAttr: (value) => String(value).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"),
     compactText: (value, maxLength) => {
@@ -31,6 +32,7 @@ function sandboxWithHelpers(extra) {
     },
   }, extra || {});
   vm.createContext(sandbox);
+  vm.runInContext(require("../_helpers/panelFunction")("taskRowStatusClass"),sandbox);
   return sandbox;
 }
 
@@ -87,6 +89,7 @@ test("operation card shows a clickable Plan name and keeps its full path", () =>
     firstPathLike: (...values) => values.find((value) => String(value || "").includes("/")) || "",
     operationIsActive: () => false, operationIsFailureLike: () => true,
     operationIsCancelled: () => false, operationIsCompleted: () => false,
+    operationOutcomePendingHistory: () => false,
     operationDisplayMessage: (row) => row.message, operationErrorLine: () => "",
     operationRunningEvidenceWarning: () => "", renderOperationDetailPills: () => "",
     renderRemoteResultInspectionActions: () => "", operationTypeLabel: String,
@@ -114,12 +117,12 @@ test("operation card shows a clickable Plan name and keeps its full path", () =>
 
 test("diagnostic action errors show the recovery hint inline", () => {
   const renderRow = loadActionErrorRow();
-  const withSuggestion = renderRow({ command: "archiveArtifacts", message: "归档失败", suggestion: "先启动 Hub 隧道再重试" });
+  const withSuggestion = renderRow({ command: "archiveArtifacts", message: "归档失败", suggestion: "先启动 Worker 隧道再重试" });
   assert.match(withSuggestion, /class="errorRowSuggestion"/);
-  assert.match(withSuggestion, /下一步：先启动 Hub 隧道再重试/);
+  assert.match(withSuggestion, /下一步：先启动 Worker 隧道再重试/);
 
   const capabilityGap = renderRow({ command: "parseResults", message: "缺少能力", capabilityMissing: ["actions.parse"] });
-  assert.match(capabilityGap, /下一步：需要升级 Hub Agent: actions\.parse/);
+  assert.match(capabilityGap, /下一步：需要升级 Worker Agent: actions\.parse/);
 
   const fallback = renderRow({ command: "selfCheck", message: "未知错误" });
   assert.match(fallback, /下一步：原因还不明确/);

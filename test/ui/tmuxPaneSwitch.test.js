@@ -20,13 +20,13 @@ test("tmux close has its own button and asks in the extension host", () => {
   const host = extension.slice(extension.indexOf("async killTmuxWindowFromUi("), extension.indexOf("async openTensorBoardUrlFromUi("));
   const taskClose = panel.slice(panel.indexOf('function tmuxWindowCloseButton('), panel.indexOf('function getTmuxWindowCandidates('));
   assert.match(render, /tmuxWindowCloseButton\(c.window, c.sessName, "tmuxClose"\)/);
-  assert.match(render, /c\.category === "gpu" \|\| c\.synthetic/);
+  assert.match(render, /c\.category === "gpu" \? tmuxGpuSessionCloseButton\(c\)/);
   assert.match(render, /: closeHtml/);
   assert.match(taskClose, /data-tmux-close/);
   assert.match(taskClose, /data-tmux-close-worker/);
   assert.doesNotMatch(taskClose, /data-tmux-worker=/);
   assert.doesNotMatch(taskClose, /data-tmux-close="' \+ escAttr\(foundSess\.name/);
-  assert.match(overview, /tmuxWindowCloseButton\(win, foundSess.name \|\| "", "tmuxTaskTabClose"\)/);
+  assert.match(overview, /tmuxWindowCloseButton\(win, sessionName, "tmuxTaskTabClose"\)/);
   assert.match(handler, /data-tmux-close-worker/);
   const capture = panel.slice(panel.indexOf('document.addEventListener("click", function(event)'), panel.indexOf('if (btn) btn.addEventListener("click", refreshTmuxCapture)'));
   assert.match(capture, /button\.hasAttribute\("data-tmux-close"\)/);

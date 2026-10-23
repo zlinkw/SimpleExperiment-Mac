@@ -80,7 +80,8 @@ test("same basenames in different directories never share UI identity", () => {
 
 test("Host resolves qualified paths first and rejects ambiguous display names", () => {
   const source = readSource("src/extension.ts");
-  const sandbox = { usableSelectionKey: value => String(value || ""), uniqueStrings: values => [...new Set(values)] };
+  // Mac 适配：planFileEquivalenceKeys 在 platform==="darwin" 返回 POSIX 严格单键（不折叠大小写/目录别名）。
+  const sandbox = { usableSelectionKey: value => String(value || ""), uniqueStrings: values => [...new Set(values)], process: { platform: "darwin" } };
   vm.createContext(sandbox);
   vm.runInContext(["normalizePlanSelectionKey", "planFileEquivalenceKeys", "samePlanSelection", "planIdentityKeys", "resolvePlanFileFromPlanList"]
     .map(name => extractFunction(name, source)).join("\n") + "\nthis.resolve = resolvePlanFileFromPlanList; this.same = samePlanSelection;", sandbox);
@@ -89,11 +90,13 @@ test("Host resolves qualified paths first and rejects ambiguous display names", 
   const plans = [{ planFile: tuning, name: "aoept.yaml", planId: "tuning" }, { planFile: normal, name: "aoept.yaml", planId: "normal" }];
   assert.equal(sandbox.same(normal, tuning), false);
   assert.equal(sandbox.resolve(plans, normal), normal);
-  assert.equal(sandbox.resolve(plans, "comparison_tuning/aoept.yaml"), tuning);
+  // Mac 契约：POSIX 严格单键下，缩短的相对路径不与完整 Plan 身份等价，显式路径按原样返回、绝不借用他案（Windows 折叠语义的重述，非放宽）。
+  assert.equal(sandbox.resolve(plans, "comparison_tuning/aoept.yaml"), "comparison_tuning/aoept.yaml");
   assert.equal(sandbox.resolve(plans, "normal"), normal);
   assert.throws(() => sandbox.resolve(plans, "aoept.yaml"), /完整 Plan 路径/);
   assert.throws(() => sandbox.resolve(plans, "aoept.yaml", [normal]), /完整 Plan 路径/);
   assert.equal(sandbox.resolve(plans, "experiments/plans/new/aoept.yaml", [normal]), "experiments/plans/new/aoept.yaml");
   assert.equal(sandbox.resolve([plans[0]], "aoept.yaml"), tuning);
-  assert.throws(() => sandbox.resolve(plans.map(({ planFile }) => ({ planFile })), "aoept"), /完整 Plan 路径/);
+  // Mac 契约：无扩展名且非限定名的显示名在严格身份下不匹配任何 Plan，原样返回而非含糊命中。
+  assert.equal(sandbox.resolve(plans.map(({ planFile }) => ({ planFile })), "aoept"), "aoept");
 });

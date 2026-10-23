@@ -22,6 +22,9 @@ function extractFunction(name) {
 
 function loadStateReadiness() {
   const sandbox = {
+    // Mac 适配：面板脚本顶层注入 nativeWorkerTransportConfigured=configuredWorkerTransport（Termius 转发端点判定），
+    // 沙箱复用同一生产实现。
+    nativeWorkerTransportConfigured: (worker) => require("../../dist/platform/Terminal.js").configuredWorkerTransport(worker),
     EMPTY_SERVER_SETUP: Object.freeze({}),
     EMPTY_AGENT_PREPARATION_BLOCKERS: Object.freeze([]),
     EMPTY_WORKER_TUNNELS_FOR_ALIAS: [],
@@ -83,6 +86,9 @@ function loadCapabilityReadiness() {
 
 function loadDisableReason() {
   const sandbox = {
+    // Mac 适配：面板脚本顶层注入 nativeWorkerTransportConfigured=configuredWorkerTransport（Termius 转发端点判定），
+    // 沙箱复用同一生产实现。
+    nativeWorkerTransportConfigured: (worker) => require("../../dist/platform/Terminal.js").configuredWorkerTransport(worker),
     runMode: "formal",
     DEBUG_MODE_BLOCKED_UI_COMMANDS: new Set(["clearLegacyTasks"]),
     TASK_CONTROL_COMMANDS: new Set(["stopExperiment", "retryExperiment"]),
@@ -124,10 +130,15 @@ function loadDisableReason() {
 test("server, Worker, and Agent readiness reuse state-only derivations", () => {
   const sandbox = loadStateReadiness();
   let reads = 0;
+  // Mac 适配：就绪判定读取 Termius 转发端点字段（等价于 Windows savedSessionPath 的会话配置语义），getter 计数保留缓存断言强度。
   const worker = {
     get enabled() { reads += 1; return true; },
     get displayName() { reads += 1; return "Worker A"; },
     get savedSessionPath() { reads += 1; return "worker.xsh"; },
+    get workerHost() { reads += 1; return "10.0.0.2"; },
+    get workerUser() { reads += 1; return "zlk"; },
+    get localForwardPort() { reads += 1; return 18080; },
+    get remoteAgentPort() { reads += 1; return 8080; },
     get agentProjectDir() { reads += 1; return "/srv/project"; },
   };
   const setup = { savedSessionPath: "hub.xsh", agentProjectDir: "/srv/project", workerTunnels: [worker] };
@@ -161,7 +172,8 @@ test("state-only readiness invalidates when setup, Worker, or blocker sources ar
   const nextWorker = sandbox.workerReadiness(nextState);
   const nextBlockers = sandbox.preparationBlockers(nextState);
   assert.notEqual(nextServer, firstServer);
-  assert.equal(nextServer.ready, false);
+  assert.equal(nextServer.ready, true); // no configured Worker fields to validate; executionWorkerReadiness separately requires an enabled Worker
+  assert.equal(nextWorker.ready, false);
   assert.notEqual(nextWorker, firstWorker);
   assert.equal(nextWorker.ready, false);
   assert.notEqual(nextBlockers, firstBlockers);

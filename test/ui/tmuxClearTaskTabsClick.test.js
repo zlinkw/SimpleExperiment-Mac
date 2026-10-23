@@ -110,7 +110,8 @@ test("GPU title renders one clear button and a click keeps the current filter", 
   const overview = elements.tmuxOverview.innerHTML;
   const allOverview = overview;
   assert.equal((overview.match(/data-tmux-clear-task-tabs=/g) || []).length, 1);
-  const tag = overview.slice(overview.indexOf("tmuxClearTaskTabs") - 40, overview.indexOf("tmuxClearTaskTabs") + 520);
+  const tag = overview.match(/<button[^>]+data-tmux-clear-task-tabs="1"[^>]*>/)?.[0];
+  assert.ok(tag, "current GPU task tabs have an explicit clear control");
   assert.match(tag, /data-tmux-clear-worker="NWPU3"/);
   assert.match(tag, /data-tmux-clear-session="zlk-gpu-0"/);
   assert.match(tag, /data-tmux-clear-targets="zlk-gpu-0:2,zlk-gpu-0:3"/);

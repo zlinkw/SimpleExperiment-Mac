@@ -6,12 +6,13 @@ const test = require('node:test');
 const { spawnSync } = require('node:child_process');
 
 test('portable formal PLAN + tmp/result isolates concurrent jobs and rejects inconsistent command targets', () => {
-  const proc = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-B', '-X', 'utf8', path.join(__dirname, 'planResultPathContract.fixture.py'), '--generic'], {
-    cwd: path.join(__dirname, '../..'), encoding: 'utf8', timeout: 10000, windowsHide: true,
-  });
+  const proc = spawnSync(process.platform === 'win32' ? 'python' : 'python3', ['-B', '-X', 'utf8', path.join(__dirname, 'planResultPathContract.fixture.py'), '--generic'], { cwd: path.join(__dirname, '../..'), encoding: 'utf8', timeout: 10000, windowsHide: true });
   assert.equal(proc.status, 0, proc.stderr || proc.stdout);
   assert.equal(JSON.parse(proc.stdout.trim()).ok, true);
 });
+
+// The former MultiModal integration case was retired by the user on 2026-10-22:
+// its experiment and PLAN were deleted. The portable contract above remains mandatory.
 
 test('portable declared paths, real generated adapter snapshot and collector agree in a dedicated fixture', () => {
   const project = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'simple-plan-adapter-'));

@@ -16,15 +16,16 @@ function runPythonSnippet(content) {
   fs.writeFileSync(script, `
 import importlib.util, json, pathlib
 agent_path = pathlib.Path(${JSON.stringify(agentPath)})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["_tmux_log_size"])
 log = pathlib.Path(${JSON.stringify(logPath)})
 size = agent._tmux_log_size(str(log))
 print(json.dumps({"size": size}))
 `, "utf8");
   const python = process.env.PYTHON || "python";
-  const run = spawnSync(python, [script], { encoding: "utf8" });
+  const run = spawnSync(python, [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   fs.rmSync(tmpDir, { recursive: true, force: true });
   if (run.status !== 0) {
     throw new Error("python probe failed: " + (run.stderr || run.stdout));
@@ -54,7 +55,7 @@ function effectiveSizeForLines(lines) {
 
 test("cd 过滤：短 /data 与带引号的 bootstrap 行被过滤", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) { t.skip("python unavailable"); return; }
 
   // 短 cd /data
@@ -71,7 +72,7 @@ test("cd 过滤：短 /data 与带引号的 bootstrap 行被过滤", (t) => {
 
 test("cd 过滤：含 experiment 的路径即使短且带引号也保留", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) { t.skip("python unavailable"); return; }
 
   const shortExperiment = 'cd "/data/experiment_demo"\n';
@@ -93,7 +94,7 @@ test("cd 过滤：含 experiment 的路径即使短且带引号也保留", (t) =
 
 test("cd 过滤：长 cd（>=80）即使含 /data 也不过滤", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) { t.skip("python unavailable"); return; }
 
   // 80 字符边界：构造 80 字符的 cd 行
@@ -119,7 +120,7 @@ test("cd 过滤：长 cd（>=80）即使含 /data 也不过滤", (t) => {
 
 test("cd 过滤：无 /data 且无引号的短 cd 保留", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) { t.skip("python unavailable"); return; }
 
   const cases = ["cd /tmp\n", "cd /home/user\n", "cd .\n", "cd ..\n"];
@@ -132,7 +133,7 @@ test("cd 过滤：无 /data 且无引号的短 cd 保留", (t) => {
 
 test("混合日志：仅有意义行计入有效大小", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
   if (probe.error || probe.status !== 0) { t.skip("python unavailable"); return; }
 
   const content = [

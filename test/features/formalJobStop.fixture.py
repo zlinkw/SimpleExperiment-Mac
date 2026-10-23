@@ -9,6 +9,8 @@ import sys
 import tempfile
 import threading
 
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "_helpers"))
+from closeFixtureTmuxWindows import close_fixture_tmux_windows
 repo = pathlib.Path(__file__).resolve().parents[2]
 source = repo / "dist/runtime/cluster_agent.py"
 tree = ast.parse(source.read_text(encoding="utf-8"))
@@ -23,7 +25,7 @@ body = [node for node in tree.body if isinstance(node, (ast.Import, ast.ImportFr
 ns = {"__builtins__": __builtins__}
 exec(compile(ast.Module(body=body, type_ignores=[]), str(source), "exec"), ns)
 root = tempfile.mkdtemp(prefix="simple-formal-stop-")
-socket = "formal-stop-probe-" + str(os.getpid())
+socket = "formal-stop-probe-" + pathlib.Path(root).name
 original_run = subprocess.run
 calls = []
 
@@ -133,4 +135,4 @@ try:
     reports.append({"task": store["tasks"][0], "request": stop_for(queued), "result": cancelled})
     print(json.dumps({"ok": True, "reports": reports}, ensure_ascii=False))
 finally:
-    isolated_run(["tmux", "kill-server"], capture_output=True, timeout=3, cwd=root)
+    close_fixture_tmux_windows(lambda args: isolated_run(["tmux", *args], capture_output=True, text=True, timeout=2, cwd=root), socket_name=socket)

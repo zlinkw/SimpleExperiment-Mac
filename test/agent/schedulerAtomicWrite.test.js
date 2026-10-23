@@ -9,14 +9,7 @@ const source = fs.readFileSync(path.join(root, "src/clusterSchedulerRuntime.lega
 const fixture = path.join(__dirname, "scheduler_atomic_write_fixture.py");
 
 test("scheduler state writes atomically and removes only its failed staging file", () => {
-  const result = spawnSync("python", ["-X", "utf8", fixture], {
-    input: source,
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-    cwd: root,
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const result = spawnSync("python", ["-X", "utf8", fixture], { input: source, encoding: "utf8", timeout: 10000, windowsHide: true, cwd: root, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
   assert.equal(result.status, 0, result.stderr || result.stdout || result.error?.message);
   assert.match(result.stdout, /scheduler atomic write ok/);
 });

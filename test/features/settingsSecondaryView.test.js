@@ -18,12 +18,7 @@ test("settings is a secondary main-column view without changing side drawers", (
   assert.match(panel, /applyMainViewForSection\(nextSection\);\s*expandResourceSection\(nextSection\);/);
 });
 
-function productionFunction(name) {
-  const start = panel.indexOf(`    function ${name}(`);
-  const end = panel.indexOf("\n    function ", start + 10);
-  assert.ok(start >= 0 && end > start);
-  return panel.slice(start, end);
-}
+const productionFunction = require('../_helpers/panelFunction');
 
 function settingsFixture(drafts = {}) {
   const nodes = Object.fromEntries(["serverSettingsCards", "remoteRootPolicySettings", "pluginUpdateSettings", "resultCsvDirectorySettings", "resultColumnMappingSettings", "projectAdapterRuleSettings", "syncChainOverview"].map(id => [id, { innerHTML: "", contains: input => input?.containerId === id }]));
@@ -47,7 +42,7 @@ function settingsFixture(drafts = {}) {
     renderProjectRuleEditor: () => '<input data-config-input="projectAdapterRules" data-key="primaryMetric">',
   };
   for (const name of ["renderSchedulerGlossary", "renderServerDestinationPreview", "renderSchedulerDependencyStatus", "renderTensorBoardLinkRow", "renderXshellSessionBudgetNote", "renderServerChainOverview"]) sandbox[name] = () => "";
-  const names = ["navigateToResourceTarget", "renderSectionIfVisible", "renderServerSettings", "renderServerCardsV2", "renderPluginUpdateSettings", "pluginUpdateStatusLabel", "renderRemoteRootPolicySettings", "remoteRootPolicyText", "remoteRootPolicyCount", "renderResultCsvDirectorySettings", "renderResultColumnMappingSettings", "configInput", "configSelect", "activeConfigScope", "configScopeHasDraft", "shouldKeepConfigDraftScope", "isServerConfigScope", "shouldKeepServerConfigDraft", "configDraftValue"];
+  const names = ["detailIsOpen", "detailsOpenAttr", "navigateToResourceTarget", "renderSectionIfVisible", "renderServerSettings", "renderServerCardsV2", "renderPluginUpdateSettings", "pluginUpdateStatusLabel", "renderRemoteRootPolicySettings", "remoteRootPolicyText", "remoteRootPolicyCount", "renderResultCsvDirectorySettings", "renderResultColumnMappingSettings", "configInput", "configSelect", "activeConfigScope", "configScopeHasDraft", "shouldKeepConfigDraftScope", "isServerConfigScope", "shouldKeepServerConfigDraft", "configDraftValue"];
   if (panel.includes("function configContainerHasEditor(")) names.push("configContainerHasEditor");
   Object.assign(sandbox, { activeResourceSection: "plans", activeResourceAnchor: "plans", applyMainViewForSection() {}, expandResourceSection() {}, syncPanelSectionInterest() {}, updateResourceTreeActiveSection() {}, resolveResourceScrollTarget: () => null, detailsOpenState: {}, scrollToResourceTarget() {}, forceWorkbenchInspectorRender() {}, renderWorkbenchInspector() {} });
   vm.createContext(sandbox);

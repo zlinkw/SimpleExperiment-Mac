@@ -229,10 +229,14 @@ with patch.object(agent,"cluster_scheduler_path",lambda _: str(runtime/"cluster_
         (root/third.result_csv).write_text("metric,value\naccuracy,0.5\n",encoding="utf-8")
     with patch.object(agent,"reconcile_worker_task_exit_codes",lambda *a:None), \
          patch.object(agent,"sync_durable_plan_task_rows",lambda *a:{"jobs":[read_queue(None)["jobs"][-1]]}), \
-         patch.object(agent,"resolve_durable_code_sync_proof",lambda *a:{"proofId":"fixture"}), \
+         patch.object(agent,"resolve_durable_code_sync_proof",lambda *a:{"proofId":"fixture", "manifestDigest":identity["codeFingerprint"], "runtimeGeneration":"fixture-runtime"}), \
          patch.object(agent,"append_worker_task",lambda *a:None):
         restored = agent.drain_durable_plan_queue_once(str(root),"worker",gpu_probe=lambda: (_ for _ in ()).throw(AssertionError("GPU probed on completed job")))
         assert restored[0]["status"] == "completed"
+        renewed = read_queue(None)["jobs"][-1]
+        assert renewed["codeSyncProofId"] == "fixture"
+        assert renewed["manifestDigest"] == identity["codeFingerprint"]
+        assert renewed["codeSyncProofRuntimeGeneration"] == "fixture-runtime"
 assert not list(root.rglob("attempts"))
 # TensorBoard sees the original immutable Job config, rather than the injected copy.
 # Its diagnostic rows must still bind the actual formal command, without attempts.

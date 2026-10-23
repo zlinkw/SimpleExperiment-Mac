@@ -51,9 +51,9 @@ test("anomaly diagnosis writes under plan-scoped anomaly dir", () => {
   const script = path.join(tmp, "check.py");
   const lines = [];
   lines.push("import importlib.util, json, os");
-  lines.push("spec = importlib.util.spec_from_file_location('agent', " + pyString(agentPath) + ")");
-  lines.push("agent = importlib.util.module_from_spec(spec)");
-  lines.push("spec.loader.exec_module(agent)");
+  lines.push(("spec = (lambda _name, _file: __import__(\"runpy\").run_path(" + JSON.stringify(require("node:path").resolve(__dirname, "../_helpers/extractRuntimeFunctions.py")) + ")[\"extract_runtime_functions\"](_file, [\"diagnose_result_anomaly_action\",\"parse_results_action\"]))('agent', ") + pyString(agentPath) + ")");
+  lines.push("agent = spec");
+  lines.push("pass");
   lines.push("root = " + pyString(root));
   lines.push("plan = 'experiments/plans/smoke.yaml'");
   lines.push("summary = agent.parse_results_action(root, None, plan)");
@@ -66,7 +66,7 @@ test("anomaly diagnosis writes under plan-scoped anomaly dir", () => {
   lines.push("  'exists': os.path.isfile(os.path.join(root, *json_path.split('/'))) if json_path else False,");
   lines.push("}))");
   fs.writeFileSync(script, lines.join("\n"), "utf8");
-  const result = spawnSync("python", [script], { encoding: "utf8" });
+  const result = spawnSync("python", [script], { encoding: "utf8", timeout: 10000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse((result.stdout || "").trim().split("\n").pop());
   assert.equal(payload.planFile, "experiments/plans/smoke.yaml");

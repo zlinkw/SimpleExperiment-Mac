@@ -33,6 +33,7 @@ function persistenceHarness() {
   };
   const sandbox = {
     fs, path, Date,
+    WorkerProgressQuery: require("../../dist/features/WorkerProgressQuery"),
     UI_ACTION_ERROR_RECORD_LIMIT: 8,
     UI_ACTION_ERROR_MESSAGE_LIMIT: 480,
     UI_ACTION_ERROR_SUGGESTION_LIMIT: 240,
@@ -222,7 +223,7 @@ test("panel.diagnostics returns the saved sample without rebuilding state or pro
   const code = ts.transpileModule(`class Subject { ${method.getText(ast)} }`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const sandbox = { PANEL_LIFECYCLE_DIAGNOSTIC_LIMIT: 24, compactPanelRenderEvidence: (value) => value, compactPanelLayoutEvidence: (value) => value };
+  const sandbox = { DistributedSchedulingPolicy:require("../../dist/features/DistributedSchedulingPolicy"), WorkerProgressQuery:require("../../dist/features/WorkerProgressQuery"), PANEL_LIFECYCLE_DIAGNOSTIC_LIMIT: 24, compactPanelRenderEvidence: (value) => value, compactPanelLayoutEvidence: (value) => value };
   vm.runInNewContext(`${code}\nthis.Subject = Subject;`, sandbox);
   const telemetry = {
     sampleId: 8, payloadBytes: 717609, buildTotalMs: 42, runtimeEvidenceMs: 3,
@@ -235,7 +236,7 @@ test("panel.diagnostics returns the saved sample without rebuilding state or pro
       runningVersion: "0.5.200", installedVersion: "0.5.200", runningBuildId: "a".repeat(64), diskBuildId: "a".repeat(64),
     },
     runningBuildIdentity: {}, diskBuildIdentity: {}, panelDocumentGeneration: 4, viewGeneration: 2,
-    latestPanelStateTelemetry: telemetry, panelSectionFailures: new Set(["results"]),
+    lastWorkerTaskSnapshots:new Map(), latestPanelStateTelemetry: telemetry, panelSectionFailures: new Set(["results"]),
     panelStateTrafficSnapshot: () => ({ fullStatePosts: 12, coalescedStatePosts: 80, hiddenSuppressedStatePosts: 100, fullStatePostsLastMinute: 4 }),
     panelStateDeliverySnapshot: () => ({ postedSeq: 71, deliveredSeq: 71, renderedSeq: 54, outstandingSeq: 71, pendingDirty: true, outstandingAgeMs: 27 }),
     latestRenderDurationMs: 9, panelRenderPerformance: [], currentSessionRecoveryReason: "", currentSessionLastFailure: null,

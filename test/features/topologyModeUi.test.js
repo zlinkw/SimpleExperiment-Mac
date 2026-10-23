@@ -1,4 +1,5 @@
 const test = require("node:test");
+require("../_helpers/registerTsRequire");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -33,28 +34,27 @@ test("topology switch invalidates authority caches without deleting project reco
   assert.doesNotMatch(invalidation, /selectedRunKeys\.clear/);
 
   const configFlow = extension.slice(extension.indexOf("async handleConfigurationChanged"), extension.indexOf("async showFirstRunSetupPromptOnce"));
-  assert.match(configFlow, /affectsConfiguration\("simpleExperiment\.topologyMode"\)/);
+  // Mac 适配：配置键前缀为 simpleExperimentMac.*（Windows 为 simpleExperiment.*）。
+  assert.match(configFlow, /affectsConfiguration\("simpleExperimentMac\.topologyMode"\)/);
   assert.match(configFlow, /applyTopologyRuntimeMode\(this\.projectTopologyAssessment\(\)\.mode/);
 });
 
-test("stale result requests cannot repopulate caches after topology switch", () => {
-  const manualStart = extension.indexOf("async refreshResultsSummary(planHint");
+test("stale result collection cannot publish after project endpoint configuration changes", async () => {
+  const f = require('../_helpers/freshResultHost').fixture();
+  let release, publications = 0;
+  f.host.refreshLocalResultCatalogForProject = async () => publications++;
+  f.block(new Promise(resolve => {release = resolve;}));
+  const pending = f.service.update();
+  const rejected = assert.rejects(pending, /配置已变化|取消/);
+  await new Promise(resolve => setImmediate(resolve));
+  const targets = f.host.workerCodeSyncTargets();
+  f.host.workerCodeSyncTargets = () => targets.map(row => ({...row,remotePath:'/new-project'}));
+  release(); await rejected;
+  assert.equal(publications, 0);
   const realtimeStart = extension.indexOf("async refreshResultsSummaryFromRealtime");
-  const manual = extension.slice(manualStart, extension.indexOf("scheduleResultsSummaryRefreshFromRealtime", manualStart));
-  assert.match(manual, /const client = this\.client/);
-  assert.match(manual, /client\.getResultsSummary\(planFile,\s*\{\s*userInitiated:\s*true\s*\}\)/);
-  assert.match(manual, /client !== this\.client/);
-  assert.match(manual, /generation === this\.projectContextGeneration && client === this\.client/);
-
   const realtime = extension.slice(realtimeStart, extension.indexOf("scheduleResultsSummaryBudgetRetryFromRealtime(", realtimeStart));
-  assert.match(realtime, /void reason/);
-  assert.match(realtime, /void dirtyKey/);
+  assert.match(realtime, /void reason/); assert.match(realtime, /void dirtyKey/);
   assert.doesNotMatch(realtime, /getResultsSummary\(|this\.resultsSummary\s*=/);
-  const snapshotStart = extension.indexOf("async manualSnapshot()");
-  const snapshot = extension.slice(snapshotStart, extension.indexOf("async manualGpuSnapshot()", snapshotStart));
-  assert.match(snapshot, /const client = this\.client/);
-  assert.match(snapshot, /client\.getSnapshot\(\)/);
-  assert.match(snapshot, /client !== this\.client/);
 });
 
 test("endpoint probes cannot publish after topology or tunnel client changes", () => {
@@ -66,30 +66,18 @@ test("endpoint probes cannot publish after topology or tunnel client changes", (
 
   const integrationStart = extension.indexOf("async runXshellRealIntegrationCheck");
   const integration = extension.slice(integrationStart, extension.indexOf("async restartRealtimeStream", integrationStart));
-  assert.match(integration, /const authorityClient = this\.client/);
-  assert.ok([...integration.matchAll(/authorityClient !== this\.client/g)].length >= 4);
-  assert.ok(integration.indexOf("authorityClient !== this.client") < integration.indexOf("this.lastIntegrationReport = result.report"));
+  assert.match(integration, /return this\.testTunnel\(true\)/);
+
 });
 
-test("settings and overview render topology ownership without active Hub controls", () => {
-  assert.match(panel, /data-command="saveTopologyMode" data-config-scope="topology"/);
-  assert.match(panel, /taskDetailLine\("调度所有者", esc\(topology\.schedulerOwner/);
-  assert.match(panel, /taskDetailLine\("状态与结果", esc\(topology\.stateOwner/);
-  assert.match(panel, /if \(hubParticipates\) cards\.push/);
-  assert.match(panel, /Hub 不参与当前模式/);
-  assert.match(panel, /当前模式不访问 Hub/);
-  assert.match(panel, /无自动备份/);
-  assert.match(panel, /data-topology-mode="' \+ escAttr\(noHubMode\) \+ '"[^>]*>停用 Hub/);
-  assert.match(panel, /data-topology-mode="hub_worker"[^>]*>恢复 Hub/);
-  assert.match(panel, /if \(button\.dataset\.topologyMode\) patch\.mode = button\.dataset\.topologyMode/);
-  assert.match(panel, /hubParticipates \? "启动全部隧道" : "启动 Worker 隧道"/);
-  assert.match(panel, /hubParticipates \? "检测全部" : "检测 Worker"/);
-  assert.match(panel, /serverObjectSummaryItem\("模式", topology\.modeLabel \|\| topologyModeLabel\(topology\.mode\), topology\.schedulerOwner \|\| "尚未确认"\)/);
+test("settings and overview expose Worker ownership without restoring retired Hub controls", () => {
+  const cards = require('../_helpers/panelFunction')('renderServerCardsV2');
+  assert.match(cards, /data-command="saveWorkerConfig"/);
+  assert.doesNotMatch(cards, /data-command="(?:saveHubConfig|startHub)"|data-topology-mode="hub_worker"/);
+  assert.match(cards, /Worker 服务器/); assert.match(cards, /saveAgentDefaults/);
   assert.match(panel, /serverObjectSummaryItem\("启用 Worker", enabledWorkers\.length \+ "\/" \+ workers\.length, "Worker"\)/);
-  assert.match(panel, /topology\.mode === "worker_pool" \? "人工选择 Plan 目标"/);
   assert.match(panel, /每个 Plan 人工选择一台 Worker，由该 Worker 独立调度完整 Plan/);
-  assert.doesNotMatch(panel, /独立分片调度/);
-  assert.doesNotMatch(panel, /确定性任务分片/);
+  assert.doesNotMatch(panel, /独立分片调度|确定性任务分片/);
 });
 
 test("topology command is registered on both sides of the webview boundary", () => {

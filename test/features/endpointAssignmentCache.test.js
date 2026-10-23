@@ -68,7 +68,7 @@ test("Extension Host reuses endpoint assignments and port conflicts by config", 
   const conflicts = subject.currentPortConflicts();
   assert.equal(subject.currentAssignments(), assignments);
   assert.equal(subject.currentPortConflicts(), conflicts);
-  assert.deepEqual(assignments.map((item) => item.endpointId), ["hub", "a"]);
+  assert.deepEqual(assignments.map((item) => item.endpointId), ["a"]);
   assert.equal(assignmentCalls, 1);
   assert.equal(conflictCalls, 1);
 
@@ -80,8 +80,8 @@ test("Extension Host reuses endpoint assignments and port conflicts by config", 
   subject.hubAllowed = false;
   const workerOnlyAssignments = subject.currentAssignments();
   assert.deepEqual(workerOnlyAssignments.map((item) => item.endpointId), ["a"]);
-  assert.equal(assignmentCalls, 2);
-  assert.notStrictEqual(workerOnlyAssignments, assignments);
+  assert.equal(assignmentCalls, 1);
+  assert.strictEqual(workerOnlyAssignments, assignments, "retired Hub policy cannot change Worker targets");
 
   subject.setupConfig = {
     workerTunnels: [{ id: "b", enabled: true, localForwardPort: 18768 }],
@@ -89,7 +89,7 @@ test("Extension Host reuses endpoint assignments and port conflicts by config", 
   };
   assert.notEqual(subject.currentAssignments(), assignments);
   subject.currentPortConflicts();
-  assert.equal(assignmentCalls, 3);
+  assert.equal(assignmentCalls, 2);
   assert.equal(conflictCalls, 3);
 });
 
@@ -160,6 +160,8 @@ test("endpoint registry state reuses stable inputs and invalidates on replacemen
   const workerRefresh = subject.endpointRegistryState();
   assert.notStrictEqual(workerRefresh, first);
   assert.equal(workerRefresh.registry.probes.a.status, "ok");
+  assert.equal(workerRefresh.registry.hub,undefined);
+  assert.ok(workerRefresh.assignments.every(row=>row.role!=="hub_control"));
 
   subject.lastProbe = { status: "ok" };
   assert.notStrictEqual(subject.endpointRegistryState(), workerRefresh);

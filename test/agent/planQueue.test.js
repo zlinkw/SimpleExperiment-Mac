@@ -33,7 +33,8 @@ def write_registry(registry, entries):
 def entry(op_id, pid, workers, owner, status="running"):
     return {"opId": op_id, "pid": pid, "workerIds": workers, "ownerWorkerId": owner, "status": status, "reservedAt": time.time()}
 
-with tempfile.TemporaryDirectory() as tmp:
+if True:
+    tmp = tempfile.mkdtemp(prefix="historical-plan-queue-input-")
     root = pathlib.Path(tmp)
     registry = root / "active_run_plans.json"
     write_registry(registry, [entry("first", os.getpid(), ["worker-a"], "worker-a")])
@@ -78,31 +79,38 @@ with tempfile.TemporaryDirectory() as tmp:
 `;
   fs.writeFileSync(scriptPath, script, "utf8");
   try {
-    const result = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], {
-      cwd: root,
-      env: {
+    const result = spawnSync(process.env.PYTHON || "python", ["-X", "utf8", scriptPath], { cwd: root, env: {
         ...process.env,
         PYTHONIOENCODING: "utf-8",
         TEST_SCHEDULER_PATH: path.join(root, "dist", "runtime", "cluster_scheduler.py"),
-      },
-      encoding: "utf8",
-      timeout: 10000,
-      windowsHide: true,
-    });
+      }, encoding: "utf8", timeout: 10000, windowsHide: true });
     assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr || result.stdout);
   } finally {
-    fs.rmSync(scriptPath, { force: true });
+    console.log("kept queue probe at " + scriptPath);
   }
 });
 
-test("Plan submission keeps task-end GPU wake path and sends one Worker", () => {
-  const agent = fs.readFileSync(path.join(root, "src", "clusterAgentRuntime.legacy.ts"), "utf8");
-  const scheduler = fs.readFileSync(path.join(root, "src", "clusterSchedulerRuntime.legacy.ts"), "utf8");
-  const extension = fs.readFileSync(path.join(root, "src", "extension", "legacy.ts"), "utf8");
-  assert.match(agent, /if len\(workers\) != 1/);
-  assert.match(agent, /"queued" if queue_wait else "running"/);
-  assert.match(scheduler, /if reap_finished_items\(\):[\s\S]*?_pending_signal_type = SCHEDULER_SIGNAL_TASK_END/);
-  assert.match(scheduler, /refresh_worker_availability_for_signal\(workers, args\.availability_path, force=_force_refresh\)/);
-  assert.doesNotMatch(extension, /单 Worker 当前仅支持一个活动 Plan 调度器/);
+test("current task queries use protocol 2 and cannot replay the historical durable queue", () => {
+  const runtime=path.join(root,"dist/runtime/cluster_agent.py");
+  const folder=fs.mkdtempSync(path.join(os.tmpdir(),"native-query-boundary-")),file=path.join(folder,"probe.py");
+  fs.writeFileSync(file,`
+import ast,pathlib
+source=pathlib.Path(${JSON.stringify(runtime)}).read_text(encoding="utf-8")
+function=next(node for node in ast.parse(source).body if isinstance(node,ast.FunctionDef) and node.name=="api_worker_tasks")
+seen=[]
+def query(root,queries):
+    seen.append((root,queries))
+    return {"queryComplete":True,"lifecycleProtocol":2}
+def retired(*args):raise AssertionError("historical durable queue was touched")
+ns={"TASK_LIFECYCLE_PROTOCOL":2,"task_query":query,"read_runtime_json_cached":retired,"sync_durable_plan_task_rows":retired,"reconcile_worker_task_exit_codes":retired}
+exec(compile(ast.Module(body=[function],type_ignores=[]),"isolated-api-worker-tasks","exec"),ns)
+assert ns["api_worker_tasks"]("/fixture")["queryComplete"]
+selection=[{"commandId":"original-command"}]
+assert ns["api_worker_tasks"]("/fixture",queries=selection)["lifecycleProtocol"]==2
+assert seen==[("/fixture",[]),("/fixture",selection)],seen
+print("ok")
+`);
+  const result=spawnSync(process.platform==="win32"?"python":"python3",["-B","-X","utf8",file],{encoding:"utf8",timeout:10000,windowsHide:true});
+  assert.equal(result.status,0,result.stderr||result.stdout);
 });

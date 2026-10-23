@@ -9,19 +9,17 @@ const root = path.resolve(__dirname, "..", "..");
 
 test("agent shares a bounded operation index for one journal version", (t) => {
   const python = process.env.PYTHON || "python";
-  const probe = spawnSync(python, ["--version"], { encoding: "utf8" });
-  if (probe.error || probe.status !== 0) {
-    t.skip("python unavailable");
-    return;
-  }
+  const probe = spawnSync(python, ["--version"], { encoding: "utf8", timeout: 10000, windowsHide: true });
+  assert.equal(probe.status,0,probe.stderr || String(probe.error));
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "simple-experiment-operation-index-"));
   const script = path.join(project, "operation-index.py");
   fs.writeFileSync(script, `
 import importlib.util, json, pathlib
 agent_path = pathlib.Path(${JSON.stringify(path.join(root, "dist", "runtime", "cluster_agent.py"))})
-spec = importlib.util.spec_from_file_location("agent", agent_path)
-agent = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(agent)
+import sys
+sys.path.insert(0, ${JSON.stringify(require("node:path").resolve(__dirname, "../_helpers"))})
+from extractRuntimeFunctions import extract_runtime_functions
+agent = extract_runtime_functions(agent_path, ["MAX_OPERATION_JOURNAL_CACHE_RECORDS", "OPERATION_JOURNAL_CACHE", "OPERATION_JOURNAL_CACHE_TTL_SECONDS", "path_for", "prune_operation_journal_cache", "read_operation_events", "recent_operations"])
 
 root = ${JSON.stringify(project)}
 journal = pathlib.Path(agent.path_for(root, "events.jsonl"))
@@ -43,6 +41,10 @@ with journal.open("a", encoding="utf-8") as handle:
 second = agent.recent_operations(root, 10)
 second_groups = agent.OPERATION_JOURNAL_CACHE[cache_path]["groups"]
 
+with journal.open("w", encoding="utf-8") as handle:
+    handle.write(json.dumps(event(4, "op-c", "completed")) + "\\n")
+third = agent.recent_operations(root, 10)
+third_groups = agent.OPERATION_JOURNAL_CACHE[cache_path]["groups"]
 agent.OPERATION_JOURNAL_CACHE.clear()
 cache_now = 5000
 for index in range(agent.MAX_OPERATION_JOURNAL_CACHE_RECORDS + 4):
@@ -54,7 +56,8 @@ print(json.dumps({
     "firstIds": [row["operationId"] for row in first],
     "details": [row["seq"] for row in details],
     "reused": first_groups is reused_groups,
-    "invalidated": second_groups is not first_groups,
+    "incremental": second_groups is first_groups,
+    "truncatedInvalidated": third_groups is not second_groups, "thirdIds":[row["operationId"] for row in third],
     "secondStatus": next(row["status"] for row in second if row["operationId"] == "op-a"),
     "secondEvents": [row["seq"] for row in second_groups["op-a"]],
     "cacheCount": len(agent.OPERATION_JOURNAL_CACHE),
@@ -63,13 +66,14 @@ print(json.dumps({
     "cacheActive": "active-old" in agent.OPERATION_JOURNAL_CACHE,
 }))
 `, "utf8");
-  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
+  const run = spawnSync(python, [script], { cwd: root, encoding: "utf8", env: { ...process.env, PYTHONIOENCODING: "utf-8" }, timeout: 10000, windowsHide: true });
   assert.equal(run.status, 0, run.stderr || run.stdout);
   const result = JSON.parse(run.stdout.trim());
   assert.deepEqual(result.firstIds, ["op-b", "op-a"]);
   assert.deepEqual(result.details, [1]);
   assert.equal(result.reused, true);
-  assert.equal(result.invalidated, true);
+  assert.equal(result.incremental, true);
+  assert.equal(result.truncatedInvalidated,true);assert.deepEqual(result.thirdIds,["op-c"]);
   assert.equal(result.secondStatus, "completed");
   assert.deepEqual(result.secondEvents, [1, 3]);
   assert.equal(result.cacheCount, 8);

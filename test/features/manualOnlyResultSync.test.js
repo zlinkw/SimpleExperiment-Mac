@@ -4,6 +4,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 const ts = require("typescript");
+require('../_helpers/registerTsRequire');
+const {resultCollectionHost}=require('../../src/extension/ResultCollectionHost.ts');
+const {fixture}=require('../_helpers/freshResultHost');
 
 const root = path.resolve(__dirname, "../..");
 
@@ -38,12 +41,16 @@ function selectedMethods(names, globals = {}) {
   }).outputText;
   const sandbox = {
     AbortController,
+    resultCollectionHost,
     workspaceRoot: () => "/project",
     errorMessage: (error) => String(error?.message || error),
     assertRetryRequestCurrent: () => undefined,
     retryRequestSignal: () => undefined,
     completedResultPlanFiles: async () => [],
-    resultCollectionHost: () => ({ update: async () => ({}) }),
+    // 085 repair: the Mac default stub used to sit after the real resultCollectionHost binding
+    // and shadowed it (duplicate key), so the .403 background route saw an empty report. The
+    // real host is now the single default; every Mac test that wants a stub passes its own
+    // resultCollectionHost override through globals, exactly as before.
     vscode: { ProgressLocation: { Notification: 1 }, window: {
       showInformationMessage: async () => {},
       showWarningMessage: async () => {},
@@ -110,6 +117,7 @@ test("manual result sync directly downloads metrics and publishes local tables w
   // 门面只负责路由：人工请求必须把原始 planFiles 交给本机总表重建，绝不触发远端重建或整树镜像。
   const provider = distributedHost();
   const result = await provider.syncPendingResultMetricsFromUi({ planFiles: ["experiments/plans/a.yaml"] });
+  assert.equal(result.title, undefined, "the current result entry forwards user options without injecting a retired workflow");
   assert.deepEqual(Array.from(result.planFiles), ["experiments/plans/a.yaml"]);
   assert.deepEqual(provider.calls, ["local-tables"]);
   // 本机重建的真实主体：一次带取消信号的采集更新 + 进度标题"更新结果汇总"。
@@ -222,4 +230,35 @@ test("a queued manual summary retry returns to the manual fetch after the active
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(fetches, 1, "the deferred manual retry re-enters the single manual fetch path");
   assert.equal(provider.resultsSummaryRefreshRetryCount, 2);
+});
+
+test("background metrics collection reads verified artifacts in memory without the manual full-transfer route", async () => {
+  const f=fixture(),provider=Object.assign(selectedMethods(["syncPendingResultMetricsFromUi"]),f.host);
+  provider.rebuildProjectResultTablesFromUi=()=>assert.fail("background query must not enter the manual full-transfer UI");
+  const report=await provider.syncPendingResultMetricsFromUi({background:true});
+  assert.equal(report.source,"active_query");assert.equal(report.completed,1);
+  const transfers=f.calls.filter(row=>row[0]==="sync.downloadMappedPaths");assert.equal(transfers.length,1);
+  assert.equal(transfers[0][1].memoryOnly,true);assert.equal(transfers[0][1].metricsOnly,true);
+  assert.equal(fs.existsSync(path.join(f.root,"work_dirs")),false,"raw artifacts cannot be downloaded to the local project");
+});
+
+test("concurrent manual summary refreshes share one active collection without a duplicate transfer", async () => {
+  const f=fixture();let release;f.block(new Promise(resolve=>release=resolve));
+  const provider=Object.assign(selectedMethods(["refreshResultsSummary"]),f.host,{
+    effectiveConnectionMode:()=>"tunnel",recordActionError:error=>assert.fail(error.message)});
+  const first=provider.refreshResultsSummary(),second=provider.refreshResultsSummary();
+  await new Promise(setImmediate);assert.equal(f.calls.filter(row=>row[0]==="tasks").length,1);
+  release();await Promise.all([first,second]);
+  assert.equal(f.calls.filter(row=>row[0]==="tasks").length,2,"one discovery plus one fresh declared-result query");
+  assert.equal(f.calls.filter(row=>row[0]==="sync.downloadMappedPaths").length,1);
+  assert.equal(provider.resultsSummary.completed,1);
+});
+
+test("an explicit refresh after a failed query starts a fresh collection and cannot reuse cached metrics", async () => {
+  const f=fixture(),provider=Object.assign(selectedMethods(["refreshResultsSummary"]),f.host,{effectiveConnectionMode:()=>"tunnel"});
+  f.offline(true);await provider.refreshResultsSummary();
+  assert.equal(provider.resultsSummary.results.length,0);assert.ok(provider.resultsSummary.skipped.length>0);
+  const before=f.calls.length;f.offline(false);await provider.refreshResultsSummary();
+  assert.equal(provider.resultsSummary.completed,1);assert.equal(provider.resultsSummary.results.length,1);
+  assert.ok(f.calls.length>before);assert.equal(f.calls.filter(row=>row[0]==="sync.downloadMappedPaths").length,1);
 });

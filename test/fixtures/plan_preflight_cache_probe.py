@@ -100,7 +100,7 @@ with patch("os.stat", stat_file), patch("os.path.isfile", lambda full: os.path.r
     validate = scope["scheduler_validate_json"]
     cached = scope["cached_scheduler_validation"]
     initial = validate(root, scheduler, plan, options=opts)
-    assert len(captures) == len(dependency_checks) == 1
+    assert len(captures) == 1 and len(dependency_checks) == 0
     cache = scope["PLAN_STRUCTURAL_VALIDATION_CACHE"]
     assert len(cache) == 1
     assert all("existing" not in row and "existingCount" not in row for row in cache.values())
@@ -111,7 +111,7 @@ with patch("os.stat", stat_file), patch("os.path.isfile", lambda full: os.path.r
     artifacts["work/job-1/checkpoints"] = ["latest.ckpt"]
     artifacts["work/job-1"] = ["checkpoints"]
     assert validate(root, scheduler, plan, options=opts)["existingCount"] == 2
-    assert len(captures) == len(dependency_checks) == 1, "warm checks must not launch scheduler or dependency subprocesses"
+    assert len(captures) == 1 and len(dependency_checks) == 0, "warm checks must not launch scheduler or dependency subprocesses"
     artifacts.clear()
     assert validate(root, scheduler, plan, options=opts)["existing"] == [], "deleted outputs cannot survive in the cache"
     assert len(captures) == 1

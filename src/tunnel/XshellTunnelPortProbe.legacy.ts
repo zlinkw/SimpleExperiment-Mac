@@ -24,6 +24,12 @@ export type TunnelProbeStatus =
   | "timeout";
 
 export interface TunnelProbeResult {
+  localForwardHost?: string;
+  remoteAgentHost?: string;
+  agentStateDir?: string;
+  workerStateDir?: string;
+  workerId?: string;
+  gpuCollectorProtocol?: number;
   status: TunnelProbeStatus;
   localForwardPort: number;
   remoteAgentPort: number;
@@ -47,6 +53,12 @@ export interface TunnelProbeResult {
 }
 
 export interface WorkerTelemetryProbeResult {
+  localForwardHost?: string;
+  remoteAgentHost?: string;
+  agentStateDir?: string;
+  workerStateDir?: string;
+  workerId?: string;
+  gpuCollectorProtocol?: number;
   status: "ok" | "local_port_closed" | "agent_unreachable" | "agent_token_invalid" | "worker_api_invalid" | "timeout";
   localForwardPort: number;
   remoteTelemetryPort: number;
@@ -110,6 +122,8 @@ export async function probeLocalTunnel(
   const host = resolveProbeHost(config);
   const base = resolveProbeBase(config);
   const baseResult = {
+    localForwardHost: host,
+    remoteAgentHost: String(config.remoteAgentHost || "127.0.0.1"),
     localForwardPort: config.localForwardPort,
     remoteAgentPort: config.remoteAgentPort,
     tcpOpen: false,
@@ -289,6 +303,10 @@ export async function probeLocalTunnel(
       projectRoot,
       agentInstallDir,
       schedulerDependencies: health.schedulerDependencies,
+      agentStateDir: String(health.agentStateDir || ""),
+      workerStateDir: String(health.workerStateDir || ""),
+      workerId: String(health.workerId || ""),
+      gpuCollectorProtocol: Number(health.gpuCollectorProtocol || 0),
       capabilities,
       fileCapabilities,
       message: "Xshell 隧道和 Worker Agent API 可用。",
@@ -315,6 +333,8 @@ export async function probeWorkerTelemetryTunnel(
   const host = resolveProbeHost(config);
   const base = resolveProbeBase(config);
   const baseResult = {
+    localForwardHost: host,
+    remoteAgentHost: String(config.remoteAgentHost || "127.0.0.1"),
     localForwardPort: config.localForwardPort,
     remoteTelemetryPort: config.remoteAgentPort,
     tcpOpen: false,
@@ -380,6 +400,10 @@ export async function probeWorkerTelemetryTunnel(
       schedulerDependencies: health.schedulerDependencies,
       capabilities,
       warnings: validation.warnings,
+      agentStateDir: String(health.agentStateDir || ""),
+      workerStateDir: String(health.workerStateDir || ""),
+      workerId: String(health.workerId || ""),
+      gpuCollectorProtocol: Number(health.gpuCollectorProtocol || 0),
       message: ok ? "Worker Telemetry API 可用。" : "Worker Telemetry API 不完整。",
       suggestion: ok ? undefined : modeSuggestion,
     };

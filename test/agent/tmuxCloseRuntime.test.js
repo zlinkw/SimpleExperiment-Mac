@@ -16,14 +16,7 @@ test("tmux close verifies session:index and protects the Agent window", () => {
   const extracted = source.slice(start, end);
   assert.equal(extracted.includes("cluster_agent"), false);
   assert.equal(extracted.includes("cluster_scheduler"), false);
-  const result = spawnSync("python", ["-X", "utf8", fixturePath], {
-    input: source,
-    encoding: "utf8",
-    timeout: 10000,
-    windowsHide: true,
-    cwd: root,
-    env: { ...process.env, PYTHONIOENCODING: "utf-8" },
-  });
+  const result = spawnSync("python", ["-X", "utf8", fixturePath], { input: source, encoding: "utf8", timeout: 10000, windowsHide: true, cwd: root, env: { ...process.env, PYTHONIOENCODING: "utf-8" } });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /ok/);
 });

@@ -18,7 +18,7 @@ test("webview panel open auto connects realtime stream", () => {
 
 test("test tunnel and resume network auto reconnect realtime", () => {
   const source = readSource("src/extension.ts");
-  assert.match(source, /ensureRealtimeConnected\("tunnel test ok"\)/);
+  assert.match(source, /ensureRealtimeConnected\(userInitiated \? "tunnel test ok" : "tunnel probe ok"\)/);
   assert.match(source, /ensureRealtimeConnected\("resume network"\)/);
   assert.match(source, /disconnect\("paused"\)/);
 });

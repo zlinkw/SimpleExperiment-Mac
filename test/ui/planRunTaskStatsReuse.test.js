@@ -32,11 +32,11 @@ function loadTaskStats() {
   return sandbox;
 }
 
-function trackedRows(statuses, counter) {
+function trackedRows(statuses, counter, verified = true) {
   return {
     forEach(callback) {
       counter.count += 1;
-      statuses.forEach((status) => callback({ status }));
+      statuses.forEach((status) => callback({ status, completionState: verified ? "verified" : "unknown" }));
     },
   };
 }
@@ -60,6 +60,8 @@ test("overview task statistics reuse stable scheduler rows and preserve status g
   assert.notStrictEqual(refreshed, first);
   assert.deepEqual(JSON.parse(JSON.stringify(refreshed)), { running: 1, queued: 0, failed: 0, completed: 1 });
   assert.equal(scans.count, 2);
+  state.rows = trackedRows(["completed", "done"], scans, false);
+  assert.equal(sandbox.check(state).completed, 0, "unverified historical completion cannot count as confirmed success");
 });
 
 test("Plan run workbench consumes the shared task statistics", () => {

@@ -3,6 +3,13 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
+require('../_helpers/registerTsRequire');
+const PlanExecutionMode=require('../../dist/features/PlanExecutionMode');
+const GpuQuotaScheduling=require('../../dist/features/GpuQuotaScheduling');
+const PlanCodeScopeHost=require('../../dist/extension/PlanCodeScopeHost');
+const AgentTmuxPolicy_1=require('../../dist/tunnel/AgentTmuxPolicy');
+const endpoints={declaredJobPaths:true,formalJobIdentityEnv:1,taskShellEnvironment:1,projectManagedValidation:1,gpuQuotaScheduling:1};
+const vscode={workspace:{getConfiguration:()=>({get:()=>undefined})}};
 const queue = require("../../dist/features/DistributedPlanQueue.js");
 const source = fs.readFileSync(require.resolve("../../src/extension/legacy.ts"), "utf8");
 const ast = ts.createSourceFile("legacy.ts", source, ts.ScriptTarget.Latest, true);
@@ -17,20 +24,27 @@ function fixture() {
   const root = "C:/research/project";
   const workers = ["worker-old", "worker-free"].map(id => ({ id, role: "worker", label: id }));
   const snapshots = Object.fromEntries(workers.map(row => [row.id, {
-    workerId: row.id, generatedAt: new Date().toISOString(), fetchedAt: new Date().toISOString(),
+    workerId: row.id,queryComplete:true, generatedAt: new Date().toISOString(), fetchedAt: new Date().toISOString(),
     capabilities: { durablePlanQueue: true, schemaVersion: 1 }, tasks: [],
   }]));
-  const sandbox = { DistributedPlanQueue: queue, workspaceRoot: () => root, UiCommandCancelled: class extends Error {},
+  const sandbox = { ...require('../_helpers/nativeHostScope'), DistributedPlanQueue: queue, workspaceRoot: () => root, UiCommandCancelled: class extends Error {},
     mapLimited: async (rows, limit, run) => Promise.all(rows.map(run)) };
   vm.createContext(sandbox);
   vm.runInContext(method("safeWorkerCodeSyncTargets"), sandbox);
   const old = queue.enqueuePlan(queue.emptyDistributedQueue(), {
-    codeFingerprint: "old-code", revision: "r", planFile: "plans/old.yaml",
-    jobs: [{ index: 0, case: "case", seed: 42, outputDir: "work_dirs/old/attempts/run-old" }],
+    projectId:queue.canonicalProjectId(root),executionMode:'train',codeFingerprint: "old-code", revision: "r", planFile: "plans/old.yaml",
+    jobs: [{ index: 0, case: "case", seed: 42, outputDir: "work_dirs/old",collectionResultCsv:"tmp/result/old.csv" }],
   }, "run-old");
   Object.assign(old.plans[0].jobs[0], { status: "running", workerId: "worker-old", gpuId: "0", commandId: "old-command" });
+  const at=new Date().toISOString(),plan=old.plans[0],job=plan.jobs[0];
+  snapshots['worker-old'].capabilities.taskLifecycle=2;
+  snapshots['worker-old'].tasks=[{commandId:job.commandId,projectId:plan.projectId,codeFingerprint:plan.codeFingerprint,
+    outputDir:job.outputDir,collectionResultCsv:job.collectionResultCsv,observation:{lifecycleProtocol:2,commandId:job.commandId,
+      projectId:plan.projectId,workerId:job.workerId,observedAt:at,tmux:{dead:false,phase:'running',paneId:'%1',windowId:'@1'}}}];
+  Object.assign(job,queue.mergeDurableWorkerSnapshots(old,Object.values(snapshots),plan.projectId).plans[0].jobs[0]);
   const reads = [];
   const host = { ...sandbox.methods, client: {}, projectTopologyAssessment: () => ({ mode: "worker_pool" }),
+    lastWorkerTaskSnapshots:new Map(workers.map(w=>[root+'\u0000'+w.id,{capabilities:{taskLifecycle:2}}])),
     loadDistributedQueue: async () => old,
     readWorkerTaskSnapshot: async (id, options) => { reads.push({ id, options }); return snapshots[id]; },
   };
@@ -54,7 +68,7 @@ test("live remote task absent from the local queue still protects its Worker roo
 });
 
 test("missing/stale snapshots and uncertain remote tasks never authorize overwrite", async () => {
-  for (const change of [{ error: "offline" }, { workerId: "another-worker" }, { generatedAt: "2000-01-01T00:00:00Z" }, { tasks: [{ status: "unknown" }] }]) {
+  for (const change of [{ error: "offline" }, { workerId: "another-worker" }, { fetchedAt: "2000-01-01T00:00:00Z" }, { tasks: [{ status: "unknown" }] }]) {
     const f = fixture();
     Object.assign(f.snapshots["worker-free"], change);
     await assert.rejects(f.host.safeWorkerCodeSyncTargets(f.workers, f.root, "new-code", "run"), /未覆盖运行中代码/);
@@ -93,12 +107,12 @@ test("a live old Plan cannot block submission on an independent Worker", async (
 test("old pending job uses the original Worker's durable proof after the local code changes", async () => {
   const f = fixture(), sent = [], oldFingerprint = "a".repeat(64), proofId = "b".repeat(64);
   const proofFunction = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "durableCodeProofRequestFields").getText(ast);
-  const sandbox = { DistributedPlanQueue: queue, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"), workspaceRoot: () => f.root };
+  const sandbox = { ...require('../_helpers/nativeHostScope'), DistributedPlanQueue: queue, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"), workspaceRoot: () => f.root };
   vm.createContext(sandbox);
   vm.runInContext(proofFunction + "\n" + method("sendDistributedJob"), sandbox);
   Object.assign(f.host, sandbox.methods, { distributedQueueGeneration: 1, workerActionTargets: () => f.workers, enabledWorkerConfigs: () => f.workers,
-    schedulerSettings: () => ({}), withRemoteActionResource: async (_worker, _action, _request, run) => run(),
-    lastWorkerProbes: { "worker-old": { capabilities: { actionEndpoints: { "register-code-sync-proof": true } } } },
+    lastWorkerTaskSnapshots:new Map([[f.root+"\u0000worker-old",{capabilities:{taskLifecycle:2}}]]), schedulerSettings: () => ({}), withRemoteActionResource: async (_worker, _action, _request, run) => run(),
+    lastWorkerProbes: { "worker-old": { capabilities: { endpoints: {declaredJobPaths:true,formalJobIdentityEnv:1,taskShellEnvironment:1,projectManagedValidation:1,gpuQuotaScheduling:1}, actionEndpoints: { "register-code-sync-proof": true } } } },
     lastCodeSyncState: { fingerprint: "new-local-code", workerVersions: { "worker-old": { fingerprint: oldFingerprint, manifestDigest: oldFingerprint, codeSyncProofId: proofId } } },
     buildDistributedJobCodeManifest: async () => { throw new Error("must not substitute current local code for original proof"); },
     client: { postWorkerAction: async (_worker, _action, request) => { sent.push(request); return { status: "queued" }; } },
@@ -117,13 +131,13 @@ test("a pre-migration cache without a proof uses a verified matching manifest an
   const f = fixture(), sent = [], manifest = { "models/train.py": "a".repeat(64) };
   const fingerprintFunction = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "fingerprintFromManifest").getText(ast);
   const proofFunction = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "durableCodeProofRequestFields").getText(ast);
-  const sandbox = { crypto: require("node:crypto"), DistributedPlanQueue: queue, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"), workspaceRoot: () => f.root };
+  const sandbox = { ...require('../_helpers/nativeHostScope'), crypto: require("node:crypto"), DistributedPlanQueue: queue, DistributedSchedulingPolicy: require("../../dist/features/DistributedSchedulingPolicy.js"), workspaceRoot: () => f.root };
   vm.createContext(sandbox);
   vm.runInContext(fingerprintFunction + "\n" + proofFunction + "\n" + method("sendDistributedJob"), sandbox);
   const fingerprint = sandbox.fingerprintFromManifest(manifest);
   Object.assign(f.host, sandbox.methods, { distributedQueueGeneration: 1, workerActionTargets: () => f.workers, enabledWorkerConfigs: () => f.workers,
     schedulerSettings: () => ({}), withRemoteActionResource: async (_worker, _action, _request, run) => run(),
-    lastWorkerProbes: { "worker-free": { capabilities: { actionEndpoints: { "register-code-sync-proof": true } } } },
+    lastWorkerProbes: { "worker-free": { capabilities: { endpoints: {declaredJobPaths:true,formalJobIdentityEnv:1,taskShellEnvironment:1,projectManagedValidation:1,gpuQuotaScheduling:1}, actionEndpoints: { "register-code-sync-proof": true } } } },
     lastCodeSyncState: { fingerprint, workerVersions: { "worker-free": { fingerprint } } },
     buildDistributedJobCodeManifest: async () => manifest,
     client: { postWorkerAction: async (_worker, _action, request) => { sent.push(request); return { status: "queued" }; } },
@@ -140,8 +154,8 @@ test("a pre-migration cache without a proof uses a verified matching manifest an
 
 test("allocation is held only during a code write; running reconciliation continues and manifest identity stays mandatory", () => {
   const tick = source.slice(source.indexOf("async tickDistributedQueueCore("), source.indexOf("async patchDistributedJobArtifactState("));
-  assert.ok(tick.indexOf("mergeDurableWorkerSnapshots") < tick.indexOf("if (this.codeSyncInFlight)"));
-  assert.ok(tick.indexOf("if (this.codeSyncInFlight)") < tick.indexOf("allocateServerPrequeue"));
+  assert.ok(tick.indexOf("mergeDurableWorkerSnapshots") < tick.indexOf("if (this.codeSyncInFlight"));
+  assert.ok(tick.indexOf("if (this.codeSyncInFlight") < tick.indexOf("allocateAvailable"));
   assert.doesNotMatch(tick, /dispatchFingerprint/);
   const sync = source.slice(source.indexOf("async syncCodeTargets("), source.indexOf("codeSyncWarmProofKey(" , source.indexOf("async safeWorkerCodeSyncTargets(")));
   assert.match(sync, /dispatchInFlight[\s\S]*boundedPromise/);

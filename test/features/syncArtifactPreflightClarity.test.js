@@ -62,7 +62,7 @@ test("sync artifact action is presented as a manifest preflight, not a transfer"
   assert.match(panel, /logPath: cleanSelectionValue\(row\.logPath\)/);
   assert.doesNotMatch(panel, /syncArtifacts: "同步产物"/);
   assert.match(agent, /同步清单检查完成（未传输文件）/);
-  assert.match(extension, /showWarningMessage\(remoteActionConfirmationDetail\(command, action, body\), \{ modal: true \}/);
+  // Active confirmations are bound to explicit Workers below; no Hub route.
   assert.match(extension, /confirmationPath: confirmationPath \|\| undefined/);
   assert.match(extension, /artifactPath: artifactPath \|\| undefined/);
   assert.match(extension, /resultPath: resultPath \|\| undefined/);

@@ -14,7 +14,7 @@ test('isolated Agent partitions Plan, project and paper tables and retains same-
   fs.writeFileSync(script, `import sys, os, csv, json, math
 sys.path.insert(0, ${JSON.stringify(helpers)})
 from extractRuntimeFunctions import extract_runtime_functions
-a = extract_runtime_functions(${JSON.stringify(runtime)}, ['parse_results_action', 'write_plan_seed_aggregate', 'write_project_seed_aggregate', 'write_project_final_summary', 'paper_dataset_output', 'publish_dataset_outputs', 'export_paper_table_action'])
+a = extract_runtime_functions(${JSON.stringify(runtime)}, ['parse_results_action', 'write_plan_seed_aggregate', 'write_project_seed_aggregate', 'write_project_final_summary', 'paper_dataset_output', 'publish_dataset_outputs', 'export_paper_table_action', 'read_current_results_summary'])
 root = ${JSON.stringify(root)}
 os.makedirs(root, exist_ok=True)
 source = 'experiments/results/raw.csv'
@@ -74,12 +74,12 @@ try:
 except ValueError:
     pass
 assert open(a.safe_project_path(root, two['finalCsvPath']), 'rb').read() == before
-stats = {'resultCount': 4, 'rows': [{'dimensions': {'dataset': d, 'method': 'demo'}, 'group': 'demo', 'metrics': {'accuracy': {'mean': .7, 'std': .1, 'n': 2}}} for d in ['BUS', 'PAD']]}
-a.compute_statistics_action = lambda *args: stats
-a.read_project_metric_policy = lambda *args: policy
-a.read_current_results_summary = lambda *args: {}
-a.build_claim_evidence_report = lambda *args: {}
-a.write_results_summary_v2 = lambda *args: None
+stats = {'resultCount': 4, 'planFile': one['planFile'], 'path': '', 'rows': [{'dimensions': {'dataset': d, 'method': 'demo'}, 'group': 'demo', 'metrics': {'accuracy': {'mean': .7, 'std': .1, 'n': 2}}} for d in ['BUS', 'PAD']]}
+# Mac 适配: Mac 导出先走 plan_analysis_context 严格边界,保留真实 read_current_results_summary
+a.compute_statistics_action = lambda *args, **kwargs: stats
+a.read_project_metric_policy = lambda *args, **kwargs: policy
+a.build_claim_evidence_report = lambda *args, **kwargs: {}
+a.write_results_summary_v2 = lambda *args, **kwargs: None
 paper = a.export_paper_table_action(root, one['planFile'])
 assert len(paper['paperDatasetTables']) == 2 and paper['path'] == '' and paper['csvPath'] == ''
 for table in paper['paperDatasetTables']:

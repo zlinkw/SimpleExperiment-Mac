@@ -79,11 +79,12 @@ test("worker realtime tunnels are normalized for local aggregation", () => {
   assert.equal(setup.workerTunnels[0].remoteAgentHost, "127.0.0.1");
 });
 
-test("duplicate worker aliases and stale assignments are removed", () => {
+test("distinct Worker identities on one host survive while same-ID duplicates and stale assignments are removed", () => {
   const setup = normalizeXshellSetupConfig({
     workerRealtimeMode: "hub_plus_workers",
     workerTelemetryMode: "hub_plus_worker_telemetry",
     workerTunnels: [
+      { id: "nwpu5", displayName: "old duplicate", workerHost: "nwpu5", workerUser: "simple", localForwardPort: 18769, remoteTelemetryPort: 18765, enabled: true },
       { id: "5", displayName: "5", workerHost: "nwpu5", workerUser: "simple", localForwardPort: 18765, remoteTelemetryPort: 18765, enabled: true },
       { id: "nwpu5", displayName: "nwpu5", workerHost: "nwpu5", workerUser: "simple", localForwardPort: 18766, remoteTelemetryPort: 18765, enabled: true },
       { id: "nwpu2", displayName: "nwpu2", workerHost: "nwpu2", workerUser: "simple", localForwardPort: 18768, remoteTelemetryPort: 18765, enabled: true },
@@ -98,9 +99,11 @@ test("duplicate worker aliases and stale assignments are removed", () => {
       ],
     },
   });
-  assert.deepEqual(setup.workerTunnels.map((worker) => worker.id), ["nwpu5", "nwpu2"]);
-  assert.deepEqual(setup.ports.assignments.map((item) => item.endpointId), ["hub", "nwpu5", "nwpu2"]);
+  assert.deepEqual(setup.workerTunnels.map((worker) => worker.id), ["nwpu5", "5", "nwpu2"]);
+  assert.deepEqual(setup.ports.assignments.map((item) => item.endpointId).sort(), ["5", "nwpu2", "nwpu5"]);
   assert.equal(setup.workerTunnels[0].localForwardPort, 18766);
+  assert.equal(setup.workerTunnels[1].localForwardPort, 18765);
+  assert.equal(setup.ports.assignments.some(row => row.role === "hub_control"), false);
 });
 
 test("single endpoint launch configs clear worker telemetry mode", () => {

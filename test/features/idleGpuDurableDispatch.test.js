@@ -4,21 +4,14 @@ const fs = require("node:fs");
 const Module = require("node:module");
 const path = require("node:path");
 const ts = require("typescript");
-const sourcePath = path.join(__dirname, "../../src/features/DistributedPlanQueue.ts");
-const compiled = ts.transpileModule(fs.readFileSync(sourcePath, "utf8"), {
-  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-}).outputText;
-const loaded = new Module(sourcePath, module);
-loaded.filename = sourcePath;
-loaded.paths = Module._nodeModulePaths(path.dirname(sourcePath));
-loaded._compile(compiled, sourcePath);
-const queue = loaded.exports;
+require('../_helpers/registerTsRequire');
+const queue = require('../../src/features/DistributedPlanQueue.ts');
 
 function durablePlan(id = "workflow") {
   return { id, planFile: `experiments/plans/${id}.yaml`, revision: "rev-1", codeFingerprint: "code-a",
     projectId: queue.canonicalProjectId("C:/research/project"), planJobCount: 2, enqueuedAt: "2026-09-29T00:00:00.000Z",
     jobs: [0, 1].map((index) => ({ index, case: "bus", seed: 40 + index,
-      outputDir: `work_dirs/${id}/bus/attempts/run-${index}` })) };
+      outputDir: `work_dirs/${id}/bus/run-${index}` })) };
 }
 
 test('migration destination persists across reload and never falls back to the old Worker when unavailable', () => {
@@ -26,8 +19,8 @@ test('migration destination persists across reload and never falls back to the o
   Object.assign(input.plans[0].jobs[0],{status:'completed',workerId:'old'});
   input.plans[0].jobs[1].reassignmentWorkerId='destination';
   const reloaded=JSON.parse(JSON.stringify(input));
-  const workers=[{workerId:'old',online:true,idleGpuAdmission:true,idleGpuIds:['0','1'],codeFingerprint:'code-a'},
-    {workerId:'destination',online:false,idleGpuAdmission:true,idleGpuIds:['0'],codeFingerprint:'code-a'}];
+  const workers=[{workerId:'old',declaredJobPaths:true,online:true,idleGpuAdmission:true,idleGpuIds:['0','1'],codeFingerprint:'code-a'},
+    {workerId:'destination',declaredJobPaths:true,online:false,idleGpuAdmission:true,idleGpuIds:['0'],codeFingerprint:'code-a'}];
   const held=queue.allocateAvailable(reloaded,workers,{requireIdleGpuAdmission:true});
   assert.equal(held.dispatches.length,0);assert.equal(held.queue.plans[0].jobs[1].reassignmentWorkerId,'destination');
   workers[1].online=true;workers[1].codeFingerprint='other-code';
@@ -55,7 +48,7 @@ test('reconciliation cooldown survives reload and expires for both pinned and se
 test("durable admission leaves jobs unassigned until a fresh idle GPU and capable Worker exist", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), durablePlan(), "workflow");
   const noIdle = queue.allocateAvailable(input, [
-    { workerId: "nwpu5", idleGpuIds: [], online: true, codeFingerprint: "code-a", idleGpuAdmission: true },
+    { workerId: "nwpu5", idleGpuIds: [], declaredJobPaths: true, online: true, codeFingerprint: "code-a", idleGpuAdmission: true },
     { workerId: "nwpu3", idleGpuIds: ["0"], online: false, codeFingerprint: "code-a", idleGpuAdmission: true },
   ], { requireIdleGpuAdmission: true });
   assert.equal(noIdle.dispatches.length, 0);
@@ -66,8 +59,8 @@ test("durable admission leaves jobs unassigned until a fresh idle GPU and capabl
     assert.equal(job.commandId, undefined);
   }
   const capable = queue.allocateAvailable(input, [
-    { workerId: "nwpu5", idleGpuIds: [], online: true, codeFingerprint: "code-a", idleGpuAdmission: true },
-    { workerId: "nwpu3", idleGpuIds: ["0", "2"], online: true, capacity: 1, codeFingerprint: "code-a", idleGpuAdmission: true },
+    { workerId: "nwpu5", idleGpuIds: [], declaredJobPaths: true, online: true, codeFingerprint: "code-a", idleGpuAdmission: true },
+    { workerId: "nwpu3", idleGpuIds: ["0", "2"], declaredJobPaths: true, online: true, capacity: 1, codeFingerprint: "code-a", idleGpuAdmission: true },
   ], { requireIdleGpuAdmission: true });
   assert.equal(capable.dispatches.length, 1);
   assert.equal(capable.dispatches[0].workerId, "nwpu3");
@@ -78,7 +71,7 @@ test("durable admission leaves jobs unassigned until a fresh idle GPU and capabl
 test("a Worker without idle GPU admission capability is never selected for durable dispatch", () => {
   const input = queue.enqueuePlan(queue.emptyDistributedQueue(), durablePlan(), "workflow");
   const result = queue.allocateAvailable(input, [
-    { workerId: "legacy", idleGpuIds: ["0"], online: true, codeFingerprint: "code-a", idleGpuAdmission: false },
+    { workerId: "legacy", idleGpuIds: ["0"], declaredJobPaths: true, online: true, codeFingerprint: "code-a", idleGpuAdmission: false },
   ], { requireIdleGpuAdmission: true });
   assert.equal(result.dispatches.length, 0);
   assert.equal(result.queue.plans[0].jobs[0].status, "pending");
@@ -98,7 +91,7 @@ test("one incomplete server is excluded while another fresh eligible server can 
   assert.equal(healthyGpu.complete, true);
   assert.equal(failedGpu.complete, false);
   const result = queue.allocateAvailable(input, [{ workerId: "nwpu3", idleGpuIds: healthyGpu.idleGpuIdsByWorker.get("nwpu3"),
-    online: true, codeFingerprint: "code-a", idleGpuAdmission: true }], { requireIdleGpuAdmission: true });
+    declaredJobPaths: true, online: true, codeFingerprint: "code-a", idleGpuAdmission: true }], { requireIdleGpuAdmission: true });
   assert.equal(result.dispatches.length, 1);
   assert.equal(result.queue.plans[0].jobs[1].workerId, undefined);
 });
@@ -115,7 +108,7 @@ test("locally saved pending jobs are accepted for scheduling without claiming re
   assert.equal(callerOutcome.waiting, true);
   assert.match(callerOutcome.message, /未绑定/);
   const dispatched = queue.allocateAvailable(input, [
-    { workerId: "nwpu3", idleGpuIds: ["0"], online: true, codeFingerprint: "code-a", idleGpuAdmission: true },
+    { workerId: "nwpu3", idleGpuIds: ["0"], declaredJobPaths: true, online: true, codeFingerprint: "code-a", idleGpuAdmission: true },
   ], { requireIdleGpuAdmission: true });
   const partial = queue.distributedSubmissionResult(dispatched.queue.plans[0]);
   assert.equal(partial.localQueued, true);

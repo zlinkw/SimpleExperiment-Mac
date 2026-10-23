@@ -11,11 +11,16 @@ tree = ast.parse(runtime.read_text(encoding="utf-8"))
 constants = {"SCHEMA_VERSION", "API_VERSION", "AGENT_VERSION", "RUNTIME_VERSION", "PLUGIN_VERSION",
              "WORKER_RESULT_ACTIONS", "WORKER_TENSORBOARD_ACTIONS", "WORKER_ENV_ACTIONS"}
 body = [node for node in tree.body if isinstance(node, ast.FunctionDef)
-        and node.name in ("api_capabilities", "formal_job_path_capable", "execution_shell_preflight_capable")
+        and node.name in ("api_capabilities", "formal_job_path_capable", "execution_shell_preflight_capable", "task_shell_environment_capable", "staged_job_preflight_capable", "project_managed_validation_capable")
         or isinstance(node, ast.Assign) and any(getattr(target, "id", "") in constants for target in node.targets)]
 namespace = {"re": re, "os": os, "cluster_scheduler_path": lambda root: str(repo / "dist/runtime/cluster_scheduler.py")}
 exec(compile(ast.Module(body=body, type_ignores=[]), str(runtime), "exec"), namespace)
 capabilities = namespace["api_capabilities"](str(repo), mode="worker_telemetry")
 assert capabilities["endpoints"]["declaredJobPaths"] is True, "packaged Scheduler protocol/version mismatch"
 assert capabilities["endpoints"]["executionShellPreflight"] == 1, "packaged Scheduler shell-preflight protocol/version mismatch"
+assert capabilities["endpoints"]["taskShellEnvironment"] == 1, "packaged Scheduler task-shell library protocol/version mismatch"
+assert capabilities["endpoints"]["stagedJobPreflight"] == 1, "packaged Scheduler staged preflight protocol/version mismatch"
+assert capabilities["endpoints"]["originalSourceHashDiagnostic"] == 1
+assert capabilities["endpoints"]["projectManagedValidation"] == 1
+assert capabilities["endpoints"]["completedOutputPreflight"] == 1
 print(json.dumps(capabilities, ensure_ascii=False))

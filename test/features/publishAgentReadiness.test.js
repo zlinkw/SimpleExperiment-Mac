@@ -38,16 +38,19 @@ function readiness(state) {
   return JSON.parse(JSON.stringify(sandbox.check(state)));
 }
 
-test("publish workflow reports actual Hub and Worker Agent readiness", () => {
+test("publish workflow reports enabled Worker readiness and ignores retired Hub probes", () => {
   const setup = { workerTunnels: [{ id: "w1", displayName: "Worker A", enabled: true }] };
   assert.deepEqual(readiness({ setup, probe: { status: "ok" }, workerProbes: { w1: { status: "ok" } } }), {
     ready: true,
     status: "已就绪",
-    detail: "Hub/Worker Agent 可达",
+    detail: "Worker Agent 可达",
   });
-  assert.equal(readiness({ setup, probe: { status: "agent_version_mismatch" }, workerProbes: { w1: { status: "ok" } } }).status, "需升级");
-  assert.equal(readiness({ setup, probe: { status: "agent_restart_required" }, workerProbes: { w1: { status: "ok" } } }).status, "待重启");
+  assert.equal(readiness({ setup, probe: { status: "agent_version_mismatch" }, workerProbes: { w1: { status: "ok" } } }).status, "已就绪");
+  assert.equal(readiness({ setup, probe: { status: "agent_restart_required" }, workerProbes: { w1: { status: "ok" } } }).status, "已就绪");
   assert.equal(readiness({ setup, probe: { status: "ok" }, workerProbes: { w1: { status: "agent_project_mismatch" } } }).status, "项目不匹配");
+  assert.equal(readiness({setup,workerProbes:{w1:{status:"agent_version_mismatch"}}}).status,"需升级");
+  assert.equal(readiness({setup,workerProbes:{w1:{status:"offline"}}}).ready,false);
+  assert.equal(readiness({setup:{workerTunnels:[]},probe:{status:"ok"}}).ready,false,"old Hub success cannot authorize an empty Worker topology");
 });
 
 test("publish workflow rerenders on endpoint changes via the settings chain overview", () => {

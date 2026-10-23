@@ -35,7 +35,9 @@ test("Host completion navigation does nothing; an explicit navigation click stil
 
 test("completed schedule history starts collapsed with its Plan recovery controls intact", () => {
   const html = renderPanelHtml();
-  assert.match(html, /<details class="executionPlanHistory"><summary>已完成 Plan 历史/);
+  assert.match(html, /<details class="executionPlanHistory" data-details-key="execution-plan-history"/);
+  assert.match(html, /detailsOpenAttr\("execution-plan-history", false\)/);
+  assert.match(html, /<summary>已完成 Plan 历史/);
   assert.match(html, /data-command="runPlan"/);
   assert.match(html, /data-command="recallPlanToLocalQueue"/);
   assert.match(html, /data-command="stopAndClearPlan"/);

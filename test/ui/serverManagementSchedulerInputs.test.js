@@ -35,6 +35,8 @@ test("all visible panel commands have extension handlers", () => {
 
   const handled = new Set();
   for (const match of extension.matchAll(/case "([^"]+)"/g)) handled.add(match[1]);
+  const core = require("../_helpers/legacyMethod")(fs.readFileSync(path.join(root, "dist/extension/legacy.js"), "utf8"), "handleMessageCore(");
+  for (const match of core.matchAll(/command === "([A-Za-z][A-Za-z0-9]+)"/g)) handled.add(match[1]);
   const uiActionBlock = extension.match(/const uiActionCommands = new Set<WebviewActionCommand>\(\[([\s\S]*?)\]\);/);
   if (uiActionBlock) {
     for (const match of uiActionBlock[1].matchAll(/"([A-Za-z][A-Za-z0-9]+)"/g)) handled.add(match[1]);
@@ -94,7 +96,8 @@ test("server management config fields receive Chinese hover explanations", () =>
   assert.match(html, /function configHelp/);
   assert.match(html, /hubDisplayName: "仅用于界面展示和识别 Hub/);
   assert.match(html, /agentProjectDir: "填写服务器上的绝对父目录/);
-  assert.match(html, /savedSessionPath: "选择本机已有的 Xshell 会话文件/);
+  // Mac 适配：Mac 发行不读 Xshell 私有会话，savedSessionPath 悬停解释为 Termius 手动转发契约文案。
+  assert.match(html, /savedSessionPath: "Termius 转发由用户手动启动；插件保存本机与远端主机、端口，不读取 Termius 私有会话。/);
   assert.match(html, /configSessionSelect\(scope, key, label, value\)[\s\S]*helpBadge\(help\)/);
   assert.match(html, /configPortPair\(scope, label, localKey, remoteKey[\s\S]*helpBadge\(pairHelp\)/);
   assert.match(html, /configSelect\(scope, key, label, value[\s\S]*helpBadge\(help\)/);
@@ -113,7 +116,8 @@ test("server overview and settings reuse status indexes", () => {
   assert.match(settings, /const indexes = serverStatusIndexesForState\(state\)/);
   assert.match(overview, /indexes\.workerStatus/);
   assert.match(settings, /indexes\.assignmentById/);
-  assert.doesNotMatch(overview + settings, /new Map\(|agent\.workers[^\n]*\.find\(/);
+  assert.doesNotMatch(overview + settings, /agent\.workers[^\n]*\.find\(/);
+  assert.match(settings, /indexes\.agentWorkerById\?\.get/);
 
   const sandbox = {
     EMPTY_SERVER_STATUS_ROWS: [],

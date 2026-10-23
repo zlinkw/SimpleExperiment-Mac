@@ -107,6 +107,11 @@ namespace["root"] = "fixture-project"
 namespace["tmux_available"] = lambda: True
 namespace["path_for"] = lambda root, path: path
 namespace["read_runtime_json_cached"] = lambda path, default: default
+# Mac adaptation: the Mac /api/tmux/list route enriches windows with live task rows
+# (task_inventory). The fixture has no task rows, so the production-equivalent empty
+# inventory is the faithful stub; window identity assertions still run untouched.
+namespace["task_inventory"] = lambda root, execution_only=False: []
+namespace["task_scheduler_runtime_report"] = lambda root, worker_id: {}
 os.environ["SIMPLE_EXPERIMENT_TMUX_SESSION"] = "fixture-worker-agent"
 
 for mode in ("worker_telemetry", "hub_control"):

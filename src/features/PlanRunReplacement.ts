@@ -15,6 +15,9 @@ export type RunReplacementPorts = {
   beforeDelete(): Promise<void>;
   hold(jobs: any[]): Promise<void>;
   progress(text: string): void;
+  // 批次接线注入：只把“对话确认+精确路径确认”送进全局对话道（同一时刻至多一个确认页）；
+  // 预览、rename 隔离、核验与 hold 等机械链不进这条道，绝不能占住别的 PLAN 的提交。
+  interactive?(work: () => Promise<void>): Promise<void>;
 };
 const targets = (previews: Array<{ index: number; preview: CleanupPreview }>) => previews.flatMap(({ preview }) =>
   preview.rows.filter(row => row.disposition === "isolate").map(row => ({ server: row.node.id,
@@ -67,6 +70,7 @@ export async function replaceRunOutputs(ports: RunReplacementPorts, state: RunRe
   ports.assertCurrent();
   if (state.key && state.key !== key) cleanupError("RUN_DECLARATION_CHANGED", "本次任务或服务器配置已变化，请重新提交并确认路径。");
   state.key = key;
+  const gate = ports.interactive || (async (work: () => Promise<void>) => work());
   // 旧“先删除再重跑”意图不迁移到隔离流程；未完成的旧状态按新流程重新预览（旧令牌未执行过任何移动）。
   if (state.previews && state.flow !== "isolate" && !state.done) {
     delete state.previews; delete state.choice; delete state.selectedIndices; delete state.completed; state.phase = 0;
@@ -140,21 +144,23 @@ export async function replaceRunOutputs(ports: RunReplacementPorts, state: RunRe
     || state.selectedIndices.some(index => !missing.includes(index))))
     cleanupError("RUN_SELECTION_CHANGED", "本轮未完成任务范围已变化；请取消后重新确认精确 job 路径，未继续隔离。");
   if (!targets(state.previews).length && !state.choice) state.choice = "rerun_all";
-  if (!state.choice) {
+  // 对话道回调里 TS 收窄失效；本行起 state.previews 恒存在（上方分支已保证），用别名传递同一引用。
+  const previewRows = state.previews;
+  if (!state.choice) await gate(async () => {
     ports.progress("等待选择运行范围并核对将移入隔离区的完整路径…");
     const choice = await ports.ask({ phase: 1, planFile, title: "选择运行范围并核对将移入 clean 隔离区的完整路径", groups: [
-      { value: "rerun_all", label: "覆盖并重跑全部", targets: targets(state.previews) },
+      { value: "rerun_all", label: "覆盖并重跑全部", targets: targets(previewRows) },
       { value: "rerun_missing", label: "仅补跑未完成任务", disabled: !missing.length,
-        targets: targets(state.previews.filter(row => missing.includes(row.index))) }] });
+        targets: targets(previewRows.filter(row => missing.includes(row.index))) }] });
     if (!["rerun_all", "rerun_missing"].includes(choice)) cleanupError("REPLACEMENT_CANCELLED", "已取消；未移动文件或提交任务。");
     state.choice = choice as RunReplacement["choice"];
     state.selectedIndices = choice === "rerun_missing" ? missing : all;
     await ports.save();
-  }
+  });
   state.selectedIndices ||= state.choice === "rerun_missing" ? missing : all;
   const selected = state.previews.filter(row => state.selectedIndices!.includes(row.index) && targets([row]).length);
   const exact = targets(selected);
-  if (exact.length && (state.phase || 0) < 1) {
+  if (exact.length && (state.phase || 0) < 1) await gate(async () => {
     ports.progress("等待确认：旧输出移入 clean 隔离区后立即启动新运行；永久删除稍后单独双确认…");
     if (await ports.ask({ phase: 2, planFile, title: "将以下旧输出移入 clean 隔离区并重跑", groups: [
       { value: "isolate_and_run", label: "隔离并重跑（旧输出不直接删除；永久删除稍后单独两次确认）", targets: exact }] }) !== "isolate_and_run")
@@ -162,7 +168,7 @@ export async function replaceRunOutputs(ports: RunReplacementPorts, state: RunRe
     for (const { preview } of selected) await ports.service.confirm({ token: preview.token, digest: preview.digest, phase: 1, confirm: true,
       exactTargets: targets([{ index: 0, preview }]).map(row => row.server + ":" + row.path) });
     state.phase = 1; await ports.save();
-  }
+  });
   ports.assertCurrent();
   if (selected.length) {
     await ports.beforeDelete();

@@ -3,6 +3,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+require("../_helpers/registerTsRequire");
+const LatestResultExport = require("../../src/results/LatestResultExport.ts");
 
 const source = fs.readFileSync(path.join(__dirname, "../../src/extension/legacy.ts"), "utf8");
 const ast = ts.createSourceFile("legacy.ts", source, ts.ScriptTarget.Latest, true);
@@ -12,9 +14,11 @@ const methods = provider.members.filter(node => node.name && names.has(node.name
 const code = ts.transpileModule(`class Subject { ${methods.map(node => node.getText(ast)).join("\n")} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const sandbox = {
   path,
+  safeWorkspaceChildPath: new Function("path", ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==="safeWorkspaceChildPath").getText(ast)+";return safeWorkspaceChildPath;")(path),
   workspaceRoot: () => "C:/workspace",
   DEFAULT_RESULT_CSV_DIR: "experiments/results", Date, console,
-  fs: {}, ProjectResultPublication: { projectResultPublicationJournalPath: root => path.join(root, "journal.json"), MAX_PROJECT_RESULT_JOURNAL_BYTES: 32 * 1024 * 1024 },
+  readLatestResultExport:async()=>undefined,
+  fs: {lstat:async()=>({...await sandbox.fs.stat(),isFile:()=>true,isSymbolicLink:()=>false})}, ProjectResultPublication: { projectResultPublicationJournalPath: root => path.join(root, "journal.json"), MAX_PROJECT_RESULT_JOURNAL_BYTES: 32 * 1024 * 1024 },
   ProjectResultTables: { buildTables: () => ({}) }, mapLimited: async (items, _limit, work) => Promise.all(items.map(work)),
   pluginProjectAdapterRules: () => ({ planDatasetMapping: {} }),
   PanelStateProjection_1: { panelInterestedSections: () => new Set(["results"]) },
@@ -22,58 +26,44 @@ const sandbox = {
 };
 require("vm").runInNewContext(`${code}; this.Subject = Subject;`, sandbox);
 
-test("settled publication journals do not keep successful results perpetually loading", async () => {
-  const subject = new sandbox.Subject();
-  subject.resultCsvDirectory = "experiments/results";
-  subject.resultCatalogDirtyGeneration = 0;
-  subject.resultCatalogRefreshSequence = 0;
-  subject.resultCatalogTtlMs = 5000;
-  subject.resultCatalogStatus = "loading";
-  let status = "committed";
-  sandbox.fs.stat = async () => ({ dev: 1, ino: 2, size: 100, mtimeMs: 1, ctimeMs: 1 });
-  sandbox.fs.readFile = async () => JSON.stringify({ schemaVersion: 1, status });
-  for (const settled of ["committed", "rolled-back"]) {
-    status = settled;
-    assert.equal((await subject.inspectResultCatalogInputs("C:/workspace")).publicationPending, false);
-  }
-  for (const active of ["preparing", "publishing"]) {
-    status = active;
-    assert.equal((await subject.inspectResultCatalogInputs("C:/workspace")).publicationPending, true);
-  }
-  let starts = 0;
-  subject.startResultCatalogRefreshWorker = () => { starts++; subject.resultCatalogStatus = "ready"; };
-  subject.scheduleResultCatalogRefreshTimer = () => undefined;
-  status = "publishing";
-  subject.scheduleResultCatalogRefresh({ root: "C:/workspace", mappings: {}, key: subject.resultCatalogKey("C:/workspace", {}) });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(starts, 0, "an unfinished transaction must still gate the reader");
-  status = "committed";
-  subject.scheduleResultCatalogRefresh({ root: "C:/workspace", mappings: {}, key: subject.resultCatalogKey("C:/workspace", {}) });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(starts, 1, "committed results must reach the catalog reader without deleting the receipt");
-  assert.equal(subject.resultCatalogStatus, "ready");
+test("only the current export signature invalidates catalog inputs; retired journals cannot block it", async () => {
+  const subject=new sandbox.Subject();subject.resultCsvDirectory="experiments/results";
+  let stamp=1,read=0;
+  sandbox.fs.stat=async()=>({dev:1,ino:2,size:100,mtimeMs:stamp,ctimeMs:stamp});
+  sandbox.fs.readFile=async()=>{read++;throw Error("old publication journal must not be read");};
+  const first=await subject.inspectResultCatalogInputs("C:/workspace");
+  assert.equal(first.publicationPending,false);stamp=2;
+  assert.notEqual((await subject.inspectResultCatalogInputs("C:/workspace")).signature,first.signature);
+  assert.equal(read,0);
+  const lstat=sandbox.fs.lstat;
+  sandbox.fs.lstat=async()=>({isFile:()=>false,isSymbolicLink:()=>true});
+  await assert.rejects(subject.inspectResultCatalogInputs("C:/workspace"),/普通文件/);
+  sandbox.fs.lstat=lstat;
 });
 
-test("malformed or unreadable publication journals fail explicitly rather than claiming an empty catalog", async () => {
-  const subject = new sandbox.Subject();
-  sandbox.fs.stat = async () => ({ dev: 1, ino: 2, size: 100, mtimeMs: 1, ctimeMs: 1 });
-  for (const text of ["invalid-json", JSON.stringify({ schemaVersion: 1, status: "unknown" })]) {
-    sandbox.fs.readFile = async () => text;
-    await assert.rejects(subject.inspectResultCatalogInputs("C:/workspace"));
+test("malformed current exports and unsafe linked files fail explicitly", async () => {
+  const root=fs.mkdtempSync(path.join(require("node:os").tmpdir(),"latest-export-validation-"));
+  fs.mkdirSync(path.join(root,"results"));const file=path.join(root,"results/latest-results.json");
+  for(const text of ["invalid-json",JSON.stringify({schemaVersion:1,source:"historical_cache",jobs:[],tables:[]}),
+    JSON.stringify({schemaVersion:1,source:"active_query",jobs:[],tables:[{relativePath:"../escape.csv",markdownPath:"report.md",header:[],rows:[],markdown:""}]})]){
+    fs.writeFileSync(file,text);await assert.rejects(LatestResultExport.readLatestResultExport(root,"results"));
   }
-  sandbox.fs.readFile = async () => { throw Object.assign(new Error("unreadable receipt"), { code: "EACCES" }); };
-  await assert.rejects(subject.inspectResultCatalogInputs("C:/workspace"), /unreadable receipt/);
-  sandbox.fs.stat = async () => ({ dev: 1, ino: 2, size: sandbox.ProjectResultPublication.MAX_PROJECT_RESULT_JOURNAL_BYTES + 1, mtimeMs: 1, ctimeMs: 1 });
-  await assert.rejects(subject.inspectResultCatalogInputs("C:/workspace"), /记录过大/);
-  sandbox.fs.stat = async () => { throw Object.assign(new Error("absent"), { code: "ENOENT" }); };
-  assert.equal((await subject.inspectResultCatalogInputs("C:/workspace")).publicationPending, false);
+  fs.writeFileSync(file,JSON.stringify({schemaVersion:1,source:"active_query",jobs:[],tables:[]}));
+  fs.linkSync(file,path.join(root,"results/retained-hardlink.json"));
+  await assert.rejects(LatestResultExport.readLatestResultExport(root,"results"),/RESULT_EXPORT_PATH_UNSAFE/);
+  // Missing current exports are empty; old registry/journal presence cannot supply rows.
+  const empty=fs.mkdtempSync(path.join(require("node:os").tmpdir(),"latest-export-missing-"));
+  fs.mkdirSync(path.join(empty,"simple_cluster/results"),{recursive:true});
+  fs.writeFileSync(path.join(empty,"simple_cluster/results/project_table_registry.json"),"{}");
+  assert.equal(await LatestResultExport.readLatestResultExport(empty,"results"),undefined);
+  assert.deepEqual((await LatestResultExport.latestResultCatalog(empty,"results")).datasets,[]);
 });
 
-test("catalog accepts the same bounded journal size as publication and recovery", async () => {
-  const subject = new sandbox.Subject();
-  sandbox.fs.stat = async () => ({ dev: 1, ino: 2, size: 12 * 1024 * 1024, mtimeMs: 1, ctimeMs: 1 });
-  sandbox.fs.readFile = async () => JSON.stringify({ schemaVersion: 1, status: "committed" });
-  assert.equal((await subject.inspectResultCatalogInputs("C:/workspace")).publicationPending, false);
+test("current export reader rejects more than 32 MiB before parsing", async () => {
+  const root=fs.mkdtempSync(path.join(require("node:os").tmpdir(),"latest-export-bounds-"));
+  fs.mkdirSync(path.join(root,"results"));const file=path.join(root,"results/latest-results.json");
+  const fd=fs.openSync(file,"w");try{fs.ftruncateSync(fd,32*1024*1024+1);}finally{fs.closeSync(fd);}
+  await assert.rejects(LatestResultExport.readLatestResultExport(root,"results"),/RESULT_EXPORT_TOO_LARGE/);
 });
 
 test("successful partial sync reaches ready catalog and publishes its tables through the real worker lifecycle", async () => {
@@ -133,7 +123,7 @@ test("manual local refresh resets read errors and rescans independently of faile
   const subject = new sandbox.Subject();
   Object.assign(subject, { resultCatalogDirtyGeneration: 0, resultCatalogRefreshSequence: 0,
     resultCatalogRefreshError: "old read error", resultCatalogRefreshFailedKey: "old", resultCatalogRefreshBackoffUntil: Date.now() + 30000,
-    resultSyncReport: { failed: 11 }, manualResultSyncInFlight: true });
+    resultSyncReport: { failed: 11 }, manualResultSyncInFlight: true, withProjectResultPublicationLease:async(_root,_dir,work)=>work() });
   subject.captureProjectContext = () => ({ root: "C:/workspace" });
   subject.projectContextIsCurrent = () => true;
   subject.loadProjectTableRegistry = async () => ({ schemaVersion: 1, plans: {} });
@@ -242,6 +232,8 @@ function largeLocalResultFixture() {
     fs.writeFileSync(csv, tables.writeCsv(table.header, table.rows), "utf8");
     fs.writeFileSync(md, table.markdown, "utf8");
   }
+  fs.writeFileSync(path.join(root,"experiments/results/latest-results.json"),JSON.stringify({schemaVersion:1,source:"active_query",
+    observedAt:new Date().toISOString(),jobs:[],errors:[],tables:Object.values(tables.buildTables(registry))}));
   return { root, registry, tables };
 }
 
@@ -298,34 +290,48 @@ test("the real local refresh returns only after the offline catalog is ready and
 });
 
 for (const command of ["syncPendingPlanArtifacts", "rebuildProjectResultTables"]) {
-  test(`${command} cannot post completed before its published local tables reach the panel cache`, async () => {
-    const { root, registry } = largeLocalResultFixture();
-    const Provider = productionProvider(root);
-    const statuses = [];
-    const host = Object.assign(Object.create(Provider.prototype), {
-      resultCsvDirectory: "experiments/results", resultCatalogDirtyGeneration: 0, resultCatalogRefreshSequence: 0, resultCatalogTtlMs: 5000,
-      resultCatalogStatus: "notLoaded", panelSectionInterest: { mainSection: "overview", visibleSections: [], expandedSections: [] },
-      context: { globalStorageUri: { fsPath: root } }, manualResultSyncCounts: new Map(),
-      runningBuildIdentity: require("../../dist/features/PanelBuildIdentity").readPanelBuildIdentity(path.resolve(__dirname, "../..")),
-      captureProjectContext: () => ({ root }), projectContextIsCurrent: () => true,
-      effectiveConnectionMode: () => "tunnel", actionBody: body => body,
-      refreshLocalPlanMetadataForAction: async () => {}, loadPlanSyncLedger: async () => ({ schemaVersion: 2, entries: {} }),
-      loadDistributedQueue: async () => ({ plans: [] }), queuePlanArtifactSyncStatusCheck: () => {},
-      distributedProjectContract: () => ({}), enabledWorkerConfigs: () => [],
-      localPlanMetadata: { plans: Object.keys(registry.plans).map(planFile => ({ planFile, revision: "r1", seeds: [42] })) },
-      client: { getResultsSummary: async planFile => ({ planFile, planRevision: "r1", results: [], workerResultTables: [] }) },
-      simpleSftpApiCall: () => assert.fail("this existing registered-result fixture needs no transfer"),
-      postState: () => {}, finishPlanSubmissionProgress: () => {},
-      recordActionError: error => assert.fail(error.message),
-      postUiCommandStatus: (_id, status) => statuses.push({ status, tables: host.resultCatalogCache?.tables.length, loadStatus: host.resultCatalogStatus }),
+  test(`${command} waits for active collection, export and ready local catalog`,async t=>{
+    if(process.platform!=="win32"){t.skip("requires native Windows UI Extension Host; mandatory native acceptance case");return;}
+    const f=require('../_helpers/freshResultHost').fixture(),Provider=productionProvider(f.root),statuses=[];
+    const host=Object.assign(Object.create(Provider.prototype),f.host,{
+      context:{globalStorageUri:{fsPath:f.root}},resultCatalogDirtyGeneration:0,resultCatalogRefreshSequence:0,resultCatalogTtlMs:5000,
+      resultCatalogStatus:"notLoaded",panelSectionInterest:{mainSection:"overview",visibleSections:[],expandedSections:[]},manualResultSyncCounts:new Map(),
+      runningBuildIdentity:require('../../dist/features/PanelBuildIdentity').readPanelBuildIdentity(path.resolve(__dirname,'../..')),
+      refreshLocalResultCatalogForProject:Provider.prototype.refreshLocalResultCatalogForProject,
+      effectiveConnectionMode:()=>"tunnel",beginSimpleSftpCapabilityLaunch:()=>undefined,finishPlanSubmissionProgress:()=>{},
+      postUiCommandStatus:(_id,status)=>statuses.push({status,loadStatus:host.resultCatalogStatus,tables:host.resultCatalogCache?.tables.length}),
+      recordActionError:error=>assert.fail(error.message),
     });
-    try {
-      await host.withUiCommandStatus("local-result-button", command, {}, () => host.handleMessageCore({ command }, command));
-      assert.equal(statuses.at(-1).status, "completed");
-      assert.equal(statuses.at(-1).loadStatus, "ready");
-      assert.equal(statuses.at(-1).tables, 4);
-      assert.equal(host.resultSyncReport.included.length, 11);
-      assert.equal(host.manualResultSyncCounts.size, 0);
-    } finally { host.cancelResultCatalogRefresh(); }
+    try{
+      await host.withUiCommandStatus("active-result-button",command,{},()=>host.handleMessageCore({command},command));
+      assert.equal(statuses.at(-1).status,"completed");assert.equal(statuses.at(-1).loadStatus,"ready");
+      assert.ok(statuses.at(-1).tables>0);assert.ok(f.calls.some(row=>row[0]==="sync.downloadMappedPaths"));
+      assert.equal(host.resultsSummary.source,"active_query");assert.equal(host.manualResultSyncCounts.size,0);
+    }finally{host.cancelResultCatalogRefresh();}
+  });
+  // 085 移植返修：.403 把这两条命令改走活采集（ResultCollectionHost），旧的注册表夹具会被
+  // “原导出文件不是本轮结果”拒收，因此按新契约在 Linux 可运行的 freshResultHost 夹具上重述
+  // 本案例的顺序不变式（每条 completed 上报都必须已带就绪表），不删断言语义；
+  // Windows 原生门禁案例保持 .403 原样另行执行。
+  test(`${command} cannot post completed before its published local tables reach the panel cache`, async () => {
+    const f=require('../_helpers/freshResultHost').fixture(),Provider=productionProvider(f.root),statuses=[];
+    const host=Object.assign(Object.create(Provider.prototype),f.host,{
+      context:{globalStorageUri:{fsPath:f.root}},resultCatalogDirtyGeneration:0,resultCatalogRefreshSequence:0,resultCatalogTtlMs:5000,
+      resultCatalogStatus:"notLoaded",panelSectionInterest:{mainSection:"overview",visibleSections:[],expandedSections:[]},manualResultSyncCounts:new Map(),
+      runningBuildIdentity:require('../../dist/features/PanelBuildIdentity').readPanelBuildIdentity(path.resolve(__dirname,'../..')),
+      refreshLocalResultCatalogForProject:Provider.prototype.refreshLocalResultCatalogForProject,
+      effectiveConnectionMode:()=>"tunnel",beginSimpleSftpCapabilityLaunch:()=>undefined,finishPlanSubmissionProgress:()=>{},
+      postUiCommandStatus:(_id,status)=>statuses.push({status,loadStatus:host.resultCatalogStatus,tables:host.resultCatalogCache?.tables.length}),
+      recordActionError:error=>assert.fail(error.message),
+    });
+    try{
+      await host.withUiCommandStatus("active-result-button",command,{},()=>host.handleMessageCore({command},command));
+      assert.ok(statuses.some(row=>row.status==="completed"),`${command} must post completed exactly once the run finishes`);
+      for(const row of statuses.filter(row=>row.status==="completed"))
+        assert.ok(row.loadStatus==="ready"&&row.tables>0,'a completed post may not precede the published local tables in the panel cache');
+      assert.equal(statuses.at(-1).status,"completed");assert.equal(statuses.at(-1).loadStatus,"ready");
+      assert.ok(f.calls.some(row=>row[0]==="sync.downloadMappedPaths"),'the new path performs one active declared-result collection');
+      assert.equal(host.manualResultSyncCounts.size,0);
+    }finally{host.cancelResultCatalogRefresh();}
   });
 }

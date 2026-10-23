@@ -98,15 +98,18 @@ test("three confirmed files use one source inventory, one destination inventory,
   const names = ["artifacts/a.txt", "artifacts/b.txt", "artifacts/pack/c.bin", "artifacts/pack/d.bin", "artifacts/outside.txt"];
   const files = Object.fromEntries(names.map((name) => [name, record(name)]));
   const provider = {
-    context: { globalStorageUri: { fsPath: ROOT } },
+    context: { globalStorageUri: { fsPath: ROOT + "-plugin-state" } },
+    localMachineStateGuard: () => ({ prefixes: [], unknown: false }),
+    targetRootGuard: () => ({ prefixes: [], unknown: false }),
     simpleSftpCapability: async () => {},
     simpleSftpApiCall: async (method, params) => {
       calls.push({ method, params });
       if (method === "sync.projectInventory") return { files };
-      if (method === "sync.serverToServerFpsync" || method === "sync.deletePath") return { ok: true };
+      if (method === "sync.serverToServerFpsync") return { ok: true };
       throw new Error(`unexpected ${method}`);
     },
     assertSshTransportIdentities: async () => {},
+    deleteSyncScopeRemoteCopy: async (id, server, relativePath, directory) => calls.push({ method: "confirmed-delete", params: { id, server, relativePath, directory } }),
     sftpServerOptions: (row) => ({ id: row.id, host: `${row.id}.example`, networkHost: `net-${row.id}`, remotePath: `/proj/${row.id}`, user: "u", port: 22 }),
     updateSyncScopeHolds: async (_root, mutate) => { provider.saved = {}; mutate(provider.saved); },
   };
@@ -138,7 +141,7 @@ test("three confirmed files use one source inventory, one destination inventory,
   assert.equal(fpsync.length, 1);
   assert.deepEqual(fpsync[0].params.relativePaths, ["artifacts/a.txt", "artifacts/b.txt", "artifacts/pack/c.bin", "artifacts/pack/d.bin"]);
   assert.equal(fpsync[0].params.relativePaths.includes("artifacts/outside.txt"), false);
-  const deletes = calls.filter((call) => call.method === "sync.deletePath");
+  const deletes = calls.filter((call) => call.method === "confirmed-delete");
   assert.deepEqual(deletes.map((call) => call.params.relativePath), ["artifacts/pack"]);
   assert.equal(provider.saved["artifacts/a.txt"].sha256, digest("artifacts/a.txt"));
   assert.equal(provider.saved["artifacts/pack"].fileHashes["artifacts/pack/c.bin"], digest("artifacts/pack/c.bin"));
@@ -149,7 +152,9 @@ test("three confirmed files use one source inventory, one destination inventory,
 test("local files share one upload manifest and a destination hash mismatch does not save holds", async () => {
   const calls = [];
   const provider = {
-    context: { globalStorageUri: { fsPath: ROOT } },
+    context: { globalStorageUri: { fsPath: ROOT + "-plugin-state" } },
+    localMachineStateGuard: () => ({ prefixes: [], unknown: false }),
+    targetRootGuard: () => ({ prefixes: [], unknown: false }),
     simpleSftpCapability: async () => {},
     simpleSftpApiCall: async (method) => { calls.push(method); throw new Error(`unexpected ${method}`); },
     assertSshTransportIdentities: async () => {},
@@ -181,7 +186,7 @@ test("local files share one upload manifest and a destination hash mismatch does
     vscodeStub.commands.executeCommand = originalExecute;
     vscodeStub.workspace.getConfiguration = originalConfig;
   }
-  const uploads = calls.filter((call) => call.command === "simpleSftp.uploadWorkspace");
+  const uploads = calls.filter((call) => call.command === "simpleSftpMac.uploadWorkspace");
   assert.equal(uploads.length, 1);
   assert.deepEqual(Object.keys(uploads[0].params.manifest).sort(), ["artifacts/a.txt", "artifacts/b.txt", "artifacts/c.txt"]);
   assert.equal(uploads[0].params.manifest["artifacts/excluded.txt"], undefined);

@@ -78,17 +78,23 @@ test("selected Plan prerequisites reuse composed command sets", () => {
 });
 
 test("Plan payload builders reuse base and restore-aware command sets", () => {
-  assert.match(panel, /const PLAN_FILE_PAYLOAD_COMMANDS = new Set\(\[\.\.\.SELECTED_PLAN_ACTION_COMMANDS, "archivePlan", "archivePlanCopy", "savePlan"\]\)/);
+  assert.match(panel, /const PLAN_FILE_PAYLOAD_COMMANDS = new Set\(\[\.\.\.SELECTED_PLAN_ACTION_COMMANDS, "cleanupPlan", "archivePlan", "archivePlanCopy", "savePlan"\]\)/);
   assert.match(panel, /const RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS = new Set\(\[\.\.\.PLAN_FILE_PAYLOAD_COMMANDS, "restoreArchivedPlan"\]\)/);
   assert.match(extractFunction("contextRefreshPayloadFromButton"), /PLAN_FILE_PAYLOAD_COMMANDS\??\.has\(command\)/);
   assert.match(extractFunction("payloadFromButton"), /RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS\??\.has\(command\)/);
 });
 
-test("Hub health summaries reuse composed status sets", () => {
+test("health summaries reuse fixed sets and readiness is determined by enabled Workers", () => {
   assert.match(panel, /const OVERVIEW_HEALTHY_STATUS_TOKENS = new Set\(\[\.\.\.HUB_HEALTHY_STATUS_TOKENS, "online"\]\)/);
   assert.match(panel, /const HUB_OPERATION_READY_STATUS_TOKENS = new Set\(\[\.\.\.HUB_HEALTHY_STATUS_TOKENS, "file_api_unavailable"\]\)/);
   assert.match(extractFunction("overviewHealthText"), /OVERVIEW_HEALTHY_STATUS_TOKENS\??\.has\(health\)/);
-  assert.match(extractFunction("projectEndpointReadiness"), /HUB_OPERATION_READY_STATUS_TOKENS\??\.has\(hubStatus\)/);
+  const readiness = require('../_helpers/panelFunction')('projectEndpointReadiness');
+  const sandbox = { projectEndpointReadinessCacheState: undefined, projectEndpointReadinessCacheValue: undefined, enabledWorkerTunnelsForState: state => (state.workers || []).filter(w => w.enabled !== false) };
+  vm.createContext(sandbox);
+  vm.runInContext(readiness + ';this.readiness = projectEndpointReadiness;', sandbox);
+  assert.equal(sandbox.readiness({workers: [], hubControlStatus: {status:'ok'}}).ready, false);
+  assert.equal(sandbox.readiness({workers: [{id:'w'}], workerProbes: {w:{status:'ok'}}, hubControlStatus: {status:'offline'}}).ready, true);
+  assert.equal(sandbox.readiness({workers: [{id:'w'}], workerProbes: {w:{status:'offline'}}, hubControlStatus: {status:'ok'}}).ready, false);
 });
 
 test("Plan mode labels reuse backend-aligned alias sets", () => {

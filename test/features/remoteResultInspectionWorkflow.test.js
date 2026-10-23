@@ -1,5 +1,8 @@
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+// The .403 body speaks over a real loopback listener instead of the retired
+// platform-stub loader, so node:http is now part of this harness.
+const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -223,16 +226,16 @@ test("extension and workbench expose confirmed memory-only result inspection", (
   assert.match(download, /const client = this\.client/);
   assert.ok([...download.matchAll(/generation !== this\.projectContextGeneration \|\| root !== workspaceRoot\(\) \|\| client !== this\.client/g)].length >= 3);
   assert.ok(download.indexOf("downloadMetricMemoryBatch") < download.indexOf("vscode.workspace.openTextDocument"));
-  assert.match(extension, /remoteResultInspectionCandidates\(\[this\.localOperations, this\.lastRealtimeState\?\.operations\], planFile, version\.revision, version\.updatedAt\)/);
+  assert.match(extension, /remoteResultInspectionCandidates\(\[this\.localOperations, this\.lastRealtimeState\?\.operations\], planFile, version\.revision, version\.updatedAt, workerId\)/);
   assert.match(download, /"【远端结果查看确认】"/);
   assert.match(download, /临时读取并查看/);
   assert.match(download, /resultInspection: true/);
   assert.doesNotMatch(download, /fs\.mkdir|fs\.writeFile|overwrite: true|memoryOnly: false/);
   assert.doesNotMatch(extension.slice(extension.indexOf("async downloadRemoteResultFromUi"), extension.indexOf("async openAuditTail")), /openWorkspaceFile\(remotePath\)/);
   assert.match(panel, /downloadRemoteResult: \[\]/);
-  assert.match(panel, /data-command="downloadRemoteResult" data-remote-path=/);
+  assert.match(panel, /data-command="downloadRemoteResult" data-worker-id=[^>]+ data-remote-path=/);
   assert.match(panel, /outputContractUnparseableFileList: item\.unparseableFileList/);
-  assert.match(panel, /renderRemoteResultInspectionActions\(row\.unparseableFileList, row\.planFile, 3, row\.unparseableDetails\)/);
+  assert.match(panel, /renderRemoteResultInspectionActions\(row\.unparseableFileList, row\.planFile, 3, row\.unparseableDetails, row\.workerId\)/);
   assert.match(panel, /class="operationFileReason"/);
   assert.match(panel, /compactText\(error, 120\)/);
   assert.match(panel, /outputContractUnparseableDetails: item\.unparseableDetails/);
@@ -320,20 +323,25 @@ test("file transfer enforces the inspection size cap before streaming", () => {
 
 test("file transfer sends maxBytes to the selected Worker transport and refuses HTTP 413", async () => {
   let requestedUrl = "";
-  const {FileTransferClient: IsolatedClient} = require('../_helpers/compiledModule').compiledModule(
-    require.resolve('../../dist/tunnel/FileTransferClient.legacy'), process.platform, {
-      '../core/ProgressRpcTransport': {postProgressRpc: async url => {
-        requestedUrl=String(url);return new Response('{"error":"file exceeds requested maxBytes"}',
-          {status:413,headers:{'content-type':'application/json'}});
-      }}
-    });
-  const directory=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'result-inspection-limit-'));
-  const client=new IsolatedClient({localHost:'fixture.invalid',localPort:23456}, {run:async (_kind,work)=>work()});
-  await assert.rejects(client.downloadFile('work_dirs/smoke/metrics_summary.csv',path.join(directory,'unused.csv'),
-    {maxBytes:12345,maxRetries:0}), /HTTP 413/);
-  assert.match(requestedUrl,/maxBytes=12345/);
-  assert.match(requestedUrl,/fixture\.invalid:23456\/api\/files\/download/);
-  assert.equal(fs.existsSync(path.join(directory,'unused.csv')),false);
+  const server = http.createServer((request,response) => {
+    requestedUrl = request.url;
+    response.writeHead(413, { 'content-type': 'application/json' });
+    response.end('{"error":"file exceeds requested maxBytes"}');
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const budget = { run: async (_kind, work) => work() };
+    const directory=fs.mkdtempSync(path.join(require("node:os").tmpdir(),"result-inspection-transfer-"));
+    const client = new FileTransferClient({ localHost: "127.0.0.1", localPort: server.address().port }, budget);
+    client.resourceLease=new (require("../../dist/core/HostOperationLease").HostOperationLeaseManager)({leasePath:path.join(directory,"lease.json")});
+    await assert.rejects(
+      client.downloadFile("work_dirs/smoke/metrics_summary.csv", path.join(directory,"unused.csv"), { maxBytes: 12345 }),
+      /HTTP 413/
+    );
+    assert.match(requestedUrl, /maxBytes=12345/);
+  } finally {
+    server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
+  }
 });
 
  test("dataset tables remain eligible metric downloads with Worker ownership", () => {
@@ -346,3 +354,32 @@ test("file transfer sends maxBytes to the selected Worker transport and refuses 
   assert.equal(sync.length >= 3, true);
   assert.equal(sync.every(row => row.workerId === "w1"), true);
  });
+
+
+test("confirmed temporary reads bind the selected enabled Worker and never borrow another Worker's contract", async () => {
+  const helpers=loadHelpers(),method=require('../_helpers/legacyMethod')(extension,'downloadRemoteResultFromUi(');
+  const plan='experiments/plans/portable.yaml',reads=[],opened=[];
+  const context={workspaceRoot:()=>'/fixture',stringField:(value,key)=>String(value?.[key]||''),
+    normalizeRemoteResultInspectionPath:helpers.normalizeRemoteResultInspectionPath,
+    remoteResultInspectionLocalRelativePath:helpers.remoteResultInspectionLocalRelativePath,
+    remoteResultInspectionCandidates:helpers.remoteResultInspectionCandidates,
+    UiCommandCancelled:class extends Error{},vscode:{window:{showWarningMessage:async()=> '临时读取并查看',showTextDocument:async doc=>opened.push(doc)},
+      workspace:{openTextDocument:async doc=>doc}}};
+  const run=new Function(...Object.keys(context),'return ({'+method+'}).downloadRemoteResultFromUi;')(...Object.values(context));
+  const operation=(workerId,file)=>({workerId,type:'check-output-contract',planFile:plan,planRevision:'rev',unparseableFiles:[file]});
+  const host={actionBody:value=>value,refreshLocalPlanMetadataForAction:async()=>{},client:{},projectContextGeneration:1,enabledWorkerConfigs:()=>[{id:'a'},{id:'b'}],
+    resolveWorkerEndpointId:id=>['a','b','disabled'].includes(id)?id:'',resolveSelectedPlanFile:()=>plan,
+    planVersionForFile:()=>({revision:'rev',updatedAt:''}),captureProjectContext:()=>({root:'/fixture'}),
+    localOperations:{a:operation('a','work_dirs/a.csv'),b:operation('b','work_dirs/b.csv')},
+    downloadMetricMemoryBatch:async(ctx,client,source)=>{reads.push({ctx,client,source});return{metricFiles:[{text:'fixture'}]};},
+    resultInspectionContent:file=>file.text};
+  await run.call(host,{workerId:'b',remotePath:'work_dirs/b.csv'});
+  assert.equal(reads.length,1);assert.equal(reads[0].client,host.client);assert.equal(reads[0].source.sourceId,'b');
+  assert.equal(reads[0].source.workerId,'b');assert.equal(reads[0].ctx.resultInspection,true);assert.equal(opened.length,1);
+  await assert.rejects(run.call(host,{workerId:'b',remotePath:'work_dirs/a.csv'}),/不属于当前 Plan/);
+  await assert.rejects(run.call(host,{remotePath:'work_dirs/b.csv'}),/请选择结果文件所属/);
+  for(const workerId of ['hub','missing','disabled'])await assert.rejects(run.call(host,{workerId,remotePath:'work_dirs/b.csv'}),/未配置或未启用/);
+  assert.equal(reads.length,1);assert.equal(opened.length,1);
+  context.vscode.window.showWarningMessage=async()=>{host.projectContextGeneration++;return '临时读取并查看';};
+  await run.call(host,{workerId:'a',remotePath:'work_dirs/a.csv'});assert.equal(reads.length,1);assert.equal(opened.length,1);
+});

@@ -69,7 +69,7 @@ test("local results stay visible with failed synchronization and expose an indep
     resultOutputConfig: { catalog, catalogLoadStatus: "ready", tables: catalog.datasets.flatMap(group => group.tables) } };
   const html = renderer.renderProjectResultTables(state);
   assert.match(html, /data-command="refreshLocalResults"/);
-  assert.match(html, /刷新本地结果/);
+  assert.match(html, /重建本机表格/);
   assert.match(html, /总表 34 行/);
   assert.match(html, /总表 28 行/);
   const start = source.indexOf("    function disableReason(");

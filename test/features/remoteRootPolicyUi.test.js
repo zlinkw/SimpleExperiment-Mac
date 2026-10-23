@@ -10,8 +10,9 @@ const panel = readSource("src/ui/PanelHtml.ts");
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 test("remote root policies are exposed in the plugin settings page", () => {
-  assert.equal(packageJson.contributes.configuration.properties["simpleExperiment.remote.allowedRoots"].scope, "resource");
-  assert.equal(packageJson.contributes.configuration.properties["simpleExperiment.remote.deniedRoots"].scope, "resource");
+  // Mac 适配：配置键前缀 simpleExperimentMac.*（Windows 为 simpleExperiment.*）。
+  assert.equal(packageJson.contributes.configuration.properties["simpleExperimentMac.remote.allowedRoots"].scope, "resource");
+  assert.equal(packageJson.contributes.configuration.properties["simpleExperimentMac.remote.deniedRoots"].scope, "resource");
   assert.match(panel, /<div id="remoteRootPolicySettings" data-anchor="settings-remote-root-policy"><\/div>/);
   assert.match(panel, /function renderRemoteRootPolicySettings\(state\)/);
   assert.doesNotMatch(panel, /settingsLayoutTools"[^>]*>\s*<b>远端根目录安全边界/);
@@ -21,7 +22,9 @@ test("remote root policies are exposed in the plugin settings page", () => {
   assert.match(panel, /data-key="deniedRoots"/);
   assert.match(panel, /<button class="secondary" data-command="saveRemoteRootPolicy"[^>]*>保存<\/button>/);
   assert.match(panel, /textarea\.remoteRootPolicyInput \{ width: 100%; height: 100%; min-height: 0;/);
-  assert.match(extension, /remoteRootPolicy: remoteRootPolicyConfig\(\)/);
+  assert.match(extension, /const remoteRootPolicy = remoteRootPolicyConfig\(\)/);
+  assert.match(extension, /remoteRootPolicyRevision = sha256Text\(JSON\.stringify\(remoteRootPolicy\)\)/);
+  assert.match(extension, /\n\s+remoteRootPolicy,/);
 });
 
 test("saving remote root policies writes the workspace configuration", () => {

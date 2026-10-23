@@ -60,7 +60,7 @@ test("renderCommandPhaseLine writes plan commands only into the plan status", ()
     },
     el(id) { return hosts[id]; }
   };
-  vm.runInNewContext(script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
+  vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
   assert.match(hosts.commandPhaseLine.textContent, /fetchTmuxList|列出 sessions|校验/);
   assert.match(hosts.planCommandPhaseLine.textContent, /校验：正在校验计划/);
   assert.doesNotMatch(hosts.planCommandPhaseLine.textContent, /fetchTmuxList/);
@@ -71,7 +71,7 @@ test("renderCommandPhaseLine writes plan commands only into the plan status", ()
   };
   hosts.planCommandPhaseLine.textContent = "leftover";
   hosts.commandPhaseLine.textContent = "";
-  vm.runInNewContext(script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
+  vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
   assert.equal(hosts.planCommandPhaseLine.textContent, "");
   assert.match(hosts.commandPhaseLine.textContent, /fetchTmuxList|列出 sessions/);
 
@@ -80,17 +80,17 @@ test("renderCommandPhaseLine writes plan commands only into the plan status", ()
   sandbox.pendingActionsById = {
     plan: { command: "runPlan", label: "校验并提交运行", message: longMessage }
   };
-  vm.runInNewContext(script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
+  vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
   assert.ok(hosts.planCommandPhaseLine.textContent.length <= 160);
   assert.ok(fullPlanText.length > 160);
   assert.match(hosts.planCommandPhaseLine.textContent, /校验并提交运行/);
-  assert.match(hosts.commandPhaseLine.textContent, /校验并提交运行/);
+  assert.equal(hosts.commandPhaseLine.textContent, "", "Plan progress belongs only to its Plan status line");
   assert.equal(hosts.planCommandPhaseLine.title, fullPlanText);
-  assert.equal(hosts.commandPhaseLine.title, fullPlanText);
+  assert.equal(hosts.commandPhaseLine.title, "");
   assert.notEqual(hosts.planCommandPhaseLine.title, hosts.planCommandPhaseLine.textContent);
 
   sandbox.pendingActionsById = {};
-  vm.runInNewContext(script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
+  vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
   assert.equal(hosts.planCommandPhaseLine.textContent, "");
   assert.equal(hosts.commandPhaseLine.textContent, "");
   assert.equal(hosts.planCommandPhaseLine.classList.busy, undefined);

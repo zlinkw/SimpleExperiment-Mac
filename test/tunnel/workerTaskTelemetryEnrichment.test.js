@@ -7,7 +7,7 @@ const { enrichSchedulerRows, mergeAuthorityRealtimeStates } = require("../../dis
 const { createRealtimeState } = require("../../dist/tunnel/RealtimeEventReducer.js");
 const { readSource } = require("../_helpers/sourceReader");
 
-test("worker task telemetry enriches hub scheduler rows only", () => {
+test("worker task telemetry enriches its own Worker Scheduler rows without changing execution status", () => {
   const warnings = [];
   const rows = enrichSchedulerRows([{ runKey: "r1", status: "running", workerId: "w1" }], [{
     schemaVersion: 1,
@@ -36,12 +36,14 @@ test("authority merge reuses latest worker task for scheduler and trace enrichme
       ],
     },
   };
+  worker.schedulerStates=hub.schedulerStates;worker.experimentTraces=hub.experimentTraces;
   const merged = mergeAuthorityRealtimeStates([
     { endpoint: { id: "hub", role: "hub" }, state: hub },
     { endpoint: { id: "w1", role: "worker" }, state: worker },
   ]);
 
   assert.equal(merged.schedulerStates[0].workerPid, 20);
+  assert.equal(merged.schedulerStates[0].workerId,"w1");assert.equal(merged.schedulerStates.length,1);
   assert.equal(merged.schedulerStates[0].workerLiveStatus, "log_updating");
   assert.equal(merged.experimentTraces[0].localPid, 20);
   assert.equal(merged.experimentTraces[0].liveStatus, "log_updating");

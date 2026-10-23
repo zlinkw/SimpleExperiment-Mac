@@ -22,6 +22,7 @@ test("xshell login command update creates backup", async () => {
   const result = await updateXshellSessionLoginCommand(file, "echo simple", { backup: true });
   assert.equal(result.changed, true);
   assert.ok(result.backupPath);
-  assert.match(await fs.readFile(file, "utf8"), /RemoteCommand=echo simple/);
+  assert.match(await fs.readFile(file, "utf8"), /RemoteCommand=SIMPLE_EXPERIMENT_LOGIN_V1=/);
+  assert.match(await fs.readFile(file, "utf8"), /\(echo simple\).*; exec bash -i/);
   assert.match(await fs.readFile(result.backupPath, "utf8"), /RemoteCommand=/);
 });

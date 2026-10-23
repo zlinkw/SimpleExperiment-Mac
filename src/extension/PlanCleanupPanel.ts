@@ -3,15 +3,25 @@ import { randomBytes } from "node:crypto";
 import type { PlanCleanupHost } from "./PlanCleanupHost";
 import { cleanupError, cleanupJobKey, type CleanupPreview, type CleanupJobSelection } from "../features/PlanCleanup";
 
-export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: string, initialOperationId = "", job?: CleanupJobSelection) {
+export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: string, initialOperationId = "", job?: CleanupJobSelection, isolatedOperationId = "") {
   const selection = job && { ...job };
-  const title = selection ? "审核并清理失败任务文件" : "审核并清理 PLAN 文件";
+  const title = isolatedOperationId ? "隔离产物独立永久删除审核" : selection ? "审核并清理失败任务文件" : "审核并清理 PLAN 文件";
   const panel = vscode.window.createWebviewPanel("simpleExperimentMac.planCleanup", title, vscode.ViewColumn.Active, { enableScripts: true });
   const nonce = randomBytes(16).toString("hex");
   const initialId = /^[a-f0-9]{48}$/.test(initialOperationId) ? initialOperationId : "";
-  let preview: CleanupPreview | undefined, operationId = "", working = false;
+  const allowedIds = new Set([initialId, isolatedOperationId].filter(Boolean));
+  let preview: CleanupPreview | undefined, operationId = "", working = false, reviewCompleted = false;
+  const settleReview = async (operation: any) => {
+    if (isolatedOperationId && operation.preview.action === "delete" && operation.state === "completed") {
+      await host.verifyIsolatedAbsence(isolatedOperationId);
+      await host.isolatedReviewEvent(isolatedOperationId, "completed", operation.id);
+      reviewCompleted = true;
+    }
+  };
   const assertScope = (operation: { preview: CleanupPreview }) => {
     if (selection && (operation.preview.scope.planFile !== planFile || cleanupJobKey(operation.preview.scope.job) !== cleanupJobKey(selection))) cleanupError("JOB_SCOPE_CHANGED");
+    if (isolatedOperationId && !(operation.preview.token === isolatedOperationId && operation.preview.action === "isolate"
+      || operation.preview.action === "delete" && operation.preview.registeredIsolationOperationId === isolatedOperationId)) cleanupError("ISOLATED_OPERATION_IDENTITY_CHANGED");
   };
   // Register the bridge before loading HTML: the Webview may send its initial
   // history request as soon as its script starts.
@@ -27,20 +37,28 @@ export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: stri
     if (!concurrent) working = true;
     let response: Record<string, unknown>;
     try {
+      if (isolatedOperationId) {
+        if (!["history", "status", "poll", "deleteIsolated", "confirm", "execute", "cancel", "recheck"].includes(message.type)) cleanupError("ISOLATED_REVIEW_ONLY");
+        if (message.operationId && !allowedIds.has(String(message.operationId))) cleanupError("ISOLATED_OPERATION_IDENTITY_CHANGED");
+        if (["deleteIsolated", "confirm", "execute"].includes(message.type)) await host.assertIsolatedReview(isolatedOperationId);
+      }
       if (message.type === "poll") {
         const operation = await host.service.status(String(message.operationId || ""));
         assertScope(operation);
+        await settleReview(operation);
         const states = Object.values(operation.targets);
         response = { type: "progress", operationId: operation.id, operation,
           message: operation.state + " · 已处理 " + states.filter(row => row.state === "completed").length + "/" + states.length + (operation.error ? " · " + operation.error : "") };
       } else if (message.type === "history") {
         const rows = await host.service.list();
-        response = { type: "history", rows: selection ? rows.filter(row => row.planFile === planFile && cleanupJobKey(row.job) === cleanupJobKey(selection)) : rows };
+        response = { type: "history", rows: isolatedOperationId ? rows.filter(row => allowedIds.has(row.id))
+          : selection ? rows.filter(row => row.planFile === planFile && cleanupJobKey(row.job) === cleanupJobKey(selection)) : rows };
       } else if (message.type === "status") {
         if (!message.operationId) cleanupError("OPERATION_REQUIRED", "请先选择清理记录，或点击审核文件。");
         const operation = await host.service.status(String(message.operationId));
         assertScope(operation);
         operationId = operation.id; preview = operation.preview;
+        await settleReview(operation);
         response = { type: "operation", operation };
       } else if (message.type === "preview" || message.type === "changeMode") {
         const reuseToken = message.type === "changeMode" ? preview?.token : undefined;
@@ -57,28 +75,41 @@ export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: stri
       } else if (message.type === "recheck") {
         if (!operationId) cleanupError("OPERATION_REQUIRED", "请先选择历史清理操作。");
         const operation = await host.service.status(operationId);
-        for (const node of operation.preview.scope.nodes.filter(node => node.kind === "remote")) await host.service.recheckNode(node.id);
-        response = { type: "operation", operation: await host.service.status(operationId) };
+        if (!isolatedOperationId) for (const node of operation.preview.scope.nodes.filter(node => node.kind === "remote")) await host.service.recheckNode(node.id);
+        const refreshed = await host.service.status(operationId); await settleReview(refreshed);
+        response = { type: "operation", operation: refreshed };
       } else if (message.type === "confirm") {
         if (!preview) cleanupError("CONFIRM_REQUIRED", "请先完成预览并确认精确路径。");
         const operation = await host.service.confirm({ token: preview.token, digest: preview.digest, phase: message.phase, confirm: true,
           exactTargets: preview.rows.filter(row => row.disposition === preview!.action).map(row => row.node.id + ":" + row.absolutePath) });
         preview = operation.preview; operationId = operation.id;
+        allowedIds.add(operationId);
+        if (isolatedOperationId) await host.isolatedReviewEvent(isolatedOperationId, message.phase === 1 ? "confirmed1" : "confirmed2", operationId);
         response = { type: "confirmed", operation };
       } else if (["execute", "resume"].includes(message.type)) {
         if (!operationId) cleanupError("CONFIRM_REQUIRED", "请先完成预览并确认精确路径。");
-        response = { type: "operation", operation: await host.execute(operationId) };
+        if (isolatedOperationId) await host.isolatedReviewEvent(isolatedOperationId, "executing", operationId);
+        const operation = await host.execute(operationId);
+        if (isolatedOperationId) {
+          await settleReview(operation);
+          if (operation.state !== "completed") await host.isolatedReviewEvent(isolatedOperationId, operation.state === "paused" ? "cancelled"
+            : /BUSY/.test(operation.error || "") ? "busy" : operation.state === "blocked" ? "failed" : "unknown", operationId, operation.error);
+        }
+        response = { type: "operation", operation };
       } else if (message.type === "cancel") {
         if (!operationId) cleanupError("OPERATION_REQUIRED", "当前没有可暂停的操作。");
         response = { type: "operation", operation: await host.service.cancel(operationId) };
+        if (isolatedOperationId) await host.isolatedReviewEvent(isolatedOperationId, "cancelled", operationId);
       } else if (message.type === "restore") {
         if (!operationId) cleanupError("OPERATION_REQUIRED", "请先选择历史清理操作。");
         preview = undefined;
         preview = await host.service.restorePreview(operationId); response = { type: "preview", preview };
       } else if (message.type === "deleteIsolated") {
-        if (!operationId) cleanupError("OPERATION_REQUIRED", "请先选择一条隔离待删记录。");
+        if (!operationId && !isolatedOperationId) cleanupError("OPERATION_REQUIRED", "请先选择一条隔离待删记录。");
         preview = undefined;
-        preview = await host.service.isolatedDeletePreview(operationId, Boolean(message.verifiedOnly));
+        preview = await host.service.isolatedDeletePreview(isolatedOperationId || operationId, isolatedOperationId ? false : Boolean(message.verifiedOnly));
+        allowedIds.add(preview.token);
+        if (isolatedOperationId) await host.isolatedReviewEvent(isolatedOperationId, "preview", preview.token);
         operationId = ""; response = { type: "preview", preview };
       } else {
         cleanupError("INVALID_REQUEST", "不支持的审核操作。");
@@ -86,6 +117,9 @@ export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: stri
     } catch (error: any) {
       const code = error.apiData?.code || error.code;
       response = { type: "error", message: (code ? code + "：" : "") + String(error.message || error) };
+      if (isolatedOperationId) try {
+        await host.isolatedReviewEvent(isolatedOperationId, /BUSY/.test(String(code || error.message)) ? "busy" : "failed", operationId || preview?.token, String(error.message || error));
+      } catch (auditError: any) { response.message = String(response.message || "") + "；独立审核留痕失败：" + String(auditError.message || auditError); }
     } finally {
       if (!concurrent) working = false;
     }
@@ -93,10 +127,16 @@ export async function openPlanCleanupPanel(host: PlanCleanupHost, planFile: stri
     // next preview immediately, even before postMessage itself resolves.
     await reply(response);
   });
-  panel.onDidDispose(() => subscription.dispose());
+  panel.onDidDispose(async () => {
+    subscription.dispose();
+    if (isolatedOperationId && !reviewCompleted) await host.isolatedReviewEvent(isolatedOperationId, "unknown", operationId || preview?.token,
+      "审核页面已关闭；服务器执行未被自动取消，重开后只查询原请求，不自动重发。").catch((error: any) => {
+        void vscode.window.showErrorMessage("独立删除审核关闭留痕失败：" + String(error.message || error) + "；请重新打开审核查询原请求，勿重复执行。");
+      });
+  });
   panel.webview.html = `<!DOCTYPE html><html lang="zh"><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}'"><style>
 body{font:var(--vscode-font-size) var(--vscode-font-family);color:var(--vscode-foreground);background:var(--vscode-editor-background);padding:16px}button,select{font:inherit;margin:4px;padding:8px}table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--vscode-panel-border);padding:8px;text-align:left;overflow-wrap:anywhere}code{font-size:11px}summary{cursor:pointer}#status{white-space:pre-wrap}.warning{color:var(--vscode-editorWarning-foreground)}.actions{position:sticky;bottom:0;background:var(--vscode-editor-background);padding:8px 0;border-top:1px solid var(--vscode-panel-border)}#execute{background:var(--vscode-button-background);color:var(--vscode-button-foreground)}button:disabled{opacity:.5}.steps{font-weight:bold}details{margin:8px 0}.path{white-space:pre-wrap;font-weight:bold}
-</style></head><body><h2>${title}</h2><p>${selection ? "只处理选中失败任务的输出目录和指标文件，保留 PLAN、配置和其他任务文件。清理完成后回到任务卡片，点击重新排队；本页不会启动任务。" : "只处理当前 PLAN 的独占配置与关联产物。PLAN、共享默认配置、其他 PLAN 引用的配置和共享资产保留。可选择移入 clean_dir 或永久删除；切换方式复用本页路径，确认前会重新核对文件。"}</p>
+</style></head><body><h2>${title}</h2><p>${isolatedOperationId ? "仅审核本批已登记隔离操作的旧产物。新任务继续调度；忙、失败或取消仅记录在此，不会自动重试。请完整核对节点和路径，永久删除必须两次确认。" : selection ? "只处理选中失败任务的输出目录和指标文件，保留 PLAN、配置和其他任务文件。清理完成后回到任务卡片，点击重新排队；本页不会启动任务。" : "只处理当前 PLAN 的独占配置与关联产物。PLAN、共享默认配置、其他 PLAN 引用的配置和共享资产保留。可选择移入 clean_dir 或永久删除；切换方式复用本页路径，确认前会重新核对文件。"}</p>
 <p class="steps">1. 审核文件 → 2. 确认完整路径 → 3. 删除或移走文件</p>
 <select id="action" aria-label="处理方式"><option value="move">移入 clean_dir 文件夹（可恢复）</option><option value="delete">永久删除（不可恢复，需确认两次）</option></select>
 <label><input type="checkbox" id="partial">先处理可连接且审核通过的服务器（其余稍后处理）</label><button id="preview">审核文件</button>
@@ -106,6 +146,7 @@ body{font:var(--vscode-font-size) var(--vscode-font-family);color:var(--vscode-f
 <script nonce="${nonce}">
 const api=acquireVsCodeApi();let model=null,operationId='',phase=0,busy=false,executing=false,sequence=0,requestId='',canConfirm=false,canExecute=false,canOperate=false,canContinue=false,canRestore=false,canResume=false,canDeleteIso=false,previewMessage='';
 const initialOperationId=${JSON.stringify(initialId)};let polling=false;
+const isolatedReview=${JSON.stringify(Boolean(isolatedOperationId))};
 const get=id=>document.getElementById(id),esc=value=>String(value===undefined?'':value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let startedAt=0,progressText='',progressCount='';
 function renderProgress(){get('progress').textContent=(busy?[progressText,progressCount].filter(Boolean).join(' · '):'本次耗时')+(startedAt?' · '+Math.max(0,Math.floor((Date.now()-startedAt)/1000))+' 秒':'')}
@@ -115,6 +156,7 @@ function controls(){
 get('preview').disabled=get('action').disabled=get('partial').disabled=get('history').disabled=busy;get('load').disabled=busy||!get('history').value;
 get('confirm').disabled=busy||!canConfirm;get('execute').disabled=busy||!canExecute;get('cancel').disabled=!canOperate||!executing;get('resume').disabled=busy||!canResume;
 get('recheck').disabled=busy||!operationId;get('continue').disabled=busy||!canContinue;get('restore').disabled=busy||!canRestore;get('deleteIso').disabled=busy||!canDeleteIso;
+if(isolatedReview){get('action').value='delete';get('action').disabled=get('partial').disabled=get('history').disabled=true;get('partial').checked=false;for(const id of ['continue','resume','restore'])get(id).style.display='none';get('preview').textContent='重新审核隔离目标';}
 get('confirm').textContent=model?.action==='delete'?(phase===0?'第一次确认：我确认所列路径正确、文件未被占用，并同意永久删除':phase===1?'第二次确认：我确认所列路径正确、文件未被占用，并同意永久删除':'已完成两次确认'):'确认上述完整路径';
 get('execute').textContent=actionName(model?.action||get('action').value)+'已确认文件';get('resume').textContent='继续'+actionName(model?.action)+'剩余文件';
 get('load').title=busy?'正在处理，请稍候':'选择一条清理记录查看';get('confirm').title=busy?'正在审核，请稍候':canConfirm?'核对上方每个服务器和完整路径后确认':previewMessage||'请先审核文件';
@@ -154,7 +196,7 @@ if(!superseded&&!closed&&operation.error)text+=String.fromCharCode(10)+operation
 if((operation.pendingNodes||[]).length&&!ready)text+=String.fromCharCode(10)+'尚未完成的服务器：'+operation.pendingNodes.join('、');
 previewMessage=text;get('status').textContent=text;controls();
 }
-get('preview').onclick=()=>send('preview');get('confirm').onclick=()=>{if(model&&canConfirm&&!busy)send('confirm',{phase:phase+1})};
+get('preview').onclick=()=>send(isolatedReview?'deleteIsolated':'preview');get('confirm').onclick=()=>{if(model&&canConfirm&&!busy)send('confirm',{phase:phase+1})};
 get('execute').onclick=()=>{if(canExecute&&!busy)send('execute')};get('resume').onclick=()=>{if(canResume&&!busy)send('resume')};get('cancel').onclick=()=>{if(canOperate)send('cancel')};get('restore').onclick=()=>{if(canRestore&&!busy)send('restore')};get('deleteIso').onclick=()=>{if(canDeleteIso&&!busy)send('deleteIsolated')};
 get('continue').onclick=()=>send('continue');get('recheck').onclick=()=>send('recheck');
 get('load').onclick=()=>{if(!get('history').value){get('status').textContent='尚无选中的清理记录，请选择一条记录或点击审核文件。';return}send('status',{operationId:get('history').value})};get('history').onchange=controls;
