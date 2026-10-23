@@ -1,8 +1,34 @@
 {
   "protocolVersion": 1,
   "channel": "preview",
-  "updatedAt": "2026-10-22T17:28:22Z",
+  "updatedAt": "2026-10-23T17:16:13Z",
   "releases": [
+    {
+      "tag_name": "preview-v0.5.316",
+      "prerelease": true,
+      "draft": false,
+      "published_at": "2026-10-23T17:16:13Z",
+      "assets": [
+        {
+          "name": "release.json",
+          "browser_download_url": "https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/preview-v0.5.316/release.json",
+          "size": 1274,
+          "digest": "sha256:0335f945dba94b279bccea4d86ecacb785176de27b00127c3e31a32aec88ae42"
+        },
+        {
+          "name": "simple-experiment-mac-0.5.316-darwin-arm64.vsix",
+          "browser_download_url": "https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/preview-v0.5.316/simple-experiment-mac-0.5.316-darwin-arm64.vsix",
+          "size": 2143170,
+          "digest": "sha256:3bad7c0b5961b07230e00ccc960000f32ffb073a7879bf74827ed22d950fcd5c"
+        },
+        {
+          "name": "simple-sftp-mac-0.2.103-darwin-arm64.vsix",
+          "browser_download_url": "https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/preview-v0.5.316/simple-sftp-mac-0.2.103-darwin-arm64.vsix",
+          "size": 230766,
+          "digest": "sha256:b933a67dabdaf210fd69a3438b44e3f415fa2e4cb19d69a7a4fccf469906bef6"
+        }
+      ]
+    },
     {
       "tag_name": "preview-v0.5.315",
       "prerelease": true,

@@ -1,7 +1,8 @@
-## 2026-10-24 当前候选（085，未发布）
+## 2026-10-24 当前交付（085，已发布）
 
-- 候选Exp0.5.316/SF0.2.103，固定Windows .403/.107；剩余由主会话亲自完成，无新增代理。原工作区保留，独立fix/mac-sync-085树进行验收。
-- 两项Mac路径夹具及冷构建、模板、四根尾空格保护已完成目标回归；完整483唯一文件、Windows原生门禁与真实归档尚待验收。详细边界见windows-alignment-2026-10-24.md；不宣称M5/OpenSSH/libproc真机通过。
+- 已发布 [preview-v0.5.316](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.316)：Experiment Mac 0.5.316 / SimpleSFTP Mac 0.2.103，冻结 Windows .403/.107。源码 PR #1 均经真实差异审核后合并；Exp c32916985f77bfd208f357dd84f14b60363c4464，SF 79e9cb7f457bc2052176060d53c43dc53b07d9c8。
+- 最终 483 个唯一文件、2963 项全部通过，零失败/零skip；含13个真实Windows门禁与三主题浏览器。2028输入摘要13a198dc28b65902a07784599009e9f7e0772e84983d725c52373c12538abb45一致；包内334/36成员通过实际归档、运行字节、文档/备份/秘密审查。只保留法律及工具链根README例外。
+- 当前PR推进静态preview索引与在线说明；包内根README仍含上一配套版本文字，实际版本与资产SHA以release.json为准，已在发行说明披露，不覆盖既有资产。M5/OpenSSH/libproc真机未验，原完整目标保持paused；未安装开发机扩展或操作真实业务服务器、训练、传输、清理和部署。原目录、索引和全部失败证据保留。
 
 # Mac 项目事实
 
