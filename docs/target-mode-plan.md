@@ -12,7 +12,7 @@
 - 固定分母29；报告已取得M5环境、最小启动及匿名检查证据后核实原条目，缺证据整条保留剩余。完整目标维持paused；仅执行用户新授权的缺陷修复及功能同步发布。
 - 历史074授权为2026-10-13 Windows新增更新参考同步；冻结参考Exp7bb96599（基线42902a5a）/SFed75a5d（基线acae730）。Mac身份/更新/Termius/POSIX/租约/GPU内部标签保留；不复制Windows安装、部署、发布设置，不触碰现有任务。
 
-## 当前授权 mac-sync-085（2026-10-24，主会话接手验收）
+## mac-sync-085 已交付（2026-10-24，原完整目标仍 paused）
 - 交接：既有执行者已停止写入；后续由主会话亲自完成，不再委派。保留原两仓全部399/29项未提交成果及原master/index，刚经宿主fetch核实远端仍为Exp9a85b2e/SF32b01ed。授权成果逐文件SHA冻结在外部takeover/snapshot.json，仅复制到/repos/.worktrees/mac-sync-085下两独立fix/mac-sync-085分支；原目录不写入。
 - 085P01：只改两份Mac路径夹具及此计划。macPlanFiles提取真实commitIsolatedEnqueueLocal；macPlanLaunchPaths在只读GPU准入边界注入请求身份核验替身，保留真实路径与零远端动作断言。编译与目标回归待运行。历史45+文件未及时登记的切片已披露，交接完整快照保留，不视为最终验收。
 
@@ -123,3 +123,5 @@
 - 085P08：首轮470文件467通过/3失败，完整输入2028文件前后digest一致（takeover/final-linux-1436rdko/summary.json）；另13原生门禁未执行。两项更新失败来自P04把协议最低版误升.103，现恢复共同等待协议最低.102以允许旧配套更新；发行组件仍.103。metrics自动汇总3秒超时已补真实异步错误捕获（未增加时限/减少断言），单文件18/18通过，原超时保留。新候选需最终完整复验，不沿用旧全局摘要。
 
 - 085P09：真实Windows13文件12通过/1失败，输入前后一致（takeover/final-native-R67BOp）；浏览器三主题、原生结果目录缓存/发布/租约、SFTP认证/映射/清理路径/安装策略均零skip。唯一失败为vsixRuntimeClosure静态断言仍期望旧CLI/30秒，实际闭包322模块已通过；现断言真实锁定VSCE listFiles入口、无shell、8秒及JSON清单，CLI等价由macPackageProjection现有8断言覆盖，不改生产校验或时限。新冻结输入需复验。
+
+- 085最终：Exp0.5.316/SF0.2.103配套preview已发布；483文件2963项全部通过/零skip，13原生门禁与三主题、442指纹、构建/VM、334/36实际归档及运行字节核验通过。源码PR #1已合并（Exp c329169、SF79e9cb7）；本PR仅推进静态索引及在线交付说明，不改变已发包。包内根README旧版本文字已披露，以release.json为准。原工作区/索引及历史失败保留；M5/OpenSSH/libproc真机待验，完整目标不恢复。

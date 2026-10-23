@@ -2,7 +2,9 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**本配套 preview 版本为 Experiment 0.5.315、SFTP 0.2.102，参考冻结 Windows 0.5.400 / 0.2.104。** 发行附件与校验值以 [preview-v0.5.315](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.315) 的实际内容为准。验收范围及 M5 真机边界见 [项目事实](docs/mac-project-facts.md)，冻结基线见 [源码对齐记录](docs/windows-alignment-2026-10-22.md)。
+**本配套 preview 版本为 Experiment 0.5.316、SFTP 0.2.103，参考冻结 Windows 0.5.403 / 0.2.107。** 发行附件与校验值以 [preview-v0.5.316](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.316) 的实际清单为准。验收范围及 M5 真机边界见 [项目事实](docs/mac-project-facts.md)，冻结基线见 [源码对齐记录](docs/windows-alignment-2026-10-24.md)。
+
+本轮增加机器级 GPU 单源采集、请求绑定准入、四根机器状态保护、独立隔离重跑审核和系统 Python 解析修复。VSIX 内根 README 的上一版版本说明属于文档遗留，实际版本与校验值以本 Release 的 package/release 清单为准；最新说明以本仓库为准。
 
 ## 系统与安装
 
@@ -41,7 +43,7 @@ Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不�
 
 启动检查一次，此后每30分钟检查，同一配套版本仅主动提醒一次。通知 **查看更新** 展示说明，安装由上述安装入口显式确认。Mac 保留公开 preview 静态索引和同一 Release 分发，查询失败显示检查失败。安装事务、全部下载验证、SFTP先装、同版跳过、禁止降级、部分失败补装和等待本地传输使用 Windows 共同实现。
 
-共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套的 Experiment 0.5.315 / SFTP 0.2.102 满足该最低要求，请使用同一 Release 的两份 VSIX。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
+共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套的 Experiment 0.5.316 / SFTP 0.2.103 满足该最低要求，请使用同一 Release 的两份 VSIX。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
 
 ## Mac 数据与 CLI
 
