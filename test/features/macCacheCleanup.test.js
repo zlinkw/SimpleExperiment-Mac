@@ -56,11 +56,13 @@ test("actual Mac cache consumer launches the packaged Node helper in the verifie
     return localRequire(name);
   };
   customRequire.resolve = localRequire.resolve;
-  vm.runInNewContext(fs.readFileSync(file, "utf8") + "\nmodule.exports.deleteLocalCandidate=deleteLocalCandidate;", {
+  vm.runInNewContext(fs.readFileSync(file, "utf8") + "\nmodule.exports.deleteLocalCandidates=deleteLocalCandidates;", {
     module, exports: module.exports, require: customRequire, __dirname: path.dirname(file), Buffer, console,
     process: { ...process, platform: "darwin", arch: "arm64", execPath: "/Applications/Visual Studio Code.app/Code Helper", env: { KEEP: "yes" } },
   });
-  await module.exports.deleteLocalCandidate(f.root, { path: f.relative, fullPath: f.full, token: f.approval.token });
+  const skipped = [];
+  await module.exports.deleteLocalCandidates(f.root, [{ path: f.relative, token: f.approval.token }], skipped, "worker-mac");
+  assert.deepEqual(skipped, [], "确认过的单项目标不应被记为跳过");
   assert.equal(calls.length, 1); assert.equal(calls[0].command, "/Applications/Visual Studio Code.app/Code Helper");
   assert.equal(calls[0].args[0], localRequire.resolve("../mac/CacheDelete")); assert.equal(calls[0].options.cwd, f.parent);
   assert.equal(calls[0].options.env.ELECTRON_RUN_AS_NODE, "1"); assert.equal(calls[0].options.env.KEEP, "yes");
@@ -118,3 +120,55 @@ test("a zero-effect child cannot report completion while the target still exists
    try{assert.throws(()=>helper.deleteApprovedCacheFile(f.approval,f.disk,f.host),/HANDLE_CHECK_UNAVAILABLE/);}finally{proofFailure=false;}
    assert.equal(f.events.some(row=>row[0]==='unlink'),false);assert.ok(proofCalls.some(row=>row.full===f.full));
  });
+// 批量入口在 Mac 侧仍是一项一进程：下面两条锁住“仅预览项不下发删除”和“复核不过就进 skipped，绝不删除”。
+function panelHarness(f) {
+  const calls = [], file = path.resolve(__dirname, "../../dist/extension/CacheCleanupPanel.js"), localRequire = createRequire(file);
+  const module = { exports: {} }, promises = { lstat: async (...args) => f.disk.lstatSync(...args), realpath: async value => f.disk.realpathSync(value) };
+  const customRequire = name => {
+    if (name === "vscode") return { extensions: { getExtension: id => { assert.equal(id, "simple-local.simple-sftp-mac"); return { extensionPath: "/fixture/sftp" }; } } };
+    if (name === "node:path") return { ...path.posix, posix: path.posix };
+    if (name === "node:fs/promises") return promises;
+    if (name === "../mac/CacheDelete") return { ...helper, fingerprintCacheFile: (full, relative) => helper.fingerprintCacheFile(full, relative, f.disk) };
+    if (name === "node:child_process") return { spawn(command, args, options) {
+      assert.notEqual(command, "pwsh.exe", "Mac must not launch Windows PowerShell"); calls.push({ command, args, options });
+      const child = new EventEmitter(); child.stderr = new EventEmitter();
+      queueMicrotask(() => { try { helper.deleteApprovedCacheFile(JSON.parse(args[1]), f.disk, f.host); child.emit("close", 0); }
+        catch (error) { child.stderr.emit("data", error.message); child.emit("close", 1); } });
+      return child;
+    } };
+    return localRequire(name);
+  };
+  customRequire.resolve = localRequire.resolve;
+  vm.runInNewContext(fs.readFileSync(file, "utf8") + "\nmodule.exports.deleteLocalCandidates=deleteLocalCandidates;", {
+    module, exports: module.exports, require: customRequire, __dirname: path.dirname(file), Buffer, console,
+    process: { ...process, platform: "darwin", arch: "arm64", execPath: "/Applications/Visual Studio Code.app/Code Helper", env: { KEEP: "yes" } },
+  });
+  return { deleteLocalCandidates: module.exports.deleteLocalCandidates, calls };
+}
+
+test("preview-only rows are reported and never reach the isolated deleter", async () => {
+  const f = fixture();
+  const { deleteLocalCandidates, calls } = panelHarness(f);
+  const skipped = [];
+  await deleteLocalCandidates(f.root, [{ path: f.relative, token: f.approval.token, previewOnly: true }], skipped, "worker-mac");
+  assert.equal(calls.length, 0, "仅预览项不能启动删除程序");
+  assert.equal(skipped.length, 1);
+  assert.match(skipped[0], /仅预览项不允许删除/);
+  assert.equal(f.events.length, 0);
+});
+
+test("a row that changes after intake is skipped by the executor re-check instead of deleted", async () => {
+  const f = fixture();
+  let fileLooks = 0;
+  const pristine = f.disk.lstatSync;
+  f.disk.lstatSync = (file, ...rest) => { const value = pristine(file, ...rest);
+    if (file === f.full || file === "./" + path.posix.basename(f.full)) { fileLooks += 1; if (fileLooks > 1) return { ...f.stat, ino: 45n }; }
+    return value; };
+  const { deleteLocalCandidates, calls } = panelHarness(f);
+  const skipped = [];
+  await deleteLocalCandidates(f.root, [{ path: f.relative, token: f.approval.token }], skipped, "worker-mac");
+  assert.equal(calls.length, 0, "target changed after intake must never reach the delete program");
+  assert.equal(skipped.length, 1);
+  assert.match(skipped[0], /目标已变化/);
+  assert.equal(f.events.some(row => row[0] === "unlink"), false);
+});

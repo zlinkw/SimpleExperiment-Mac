@@ -42,7 +42,8 @@ function fixture(mode = "single_worker") {
     samePlanSelection: (a, b) => a === b, operationResultPlanFile: value => value?.planFile || "", makeOpId: prefix => prefix + "-mock", LocalApiError: class extends Error {},
     isUiCommandRemotePending: () => false, isUiCommandCancelled: () => false,
   };
-  for (const name of ["apiWorkflowPlan", "apiWorkflowRun", "runApiWorkflowOperation"]) provider[name] = vm.runInNewContext("({" + source(name) + "})", globals)[name];
+  // 提交路径新增的本机 Git 溯源收敛也取生产实现本身（含剥凭证的依赖方法），不写替身。
+  for (const name of ["apiWorkflowPlan", "apiWorkflowRun", "runApiWorkflowOperation", "queueGitProvenance", "stripGitUrlCredentials"]) provider[name] = vm.runInNewContext("({" + source(name) + "})", globals)[name];
   // Submission remains mocked unless the operation body itself is under test.
   const runOperation = provider.runApiWorkflowOperation;
   provider.runApiWorkflowOperation = async () => step("operation");
