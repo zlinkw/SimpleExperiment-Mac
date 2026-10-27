@@ -82,8 +82,27 @@ const tsLoader = (loadedModule, filename) => {
   loadedModule._compile(compiled, filename);
 };
 Module._extensions[".ts"] = tsLoader;
+// 真实 mapper 的 host 侧只接受无越界 POSIX 绝对路径（src/platform/Filesystem.ts:4-10），Windows 宿主的临时目录
+// 是盘符路径，会被直接拒，于是 workspaceRoot() 退化成 undefined、套件报“请先打开当前实验项目。”。这是宿主路径
+// 口径而不是行为差异，也不允许为此放宽生产 mapper。沿用已有的 Module._load 注入边界，只为被加载的 legacy 入口
+// 提供工作区位置适配器：file URI 的盘符路径规范成正斜杠 hostPath 返回，其余判定原样透传真实 mapper；真实 mapper
+// 自身的“接受 POSIX、拒绝盘符”契约在下面单独断言。
+const hostWorkspacePath = fsPath => String(fsPath).replace(/\\/g, "/");
+const realWorkspaceMapper = require(path.join(root, "src/core/WorkspacePathMapper.ts"));
+const workspaceLocationAdapter = {
+  ...realWorkspaceMapper,
+  resolveWorkspaceLocation(uri, config = {}) {
+    if (String(uri?.scheme || "").toLowerCase() === "file" && /^[A-Za-z]:[\\/]/.test(String(uri?.fsPath || ""))) {
+      const hostPath = hostWorkspacePath(uri.fsPath);
+      return { scheme: "file", editorUri: String(uri?.external || "file:///" + hostPath), hostPath, relativePath: "", remote: false };
+    }
+    return realWorkspaceMapper.resolveWorkspaceLocation(uri, config);
+  },
+};
+const legacyEntryFile = filename => /[\\/](src|dist)[\\/]extension[\\/]legacy\.(ts|js)$/.test(String(filename || ""));
 Module._load = function (request, parent, isMain) {
   if (request === "vscode") return vscode;
+  if (request === "../core/WorkspacePathMapper" && legacyEntryFile(parent?.filename)) return workspaceLocationAdapter;
   if (request === "../results/ProjectResultTables" && parent?.filename.endsWith(path.join("src", "extension", "legacy.ts"))) return tablesModule.exports;
   return originalLoad.call(this, request, parent, isMain);
 };
@@ -109,7 +128,8 @@ function providerFor(workspace, previousRegistry, summary) {
   const planText = 'suite: demo\nmode: test\nbase_config: configs/base.yaml\nseeds: [42, 43]\ncases: [{case: alpha}]\ntest_command: python fixture.py\n';
   fs.mkdirSync(path.join(workspace, 'experiments/plans'), { recursive: true });
   fs.writeFileSync(path.join(workspace, planFile), planText);
-  vscode.workspace.workspaceFolders = [{ uri: { scheme: 'file', fsPath: workspace } }];
+  // 工作区根必须真的能被解析出 hostPath，否则测的是“没有打开项目”的分支，不是结果重建本身。
+  vscode.workspace.workspaceFolders = [{ uri: { scheme: 'file', path: workspace, fsPath: workspace, toString: () => 'file://' + hostWorkspacePath(workspace) } }];
   const raw = {}, declarations = summary.results.map((row, index) => {
     const output_dir = 'work_dirs/alias-' + row.dimensions.seed;
     const result_csv = output_dir + '/metrics.csv';
@@ -199,4 +219,18 @@ test("a conflicting seed cannot supply metrics or suppress the other seed's fres
   } finally {
     vscode.workspace.workspaceFolders = [];
   }
+});
+
+// 适配器只补宿主口径，不改生产规则：真实 mapper 必须继续接受无越界 POSIX 根、继续拒绝盘符根与越界段，
+// 否则“Mac 侧工作区身份只认无越界 POSIX 绝对路径”这条生产契约就没人守；适配器本身只允许把盘符根规范成正斜杠。
+test("the real workspace mapper keeps its POSIX-only contract while the host adapter only normalises separators", () => {
+  const posix = realWorkspaceMapper.resolveWorkspaceLocation(
+    { scheme: "file", path: "/Users/demo/研究 项目", fsPath: "/Users/demo/研究 项目", toString: () => "file:///Users/demo/研究 项目" }, {});
+  assert.equal(posix.hostPath, "/Users/demo/研究 项目");
+  assert.equal(posix.remote, false);
+  assert.throws(() => realWorkspaceMapper.resolveWorkspaceLocation({ scheme: "file", path: "D:/demo", fsPath: "D:\\demo" }, {}),
+    /必须是无越界路径段的 POSIX 绝对路径/);
+  assert.throws(() => realWorkspaceMapper.resolveWorkspaceLocation({ scheme: "file", path: "/a/../../etc", fsPath: "/a/../../etc" }, {}),
+    /必须是无越界路径段的 POSIX 绝对路径/);
+  assert.equal(workspaceLocationAdapter.resolveWorkspaceLocation({ scheme: "file", fsPath: "D:\\demo\\研究 项目" }, {}).hostPath, "D:/demo/研究 项目");
 });

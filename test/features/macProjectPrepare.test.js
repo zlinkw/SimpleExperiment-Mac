@@ -72,6 +72,8 @@ function fixture(mode = "single_worker", options = {}) {
   };
   const globals = { ManualTunnel_1: manual, ApiWorkflow_1: workflow, TopologyMode_1: topology, XshellTunnelSetup_1: xshell, RuntimeManifest_1: runtime,
     AgentRuntimeScope_1: require("../../dist/features/AgentRuntimeScope"), SshTransportIdentity_1: ssh,
+    // 编译产物按模块命名空间引用取消类型（UiCommandCancelled_1.UiCommandCancelled），沙箱补同一形状。
+    UiCommandCancelled_1: { UiCommandCancelled: class extends Error {} },
     crypto, path, fs: fs.promises, __dirname: path.join(__dirname, "../../dist/extension"), console: { log() {}, warn() {} },
     workspaceRoot: () => root, remoteProjectName: () => path.posix.basename(root), assertSingleProjectWorkspace: () => {},
     firstNonEmpty: (...items) => items.find(item => item), normalizeRemoteWorkRoot: value => value, normalizeCondaEnvSetting: value => value || "",

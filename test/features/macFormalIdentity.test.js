@@ -25,6 +25,8 @@ test('old Worker declared paths alone cannot save or submit a new formal job', a
   p.workerActionTargets = () => [{ id: 'old-worker' }];
   p.lastWorkerProbes = { 'old-worker': { capabilities: { endpoints: { declaredJobPaths: true } } } };
   p.loadDistributedQueue = () => { throw Error('old protocol must not save a submission'); };
+  // 统一域判定与本用例无关（它只看登记表），取生产同款“无登记表”结果，避免把门禁当成被测试对象。
+  p.unifiedDomainState = () => ({ active: false, blocked: '' });
   await assert.rejects(p.enqueueDistributedPlan({}, {}), /WORKER_PROTOCOL_INCOMPATIBLE/);
   await assert.rejects(p.sendDistributedJob({ resultPathPolicy: 'declared' }, { outputDir: 'work/job' }, 'old-worker', '0', 'cmd'), /WORKER_PROTOCOL_INCOMPATIBLE/);
 });

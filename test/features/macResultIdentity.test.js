@@ -51,6 +51,8 @@ function backend() {
     resultSummaryInspectionCandidates: () => [' work_dirs/中文 A /指标.csv '],
     fs: { stat: async () => undefined, mkdir: async () => { disk.writes++; } },
     UiCommandCancelled: class extends Error {},
+    // 编译产物按模块命名空间引用取消类型（UiCommandCancelled_1.UiCommandCancelled），沙箱补同一形状。
+    UiCommandCancelled_1: { UiCommandCancelled: class extends Error {} },
     vscode: { workspace: { getConfiguration: () => ({ get: (_key, fallback) => sandbox.setting ?? fallback }) },
       window: { showErrorMessage: async (message, options) => { notices.push({ message, options }); },
         showWarningMessage: async message => { confirmations.push(message); }, showInformationMessage() {} } },

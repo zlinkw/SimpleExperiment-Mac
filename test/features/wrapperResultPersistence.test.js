@@ -290,10 +290,12 @@ test('an authorized historical metric view opens malformed text in memory and re
 
 test('a failed table write leaves the authoritative JSON repairable without a legacy publication ledger',async()=>{
   const f=fixture({rows:rows()});await f.sync();const job=f.declarations.get(planFile)[0];f.files.set(job.result_csv,Buffer.from(f.files.get(job.result_csv).toString().replace('0.92','0.93')));
-  const io=require('node:fs/promises'),rename=io.rename;let failed=false;
-  io.rename=async(from,to)=>{if(!failed&&to.endsWith('/final/final.csv')){failed=true;throw Error('isolated table commit failure');}return rename(from,to);};
+  const io=require('node:fs/promises'),rename=io.rename;let failed=false;const renamed=[];
+  // 生产给出的目标按宿主分隔符拼接，先归一成正斜杠再匹配，否则本机根本注入不到，拒绝断言就成了空跑。
+  const isFinalTable=target=>String(target).split(path.sep).join('/').endsWith('/final/final.csv');
+  io.rename=async(from,to)=>{renamed.push(to);if(!failed&&isFinalTable(to)){failed=true;throw Error('isolated table commit failure');}return rename(from,to);};
   try{await assert.rejects(f.sync(),/isolated table commit failure/);}finally{io.rename=rename;}
-  assert.equal(failed,true);assert.equal(f.exported().source,'active_query');assert.equal(f.exported().jobs.length,3);
+  assert.equal(failed,true,'注入必须命中真实表写入，实际重命名目标: '+JSON.stringify(renamed.slice(-6)));assert.equal(f.exported().source,'active_query');assert.equal(f.exported().jobs.length,3);
   const expected=f.exported().tables.find(table=>table.relativePath==='arbitrary_set/final/final.csv');await f.host.refreshLocalResultsFromUi();
   assert.equal(fs.readFileSync(path.join(f.root,'experiments/results',expected.relativePath),'utf8'),tables.writeCsv(expected.header,expected.rows));noRawFiles(f);
 });

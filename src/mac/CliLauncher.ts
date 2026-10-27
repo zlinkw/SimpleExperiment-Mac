@@ -73,7 +73,8 @@ export function registerMacCli(context: any, vscode: any) {
   const refresh = () => writeMacCliLauncher(context.extensionPath || context.extensionUri?.fsPath);
   context.subscriptions.push(vscode.commands.registerCommand(CLI_COMMAND, async () => {
     if (process.platform !== "darwin" || process.arch !== "arm64") throw new Error("CLI 入口仅支持 Apple Silicon Mac。");
-    const target = refresh(), command = shellQuote(target) + " self-check";
+    // self-check 已是从 CLI 移除的入口（会被直接拒绝并指向 doctor），复制给用户的必须是当前真能跑的体检入口。
+    const target = refresh(), command = shellQuote(target) + " doctor";
     const choice = await vscode.window.showInformationMessage(`CLI 入口：${target}。终端需要 Node.js 20+；每次扩展激活会刷新入口，保留当前工作目录，不自动修改 PATH。`, "复制自检命令");
     if (choice === "复制自检命令") await vscode.env.clipboard.writeText(command);
     return { path: target, command };
