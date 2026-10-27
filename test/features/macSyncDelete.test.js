@@ -172,7 +172,9 @@ test("a wrong physical working directory fails closed as PARENT_CD_FAILED", () =
 test("a non canonical host-shaped root is refused before any filesystem call", () => {
   const { root, real } = sandbox({ "old/a.bin": "x" });
   const { disk, host } = injected(root, real);
-  for (const bad of [real, root + "/..", root.replace(/^\//, "")]) {
+  // 固定 Windows 形状字面量：真机 macOS 上 realFs.realpathSync 的结果本身是规范 POSIX 绝对路径，
+  // 属于合法输入，不能当作非法根，否则该用例在目标平台会反向失败。
+  for (const bad of ["C:/fixture/project", root + "/..", root.replace(/^\//, "")]) {
     let touched = false;
     const probe = { ...disk, lstatSync: file => { touched = true; return disk.lstatSync(file, { bigint: true }); } };
     assert.throws(() => macDeleteChild({ root: bad, relative: "old/a.bin", handleProbe: "/p.py" }, probe, host, () => undefined),
