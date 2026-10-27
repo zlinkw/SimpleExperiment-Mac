@@ -179,3 +179,57 @@ test("release keeps every new GPU, root-map and isolated-retry safety domain", (
     'features/planJobDeleteRequeueProduction', 'scripts/macRuntimeTemplate'])
     assert.ok(files.has(path.resolve(__dirname, '../' + relative + '.test.js').replaceAll('\\', '/')), relative);
 });
+
+test("limited preview deferral skips only the listed rows and never counts them as executed", () => {
+  const prepare = require('../../scripts/mac-release-prepare');
+  const path = require('node:path');
+  const roots = { experiment: path.resolve(__dirname, '../..'), sftp: path.resolve(__dirname, '../../../SimpleSFTP-Mac') };
+  const inventory = prepare.getReleaseValidationInventory(roots);
+  const target = inventory.find(row => row.file.endsWith(path.join('test', 'features', 'preflightStages.test.js')));
+  assert.ok(target, 'preflightStages must stay in the release inventory');
+  const executed = [];
+  const result = prepare.runValidationTests((command, args, cwd) => executed.push(path.resolve(cwd, args.at(-1))),
+    roots, process.execPath, new Set(), new Set([target.file]));
+  assert.equal(result.inventory.length, inventory.length, 'deferral must not shrink the reviewed inventory');
+  assert.deepEqual(result.deferred, [target.file]);
+  assert.equal(executed.length, inventory.length - 1, 'exactly the deferred row is skipped');
+  assert.ok(!executed.includes(target.file));
+  assert.equal(result.executed.length, inventory.length - 1);
+  const strictRun = [];
+  prepare.runValidationTests((command, args, cwd) => strictRun.push(path.resolve(cwd, args.at(-1))), roots, process.execPath, new Set());
+  assert.equal(strictRun.length, inventory.length, 'default strict path still executes every row');
+});
+
+test("checked-in preview deferral policy binds this release and rejects tampering", () => {
+  const prepare = require('../../scripts/mac-release-prepare');
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const roots = { experiment: path.resolve(__dirname, '../..'), sftp: path.resolve(__dirname, '../../../SimpleSFTP-Mac') };
+  const versions = { experiment: require('../../package.json').version, sftp: require('../../../SimpleSFTP-Mac/package.json').version };
+  const inventory = prepare.getReleaseValidationInventory(roots);
+  const file = path.resolve(__dirname, '../../scripts/mac-release-preview-deferral.json');
+  assert.ok(fs.existsSync(file), 'the paired preview needs its checked-in deferral policy');
+  const loaded = prepare.loadDeferredPolicy(file, roots, versions, inventory);
+  assert.ok(loaded.entries.length > 0);
+  assert.equal([...loaded.set].filter(entry => path.isAbsolute(entry)).length, loaded.entries.length);
+  for (const entry of loaded.entries) {
+    assert.ok(inventory.some(row => row.file.endsWith(entry.file.split('/').join(path.sep))), entry.file);
+    assert.ok(!/passed|已通过/.test(entry.reason), 'a deferral reason must not claim a pass');
+  }
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'mac-deferral-'));
+  const write = (name, value) => { const p = path.join(scratch, name); fs.writeFileSync(p, JSON.stringify(value)); return p; };
+  const wrongVersion = JSON.parse(JSON.stringify(loaded.policy)); wrongVersion.appliesTo.experiment = '0.0.1';
+  assert.throws(() => prepare.loadDeferredPolicy(write('version.json', wrongVersion), roots, versions, inventory), /does not apply/);
+  const outside = JSON.parse(JSON.stringify(loaded.policy)); outside.notVerified.push({ component: 'experiment', file: 'test/not-in-inventory.test.js', reason: 'x' });
+  assert.throws(() => prepare.loadDeferredPolicy(write('outside.json', outside), roots, versions, inventory), /outside this release inventory/);
+  const blankReason = JSON.parse(JSON.stringify(loaded.policy)); blankReason.notVerified[0].reason = '   ';
+  assert.throws(() => prepare.loadDeferredPolicy(write('blank.json', blankReason), roots, versions, inventory), /lacks a reason/);
+  const empty = JSON.parse(JSON.stringify(loaded.policy)); empty.notVerified = [];
+  assert.throws(() => prepare.loadDeferredPolicy(write('empty.json', empty), roots, versions, inventory), /lists nothing to defer/);
+  const disclosure = prepare.buildDeferralDisclosure(loaded, { executed: new Array(3).fill('x') });
+  assert.match(disclosure, /本机未执行/);
+  assert.match(disclosure, /不宣称通过/);
+  for (const entry of loaded.entries) assert.ok(disclosure.includes(entry.file), entry.file);
+  fs.rmSync(scratch, { recursive: true, force: true });
+});
