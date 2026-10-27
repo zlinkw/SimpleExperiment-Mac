@@ -6,7 +6,7 @@
     "experiment": "0.5.317",
     "sftp": "0.2.104"
   },
-  "note": "本轮在 Windows 开发机打包。以下用例断言 macOS 的正斜杠项目内路径，在生产代码 os.path.relpath 返回宿主分隔符时必然被拒；同一批用例在已发布的 preview-v0.5.316 干净副本上重新构建后同样失败，因此本机执行结果不代表 Mac 行为，也不代表本轮引入的退化。",
+  "note": "本轮在 Windows 开发机做限定预览打包。以下行按真实签名分为三类：Mac 侧 POSIX 路径判定与宿主分隔符/根路径差异（共 20 行）、需要真机 macOS 能力（共 4 行）、本机宿主差异（其余行）。这些行仍留在已评审的 520 行发布清单里，不执行、不计为通过，并在 release-notes.md 与 preview-deferral.json 公开；因此本包不声明 M5 或真机验收通过。本轮另修的两处夹具缺陷（Mac 缓存清理等 6 个用例、SimpleSFTP fpsync 测试链）与 self-check 改为 doctor 的启动器用例都已跑绿，未列入延期。",
   "notVerified": [
     {
       "component": "experiment",
@@ -25,13 +25,73 @@
     },
     {
       "component": "experiment",
+      "file": "test/features/executionShellPreflight.test.js",
+      "reason": "host-git-bash-layout-not-mac-verifiable"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/formalJobExecution.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/formalJobPreflightApi.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
       "file": "test/features/formalJobPreflightEnvironment.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/formalJobPreflightProgress.test.js",
       "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
     },
     {
       "component": "experiment",
       "file": "test/features/formalJobPreflightStructure.test.js",
       "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/macCliWorkflow.test.js",
+      "reason": "mac-only-positional-argument-branch-trims-only-on-windows-host"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/macMappedResultIdentity.test.js",
+      "reason": "requires-macos-real-host-local-mapping-identity-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/macOpenSshTunnels.test.js",
+      "reason": "requires-macos-real-host-system-openssh-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/macSchedulerGpuTabs.test.js",
+      "reason": "requires-macos-real-host-native-task-window-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/macSyncDelete.test.js",
+      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/macUpdateGate.test.js",
+      "reason": "requires-macos-real-host-lease-ownership-proof-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/metricAliasRebuildWorkflow.test.js",
+      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/metricsDownloadEndToEnd.test.js",
+      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
     },
     {
       "component": "experiment",
@@ -67,6 +127,16 @@
       "component": "experiment",
       "file": "test/features/resultExclusionWorkflow.test.js",
       "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/syncResolution.test.js",
+      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/wrapperResultPersistence.test.js",
+      "reason": "windows-path-separator-blocks-test-failure-injection-not-mac-verifiable"
     }
   ]
 }

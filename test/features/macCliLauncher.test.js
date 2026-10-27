@@ -79,15 +79,44 @@ test("actual Mac command refreshes and copies the quoted stable path without a b
   assert.ok(fs.readFileSync(result.path, "utf8").includes("# extension-version: " + require("../../package.json").version));
 });
 
-test("actual packaged CLI self-check runs through the launcher with fresh local discovery", async () => {
-  const directory = evidence(), target = writeMacCliLauncher(root, path.join(directory, "component")), discovery = path.join(directory, "发现 中文.json");
-  let requests = 0;
-  const server = http.createServer((req, res) => { requests++; assert.equal(req.url, "/api/v1/health"); assert.equal(req.headers.authorization, "Bearer local-fixture"); res.setHeader("Content-Type", "application/json"); res.end(JSON.stringify({ ok: true, name: "SimpleExperimentMac", version: "fixture" })); });
-  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+// self-check 已是从 CLI 移除的入口（生产会直接报 removed entry 并指向 doctor），体检改由 doctor 承担。
+// 体检走统一入口契约：需要带 pid/startedAt 的实例身份，并同时核实配套 SimpleSFTP，因此两端都给本轮新生成的发现文件与替身服务。
+const HEALTH_PID = 4241, HEALTH_STARTED_AT = "2026-01-01T00:00:00.000Z";
+function stubPluginApi(name, version, methods) {
+  const state = { requests: 0 };
+  const server = http.createServer((req, res) => {
+    if (req.headers.authorization !== "Bearer local-fixture") { res.statusCode = 401; return res.end("{}"); }
+    if (req.url !== "/api/v1/capabilities") { res.statusCode = 404; return res.end("{}"); }
+    state.requests += 1;
+    res.setHeader("Content-Type", "application/json");
+    return res.end(JSON.stringify({ schemaVersion: 1, name, version, instanceId: `${HEALTH_PID}:${HEALTH_STARTED_AT}`,
+      transport: ["http", "cli"], rpc: "json-rpc-2.0", features: { probe: 1 }, confirmation: { required: true, categories: ["confirm"] }, methods }));
+  });
+  return new Promise(resolve => server.listen(0, "127.0.0.1", () => resolve({ server, state, port: server.address().port,
+    close: () => new Promise(done => { server.closeAllConnections(); server.close(done); }) })));
+}
+function writeApiDiscovery(file, name, version, port) {
+  fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, name, version, baseUrl: `http://127.0.0.1:${port}`,
+    host: "127.0.0.1", port, token: "local-fixture", pid: HEALTH_PID, startedAt: HEALTH_STARTED_AT }, null, 2) + "\n", "utf8");
+  return file;
+}
+
+test("actual packaged CLI health check runs through the launcher via doctor with fresh local discovery", async () => {
+  const directory = evidence(), target = writeMacCliLauncher(root, path.join(directory, "component"));
+  const experimentApi = await stubPluginApi("SimpleExperiment", require(path.join(root, "package.json")).version, ["status", "workflow.run"]);
+  const sftpApi = await stubPluginApi("SimpleSFTP", "0.2.104", ["status"]);
+  const experimentDiscovery = writeApiDiscovery(path.join(directory, "发现 中文.json"), "SimpleExperiment", require(path.join(root, "package.json")).version, experimentApi.port);
+  const sftpDiscovery = writeApiDiscovery(path.join(directory, "sftp-api.json"), "SimpleSFTP", "0.2.104", sftpApi.port);
   try {
-    fs.writeFileSync(discovery, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "local-fixture" }), "utf8");
-    const result = await new Promise((resolve, reject) => execFile(shell(), [target, "self-check"], { cwd: directory, encoding: "utf8", timeout: 10000, windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1", SIMPLE_EXPERIMENT_MAC_API_FILE: discovery } }, (error, stdout, stderr) => error ? reject(Object.assign(error, { stderr })) : resolve(JSON.parse(stdout))));
-    assert.equal(result.ok, true); assert.equal(requests, 1);
-    const found = result.checks.find(item => item.name === "discovery"); assert.equal(found.detail, discovery);
-  } finally { await new Promise(resolve => server.close(resolve)); }
+    const result = await new Promise((resolve, reject) => execFile(shell(), [target, "doctor", "--json"], { cwd: directory, encoding: "utf8", timeout: 10000, windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1", SIMPLE_EXPERIMENT_MAC_API_FILE: experimentDiscovery, SIMPLE_SFTP_MAC_API_FILE: sftpDiscovery } }, (error, stdout, stderr) => error ? reject(Object.assign(error, { stderr })) : resolve(JSON.parse(stdout))));
+    assert.equal(result.ok, true, JSON.stringify(result.plugins));
+    const blocks = Object.fromEntries((result.plugins || []).map(item => [item.plugin, item]));
+    // 发现载荷里的名字保持产品名，仅发现文件位置与环境变量按 Mac 命名。
+    for (const [plugin, api, discovery] of [["SimpleExperiment", experimentApi, experimentDiscovery], ["SimpleSFTP", sftpApi, sftpDiscovery]]) {
+      assert.equal(blocks[plugin].ok, true, JSON.stringify(blocks[plugin].checks));
+      assert.deepEqual(blocks[plugin].checks.map(item => item.name), ["discovery", "identity", "capabilities"]);
+      assert.equal(blocks[plugin].checks[0].detail, discovery, "体检必须读本轮新生成的发现文件");
+      assert.ok(api.state.requests >= 1, plugin + " 的本地服务必须真的被启动器里的 CLI 访问");
+    }
+  } finally { await experimentApi.close(); await sftpApi.close(); }
 });
