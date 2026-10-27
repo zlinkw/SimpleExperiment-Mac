@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "kind": "mac-limited-preview-deferral",
+  "policyId": "mac-sync-087-windows-host-deferral",
+  "appliesTo": {
+    "experiment": "0.5.317",
+    "sftp": "0.2.104"
+  },
+  "note": "本轮在 Windows 开发机打包。以下用例断言 macOS 的正斜杠项目内路径，在生产代码 os.path.relpath 返回宿主分隔符时必然被拒；同一批用例在已发布的 preview-v0.5.316 干净副本上重新构建后同样失败，因此本机执行结果不代表 Mac 行为，也不代表本轮引入的退化。",
+  "notVerified": [
+    {
+      "component": "experiment",
+      "file": "test/agent/runtimeReadBoundaryCache.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/archivedOnlyResultCsvViews.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/datasetAgentTables.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/formalJobPreflightEnvironment.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/formalJobPreflightStructure.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/multiFormatOutputContract.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/planScopedAnomalyAndUiPaths.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/planScopedPptConfigPaths.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/planSeedAggregate.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/preflightStages.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/projectManagedPreflight.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    },
+    {
+      "component": "experiment",
+      "file": "test/features/resultExclusionWorkflow.test.js",
+      "reason": "windows-host-path-separator-not-mac-verifiable-user-authorized"
+    }
+  ]
+}

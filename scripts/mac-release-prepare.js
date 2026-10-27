@@ -20,10 +20,14 @@ function main() {
   }
   const rootsByComponent = { experiment: EXPERIMENT_ROOT, sftp: SFTP_ROOT };
   const proofFile = process.env.SIMPLE_MAC_VALIDATION_PROOF;
+  const inventory = getReleaseValidationInventory(rootsByComponent);
   const validated = proofFile ? require("./mac-release-validation").assertValidationProof(
-    proofFile, rootsByComponent, getReleaseValidationInventory(rootsByComponent), commits)
+    proofFile, rootsByComponent, inventory, commits)
     : new Set([path.resolve(EXPERIMENT_ROOT, "test/features/panelWebviewScriptHealth.test.js")]);
-  runValidationTests(run, rootsByComponent, process.execPath, validated);
+  // 有限预览延迟清单：只有显式设置环境变量才生效，默认严格路径逐字不变；被延迟的行只登记、不执行，也不并入已通过集合。
+  const deferral = loadDeferredPolicy(process.env.SIMPLE_MAC_PREVIEW_DEFERRED_POLICY, rootsByComponent,
+    { experiment: packages[1].version, sftp: packages[0].version }, inventory);
+  const validation = runValidationTests(run, rootsByComponent, process.execPath, validated, deferral.set);
   npm(["run", "verify:package-runtime"], EXPERIMENT_ROOT);
   run(process.execPath, ["-e", "new (require('vm').Script)(require('fs').readFileSync('dist/ui/PanelHtml.js','utf8'))"], EXPERIMENT_ROOT);
   const tag = `preview-v${packages[1].version}`, directory = path.join(EXPERIMENT_ROOT, "release-artifacts", tag);
@@ -43,12 +47,17 @@ function main() {
     return component;
   });
   if (proofFile) require("./mac-release-validation").assertValidationProof(
-    proofFile, rootsByComponent, getReleaseValidationInventory(rootsByComponent), commits);
+    proofFile, rootsByComponent, inventory, commits);
   for (let index = 0; index < 2; index++) if (assertSource(roots[index], repos[index]) !== commits[index]) throw new Error("Build changed release source");
   const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: new Date().toISOString(), minimumMacOS: "26.0", components };
   fs.writeFileSync(path.join(directory, "release.json"), JSON.stringify(manifest, null, 2) + "\n", { encoding: "utf8", flag: "wx" });
   const notes = buildReleaseNotes(commits, [packages[0].version, packages[1].version]);
-  fs.writeFileSync(path.join(directory, "release-notes.md"), notes, { encoding: "utf8", flag: "wx" });
+  const notesText = deferral.entries.length ? notes + String.fromCharCode(10) + buildDeferralDisclosure(deferral, validation) : notes;
+  fs.writeFileSync(path.join(directory, "release-notes.md"), notesText, { encoding: "utf8", flag: "wx" });
+  if (deferral.entries.length) fs.writeFileSync(path.join(directory, "preview-deferral.json"), JSON.stringify({
+    kind: deferral.policy.kind, appliesTo: deferral.policy.appliesTo, policyFile: path.basename(deferral.file), policySha256: deferral.policySha256,
+    executed: validation.executed.length, notExecuted: deferral.entries, sourceCommits: commits, definitions: deferral.policy.note || "",
+  }, null, 2) + String.fromCharCode(10), { encoding: "utf8", flag: "wx" });
   // 禁止发布脚本跑完后脏树：构建期 compact:plan 若改写了 plan，必须在提交前审查并重新准备。
   for (const [root, name] of [[SFTP_ROOT, "SimpleSFTP-Mac"], [EXPERIMENT_ROOT, "SimpleExperiment-Mac"]]) {
     if (run("git", ["status", "--porcelain"], root)) throw new Error(`${name} 在发布准备后工作树不再干净（如构建期文档压缩改写了计划文件）；请先审查压缩结果、提交后重新准备。`);
@@ -59,13 +68,15 @@ function main() {
 // One callable source of truth for execution and review inventory. This function
 // does not build or contact GitHub. A test completed by the successful build is
 // counted in the inventory and skipped here so it executes only once.
-function runValidationTests(execute, roots, nodeExecutable, alreadyRun = new Set()) {
+function runValidationTests(execute, roots, nodeExecutable, alreadyRun = new Set(), deferred = new Set()) {
   const EXPERIMENT_ROOT = roots.experiment, SFTP_ROOT = roots.sftp;
-  const seen = new Set();
+  const seen = new Set(), skipped = [];
   function run(command, args, cwd, options) {
     const file = path.resolve(cwd, args[args.length - 1]);
     if (seen.has(file)) throw new Error("Duplicate release regression: " + file);
     seen.add(file);
+    // 显式延迟的行：登记后直接返回，既不执行也不记为通过；默认 deferred 是空集，严格路径行为不变。
+    if (deferred.has(file)) { skipped.push(file); return; }
     if (!alreadyRun.has(file)) return execute(command, args, cwd, options);
   }
   const files = ["macSchedulerGpuTabs", "tmuxGpuSessionClose", "tmuxClearTaskTabs", "tmuxTaskTabClose", "abortSchedulerStopRouting", "planStopClear", "macCacheCleanup", "simpleSftpIntegrationPreflight", "commandPaletteClarity", "macVsix", "macPreviewRelease", "macUpdateTransaction", "macBootstrap", "macCliLauncher", "macCliApi", "macCliWorkflow", "macWorkflowBinding", "macPlanIdentity", "macPlanFiles", "macAgentPlanIdentity", "macPlanLaunchPaths", "macResultIdentity", "macResultSummaryScope", "macMappedResultIdentity", "macResultFiles", "macLocalMetricParsing", "macResultOperationScope", "wrapperResultPersistence", "pendingResultMetricSync", "metricsDownloadEndToEnd", "resultsSummaryWebviewCache", "macResultCandidates", "macPlanResultCandidates", "jsonConfigOnboarding", "projectResultLocationClarity", "backendOutputDerivationCaches", "outputCandidateDedupRegression", "planScopedResultCandidateCache", "planSelectionPreviewAndWorkerEmptyState", "planOutputEvidenceSignals", "projectResultTables", "manualDistributedResultSync", "projectResultSyncCompleteness", "remoteResultInspectionWorkflow", "resultCsvDirectoryConfig", "datasetResultCatalog", "distributedPlanExecutionMode", "planRunModeWorkflow", "distributedProjectContract", "distributedPlanQueue", "distributedJobAutoRetry", "planSafeRetry", "distributedPlanSubmissionRouting", "planSubmissionVisiblePreflight", "macUpdateGate", "macUpdatePanel", "macHostLeasePaths", "macSetupGuide", "macPanelTheme", "macManualTunnel", "macProjectPrepare", "macPosixPaths", "topologyMode"];
@@ -117,6 +128,7 @@ function runValidationTests(execute, roots, nodeExecutable, alreadyRun = new Set
       row.component === "experiment" ? EXPERIMENT_ROOT : SFTP_ROOT,
       { inherit: true, timeout: rowTimeout(row.component, row.file), env: row.component === "experiment" ? { ...process.env, SIMPLE_TEST_SFTP_ROOT: path.resolve(SFTP_ROOT) } : undefined });
   }
+  return { inventory: [...seen], executed: [...seen].filter(file => !skipped.includes(file)), deferred: skipped };
 }
 
 function getReleaseValidationInventory(roots = { experiment: EXPERIMENT_ROOT, sftp: SFTP_ROOT }) {
@@ -156,4 +168,39 @@ SimpleExperiment-Mac ${commits[1]}
 `;
 }
 if (require.main === module) { try { main(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; } }
-module.exports = { main, buildReleaseNotes, runValidationTests, getReleaseValidationInventory, ROW_TIMEOUT_EXCEPTIONS };
+// 有限预览延迟清单：只接受"本轮版本 + 落在本次清单内 + 写明原因"的行，任何一条不合规直接失败，绝不静默回退执行。
+function loadDeferredPolicy(file, roots, versions, inventory) {
+  const empty = { set: new Set(), entries: [], policy: null, policySha256: "", file: "" };
+  if (!file) return empty;
+  const policy = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (policy.schemaVersion !== 1 || policy.kind !== "mac-limited-preview-deferral") throw new Error("Unexpected preview deferral policy schema");
+  if (!policy.appliesTo || policy.appliesTo.experiment !== versions.experiment || policy.appliesTo.sftp !== versions.sftp) throw new Error("Preview deferral policy does not apply to these package versions");
+  const rows = new Map(inventory.map(row => {
+    const component = path.resolve(row.cwd) === path.resolve(roots.experiment) ? "experiment" : "sftp";
+    return [component + ":" + path.relative(roots[component], row.file).split(path.sep).join("/"), row];
+  }));
+  const entries = policy.notVerified;
+  if (!Array.isArray(entries) || entries.length === 0) throw new Error("Preview deferral policy lists nothing to defer");
+  const set = new Set();
+  for (const entry of entries) {
+    const key = entry.component + ":" + entry.file;
+    if (!["experiment", "sftp"].includes(entry.component) || !/^test\/[^\s]+\.test\.js$/.test(entry.file)) throw new Error("Unsafe preview deferral entry: " + key);
+    if (typeof entry.reason !== "string" || !entry.reason.trim()) throw new Error("Preview deferral entry lacks a reason: " + key);
+    if (set.has(key)) throw new Error("Duplicate preview deferral entry: " + key);
+    const row = rows.get(key);
+    if (!row) throw new Error("Preview deferral entry is outside this release inventory: " + key);
+    set.add(key); set.add(row.file);
+  }
+  const digest = require("node:crypto").createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+  return { set, entries, policy, policySha256: digest, file };
+}
+
+// 披露文本：逐项列出未执行文件与原因，明确不宣称通过；不改动 buildReleaseNotes 的两参数纯函数契约。
+function buildDeferralDisclosure(deferral, validation) {
+  const executed = validation && Array.isArray(validation.executed) ? validation.executed.length : 0;
+  const out = ["", "## 有限预览：本机未执行的清单行（" + deferral.entries.length + " 项）", "",
+    "以下用例在本机没有执行，只登记不宣称通过；其余 " + executed + " 行照常串行执行。", "",];
+  for (const entry of deferral.entries) out.push("- " + entry.component + " " + entry.file + " — " + entry.reason);
+  return out.join("\n") + "\n";
+}
+module.exports = { main, buildReleaseNotes, runValidationTests, getReleaseValidationInventory, loadDeferredPolicy, buildDeferralDisclosure, ROW_TIMEOUT_EXCEPTIONS };

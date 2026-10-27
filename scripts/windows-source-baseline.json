@@ -88,7 +88,7 @@
         },
         {
           "path": "scripts/mac-release-prepare.js",
-          "localSha256": "5169345979b2d4f69919f06d21ff46d0aff0be19a5deca337496a9a86c9b4ba8",
+          "localSha256": "3aa4c143e6a4ded1809a8aeac80d38307f00031b3dedd49fbef58a3458dc1e55",
           "classification": "platform-only",
           "reason": "Mac 发布前置脚本（Windows 侧由 test-workflow 编排，无对应实现）：Mac 包投影 + 逐文件串行回归；本轮为跨仓用例注入 SIMPLE_TEST_SFTP_ROOT 前置条件。"
         },
@@ -3428,6 +3428,12 @@
           "windowsSha256": "f5f95ffe4f12b6259e629d5c7bdf859b3a33157e4899a755c40f0c650c0e65d2",
           "localSha256": "f5f95ffe4f12b6259e629d5c7bdf859b3a33157e4899a755c40f0c650c0e65d2",
           "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "scripts/mac-release-preview-deferral.json",
+          "localSha256": "83f89ad880110056907964dfc0b39db4f378cbf130f48bd9735a02d4171d8b8a",
+          "classification": "platform-overlay",
+          "reason": "Mac 有限预览延迟清单（Windows 侧无对应实现）：绑定本轮两仓版本号，逐条写明未在本机执行的用例与原因；只登记不执行，默认严格发布路径不受影响。"
         }
       ]
     },
