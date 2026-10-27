@@ -9,14 +9,13 @@ test("simpleex --help lists domains", async () => {
   }
 });
 
-test("simpleex run retains the manual experiment recorder", async () => {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "simpleex-recorded-run-"));
-  const result = await runCli(["run", "--name", "manual", "--", process.execPath, "-e", "console.log('AUC: 0.9')"], { cwd });
-  assert.equal(result.code, 0, result.stderr);
-  const recorded = JSON.parse(result.stdout);
-  assert.ok(recorded.runDir.startsWith(path.join(cwd, "experiments", "runs")));
-  assert.equal(recorded.metricsRows, 1);
-  assert.equal(fs.existsSync(path.join(recorded.runDir, "artifact_manifest.json")), true);
+test("simpleex run is refused: experiment execution goes through the API path", async () => {
+  const result = await runCli(["run", "--name", "manual", "--", process.execPath, "-e", "console.log('AUC: 0.9')", "--json"]);
+  assert.equal(result.code, 1);
+  const body = JSON.parse(result.stdout);
+  assert.equal(body.success, false);
+  assert.match(body.error.message + body.error.detail, /recorded local run removed/);
+  assert.match(body.error.detail, /experiment run/);
 });
 
 test("simpleex project status is human readable and json", async () => {
@@ -46,7 +45,7 @@ test("project root uses Local API workspace from unrelated cwd and explicit env 
   const server = http.createServer((req, res) => {
     if (req.url === "/api/v1/capabilities") {
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status"] }));
+      res.end(JSON.stringify({ schemaVersion: 1, rpc: "json-rpc-2.0", name: "SimpleExperiment", version: "0.5.60", instanceId: "4242:2026-01-01T00:00:00.000Z", methods: ["status"] }));
       return;
     }
     const chunks = [];
@@ -61,7 +60,7 @@ test("project root uses Local API workspace from unrelated cwd and explicit env 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
   const apiFile = path.join(parent, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: "SimpleExperiment", version: "0.5.60", pid: 4242, startedAt: "2026-01-01T00:00:00.000Z" }), "utf8");
   const resolved = await runCli(["project", "status", "--json"], { cwd: parent, apiFile });
   assert.equal(resolved.code, 0);
   assert.equal(JSON.parse(resolved.stdout).root, project);
@@ -79,18 +78,7 @@ test("project root uses Local API workspace from unrelated cwd and explicit env 
   assert.equal(JSON.parse(invalid.stdout).error.code, "ENV");
 });
 
-test("simpleex plan validate reuses PlanBuilder contract", async () => {
-  const ok = await runCli(["plan", "validate", validPlan, "--json"]);
-  assert.equal(ok.code, 0);
-  assert.equal(JSON.parse(ok.stdout).valid, true);
-
-  const bad = await runCli(["plan", "validate", invalidPlan, "--json"]);
-  assert.equal(bad.code, 3);
-  const payload = JSON.parse(bad.stdout);
-  assert.equal(payload.valid, false);
-  assert.ok(Array.isArray(payload.errors));
-  assert.ok(payload.errors.length > 0);
-});
+test("simpleex plan validate uses the host contract and reports its failures", require("./serverPlanValidation.support.cjs"));
 
 test("simpleex experiment list --json is parseable and filterable", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "simple-cli-exp-"));

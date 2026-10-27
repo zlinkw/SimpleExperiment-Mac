@@ -3,9 +3,10 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { PlanCleanup, cleanupDigest, cleanupError, type CleanupOperation, type CleanupPreview, type CleanupRemovedMetadata, type CleanupProgressSink, type CleanupJobSelection } from "../features/PlanCleanup";
 import { collectPlanCleanupEvidence } from "../features/PlanCleanupEvidence";
-import { distributedQueuePath, emptyDistributedQueue, canonicalProjectId, type DistributedQueue } from "../features/DistributedPlanQueue";
+import { distributedQueuePath, legacyDistributedQueuePath, emptyDistributedQueue, canonicalProjectId, type DistributedQueue } from "../features/DistributedPlanQueue";
 import { cleanupTaskEvidence, replacementEvidenceQueue, replacementJobGroups, replacementLifecycleJob } from "../features/PlanOutputReplacement";
-import { planSyncLedgerStoragePath, emptyPlanSyncLedger } from "../features/PlanArtifactSync";
+import { planSyncLedgerStoragePath, legacyPlanSyncLedgerStoragePath, emptyPlanSyncLedger } from "../features/PlanArtifactSync";
+import { ensureProjectDirectorySnapshotsMigrated, ensureProjectSnapshotMigrated, projectStateDir, projectStateFile } from "../features/ProjectStatePaths";
 import { atomicWriteText } from "../state/StateStore";
 import { openPlanCleanupPanel } from "./PlanCleanupPanel";
 import { isUnderMachineStatePrefixes } from "../features/ProjectRootMap";
@@ -23,6 +24,14 @@ async function json(file: string, fallback: any): Promise<any> {
   return text ? JSON.parse(text) : fallback;
 }
 
+/** r17-A: read the project-location snapshot after a one-time race-safe migration copy; a
+ * corrupt LEGACY file keeps its original corrupt-state error instead of an empty fallback. */
+async function jsonWithMigration(projectRoot: string, legacyFile: string, targetFile: string, fallback: any): Promise<any> {
+  const migration = await ensureProjectSnapshotMigrated(projectRoot, legacyFile, targetFile);
+  if (migration === "invalid-legacy") return json(legacyFile, fallback);
+  return json(targetFile, fallback);
+}
+
 /** Host adapter deliberately reads original ledgers, without refreshing/migrating project files. */
 export class PlanCleanupHost {
   readonly service: PlanCleanup;
@@ -30,10 +39,11 @@ export class PlanCleanupHost {
   private independentExecuting = false;
   get blocksTaskScheduling() { return this.executing && !this.independentExecuting; }
   constructor(private readonly host: any, readonly root: string) {
-    const storage = host.context.globalStorageUri.fsPath;
-    this.service = new PlanCleanup({ storageRoot: path.join(storage, "plan-cleanup", cleanupDigest(root)),
+    // r17-A: operation records live in the CONSUMED project (per projectRoot); legacy globalStorage
+    // location is used only by read-with-migration helpers, never written again.
+    this.service = new PlanCleanup({ storageRoot: path.join(projectStateDir(root, "simple-experiment"), "plan-cleanup", cleanupDigest(root)),
       collect: (file, options) => this.collect(file, Boolean(options?.removedMetadata), options?.archivedFiles, options?.removedMetadata, options?.onProgress, options?.job, options?.nativeDeclarations, options?.authorizationMode),
-      sftp: async (method, params) => guardCleanupSftpCall(host, method, params),
+      sftp: async (method, params) => guardCleanupSftpCall(host, root, method, params),
       restoreGate: (preview, operation) => this.restoreGate(preview, operation),
       currentNode: async id => this.currentNode(id),
       validateScope: async scope => {
@@ -56,7 +66,10 @@ export class PlanCleanupHost {
             || proof.expectedSha256 !== config.expectedSha256) cleanupError("CONFIG_SCOPE_CHANGED", config.relativePath + "：配置已变化或已被其他 PLAN 引用，请重新审核");
         }
       },
-      validateIsolationReview: async id => { await this.assertIsolatedReview(id); },
+      // The service can be entered directly (e.g. isolatedDeletePreview) without ever passing
+      // an executing host entry, so this read-only validation must still surface legacy
+      // operation records: migrate-then-read, byte-exact, legacy files never modified.
+      validateIsolationReview: async id => { await this.ensureOperationRecordsMigrated(); await this.assertIsolatedReview(id); },
       updateIndexes: (operation, restore) => this.updateIndexes(operation, restore) });
   }
   private assertWorkspace() {
@@ -108,8 +121,8 @@ export class PlanCleanupHost {
     if (this.host.taskLifecycleProtocol === 2 || authorizationMode === "confirmed_paths") return this.collectManaged(file, allowMissing, archivedFiles, removedMetadata, onProgress, job, nativeDeclarations, authorizationMode);
     this.assertWorkspace();
     const storage = this.host.context.globalStorageUri.fsPath;
-    const queue = await json(distributedQueuePath(storage, this.root), emptyDistributedQueue());
-    const ledger = await json(planSyncLedgerStoragePath(storage, this.root), emptyPlanSyncLedger());
+    const queue = await jsonWithMigration(this.root, legacyDistributedQueuePath(storage, this.root), distributedQueuePath(storage, this.root), emptyDistributedQueue());
+    const ledger = await jsonWithMigration(this.root, legacyPlanSyncLedgerStoragePath(storage, this.root), planSyncLedgerStoragePath(storage, this.root), emptyPlanSyncLedger());
     const registry = await json(path.join(this.root, "simple_cluster/results/project_table_registry.json"), undefined);
     const targets = collectNodeTargets(this.host);
     const nodes = nodesForTargets(this.root, targets);
@@ -152,9 +165,10 @@ export class PlanCleanupHost {
           detail: "原 Worker 尚不支持旧状态回收；更新 Agent 后再预览。未删除产物，不影响单独停止任务。" });
     }
     if (!job) {
-    scope.nodes.push({ id: "pluginState", kind: "local", root: storage });
+    const stateRoot = projectStateDir(this.root, "simple-experiment");
+    scope.nodes.push({ id: "pluginState", kind: "local", root: stateRoot });
     for (const indexFile of [distributedQueuePath(storage, this.root), planSyncLedgerStoragePath(storage, this.root)]) {
-      scope.candidates.push({ nodeId: "pluginState", relativePath: path.relative(storage, indexFile).replace(/\\/g, "/"), type: "file",
+      scope.candidates.push({ nodeId: "pluginState", relativePath: path.relative(stateRoot, indexFile).replace(/\\/g, "/"), type: "file",
         category: "插件缓存/任务索引", owners: [scope.planKey], evidence: ["当前项目的持久化登记与清理生命周期标记"],
         dependencies: ["同项目其他 PLAN 与历史恢复证据"], protectedReason: "共享索引保留，完成后仅追加生命周期标记" });
     }
@@ -171,9 +185,10 @@ export class PlanCleanupHost {
   private async collectManaged(file: string, allowMissing: boolean, archivedFiles?: Record<string, string>, removedMetadata?: CleanupRemovedMetadata,
     onProgress?: CleanupProgressSink, job?: CleanupJobSelection, nativeDeclarations?: ManifestDeclaration[], authorizationMode?: "confirmed_paths") {
     this.assertWorkspace();
+    await this.ensureOperationRecordsMigrated();
     const storage = this.host.context.globalStorageUri.fsPath;
-    const queue = await json(distributedQueuePath(storage, this.root), emptyDistributedQueue());
-    const ledger = await json(planSyncLedgerStoragePath(storage, this.root), emptyPlanSyncLedger());
+    const queue = await jsonWithMigration(this.root, legacyDistributedQueuePath(storage, this.root), distributedQueuePath(storage, this.root), emptyDistributedQueue());
+    const ledger = await jsonWithMigration(this.root, legacyPlanSyncLedgerStoragePath(storage, this.root), planSyncLedgerStoragePath(storage, this.root), emptyPlanSyncLedger());
     const registry = await json(path.join(this.root, "simple_cluster/results/project_table_registry.json"), undefined);
     const nodes = this.managedNodes();
     let declarations = nativeDeclarations || job?.manifest?.declarations;
@@ -251,8 +266,25 @@ export class PlanCleanupHost {
         cleanupError("SHARED_DEPENDENCY");
     }
   }
+  /** One-time, per-host byte-exact copy of whitelisted legacy operation records into the
+   * project location; legacy files are never modified or deleted. Failures re-throw and may
+   * be retried by the next entry. */
+  private recordsMigration?: Promise<void>;
+  private ensureOperationRecordsMigrated(): Promise<void> {
+    // One fixed persisted completion fact per (projectRoot, records directory): once imported,
+    // a fresh host/window never re-imports — released or retired records cannot be resurrected
+    // from the untouched legacy directory.
+    if (!this.recordsMigration) this.recordsMigration = ensureProjectDirectorySnapshotsMigrated(
+      this.root,
+      path.join(this.host.context.globalStorageUri.fsPath, "plan-cleanup", cleanupDigest(this.root)),
+      path.join(projectStateDir(this.root, "simple-experiment"), "plan-cleanup", cleanupDigest(this.root)),
+      /^[a-f0-9]{48}\.json$/,
+      projectStateFile(this.root, "simple-experiment", "migrations", "plan-cleanup-" + cleanupDigest(this.root) + ".done.json")).catch((error: unknown) => { this.recordsMigration = undefined; throw error; });
+    return this.recordsMigration;
+  }
   private async updateIndexes(operation: CleanupOperation, restore: boolean) {
     this.assertWorkspace();
+    await this.ensureOperationRecordsMigrated();
     // An old registered isolation tree has no authority to retire, clear or rewrite the new PLAN/job.
     if (operation.preview.registeredIsolationOperationId) return;
     const originalId = operation.preview.originalOperationId || operation.id;
@@ -315,8 +347,8 @@ export class PlanCleanupHost {
     if (restore) {
       for (const original of restoreChain) {
         original.restoredBy = operation.id;
-        const storage = path.join(this.host.context.globalStorageUri.fsPath, "plan-cleanup", cleanupDigest(this.root), original.id + ".json");
-        await atomicWriteText(storage, JSON.stringify(original, null, 2));
+        const record = path.join(projectStateDir(this.root, "simple-experiment"), "plan-cleanup", cleanupDigest(this.root), original.id + ".json");
+        await atomicWriteText(record, JSON.stringify(original, null, 2));
       }
     }
     this.host.localPlanMetadataUpdatedAt = 0;
@@ -326,6 +358,7 @@ export class PlanCleanupHost {
     if (this.executing) cleanupError("OPERATION_BUSY");
     this.executing = true;
     try {
+      await this.ensureOperationRecordsMigrated();
       const registered = await this.service.registeredIsolationSource(id);
       this.independentExecuting = Boolean(registered);
       const initial = await this.service.status(id);
@@ -384,7 +417,14 @@ export class PlanCleanupHost {
     return recordIsolatedReviewEventFor(this.isolatedReviewContext(), originalId, kind, reviewId, detail);
   }
   async verifyIsolatedAbsence(originalId: string) { return verifyIsolatedTargetsAbsence(this.isolatedReviewContext(), originalId); }
-  async openIsolatedBatchReviews() { return openIsolatedBatchReviewFlow(this.isolatedReviewContext()); }
+  /** r87 块4：后台清隔离副本的旁路提交——只走 service 的门（能力、回执齐备、job 级完成），
+   * 与上面人工审核链的"目的地缺失证明"完全无关，也不共用它的授权。传输异常由 service 落 unknown，
+   * 门拒绝（能力缺失/回执不全）由派发侧 fire-and-forget 的处理器落日志与通知，不影响已派发任务。 */
+  async autoDeleteIsolated(id: string) { await this.ensureOperationRecordsMigrated(); return this.service.autoDeleteIsolated(id); }
+  // r17-B anchor rule: every reader of the old operation-record location takes the migration
+  // first — a fresh window opening the isolated-review bridge must still find (byte-import)
+  // a legacy-only record instead of answering OPERATION_NOT_FOUND.
+  async openIsolatedBatchReviews() { await this.ensureOperationRecordsMigrated(); return openIsolatedBatchReviewFlow(this.isolatedReviewContext()); }
   open(file: string, operationId?: string, job?: CleanupJobSelection, isolatedOperationId?: string) { return openPlanCleanupPanel(this, file, operationId, job, isolatedOperationId); }
   openJob(file: string, job: CleanupJobSelection) { return this.open(file, undefined, job); }
 }

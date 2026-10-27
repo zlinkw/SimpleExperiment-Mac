@@ -51,14 +51,28 @@ const observed=(when,extra={})=>({queuePlanId:'card',projectId:'cp-1',jobIndex:0
   status:'running',lastObservedAt:new Date(when).toISOString(),statusQueryError:'',...extra});
 
 
+// r28-U1（主控批准）：完整 drain 并保留子进程 stdio；done 之前任何 IPC error / 退出 / 传输故障即时拒绝全部
+// pending wait 并附真实诊断（旧版吞 error、Socket.toString 打印 [object Object]、伪装 3000ms IPC timeout 的缺陷即首因伪装层）。
+// done 之后的收尾 send/EPIPE 属清理竞态，不影响已完成结果。3000ms 既有预算原样保留，未延长。
 function spawnChild(distFile,file,mode,eventsFile){
   const p=fork(path.resolve(__dirname,'planIsolatedBatchLedger.lockChild.cjs'),[distFile,file,mode,eventsFile||''],{execArgv:[],stdio:['ignore','pipe','pipe','ipc']});
-  p.on('error',()=>{/* 断连竞态的异步 EPIPE 由 close/exit 判定兜底 */});
-  const events=[];const waiters=new Map();
-  p.on('message',m=>{events.push(m);for(const f of waiters.get(m.event)||[])f(m);});
-  const wait=event=>new Promise((resolve,reject)=>{const hit=events.find(m=>m.event===event);if(hit)return resolve(hit);
-    const f=m=>{clearTimeout(timer);resolve(m);};const timer=setTimeout(()=>reject(Error('IPC timeout '+event+' '+p.stdout.toString?.()||'')),3000);
-    waiters.set(event,[...(waiters.get(event)||[]),f]);});
+  const io={stdout:'',stderr:''};
+  p.stdout.setEncoding('utf8');p.stderr.setEncoding('utf8');
+  p.stdout.on('data',c=>{io.stdout+=c;});p.stderr.on('data',c=>{io.stderr+=c;});
+  const events=[];const waiters=new Map();let done=false;let failure=null;
+  const diag=()=>'events='+JSON.stringify(events.map(m=>m.event))+' exitCode='+String(p.exitCode)+' signal='+String(p.signalCode)+' stdout='+JSON.stringify(io.stdout)+' stderr='+JSON.stringify(io.stderr);
+  const failAll=err=>{if(!failure)failure=err;for(const [,arr] of waiters)for(const w of arr){clearTimeout(w.timer);w.reject(Error(err.message+' | '+diag()));}waiters.clear();};
+  p.on('message',m=>{events.push(m);if(m.event==='done')done=true;
+    if(m.event==='error')failAll(Error('child IPC error: '+String(m.message||'')));
+    const arr=waiters.get(m.event)||[];waiters.delete(m.event);for(const w of arr){clearTimeout(w.timer);w.resolve(m);}});
+  p.on('exit',(code,sig)=>{if(!done)failAll(Error('child exited before done code='+String(code)+' signal='+String(sig)));});
+  p.on('error',e=>{if(!done)failAll(Error('child transport error: '+String((e&&e.message)||e)));}); // done 后清理 EPIPE 不推翻结果；done 前即时上报
+  const wait=event=>new Promise((resolve,reject)=>{
+    const hit=events.find(m=>m.event===event);if(hit)return resolve(hit);
+    if(failure)return reject(Error(failure.message+' | '+diag()));
+    const w={};w.resolve=resolve;w.reject=reject;
+    w.timer=setTimeout(()=>{const arr=waiters.get(event)||[];waiters.set(event,arr.filter(x=>x!==w));reject(Error('IPC timeout '+event+' | '+diag()));},3000);
+    waiters.set(event,[...(waiters.get(event)||[]),w]);});
   return {p,events,wait};
 }
 

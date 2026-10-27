@@ -22,7 +22,16 @@ function fixture() {
     PlanOutputRetention: require('../../dist/features/PlanOutputRetention.js'),
     collectDistributedJobArtifacts: require('../../dist/features/DistributedJobArtifacts.js').collectDistributedJobArtifacts,
     workerFpsyncTaskLabel: () => 'Plan 完成产物同步', workspaceRoot: () => root,
+    // r6：方法从 TS 源码抽取，编译后保留裸标识符。
+    jobArtifactRunGeneration: require('../../dist/features/JobArtifactSyncIdentity.js').jobArtifactRunGeneration,
+    // 0.5.416 配套：failJob 现从错误提取结构化卡点（裸标识符，TS 源切片保留裸名），
+    // 复用同一真实生产模块，不造假替身；无卡点故障不会触达能力门探测。
+    artifactStageBlockFromError: require('../../dist/features/JobArtifactSyncIdentity.js').artifactStageBlockFromError,
     errorMessage: error => String(error.message || error),
+    // r51：schedule 失败回调的 typed 过滤需要真实生产取消类（TS 源切片保留裸标识符；
+    // 与其余 dist 依赖一致复用已编译 core 模块，不造假 name 类）。
+    UiCommandCancelled: require('../../dist/core/UiCommandCancelled.js').UiCommandCancelled,
+    ...require('../../dist/results/NativeResultManifest.js'),
     loadSyncHolds: async () => f.holds, isSyncHeld: require('../../dist/features/SyncResolution.js').isSyncHeld,
     mapLimited: async (rows, limit, work) => { for (const row of rows) await work(row); },
   };
@@ -30,6 +39,9 @@ function fixture() {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText, sandbox);
   const p = new sandbox.Host();
+  // 0.5.416 配套：抽取成员集合外的宿主方法在切片外定义；此处仅保证 failJob 对
+  // 卡点的能力门探测可解析（本夹具错误无结构化卡点，实际不会触达）。
+  p.ensureStagedSlotReleaseCapabilities = () => {};
   const plan = { id: 'run', projectId: queueApi.canonicalProjectId(root), planFile: 'experiments/plans/formal.yaml',
     revision: 'revision', codeFingerprint: 'code', resultPathPolicy: 'declared', fullPlanJobCount: 2,
     enqueuedAt: '2026-10-12T00:00:00Z', executionMode: 'train_test', jobs: [0, 1].map(index => ({
@@ -50,7 +62,7 @@ function fixture() {
     inventory[job.workerId][job.collectionResultCsv] = { sha256: hash };
     inventory[job.workerId][`${job.outputDir}/worker.pid`] = { sha256: hash };
   }
-  const f = { p, state, inventory, owners, holds: {}, transfers: [], reads: [], errors: [], checks: 0, changed: undefined };
+  const f = { p, state, inventory, owners, holds: {}, transfers: [], reads: [], errors: [], nativeNotes: [], checks: 0, changed: undefined };
   Object.assign(p, {
     context: { globalStorageUri: { fsPath: 'C:/plugin' } }, projectContextGeneration: 1, client: {},
     lastWorkerProbes: { w1: { status: 'ok' }, w2: { status: 'ok' }, w3: { status: 'ok' } },
@@ -91,6 +103,8 @@ function fixture() {
       }
     },
     recordActionError: row => f.errors.push(row), postState() {},
+    // r51：真实失败必须可见——记录原生通知供断言，不空 no-op 掩盖本轮需求。
+    showNativePanelMessage: m => f.nativeNotes.push(structuredClone(m)),
     queuePlanArtifactSyncStatusCheck: () => f.checks++,
   });
   f.run = async () => { p.scheduleDistributedPostprocess(root, true); await p.distributedPostprocessPromise; await turn(); };
@@ -164,6 +178,32 @@ test('content conflicts remain pending without overwriting another completed for
   assert.ok(job.artifactRetryAfter); assert.match(job.artifactError, /CONFLICT/);
   const reads = f.reads.length;
   await f.run(); assert.equal(f.reads.length, reads, 'durable retry deadline prevents tight loops');
+});
+
+// r51：自动镜像真实失败的可见性契约——当前 scope 经原生通知恰一次；
+// 在途期间上下文切换（generation 前进）后的旧轮失败绝不进新 scope 面板。
+test('an automatic mirror failure notifies the current scope once while a switched-away stale scope stays silent', async () => {
+  const f = fixture(), job = f.state.plans[0].jobs[0];
+  const file = `${job.outputDir}/best_model.pth`;
+  f.inventory.w3[file] = { sha256: 'b'.repeat(64) };
+  await assert.rejects(f.run(), /FORMAL_JOB_MIRROR_CONFLICT/);
+  await turn();
+  assert.equal(f.nativeNotes.length, 1, '当前 scope 的真实故障原生通知恰一次');
+  assert.equal(f.nativeNotes[0].tone, 'error');
+  assert.match(f.nativeNotes[0].message, /自动产物同步未完成：.*FORMAL_JOB_MIRROR_CONFLICT/, '完整真实原因进通知');
+  assert.match(f.nativeNotes[0].message, /运行完成状态不变，可在对应 Job 行重新同步/);
+  // 过期 scope：同步在途时切换上下文，随后旧轮真实失败——不向新 scope 弹任何提示
+  let release, started; const startedSignal = new Promise(resolve => { started = resolve; });
+  f.p.syncCompletedPlanArtifacts = async () => { started(); await new Promise(resolve => { release = resolve; }); throw Error('FORMAL_JOB_MIRROR_CONFLICT: stale round'); };
+  f.p.scheduleDistributedPostprocess(root, true);
+  await startedSignal;
+  f.p.projectContextGeneration++; // 工作区切换：schedule 捕获的 context 不再当前
+  const promise = f.p.distributedPostprocessPromise;
+  release();
+  await assert.rejects(promise, /stale round/, '旧轮照常真实失败');
+  await turn();
+  assert.equal(f.nativeNotes.length, 1, '过期 scope 的旧失败不得弹进新 scope（通知计数不变）');
+  assert.equal(f.p.completedPlanMirrorDiagnostics?.status, 'failed', '诊断记录不受上下文守卫影响');
 });
 
 test('busy transfers coalesce completion events without starting parallel mirror jobs', async () => {

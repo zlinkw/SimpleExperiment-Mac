@@ -29,7 +29,7 @@ function method(start, end, scope = {}) {
     PlanCodeScopeHost: require("../../dist/extension/PlanCodeScopeHost"),
     GpuQuotaScheduling: require("../../dist/features/GpuQuotaScheduling"), AgentTmuxPolicy_1:require("../../dist/tunnel/AgentTmuxPolicy"),
     WorkflowBinding: require('../../dist/features/WorkflowWorkspaceBinding'),
-    PlanCleanupEvidence_1: require('../../dist/features/PlanCleanupEvidence'), path,
+    PlanCleanupEvidence_1: require('../../dist/features/PlanCleanupEvidence'), ProjectStatePaths_1: require('../../dist/features/ProjectStatePaths'), path,
     fs: { readFile: async () => 'plan_id: stable-mode-plan\n' },
     workspaceRoot: () => root, makeOpId: () => 'distributed-plan-mode',
     operationResultPlanFile: body => body.planFile, planValidationFromResult: result => result.validation,
@@ -50,6 +50,9 @@ function host(queue = Queue.emptyDistributedQueue()) {
     client: { postWorkerAction: async (_, __, request) => {owner.sent.push(request);return request;} },
   };
   owner.commitIsolatedEnqueueLocal = method('async commitIsolatedEnqueueLocal(', 'async promoteIsolatedDispatchLocal(').commitIsolatedEnqueueLocal;
+  // 块C：真实 enqueue 落盘窄溯源；纯法身提取（同 commitIsolatedEnqueueLocal 口径），无副作用。
+  Object.assign(owner, method('stripGitUrlCredentials(', 'async confirmPlanBatchRunSubmission('));
+  owner.unifiedDomainState = () => ({ active: false, blocked: "" }); // 块B：夹具根未登记 → 既有单机发送路径
   return owner;
 }
 for (const mode of ['train', 'test', 'train_test']) test('validated mode survives persistence, native dispatch and reviewed requeue: ' + mode, async () => {

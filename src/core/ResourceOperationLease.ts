@@ -73,6 +73,45 @@ async function canonicalResourceTarget(value: ResourceTarget): Promise<ResourceT
   return normalizeResourceTarget({ server: "local", project: await physical(normalized.project), target: await physical(normalized.target!) });
 }
 
+/** Shared secure reader (plan r13 §2 / r14): exact delegation of the manager's private readRegistry.
+ * Returns the record with its captured mtimeMs so the update gate can prove snapshot bounds.
+ * The manager keeps identical semantics by delegating here; admission/TTL/conflict/recovery protocols are unchanged.
+ */
+export async function readResourceLeaseRegistrySecure(file: string): Promise<{ record: Registry; mtimeMs: number }> {
+  const handle = await fs.open(file, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
+  try {
+    const before = await handle.stat();
+    const current = await fs.lstat(file);
+    if (current.isSymbolicLink() || current.dev !== before.dev || current.ino !== before.ino) throw new Error("资源锁路径身份无效。");
+    if (!before.isFile() || before.nlink > 1 || before.size > 8 * 1024 * 1024) throw new Error("资源锁文件身份或大小无效。");
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (!result.bytesRead) throw new Error("资源锁读取未前进。");
+      offset += result.bytesRead;
+    }
+    const after = await handle.stat();
+    if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) throw new Error("资源锁读取期间发生变化。");
+    const row = JSON.parse(bytes.toString("utf8"));
+    if (row.schemaVersion !== 2 || !Array.isArray(row.leases) || !row.windowId || row.leases.some((lease: any) => !Array.isArray(lease.resources) || !lease.resources.length)) throw new Error("资源锁记录损坏。");
+    return { record: row, mtimeMs: before.mtimeMs };
+  } finally { await handle.close(); }
+}
+/** Ownership-recovery traversal identical to the manager's rows(): trusted sidecar fallback, atomically consumed
+ * empty slots skipped (undefined), and unknown records block with RESOURCE_LEASE_OWNER_UNKNOWN. Orphan ownership
+ * sidecars are included, never ignored. */
+export async function readResourceLeaseRegistryWithOwnership(file: string): Promise<{ record: Registry; mtimeMs: number } | undefined> {
+  try { return await readResourceLeaseRegistrySecure(file); }
+  catch (error: any) {
+    try { return await readResourceLeaseRegistrySecure(file + ".ownership"); }
+    catch (fallback: any) {
+      if (error.code === "ENOENT" && fallback.code === "ENOENT") return undefined; // Atomically consumed idle slot.
+      throw Object.assign(new Error("资源锁归属无法核实，记录已保留；请检查持有窗口，不能忽略未知活动锁。"), { code: "RESOURCE_LEASE_OWNER_UNKNOWN" });
+    }
+  }
+}
+
 /** Per-window bakery admission protects only registry writes, never business operations.
  * Registry release and crash recovery are logical: no filesystem cleanup is required.
  */
@@ -142,41 +181,14 @@ export class ResourceOperationLeaseManager {
     }
   }
   private async readRegistry(file: string): Promise<Registry> {
-    const handle = await fs.open(file, constants.O_RDONLY | (constants.O_NOFOLLOW || 0));
-    try {
-      const before = await handle.stat();
-      const current = await fs.lstat(file);
-      if (current.isSymbolicLink() || current.dev !== before.dev || current.ino !== before.ino) throw new Error("资源锁路径身份无效。");
-      if (!before.isFile() || before.nlink > 1 || before.size > 8 * 1024 * 1024) throw new Error("资源锁文件身份或大小无效。");
-      const bytes = Buffer.alloc(before.size);
-      let offset = 0;
-      while (offset < bytes.length) {
-        const result = await handle.read(bytes, offset, bytes.length - offset, offset);
-        if (!result.bytesRead) throw new Error("资源锁读取未前进。");
-        offset += result.bytesRead;
-      }
-      const after = await handle.stat();
-      if (before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) throw new Error("资源锁读取期间发生变化。");
-      const row = JSON.parse(bytes.toString("utf8"));
-      if (row.schemaVersion !== 2 || !Array.isArray(row.leases) || !row.windowId || row.leases.some((lease: any) => !Array.isArray(lease.resources) || !lease.resources.length)) throw new Error("资源锁记录损坏。");
-      return row;
-    } finally { await handle.close(); }
+    const { record } = await readResourceLeaseRegistrySecure(file);
+    return record;
   }
   private async rows(): Promise<Registry[]> {
     await fs.mkdir(this.directory, { recursive: true });
     const names = (await fs.readdir(this.directory)).filter(name => /^[a-f0-9]{64}[.]json$/.test(name));
-    const rows = await Promise.all(names.map(async name => {
-      const file = path.join(this.directory, name);
-      try { return await this.readRegistry(file); }
-      catch (error: any) {
-        try { return await this.readRegistry(file + ".ownership"); }
-        catch (fallback: any) {
-          if (error.code === "ENOENT" && fallback.code === "ENOENT") return undefined; // Atomically consumed idle slot.
-          throw Object.assign(new Error("资源锁归属无法核实，记录已保留；请检查持有窗口，不能忽略未知活动锁。"), { code: "RESOURCE_LEASE_OWNER_UNKNOWN" });
-        }
-      }
-    }));
-    return rows.filter((row): row is Registry => row !== undefined);
+    const rows = await Promise.all(names.map(name => readResourceLeaseRegistryWithOwnership(path.join(this.directory, name))));
+    return rows.filter((entry): entry is { record: Registry; mtimeMs: number } => entry !== undefined).map(entry => entry.record);
   }
   private async legacyGuard(existingOperation = false): Promise<void> {
     try {

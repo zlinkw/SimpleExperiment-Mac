@@ -125,6 +125,16 @@ export function resolveProjectRootMap(input: ProjectRootMapInput): ProjectRootMa
     mapping: unknownFields.length ? "unknown" : "resolved", unknownFields };
 }
 
+/** True only when both spellings canonicalize to the SAME absolute root. An
+ * uncanonicalizable side NEVER matches: this equality binds endpoint identity
+ * (a probe's projectRoot against the code root), so "invalid == invalid" must
+ * not read as "same root" and fail an identity check open. */
+export function remoteRootsEqual(left: string, right: string): boolean {
+  const a = canonicalRemotePath(left);
+  const b = canonicalRemotePath(right);
+  return a.ok && b.ok && a.path === b.path;
+}
+
 /** True when an absolute path lives under the mapped machine state root. */
 export function isMachineStateAbsolute(roots: ProjectRootMap, target: string): boolean {
   const canonical = canonicalRemotePath(target);

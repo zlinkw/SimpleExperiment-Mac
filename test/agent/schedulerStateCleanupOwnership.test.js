@@ -21,7 +21,7 @@ test("cleanup exposes only owned scheduler state and revalidates ownership befor
   const candidates = source.slice(candidatesStart, candidatesEnd);
   assert.match(candidates, /scheduler_state_cleanup_owner_matches\(root_real, path, state\)/);
   assert.match(candidates, /已终止 Plan 的专属调度状态/);
-  assert.match(candidates, /stat\.st_mtime > cutoff/);
+  assert.doesNotMatch(candidates, /stat\.st_mtime > cutoff/);
 
   const deleteStart = source.indexOf("def cache_delete_exact_file(");
   const deleteEnd = source.indexOf("\ndef handle_action(", deleteStart);

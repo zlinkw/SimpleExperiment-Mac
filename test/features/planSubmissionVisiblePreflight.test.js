@@ -76,6 +76,9 @@ const production = new Function("DistributedPlanQueue", "fs", "path", "crypto", 
     finishPlanSubmissionProgress: ${method("finishPlanSubmissionProgress").replace("finishPlanSubmissionProgress", "function")},
     planSubmissionQueueDetail: ${method("planSubmissionQueueDetail").replace("planSubmissionQueueDetail", "function")},
     distributedCodeVersionHold: ${method("distributedCodeVersionHold").replace("async distributedCodeVersionHold", "async function")},
+    legacySourceFreezeWorkerNames: ${method("legacySourceFreezeWorkerNames").replace("legacySourceFreezeWorkerNames", "function")},
+    recordLegacySourceFreezeFact: ${method("recordLegacySourceFreezeFact").replace("recordLegacySourceFreezeFact", "function")},
+    beginSimpleSftpCapabilityLaunch: ${method("beginSimpleSftpCapabilityLaunch").replace("beginSimpleSftpCapabilityLaunch", "function")},
     assertPlanSubmissionNotDuringResultSync: ${method("assertPlanSubmissionNotDuringResultSync").replace("assertPlanSubmissionNotDuringResultSync", "function")},
     deferDistributedPlan: ${method("deferDistributedPlan").replace("async deferDistributedPlan", "async function")},
     supersedeDeferredPlan: ${method("supersedeDeferredPlan").replace("async supersedeDeferredPlan", "async function")},
@@ -101,7 +104,7 @@ function provider() {
   host.distributedQueueCache = { schemaVersion: 1, plans: [], deferred: [] };
   host.distributedQueueRoot = root;
   host.lastCodeSyncState = { fingerprint: "new-code", workerVersions: { w1: { fingerprint: "old-code" } } };
-  host.lastWorkerProbes = { w1: { status: "ok", agentVersion: "agent-1" } };
+  host.lastWorkerProbes = { w1: { status: "ok", agentVersion: "agent-1", capabilities: { agentVersion: "agent-1", endpoints: {} } } };
   host.planValidationCache = new Map();
   host.planValidationCacheMaxEntries = 32;
   host.resolveWorkerEndpointId=id=>id||"w1";
@@ -115,6 +118,7 @@ function provider() {
   host.postState = () => host.posts.push(JSON.parse(JSON.stringify(host.localOperations)));
   host.markLocalOperationsDirty = () => {};
   host.reportPlanStage = (_message, text) => host.stages.push(text);
+  host.logOperationFact = () => {};
   host.openPanelAt = async () => {};
   host.loadDistributedQueue = async () => host.distributedQueueCache;
   host.saveDistributedQueue = async (_root, queue) => {
@@ -240,7 +244,29 @@ test("an occupied old code version is diagnostic and does not freeze a new valid
 
 });
 
-test("a new validated submission leaves an unrelated saved deferred row untouched", async () => {
+test("29 updated runtimes receive no legacy freeze notice", async () => {
+  const host = commandHost();
+  mountOldPlan(host);
+  host.lastWorkerProbes.w1 = { status: "ok", agentVersion: "agent-2", capabilities: { agentVersion: "agent-2", endpoints: { sourceDecouple: 1 } } };
+  await submit(host, message());
+  assert.deepEqual(host.calls, ["sync", "preflight", "confirm", "enqueue:[0]"]);
+  assert.equal(host.stages.some((text) => /更新 Worker runtime/.test(text)), false);
+});
+
+test("r39 only a successfully probed legacy endpoint is called old; missing/failed probes stay unknown", () => {
+  const host = commandHost();
+  // 该用例要验证真实实现，必须去掉夹具在 provider() 里对本方法的遮蔽。
+  delete host.legacySourceFreezeWorkerNames;
+  host.enabledWorkerConfigs = () => [{ id: "current" }, { id: "old" }, { id: "missing" }, { id: "failed" }];
+  host.lastWorkerProbes = {
+    current: { status: "ok", capabilities: { runtimeVersion: "0.5.409", endpoints: { sourceDecouple: 1 } } },
+    old: { status: "ok", capabilities: { endpoints: {} } },
+    failed: { status: "timeout", message: "query failed" },
+  };
+  assert.deepEqual(host.legacySourceFreezeWorkerNames(), ["old"]);
+});
+
+test("29 old persisted deferred stays untouched while a source-changed plan still submits", async () => {
   const host = commandHost();
   mountOldPlan(host);
   host.distributedQueueCache.deferred = [deferredRow({ status: "pending", confirmedOutputChoice: true })];
@@ -309,9 +335,9 @@ test("a preflight rejection reports a terminal failure and its detail through th
   assert.match(statuses.at(-1).message, /未提交/);
   assert.equal(statuses.some((row) => row.status === "completed"), false);
   assert.equal(host.actionErrors.length, 1);
-  assert.equal(alerts.length, 1);
-  assert.equal(alerts[0][1].modal, true);
-  assert.match(alerts[0][1].detail, /未提交/);
+  // 当前权威通知契约（legacy.ts 的 PLAN_SUBMISSION_COMMANDS 分支）不再为提交类命令叠加第二层错误弹窗，
+  // 可见失败由面板状态回显、localOperations 终态与 actionErrors 承担，已在上面逐条断言。
+  assert.equal(alerts.length, 0);
 });
 
 async function submit(host, item) {
@@ -487,8 +513,10 @@ test("successful Plan validation cache is bounded, cloned, and keyed by all exec
   assert.notEqual(host.planValidationCacheKey(body, "w1"), key);
   host.setupConfig = {};
   host.lastWorkerProbes.w1.agentVersion = "agent-next";
+  host.lastWorkerProbes.w1.capabilities.agentVersion = "agent-next";
   assert.notEqual(host.planValidationCacheKey(body, "w1"), key);
   host.lastWorkerProbes.w1.agentVersion = "agent-1";
+  host.lastWorkerProbes.w1.capabilities.agentVersion = "agent-1";
   host.lastCodeSyncState.fingerprint = "other-code";
   assert.notEqual(host.planValidationCacheKey(body, "w1"), key);
   host.planValidationCacheMaxEntries = 1;
@@ -561,6 +589,7 @@ test("missing explicit historical-output choice cannot skip every job or close a
   `)(() => root, (body) => body.planFile, () => "new-plan", DistributedPlanQueue,
     { window: { showInformationMessage: () => Promise.resolve() } }, (error) => String(error), require("../../dist/features/PlanExecutionMode"),require("../../dist/features/WorkflowWorkspaceBinding"));
   const previous = { id: "deferred-drf", planFile: drf, revision: "rev-drf", codeFingerprint: "new-code", status: "blocked", confirmedOutputChoice: false };
+  // 块C：真实 enqueue 含队列窄溯源收敛（纯法身注入，无副作用）。
   const host = {
     distributedQueueTickPromise: undefined,
     workerActionTargets: () => [],
@@ -569,6 +598,7 @@ test("missing explicit historical-output choice cannot skip every job or close a
     async loadDistributedQueue() { return this.queue; },
     async saveDistributedQueue(_root, next) { this.queue = next; },
     postState() {},
+    ...new Function(`return { ${method("queueGitProvenance")}, ${method("stripGitUrlCredentials")} };`)(),
   };
   await assert.rejects(() => enqueue.call(host, { planFile: drf, planRevision: "rev-drf", existingOutputCount: 1, distributedSkipJobIndices: [0], options: {} },
     validation(), false, previous.id), /历史产物处理方式未确认/);
@@ -599,7 +629,7 @@ function progressState(host) {
 }
 
 function renderExecution(state) {
-  return renderPanel(["executionOperationWorkflowId", "distributedPlanRecoveryView", "executionPlanGroupKey", "executionCurrentDistributedJobs", "executionSubmissionLabel", "executionNewerSubmission", "executionDeferredView", "operationIsActive", "operationIsFailureLike", "operationHasDeadEvidence", "renderPlanTaskCards", "renderTaskCards", "renderExecutionPlanList"], state, ["executionPlanList"]);
+  return renderPanel(["distributedPlanRecoveryView", "executionPlanGroupKey", "executionCurrentDistributedJobs", "executionSubmissionProgressText", "executionSubmissionLabel", "executionOperationWorkflowId", "executionNewerSubmission", "executionDeferredView", "operationIsActive", "operationIsFailureLike", "operationHasDeadEvidence", "renderPlanTaskCards", "renderTaskCards", "renderExecutionPlanList"], state, ["executionPlanList"]);
 }
 
 
@@ -649,6 +679,7 @@ function renderPanel(names, state, ids) {
     TASK_QUEUED_STATUSES: new Set(["queued", "pending"]),
     TASK_TERMINAL_STATUSES: new Set(["completed", "done", "archived", "deleted"]),
     taskRowsViewModel: () => ({ counts: {}, selectedRows: [], visibleRows: [], detailRow: undefined }),
+    PLAN_EXECUTION_PHASE_LABELS: {},
     OPERATION_ACTIVE_MATCH_TOKENS: ["running", "queued", "pending"],
     OPERATION_FAILURE_MATCH_TOKENS: ["failed"],
     operationIsActive: (status) => ["running", "queued", "pending"].includes(String(status)),
@@ -681,3 +712,24 @@ function extract(name) {
   const next = renderedPanel.indexOf("\n    function ", start + 1);
   return renderedPanel.slice(start, next);
 }
+
+// ── r82（0.5.414）：入队选择/占用核查豁免必须显式区分 可执行 / 隔离暂停 / 有意跳过（413 上红）──
+// 现场：legacy.ts:13423 把非 rerun_missing 的排除集清成 []，隔离失败 job 按普通 pending 入队照常派发；
+// assertLaunchObservations（legacy.ts:13368-13369）又用同一 skip 集决定豁免。修复后豁免是显式决定，
+// 且阻断 job 带着 job 级标记入队、界面可见。
+// r83 返修：拆开短路——方法体接线钉与共享选择函数行为各自独立成用例，任一红不再遮蔽其余断言的复现机会。
+test("r82 red: enqueue wiring pins — no erasure, shared selection, job-level marker, explicit exemption", () => {
+  const enqueueMethod = method("enqueueDistributedPlan");
+  assert.equal(/existingOutputChoice !== "rerun_missing" \? \[\]/.test(enqueueMethod), false, "隔离阻断不得随非补跑清空而蒸发");
+  assert.match(enqueueMethod, /planDispatchSelection\(/, "入队选择必须走 DistributedPlanQueue.planDispatchSelection 共享函数");
+  assert.match(enqueueMethod, /outputIsolationBlocked/, "阻断 job 入队必须携带 job 级阻断标记");
+  assert.match(method("assertPlanSubmissionWorkers"), /blocked|launchObservationExempt/, "占用核查豁免必须显式并入隔离阻断 job（本轮不派发），不再是清空排除表的副作用");
+});
+test("r82 red: planDispatchSelection keeps isolation-blocked jobs as visible pending queue entries, launchable only for the safe subset", () => {
+  const selection = DistributedPlanQueue.planDispatchSelection(
+    { jobs: [{ index: 0, output_dir: "w0", result_csv: "c0" }, { index: 1, output_dir: "w1", result_csv: "c1" }] },
+    { existingOutputChoice: "rerun_all", distributedSkipJobIndices: [], runReplacement: { flow: "isolate", blocked: [{ index: 1, reason: "ACTIVE_TRANSFER", stage: "execute", code: "ACTIVE_TRANSFER" }] } });
+  assert.deepEqual(selection.selectedJobs.map(job => Number(job.index)), [0, 1], "阻断 job 仍入队（可见、待处理）");
+  assert.deepEqual(selection.launchableJobs.map(job => Number(job.index)), [0], "只有安全准入者可进入派发候选");
+  assert.equal(selection.blockedMarkers.get(1).stage, "execute");
+});

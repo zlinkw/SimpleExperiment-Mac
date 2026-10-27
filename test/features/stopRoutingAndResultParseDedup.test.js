@@ -40,6 +40,10 @@ function createContext(extra = {}) {
     require: require("node:module").createRequire(path.join(__dirname,"../../dist/extension/legacy.js")),
     DistributedPlanQueue: require("../../dist/features/DistributedPlanQueue"),
     workspaceRoot: () => "C:/project",
+    // r49 迁类：ensureManualStopReason/runActionCommand 的 legacy.ts 源切片直接使用裸标识符，
+    // 此处提供与 core 共享类同一构造语义（name/code 一致），不再依赖 legacy 本地类。
+    UiCommandCancelled: class UiCommandCancelled extends Error {
+      constructor(message = "操作已取消。", code = "USER_CANCELLED") { super(message); this.name = "UiCommandCancelled"; this.code = code; } },
     Error,
     Set,
     String,
@@ -64,6 +68,10 @@ function createContext(extra = {}) {
     resultStatus: (record) => String(record?.status || ""),
     stringFromRecord: (record, keys) => keys.map((key) => String(record?.[key] || "")).find(Boolean) || "",
     LONG_RUNNING_OPERATION_ACTIONS: new Set(["run-plan", "reproduce-plan"]),
+    // Task ui-plan-gpu-progress-20261024: runActionCommand now opens one VS Code
+    // Notification per in-scope operation; stopExperiment is out of that set, so
+    // the routing assertions below are unchanged and only need the constant bound.
+    OPERATION_NOTICE_COMMANDS: new Set(["runPlan", "reproducePlan", "validatePlan", "dryRunPlan", "runAllPlans"]),
     sanitizeAllowedGpuIds: (ids) => {
       const raw = Array.isArray(ids) ? ids : typeof ids === "string" ? String(ids).split(/[,\s]+/) : [];
       const trimmed = raw.map((item) => String(item || "").trim()).filter(Boolean);

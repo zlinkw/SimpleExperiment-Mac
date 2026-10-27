@@ -1,5 +1,7 @@
-// Real process fixture. No fs method interception or retired rename hook.
-const fs = require('node:fs');
+// 用户裁定 B（2026-10-26）后：跨进程锁协议整体退役，本夹具随之改为 CAS 回归夹具。
+// 不拦截任何 fs 方法、不构造/读取任何锁文件；唯一职责是在独立真实进程里进入
+// withIsolatedBatchLedger 临界区（此时 basis 身份指纹已按"读一次"记下），挂起等待父进程
+// 完成外部改动后，再按指令用该 basis 调 saveIsolatedBatchLedger，并把真实结果原样上报。
 const [moduleFile, file, mode, batchId] = process.argv.slice(2);
 const ledger = require(moduleFile);
 const queued = new Set(), waiting = new Map();
@@ -9,28 +11,14 @@ process.on('message', key => {
   if (resolve) { waiting.delete(key); resolve(); } else queued.add(key);
 });
 const gate = key => queued.delete(key) ? Promise.resolve() : new Promise(resolve => waiting.set(key, resolve));
-async function append(fence) {
-  const batches = await ledger.loadIsolatedBatchLedger(file);
-  batches.push({ batchId, projectRoot: '/fixture', frozenAt: new Date().toISOString(), plans: [] });
-  await ledger.saveIsolatedBatchLedger(file, batches, fence);
-}
 (async () => {
-  if (mode === 'stale-contender') {
-    send({ event: 'observed', raw: fs.readFileSync(file + '.lock', 'utf8') });
-    await gate('acquire');
-  }
-  await ledger.withIsolatedBatchLedger(file, async fence => {
-    if (mode === 'unknown-expired-holder') {
-      // The current owner keeps its token, but simulates an old/unknown expired
-      // owner record. Missing PID/host and TTL must never authorize takeover.
-      const owner = JSON.parse(fs.readFileSync(file + '.lock', 'utf8'));
-      fs.writeFileSync(file + '.lock', JSON.stringify({ token: owner.token, expiresAt: new Date(0).toISOString() }));
-    }
-    send({ event: 'entered', raw: fs.readFileSync(file + '.lock', 'utf8') });
-    if (['writer', 'stale-contender', 'contender'].includes(mode)) await append(fence);
-    else if (mode === 'crash-holder') { await gate('crash'); process.exit(23); }
-    else if (mode === 'fenced-writer') { await gate('write'); await append(fence); }
-    else await gate('release');
+  if (mode !== 'cas-write-on-cue') throw new Error('unknown fixture mode: ' + mode);
+  await ledger.withIsolatedBatchLedger(file, async basis => {
+    send({ event: 'entered', fingerprint: basis.fingerprint });
+    await gate('write');
+    const batches = basis.batches;
+    batches.push({ batchId, projectRoot: '/fixture', frozenAt: new Date().toISOString(), plans: [] });
+    await ledger.saveIsolatedBatchLedger(file, batches, basis);
   });
   send({ event: 'done' });
   process.disconnect();

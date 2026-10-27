@@ -12,21 +12,43 @@ export function assertUpdateUrl(value: string, repo?: string): void {
     throw new Error("更新来源不属于已配置的 Mac 插件公开 Release。");
 }
 
+/** Proven GitHub quota exhaustion: a temporary deferral with a concrete retry time,
+ * NOT a check failure. Callers may report it as a waiting state but must not render
+ * it as "检查失败" and must not treat cached data as freshly verified. */
+export class RateLimitedError extends Error {
+  constructor(message: string, readonly retryAt: number) { super(message); this.name = "RateLimitedError"; }
+}
+export interface RetryStore { load(): number | Promise<number>; save(at: number): void | Promise<void> }
+
 /** Mac's ETag/single-flight/backoff client, using Windows' existing stable Releases. */
 export class ReleaseClient {
   private cache = new Map<string, CacheEntry>();
   private inflight = new Map<string, Promise<Buffer>>();
   private checking?: Promise<PluginUpdatePlan>;
   private retryAt = 0;
+  private retryLoaded?: Promise<void>;
   private failures = 0;
-  constructor(private readonly fetcher: typeof fetch = fetch, private readonly now: () => number = Date.now) {}
+  constructor(private readonly fetcher: typeof fetch = fetch, private readonly now: () => number = Date.now,
+    private readonly retryStore?: RetryStore) {}
+  /** The persisted backoff is async (globalState); load once and keep request() synchronous
+   * so single-flight identity (request === request) stays proven by the existing tests. */
+  private loadRetryAt(): Promise<void> {
+    // Promise.resolve().then(...) also catches a synchronous throw from load(); a
+    // persisted window is honored only while finite and inside the client's own 24h
+    // cap, so a corrupt far-future value can never lock checks out forever.
+    return this.retryLoaded ??= Promise.resolve().then(() => this.retryStore?.load()).then(at => {
+      if (typeof at === "number" && Number.isFinite(at) && at > this.retryAt && at > this.now() && at <= this.now() + 86400000) this.retryAt = at;
+    }, () => { /* No usable persisted backoff: in-memory backoff still applies below. */ });
+  }
   request(url: string, maxBytes: number, manual = false): Promise<Buffer> {
     assertUpdateUrl(url);
     const pending = this.inflight.get(url); if (pending) return pending;
-    const cached = this.cache.get(url);
-    if (!manual && cached && cached.until > this.now()) return Promise.resolve(cached.bytes);
-    if (this.retryAt > this.now()) return Promise.reject(new Error(`GitHub 限流；${new Date(this.retryAt).toISOString()} 后重试。`));
-    const result = this.fetchBytes(url, maxBytes, cached).finally(() => this.inflight.delete(url));
+    const result = this.loadRetryAt().then(() => {
+      const cached = this.cache.get(url);
+      if (!manual && cached && cached.until > this.now()) return cached.bytes;
+      if (this.retryAt > this.now()) throw new RateLimitedError(`GitHub 限流；${new Date(this.retryAt).toISOString()} 后重试。`, this.retryAt);
+      return this.fetchBytes(url, maxBytes, cached);
+    }).finally(() => this.inflight.delete(url));
     this.inflight.set(url, result); return result;
   }
   private async fetchBytes(url: string, maxBytes: number, cached?: CacheEntry): Promise<Buffer> {
@@ -48,7 +70,13 @@ export class ReleaseClient {
           const reset = primary ? Number(response.headers.get("x-ratelimit-reset")) * 1000 - this.now() : 0;
           this.retryAt = this.now() + Math.min(86400000, Math.max(60000, Number.isFinite(retryMs) ? retryMs : 0, Number.isFinite(reset) ? reset : 0,
             Math.min(1800000, 60000 * 2 ** Math.min(this.failures - 1, 5))));
-          throw new Error(`GitHub HTTP ${response.status}；限流至 ${new Date(this.retryAt).toISOString()}。`);
+          // Await the persistence before settling the check (a reload right after the
+          // error must see the window); a sync throw or async reject keeps the in-memory
+          // backoff and is stated openly inside the same RateLimitedError — never silent.
+          let persisted = true;
+          if (this.retryStore) { try { await this.retryStore.save(this.retryAt); } catch { persisted = false; } }
+          throw new RateLimitedError(`GitHub HTTP ${response.status}；限流至 ${new Date(this.retryAt).toISOString()}。`
+            + (this.retryStore && !persisted ? "（退避记录保存失败：重启后可能需按下一次响应重新退避）" : ""), this.retryAt);
         }
         throw new Error(`GitHub 检查失败：HTTP ${response.status}${response.status === 403 ? "，访问被拒绝；未确认限流" : ""}。`);
       }

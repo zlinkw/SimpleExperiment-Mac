@@ -713,11 +713,7 @@ export async function experimentStop(id: string, flags: CliFlags): Promise<numbe
 }
 
 export async function experimentPause(id: string, flags: CliFlags): Promise<number> {
-  const match = await findExperiment(id);
-  const payload = { id: match.id, status: "unsupported", message: "experiment pause is not supported by the current scheduler" };
-  if (flags.json) writeJson(payload, flags.compactJson);
-  else writeText(block("Experiment pause", payload));
-  return 0;
+  throw businessError("EXPERIMENT_PAUSE_UNSUPPORTED: the scheduler has no pause operation; use experiment stop or monitor.");
 }
 
 export async function experimentRetry(id: string, flags: CliFlags, action = "retry"): Promise<number> {

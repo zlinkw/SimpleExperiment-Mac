@@ -16,14 +16,16 @@ async function fixture(t, handler) {
       const call = { route: req.url, method: req.method, auth: req.headers.authorization, body: Buffer.concat(chunks).toString("utf8") };
       calls.push(call);
       if (handler) handler(call, res);
-      else res.end(JSON.stringify(call.method === "GET" ? { schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status", "plan.run"], name: "SimpleExperiment Mac", version: "0.5.277" } : { jsonrpc: "2.0", id: 1, result: JSON.parse(call.body).params }));
+      else res.end(JSON.stringify(call.method === "GET" ? { schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status", "plan.run"], name: "SimpleExperiment Mac", version: "0.5.277", instanceId } : { jsonrpc: "2.0", id: 1, result: JSON.parse(call.body).params }));
     });
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "Mac CLI 中文 路径 "));
   const file = path.join(directory, "发现文件.json");
-  const discovery = { baseUrl: `http://127.0.0.1:${server.address().port}`, token: "fixture-token", name: "SimpleExperiment Mac", version: "0.5.277", pid: process.pid, startedAt: "fixture", status: "running" };
+  const startedAt = new Date(Date.UTC(2026, 9, 27, 0, 0, 0)).toISOString();
+  const instanceId = process.pid + ":" + startedAt;
+  const discovery = { baseUrl: `http://127.0.0.1:${server.address().port}`, token: "fixture-token", name: "SimpleExperiment Mac", version: "0.5.277", pid: process.pid, startedAt, instanceId, status: "running" };
   fs.writeFileSync(file, JSON.stringify(discovery), "utf8");
   fs.writeFileSync(path.join(directory, "KEEP.txt"), "Local CLI test evidence; no cleanup performed.\n", "utf8");
   return { server, calls, file, directory, discovery, read: () => readLocalDiscovery(file) };
@@ -66,7 +68,7 @@ test("unknown methods, mismatched identity and malformed capabilities never send
 test("listener changes during preflight stop RPC without retrying a business operation", async t => {
   let f;
   f = await fixture(t, (_, res) => {
-    fs.writeFileSync(f.file, JSON.stringify({ ...f.discovery, startedAt: "new-instance" }), "utf8");
+    fs.writeFileSync(f.file, JSON.stringify({ ...f.discovery, startedAt: new Date(Date.UTC(2026, 9, 27, 0, 5, 0)).toISOString(), instanceId: process.pid + ":" + new Date(Date.UTC(2026, 9, 27, 0, 5, 0)).toISOString() }), "utf8");
     res.end(JSON.stringify({ schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status"], name: f.discovery.name, version: f.discovery.version }));
   });
   await assert.rejects(callLocalRpc(f.read, "status", {}), /changed during preflight/);
@@ -111,28 +113,44 @@ test("JSON-RPC envelopes require the current request identity and preserve confi
   await assert.rejects(callLocalRpc(f.read, "status", { large: "x".repeat(4 * 1024 * 1024) }), /request exceeds/);
 });
 
-test("actual CLI API entry uses the Mac discovery variable and current listener, ignoring a stale caller snapshot", async t => {
+test("CLI discovery uses the Mac variable, ignores the original Windows one, and the revoked api passthrough stays refused", async t => {
   const f = await fixture(t);
-  const paramsFile = path.join(f.directory, "参数 中文.json");
-  fs.writeFileSync(paramsFile, JSON.stringify({ path: "/Data/中文 空格", confirm: false }), "utf8");
-  const result = await new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [path.resolve(__dirname, "../../dist/cli.js"), "api", "status", "--json", paramsFile], { windowsHide: true, env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: f.file, SIMPLE_EXPERIMENT_API_FILE: "missing-original-api.json" } });
-    let stdout = "", stderr = "";
-    const timer = setTimeout(() => child.kill(), 5000);
-    child.stdout.on("data", c => stdout += c); child.stderr.on("data", c => stderr += c);
-    child.on("error", reject); child.on("close", code => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
-  });
-  assert.equal(result.code, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout).result, { path: "/Data/中文 空格", confirm: false });
-  assert.deepEqual(f.calls.map(c => c.method), ["GET", "POST"]);
-  const prior = process.env.SIMPLE_EXPERIMENT_MAC_API_FILE;
+  // Mac 适配：只承认 Mac 发现文件；Windows 原始变量指向不存在的文件，必须被忽略而不是回退。
+  const priorMac = process.env.SIMPLE_EXPERIMENT_MAC_API_FILE;
+  const priorOriginal = process.env.SIMPLE_EXPERIMENT_API_FILE;
   process.env.SIMPLE_EXPERIMENT_MAC_API_FILE = f.file;
+  process.env.SIMPLE_EXPERIMENT_API_FILE = path.join(f.directory, "missing-original-api.json");
   try {
+    const { discoveryOrNull } = require("../../dist/cli/api.js");
+    const found = discoveryOrNull();
+    assert.ok(found, "Mac 发现文件必须被 CLI 读到");
+    assert.equal(String(found.baseUrl), f.discovery.baseUrl);
+    await callLocalRpc(() => readLocalDiscovery(f.file), "status", {});
+    assert.deepEqual(f.calls.map(c => c.method), ["GET", "POST"]);
+    assert.equal(f.calls.at(-1).auth, "Bearer fixture-token");
     const legacy = require("../../dist/cli.legacy");
     await legacy.apiRequest({ baseUrl: "http://192.0.2.1:1234", token: "must-not-send" }, "status", {});
     assert.equal(f.calls.at(-1).auth, "Bearer fixture-token");
   } finally {
-    if (prior === undefined) delete process.env.SIMPLE_EXPERIMENT_MAC_API_FILE;
-    else process.env.SIMPLE_EXPERIMENT_MAC_API_FILE = prior;
+    if (priorMac === undefined) delete process.env.SIMPLE_EXPERIMENT_MAC_API_FILE;
+    else process.env.SIMPLE_EXPERIMENT_MAC_API_FILE = priorMac;
+    if (priorOriginal === undefined) delete process.env.SIMPLE_EXPERIMENT_API_FILE;
+    else process.env.SIMPLE_EXPERIMENT_API_FILE = priorOriginal;
   }
+  // Windows 权威 2026-10-23 撤销 api 原始透传：必须显式拒绝，且不得再打到本地监听。
+  const callsBefore = f.calls.length;
+  const removed = await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [path.resolve(__dirname, "../../dist/cli.js"), "api", "status"], {
+      cwd: f.directory, windowsHide: true,
+      env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: f.file, SIMPLE_EXPERIMENT_API_FILE: "missing-original-api.json" },
+    });
+    let stdout = "", stderr = "";
+    const timer = setTimeout(() => child.kill(), 5000);
+    child.stdout.on("data", chunk => stdout += chunk); child.stderr.on("data", chunk => stderr += chunk);
+    child.on("error", reject);
+    child.on("close", code => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
+  });
+  assert.notEqual(removed.code, 0);
+  assert.match(removed.stderr + removed.stdout, /removed entry: simpleex api/);
+  assert.equal(f.calls.length, callsBefore);
 });

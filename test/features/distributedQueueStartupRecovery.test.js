@@ -200,6 +200,60 @@ test("a persisted deferred Plan is retired without resuming a pending legacy job
   assert.equal(queue.plans.find((plan) => plan.id === "ebmc").jobs[0].status, "pending");
 });
 
+// r82（0.5.414）：真实 tick 派发候选必须排除隔离未完成 job（现场 03:25:27Z 阻断 job 照常派发→FORMAL_JOB_CONFLICT）。
+// 走 loadTickQueue 既有生产 tick 提取链：候选筛选→allocateAvailable→save→sendDistributedJob，不测纯函数替身。
+// r83 红基线返修（宿主实测 413 上 sent=[] 而非预测的 [0]）：红因确证为本夹具环境前置不足——413 下 Worker 行
+// online=false（快照缺 fetchedAt/capabilities.idleGpuAdmission、getGpu 返回空行 → allocateAvailable slots 为空），
+// 连干净 sibling 都到不了发送口，"缺过滤"根本不可观测。本返修只补齐派发环境前置（对齐 idleGpuDispatchLifecycle
+// 已验证夹具：fresh snapshot+idleGpuAdmission、真实 GPU 行、probes endpoints、local_idle、codeFingerprint 匹配），
+// 断言逐字不变。修复后判据：413 必红且红因=阻断 job 未被过滤（单卡下 pad 先占卡，sent=[0]）；
+// 修复后同一夹具 sent=[1]——红绿差异有且仅有 allocateAvailable 对 outputIsolationBlocked 的过滤这一点。
+test("a job with an unresolved isolation block never enters the real tick dispatch; its sibling dispatches normally", async () => {
+  const context = loadTickQueue();
+  const projectId = context.DistributedPlanQueue.canonicalProjectId("C:/project");
+  let queue = { schemaVersion: 1, plans: [
+    { id: "mixed", projectId, planFile: "plans/mixed.yaml", revision: "rev-m", codeFingerprint: "ec594411",
+      planJobCount: 2, enqueuedAt: new Date().toISOString(), resultPathPolicy: "declared", schedulingMode: "local_idle",
+      jobs: [
+        { index: 0, case: "pad", seed: 42, attempt: 0, outputDir: "work_dirs/pad_42", status: "pending",
+          lifecycleProtocol: 2, resultPathPolicy: "declared", globalJobId: "mixed:0",
+          outputIsolationBlocked: { reason: "nwpu3：ACTIVE_TRANSFER SimpleSFTP files.cleanup.execute：[ACTIVE_TRANSFER]", stage: "execute", code: "ACTIVE_TRANSFER", declarationKey: "work_dirs/pad_42", observedAt: new Date().toISOString() } },
+        { index: 1, case: "bus", seed: 7, attempt: 0, outputDir: "work_dirs/bus_7", status: "pending",
+          lifecycleProtocol: 2, resultPathPolicy: "declared", globalJobId: "mixed:1" }] }],
+    deferred: [] };
+  const sent = [];
+  const provider = {
+    distributedQueueGeneration: 0, distributedPlanStopEpoch: 0, taskLifecycleProtocol: 2,
+    distributedLaunchInFlight: new Set(), recordActionError: () => {},
+    lastWorkerProbes: { nwpu3: { status: "ok", capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 } } } },
+    lastCodeSyncState: { fingerprint: "ec594411", workerVersions: { nwpu3: { fingerprint: "ec594411" } } },
+    workerCodeSyncTargets: () => [], isRealtimeMode: () => true,
+    projectTopologyAssessment: () => ({ mode: "worker_pool" }),
+    loadDistributedQueue: async () => queue, saveDistributedQueue: async (_root, next) => { queue = next; },
+    workerActionTargets: () => [{ id: "nwpu3" }], enabledWorkerConfigs: () => [{ id: "nwpu3" }],
+    buildDistributedJobCodeManifest: async () => ({}),
+    readWorkerTaskSnapshotBatch: async ids => ids.map(workerId => ({ workerId, queryComplete: true,
+      fetchedAt: new Date().toISOString(), generatedAt: new Date().toISOString(),
+      capabilities: { taskLifecycle: 2, durablePlanQueue: true, idleGpuAdmission: true, schemaVersion: 1 }, tasks: [] })),
+    sendDistributedJob: async (plan, job, workerId, gpuId, commandId) => {
+      sent.push({ planId: plan.id, jobIndex: job.index, workerId, gpuId, commandId });
+      return { lifecycleProtocol: 2, status: "unknown", commandId, workerId, gpuId };
+    },
+    client: { getGpu: async () => ({ nwpu3: [{ index: "0", memoryTotalMb: 32768, memoryFreeMb: 24576, memoryUsedMb: 8192, utilizationPercent: 0, processes: [] }] }) },
+    localWorkerAvailabilityRows: () => [{ workerId: "nwpu3", availableGpuIds: ["0"] }],
+    availabilityPushTtlSeconds: () => 45, schedulerSettings: () => ({}),
+    scheduleDistributedPostprocess: () => undefined, postState: () => undefined,
+    refreshSelectedDistributedLog: () => undefined,
+  };
+  await context.tickQueue.call(provider);
+  assert.deepEqual(sent.map((row) => row.jobIndex), [1], "隔离未完成 job 在真实 tick 候选筛选就被排除；同 PLAN 干净 job 正常派发");
+  const blocked = queue.plans[0].jobs.find((job) => job.index === 0);
+  assert.equal(blocked.status, "pending"); assert.equal(blocked.commandId, undefined);
+  assert.ok(blocked.outputIsolationBlocked, "tick 轮次不得清除阻断标记");
+  const sent0 = queue.plans[0].jobs.find((job) => job.index === 1);
+  assert.equal(sent0.commandId, sent[0].commandId, "干净 job 走的是既有持久化→发送链");
+});
+
 test("running work and missing Worker version evidence still hold a deferred Plan", async () => {
   const context = loadTickQueue();
   const running = { schemaVersion: 1, plans: [

@@ -6,10 +6,11 @@ const {scopeInventoryPathAllowed,buildScopeStatuses}=require('../../src/features
 const {expandSyncScopeBatchSelection,runSyncScopeBatch,syncScopeIssueSignature}=require('../../src/features/SyncScopeBatch.ts');
 const {planLatestWorkerMerge}=require('../../src/features/SyncLatestMerge.ts');
 const {planSyncScopeTransferGroups,batchSyncScopeInventoryPaths,scopeInventorySnapshot}=require('../../src/features/SyncScopeTransferBatch.ts');
+const {syncScopeStagingIdentity}=require('../../dist/features/JobArtifactSyncIdentity.js'); // r120：方法体新增裸符号必须进 VM globals（真实模块实现，非桩函数）
 const ast=ts.createSourceFile('legacy.ts',fs.readFileSync(path.resolve(__dirname,'../../src/extension/legacy.ts'),'utf8'),ts.ScriptTarget.Latest,true);
 const targets=[{id:'w1'},{id:'w2'}],file='configs/model.yaml',sha='a'.repeat(64),files={[file]:{sha256:sha,size:3}};
 function method(name,globals={}){let member;function visit(n){if(ts.isMethodDeclaration(n)&&n.name.getText(ast)===name)member=n;ts.forEachChild(n,visit);}visit(ast);assert.ok(member,name);return vm.runInNewContext(ts.transpileModule('class Host{'+member.getText(ast)+'};Host.prototype.'+name,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,{
- path,safeSyncPath,isUnderMachineStatePrefixes,scopeInventoryPathAllowed,expandSyncScopeBatchSelection,runSyncScopeBatch,planSyncScopeTransferGroups,batchSyncScopeInventoryPaths,scopeInventorySnapshot,
+ path,safeSyncPath,isUnderMachineStatePrefixes,scopeInventoryPathAllowed,expandSyncScopeBatchSelection,runSyncScopeBatch,planSyncScopeTransferGroups,batchSyncScopeInventoryPaths,scopeInventorySnapshot,syncScopeStagingIdentity,
  loadSyncHolds:async()=>({[file]:{endpointId:'w2',codeOwned:true,directory:false}}),isLocalCodeOwnedPath:()=>true,
  vscode:{workspace:{getConfiguration:()=>({get:(_key,fallback)=>fallback})},Uri:{file:x=>x}},workerFpsyncTaskLabel:()=>'',...globals});}
 function host(){const calls=[];return {calls,context:{globalStorageUri:{fsPath:'unused'}},

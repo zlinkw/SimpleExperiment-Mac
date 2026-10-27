@@ -17,6 +17,8 @@ CONTEXT.md
 scripts/**
 !scripts/check-static.js
 test/**
+# r9 平台归属：Linux 专属验证套件（verification/linux/，POSIX receiver 显式注入必验）仅源码仓保留
+verification/**
 scenarios/**
 *.vsix
 *.tgz

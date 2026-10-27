@@ -1,6 +1,7 @@
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),crypto=require('node:crypto'),assert=require('node:assert/strict'),Module=require('node:module');
 require('./registerTsRequire');
 const ts=require('typescript'),Q=require('../../src/features/DistributedPlanQueue.ts'),L=require('../../src/features/PlanIsolatedBatchLedger.ts'),{cleanupDigest}=require('../../src/features/PlanCleanup.ts');
+if(!process.env.LOCALAPPDATA)process.env.LOCALAPPDATA=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'isolated-review-lease-')); // r17 约定：租约注册表落隔离目录（沙箱 homedir/AppData 只读，产品路径不变）
 const clone=value=>JSON.parse(JSON.stringify(value));
 function load(file,imports){const m=new Module(file,module);m.filename=file;m.paths=Module._nodeModulePaths(path.dirname(file));const original=m.require.bind(m);m.require=name=>imports[name]||original(name);
  m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);return m.exports;}

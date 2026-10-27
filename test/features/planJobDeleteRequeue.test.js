@@ -37,10 +37,15 @@ function makeWorld({answers=['确认删除（1/2）','永久删除（2/2）'],de
   let queue={plans:[{id:'plan-a',projectId:'p-1',planFile,revision,codeFingerprint:'fp-1',
     jobs:jobs.map(job=>({...job,index:job.index===0?0:job.index,commandId:job.index===0?queueJobCommandId:job.commandId}))}],clearedJobs:[]};
   const writes=[]; const cleanupCalls=[]; let deleteExecutions=0; let deleted=false; let inPreviewGate=null;
+  // F11：一次性入口闩——真实 mock preview 首次被调用时才 resolve（preview 发生在生产
+  // guardKey 占用之后，见 retryPulledJob L13362→L13418），先通知再等待既有 inPreviewGate。
+  let previewEnteredFired=false; let resolvePreviewEntered=null;
+  const previewEntered=new Promise(resolve=>{resolvePreviewEntered=resolve;});
   const isolateProbes=[]; const answersQueue=[...answers];
   const cleanupHost={
     service:{
       preview:async params=>{cleanupCalls.push({kind:'preview',params:JSON.parse(JSON.stringify(params))});
+        if(!previewEnteredFired){previewEnteredFired=true;resolvePreviewEntered();}
         if(inPreviewGate)await inPreviewGate;
         return {token:'tok-del',digest:'dig-del',action:'delete',confirmations:0,scope:{nodes:[{id:'w1'}]},rows:[
           {id:'r0',disposition:deleted?'absent':'delete',type:'directory',relativePath:'work_dirs/a0',node:{id:'w1',host:'h1.example'},absolutePath:'/srv/proj/work_dirs/a0',missing:deleted},
@@ -83,7 +88,7 @@ function makeWorld({answers=['确认删除（1/2）','永久删除（2/2）'],de
     PulledTaskControl,vscode,UiCommandCancelled,()=>'op-'+Math.random(),String,PlanRunHostProbe);
   const plan={id:'plan-a',projectId:'p-1',planFile,revision,codeFingerprint:'fp-1',executionMode:'train',jobs:JSON.parse(JSON.stringify(jobs)),planJobCount:2};
   return {root,plan,planFile,host,client,queue:()=>queue,writes,isolateProbes,cleanupCalls,deleteMode:mode=>{deleteMode=mode;},
-    deletedCount:()=>deleteExecutions,setPreviewGate:promise=>{inPreviewGate=promise;},
+    deletedCount:()=>deleteExecutions,setPreviewGate:promise=>{inPreviewGate=promise;},previewEntered,
     retry:isCurrent=>retry.call(host,plan,plan.jobs[0],root,isCurrent??(()=>true))};
 }
 
@@ -159,10 +164,16 @@ test('并发双击恰一次：在途时第二次显式拒绝',async()=>{
   const world=makeWorld();
   let releaseGate;world.setPreviewGate(new Promise(resolve=>{releaseGate=resolve;}));
   const first=world.retry();
-  await new Promise(resolve=>setImmediate(resolve));
-  await assert.rejects(()=>world.retry(),/正在执行删除并重新排队/);
-  releaseGate();
-  await first;
+  let firstError=null;const firstTracked=first.then(()=>null,error=>{firstError=error;});
+  try{
+    // F11 确定性同步：await 真实入口信号（首个 preview 调用发生在生产 guardKey
+    // 占用之后，L13362→L13418），再等一次宏任务让出队列；第二调用此时必然看到已占的锁。
+    await world.previewEntered;
+    await new Promise(resolve=>setImmediate(resolve));
+    await assert.rejects(()=>world.retry(),/正在执行删除并重新排队/);
+  }finally{ releaseGate(); }
+  await firstTracked;
+  if(firstError)throw firstError;
   assert.equal(world.deletedCount(),1);
 });
 test('原卡身份不匹配（旧卡/迟到回执代际）：删除前就拒绝，零文件操作',async()=>{

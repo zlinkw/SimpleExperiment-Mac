@@ -1,17 +1,32 @@
 import * as path from "path";
 import { optionalApi } from "../api";
+import { emitRpc } from "./control";
 import { DEFAULT_PLAN_DIR, PLAN_REGISTRY_REL, fileExists, listFilesRecursive, projectRoot, readJsonFile, readTextFile, resolveProjectPath } from "../data";
 import { businessError, usageError } from "../errors";
 import { block, table, writeJson, writeText } from "../format";
 import { CliFlags, requirePositional } from "../parse";
-import { expandPlanMatrix, importLegacyPlanYamlToRegistry, parsePlanSummary, validateDeepLearningPlanContract } from "../../features/PlanBuilder";
+import { buildExperimentMatrix, expandPlanMatrix, importLegacyPlanYamlToRegistry, parsePlanSummary, validateDeepLearningPlanContract } from "../../features/PlanBuilder";
 import { validatePlan } from "../../features/PlanBuilder/PlanValidator";
+import { planCleanupCommand } from "./planCleanup";
 
 export async function planCommand(action: string, rest: string[], flags: CliFlags): Promise<number> {
+  if (action === "cleanup") return planCleanupCommand(rest[0] || "", rest.slice(1), flags);
   if (action === "list") return planList(flags);
   if (action === "validate") return planValidate(requirePositional(rest, 0, "plan file"), flags);
   if (action === "matrix") return planMatrix(requirePositional(rest, 0, "plan file"), flags);
+  if (action === "build") return planBuild(flags);
   throw usageError(`unknown plan action: ${action || "(missing)"}`);
+}
+
+/** First-class plan matrix builder (replaces the revoked `simpleex plan build` legacy fallthrough). */
+export function planBuild(flags: CliFlags): number {
+  const suite = flags.suite || "suite";
+  const baseConfig = flags.base || "config.yaml";
+  const seeds = (flags.seeds || "1").split(",");
+  const result = buildExperimentMatrix({ suite, baseConfig, seeds, variables: [] });
+  if (flags.json) writeJson({ suite, baseConfig, seeds, yaml: result.yaml }, flags.compactJson);
+  else writeText(result.yaml);
+  return 0;
 }
 
 export async function planList(flags: CliFlags): Promise<number> {
@@ -25,18 +40,8 @@ export async function planList(flags: CliFlags): Promise<number> {
 }
 
 export async function planValidate(fileArg: string, flags: CliFlags): Promise<number> {
-  const file = resolveExisting(fileArg);
-  const yaml = readTextFile(file);
-  const contract = validateDeepLearningPlanContract(yaml);
-  const validator = validatePlan(yaml);
-  const errors = [
-    ...(contract.issues || []).map((issue: { message?: string; field?: string; label?: string }) => String(issue.message || issue.field || issue.label || "")),
-    ...(validator.errors || []).map((issue) => issue.message),
-  ].filter(Boolean);
-  const valid = Boolean(contract.ok) && validator.status !== "failed";
-  const payload = valid ? { valid: true } : { valid: false, errors };
-  writeJson(payload, flags.compactJson);
-  return valid ? 0 : 3;
+  if (!fileArg.trim()) throw usageError("plan validate requires a plan file");
+  return emitRpc("plan.validate", { planFile: fileArg, ...(flags.workspace ? { workspace: flags.workspace } : {}) });
 }
 
 export async function planMatrix(fileArg: string, flags: CliFlags): Promise<number> {

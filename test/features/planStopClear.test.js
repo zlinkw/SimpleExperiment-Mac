@@ -1330,6 +1330,11 @@ test("handleMessage posts the real stop-clear outcome for failed, cancelled, and
     hostOperationLeaseActionLabel: () => "终止并清理",
     commandNeedsUiStatus: () => true,
     PLAN_SUBMISSION_COMMANDS: new Set(["runPlan", "reproducePlan"]),
+    // Task ui-plan-gpu-progress-20261024 review item 5: postUiCommandStatus now forwards
+    // in-scope command feedback to the operation log channel; stopAndClearPlan is out of
+    // that set, so outcome posting below is unchanged and only needs the bindings present.
+    OPERATION_NOTICE_COMMANDS: new Set(["runPlan", "reproducePlan", "validatePlan", "dryRunPlan", "runAllPlans"]),
+    logOperationFact: () => undefined,
     withSafeTransferRetry: (_command, _message, work) => work(),
     extensionRuntimeVersionState: () => ({ reloadRequired: false }),
     localCommandReleasesAfterTrigger: () => false,
@@ -1737,14 +1742,14 @@ test("concurrent submissions append to the latest queue and reject the old sched
     withQueueWriteResource: async (_root, work) => work(),
     distributedQueueGeneration: 0,
     distributedQueueWritePromise: Promise.resolve(),
-    distributedQueueRoot: "D:/project",
+    distributedQueueRoot: path.resolve("D:/project"), // r17：与 :1647 同策——resolve 后 Windows 得 "D:\project"、POSIX 得绝对路径，断言强度不变
     distributedQueueCache: queueApi.emptyDistributedQueue(),
     distributedSubmissionEpochs: new Map([["submit-a", 1], ["submit-b", 1]]),
     context: { globalStorageUri: { fsPath: "C:/fake-storage" } },
     detachStaleDistributedTick: () => undefined,
   };
   vm.createContext(Object.assign(host, {
-    DistributedPlanQueue: queueApi, workspaceRoot: () => "D:/project", path, process,
+    DistributedPlanQueue: queueApi, workspaceRoot: () => path.resolve("D:/project"), path, process,
     errorMessage: (error) => String(error?.message || error),
     compactSensitiveText: (value) => String(value || "").slice(0, 240),
     crypto: { randomBytes: () => Buffer.from("fake") },
@@ -1786,16 +1791,16 @@ test("concurrent submissions append to the latest queue and reject the old sched
   const b = enqueueStopFixture(queueApi.emptyDistributedQueue(), {
     planFile: "plans/b.yaml", revision: "rev-b", codeFingerprint: "code-1", jobs: [{ index: 0, case: "bus", seed: 2, outputDir: "work/b" }],
   }, "b");
-  const first = host.save("D:/project", a, { appendPlanId: "a", queueGeneration: 0, submissionOperationId: "submit-a", submissionEpoch: 1 });
-  const second = host.save("D:/project", b, { appendPlanId: "b", queueGeneration: 0, submissionOperationId: "submit-b", submissionEpoch: 1 });
+  const first = host.save(path.resolve("D:/project"), a, { appendPlanId: "a", queueGeneration: 0, submissionOperationId: "submit-a", submissionEpoch: 1 });
+  const second = host.save(path.resolve("D:/project"), b, { appendPlanId: "b", queueGeneration: 0, submissionOperationId: "submit-b", submissionEpoch: 1 });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(typeof releaseFirst, "function");
   releaseFirst();
   await Promise.all([first, second]);
   assert.equal(host.distributedQueueCache.plans.map((plan) => plan.id).join(","), "a,b");
-  await assert.rejects(host.save("D:/project", a, { queueGeneration: 0 }), /过期调度/);
+  await assert.rejects(host.save(path.resolve("D:/project"), a, { queueGeneration: 0 }), /过期调度/);
   host.distributedSubmissionEpochs.set("submit-a", 2);
-  await assert.rejects(host.save("D:/project", a, { appendPlanId: "a", submissionOperationId: "submit-a", submissionEpoch: 1 }), /提交已取消/);
+  await assert.rejects(host.save(path.resolve("D:/project"), a, { appendPlanId: "a", submissionOperationId: "submit-a", submissionEpoch: 1 }), /提交已取消/);
   assert.equal(snapshots.length, 2);
 });
 

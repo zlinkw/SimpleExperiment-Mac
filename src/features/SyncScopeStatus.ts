@@ -8,6 +8,7 @@ import * as crypto from "node:crypto";
 import { SyncHolds, chosenSyncHash, isSyncHeld, safeSyncPath } from "./SyncResolution";
 import { isUnderMachineStatePrefixes } from "./ProjectRootMap";
 import { HostOperationLeaseManager } from "../core/HostOperationLease";
+import { ensureProjectManagedCacheFileDirectory, projectCacheDir } from "./ProjectStatePaths";
 import { atomicWriteText } from "../state/StateStore";
 
 type File = { sha256: string; size: number; modifiedAtMs?: number; changedAtMs?: number; device?: string; inode?: string };
@@ -31,10 +32,14 @@ function rememberLocalScopeHash(full: string, identity: string, file: File): voi
   while (localHashCache.size > LOCAL_HASH_CACHE_LIMIT) localHashCache.delete(localHashCache.keys().next().value!);
 }
 
-export function localScopeHashCachePath(storageRoot: string, projectRoot: string): string {
+/** r18#5: recomputable scope-hash cache now lives inside the consumed project's cache bucket
+ * (simple_cluster/cache/simple-experiment/scope-hash-cache). Identity formula, rows, limits and
+ * lock semantics unchanged; old globalStorage caches are left in place untouched (never
+ * migrated/scanned/deleted — a missing cache only forces a rehash). */
+export function localScopeHashCachePath(projectRoot: string): string {
   const resolved = path.resolve(projectRoot);
   const id = crypto.createHash("sha256").update(process.platform === "win32" ? resolved.toLowerCase() : resolved).digest("hex");
-  return path.join(storageRoot, "scope-hash-cache", `${id}.json`);
+  return path.join(projectCacheDir(projectRoot, "simple-experiment"), "scope-hash-cache", `${id}.json`);
 }
 
 function bigintString(value: unknown): string {
@@ -452,6 +457,7 @@ export async function hashLocalScopeNames(
   options.signal?.throwIfAborted();
   if (cacheFile && !failed) {
     try {
+      await ensureProjectManagedCacheFileDirectory(root, cacheFile); // 受管树内缓存写入前逐层守卫（symlink 即拒）
       await writeScopeHashCache(cacheFile, { schemaVersion: SCOPE_HASH_SCHEMA_VERSION, files: boundedScopeHashRows(activeRows, persisted.files, requestedNames) });
     }
     catch (error) {

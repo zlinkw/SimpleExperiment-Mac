@@ -44,6 +44,7 @@ function fixture() {
   Object.assign(job,queue.mergeDurableWorkerSnapshots(old,Object.values(snapshots),plan.projectId).plans[0].jobs[0]);
   const reads = [];
   const host = { ...sandbox.methods, client: {}, projectTopologyAssessment: () => ({ mode: "worker_pool" }),
+    unifiedDomainState: () => ({ active: false, blocked: "" }), // 块B：夹具根未登记 → 既有单机发送路径（真实 send 法身用例）
     lastWorkerTaskSnapshots:new Map(workers.map(w=>[root+'\u0000'+w.id,{capabilities:{taskLifecycle:2}}])),
     loadDistributedQueue: async () => old,
     readWorkerTaskSnapshot: async (id, options) => { reads.push({ id, options }); return snapshots[id]; },

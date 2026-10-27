@@ -16,10 +16,12 @@ test('old Worker capability blocks before saving/submitting a formal job', async
   const source = fs.readFileSync(path.join(__dirname, '../../src/extension/legacy.ts'), 'utf8');
   const ast = ts.createSourceFile('legacy.ts', source, ts.ScriptTarget.Latest, true);
   const cls = ast.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'RealtimeTunnelPanelProvider');
-  const methods = cls.members.filter(node => ['enqueueDistributedPlan', 'sendDistributedJob'].includes(node.name?.getText(ast)));
+  // 块C：真实 enqueue 含队列窄溯源收敛（纯函数，一并提取法身）。
+  const methods = cls.members.filter(node => ['enqueueDistributedPlan', 'sendDistributedJob', 'queueGitProvenance', 'stripGitUrlCredentials'].includes(node.name?.getText(ast)));
   const Provider = vm.runInNewContext(ts.transpileModule('class Provider {' + methods.map(node => node.getText(ast)).join('\n') + '};Provider;',
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, { WorkflowBinding:require("../../dist/features/WorkflowWorkspaceBinding"), workspaceRoot:()=>path.resolve(__dirname,"../..") });
   const p = new Provider();
+  p.unifiedDomainState = () => ({ active: false, blocked: "" }); // 块B：夹具根未登记 → 既有单机发送路径
   p.workerActionTargets = () => [{ id: 'old-worker' }];
   p.lastWorkerProbes = { 'old-worker': { capabilities: { endpoints: { declaredJobPaths: true } } } };
   p.loadDistributedQueue = () => { throw Error('old protocol must not save a submission'); };

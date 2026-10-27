@@ -101,7 +101,7 @@ test('formal same-project same-plan cleared record lets the real replacement cha
   assert.deepEqual(h.body.distributedSkipJobIndices,[]);
   assert.equal(h.body.runReplacement.done,true,'真实链走到 done，不再被 HOLD 中止');
   // 恢复记录必须真实落盘（提交崩溃后可继续），供后续查询/重放使用。
-  const submissionsRoot=path.join(h.storage,'run-submissions');
+  const submissionsRoot=path.join(h.root,'simple_cluster/state/simple-experiment/run-submissions');
   const submissions=fs.readdirSync(submissionsRoot).flatMap(dir=>fs.readdirSync(path.join(submissionsRoot,dir)));
   assert.equal(submissions.length,1);
 });

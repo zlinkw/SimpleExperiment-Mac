@@ -13579,23 +13579,69 @@ def scheduler_state_cleanup_owner_matches(root, file_path, state):
         return False
 
 
+def observe_cache_paths(root, paths):
+    """Bounded read-only existence observation for EXACT managed cache paths.
+
+    Two-generation admission needs ground truth about which log files this Worker
+    physically still holds. Nothing is created, touched or deleted here. Every requested
+    path gets exactly one answer row; only ordinary files under the managed path table
+    (shared with the host-side manifest) are eligible, and any path shape that cannot be
+    verified — outside the table, symlink, unreadable, unknown state — is "error", never a
+    silent "absent"."""
+    root_real = os.path.realpath(root)
+    managed = ("simple_cluster/console_logs/", "simple_cluster/tmux_logs/",
+               "simple_cluster/tmp/cluster_scheduler/", "simple_cluster/tmp/tmux_logs/",
+               "simple_cluster/tmp/console_logs/", "tmp/console_logs/",
+               "tmp/tmux_logs/", "tmp/cluster_scheduler/")
+    observations = []
+    for relative in paths:
+        parts = str(relative or "").split("/")
+        state = "error"
+        if not parts or any(part in ("", ".", "..") or ":" in part for part in parts) or not str(relative).startswith(managed):
+            observations.append({"path": str(relative), "state": "error"})
+            continue
+        try:
+            current = root_real
+            unsafe = False
+            for part in parts[:-1]:
+                current = os.path.join(current, part)
+                info = os.lstat(current)
+                if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+                    unsafe = True
+                    break
+            if not unsafe:
+                info = os.lstat(os.path.join(current, parts[-1]))
+                if stat.S_ISLNK(info.st_mode):
+                    unsafe = True
+                elif stat.S_ISREG(info.st_mode):
+                    state = "present"
+            observations.append({"path": str(relative), "state": "error" if unsafe else state})
+        except FileNotFoundError:
+            observations.append({"path": str(relative), "state": "absent"})
+        except Exception:
+            observations.append({"path": str(relative), "state": "error"})
+    return observations
+
+
 def cache_cleanup_candidates(root):
-    """Only aged project temp files; never remove runtime state or experiment data."""
+    """Read-only managed cache inventory; age does not authorize retirement."""
     root_real = os.path.realpath(root)
     if not os.path.isdir(root_real):
         raise ValueError("项目根目录不可用")
-    tasks = api_worker_tasks(root).get("tasks") or []
-    if any(str(task.get("status") or "").lower() in ("running", "queued", "pending") for task in tasks if isinstance(task, dict)):
-        raise ValueError("仍有运行中或待派发的任务，当前 Worker 暂停缓存回收")
-    for state in collect_scheduler(root):
-        scheduler_pid = state.get("pid") or state.get("schedulerPid") or state.get("processId")
-        if scheduler_pid and is_pid_running(scheduler_pid) and (str(state.get("status") or "").lower() in ("running", "queued", "pending") or any(state.get(bucket) for bucket in ("running_experiments", "testing_experiments"))):
-            raise ValueError("调度器仍在运行，当前 Worker 暂停缓存回收")
-    cutoff = time.time() - 7 * 24 * 60 * 60
+    # Ownership is evaluated per exact generation/path by the host. An unrelated active
+    # Plan on this Worker must not hide every other Plan's confirmed retirement candidates.
     candidates = []
     protected_markers = ("tensorboard", "tb_log", "checkpoint", "weight", "model_cache", "dataset")
     allowed_extensions = {".log", ".tmp", ".bak", ".part"}
-    groups = ("simple_cluster/tmp", "tmp")
+    groups = ("simple_cluster/tmp", "tmp", "simple_cluster/console_logs", "simple_cluster/tmux_logs")
+    # Single path table shared with the host-side ownership manifest
+    # (PluginLogRetention.MANAGED_LOG_PREFIXES): console/tmux/scheduler logs are
+    # version-based and listed for the host to judge; unmanaged tmp junk keeps the
+    # historical 7-day rule.
+    managed_cache_prefixes = ("simple_cluster/console_logs/", "simple_cluster/tmux_logs/",
+                              "simple_cluster/tmp/cluster_scheduler/", "simple_cluster/tmp/tmux_logs/",
+                              "simple_cluster/tmp/console_logs/", "tmp/console_logs/",
+                              "tmp/tmux_logs/", "tmp/cluster_scheduler/")
     for relative_base in groups:
         base = os.path.join(root_real, *relative_base.split("/"))
         if not os.path.isdir(base) or os.path.islink(base) or os.path.realpath(base) != base or os.stat(base).st_dev != os.stat(root_real).st_dev:
@@ -13614,7 +13660,7 @@ def cache_cleanup_candidates(root):
                     continue
                 try:
                     stat = os.stat(path, follow_symlinks=False)
-                    if not os.path.isfile(path) or stat.st_dev != os.stat(root_real).st_dev or stat.st_mtime > cutoff:
+                    if not os.path.isfile(path) or stat.st_dev != os.stat(root_real).st_dev:
                         continue
                     if scheduler_state_temp and stat.st_size > 2 * 1024 * 1024:
                         continue
@@ -13631,9 +13677,10 @@ def cache_cleanup_candidates(root):
                             continue
                     purpose = ("单个 Job 的训练或测试输出日志，旧内容用于历史排错" if "/cluster_scheduler/logs/" in rel else
                                "Plan 调度过程日志" if "/cluster_scheduler/" in rel and rel.endswith(".log") else
-                               "已终止 Plan 的专属调度状态，保留期已满 7 天" if scheduler_state_temp else
+                               "已终止 Plan 的专属调度状态（归属经确认后回收）" if scheduler_state_temp else
                                "Plan 预演的 Worker 分配快照" if dry_run_temp else
-                               "tmux 会话输出副本" if "/tmux_logs/" in rel else "插件临时工作文件")
+                               "tmux 会话输出副本" if "/tmux_logs/" in rel else
+                               "控制台执行日志（两代归属由宿主保留清单判定）" if "/console_logs/" in rel else "插件临时工作文件")
                     token = hashlib.sha256(f"{rel}|{stat.st_dev}|{stat.st_ino}|{stat.st_size}|{stat.st_mtime_ns}".encode("utf-8")).hexdigest()
                     candidates.append({"path": rel, "fullPath": path, "type": "file", "bytes": stat.st_size, "modifiedAt": stat.st_mtime, "purpose": purpose, "token": token})
                     if len(candidates) > 20000:
@@ -13642,10 +13689,10 @@ def cache_cleanup_candidates(root):
                     continue
     return sorted(candidates, key=lambda item: item["path"])
 
-def cache_delete_exact_file(root, relative_path, expected_token):
+def cache_delete_exact_file(root, relative_path, expected_token, batch=None):
     root_real = os.path.realpath(root)
     parts = str(relative_path or "").split("/")
-    if not parts or any(part in ("", ".", "..") for part in parts) or not (parts[:2] == ["simple_cluster", "tmp"] or parts[0] == "tmp"):
+    if not parts or any(part in ("", ".", "..") for part in parts) or not (parts[0] == "tmp" or parts[0] == "simple_cluster" and len(parts) > 1 and parts[1] in ("tmp", "console_logs", "tmux_logs")):
         raise ValueError("缓存路径超出允许范围")
     full_path = os.path.join(root_real, *parts)
     parent = os.path.dirname(full_path)
@@ -13656,7 +13703,7 @@ def cache_delete_exact_file(root, relative_path, expected_token):
         raise ValueError(f"候选已变化：{relative_path}")
     file_stat = os.stat(full_path, follow_symlinks=False)
     current_token = hashlib.sha256(f"{relative_path}|{file_stat.st_dev}|{file_stat.st_ino}|{file_stat.st_size}|{file_stat.st_mtime_ns}".encode("utf-8")).hexdigest()
-    if current_token != expected_token or file_stat.st_mtime > time.time() - 7 * 24 * 60 * 60:
+    if current_token != expected_token or file_stat.st_nlink != 1:
         raise ValueError(f"候选已变化：{relative_path}")
     if relative_path.startswith("simple_cluster/tmp/cluster_scheduler/") and relative_path.endswith("_state.json"):
         try:
@@ -13668,12 +13715,42 @@ def cache_delete_exact_file(root, relative_path, expected_token):
             raise ValueError(f"调度状态所有权已变化：{relative_path}")
     if os.name != "posix":
         raise ValueError("PARENT_CD_FAILED: 当前平台不支持安全的目录内删除")
+    if any(c in parent + leaf for c in ("\r", "\n", "\0")):
+        raise ValueError("PARENT_CD_FAILED: invalid parent or leaf")
+    if batch is not None:
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(file_stat.st_mtime_ns // 1_000_000_000))
+        stamp += f".{file_stat.st_mtime_ns % 1_000_000_000:09d} +0000"
+        signature = f"{file_stat.st_dev}|{file_stat.st_ino}|{file_stat.st_size}|{file_stat.st_nlink}|{stamp}"
+        batch.append((parent, leaf, signature))
+        return
     script = 'cd -- "$1" || exit 41; [ "$(pwd -P)" = "$1" ] || exit 42; [ -f "./$2" ] && [ ! -L "./$2" ] || exit 43; rm -- "./$2"'
     completed = subprocess.run(["/bin/sh", "-c", script, "cache-delete", parent, leaf], cwd=parent, capture_output=True, text=True, timeout=30)
     if completed.returncode != 0:
         raise ValueError("PARENT_CD_FAILED" if completed.returncode in (41, 42) else f"删除失败：{relative_path}: {completed.stderr.strip()[:200]}")
     if os.path.lexists(full_path):
         raise ValueError(f"删除后仍存在：{relative_path}")
+
+def cache_delete_confirmed_batch(bindings):
+    """One executor for the frozen batch. Every deletion still uses its verified direct parent."""
+    if not bindings:
+        return
+    script = (
+        'while IFS= read -r parent && IFS= read -r leaf && IFS= read -r expected; do '
+        'cd -- "$parent" || exit 41; [ "$(pwd -P)" = "$parent" ] || exit 42; '
+        '[ -f "./$leaf" ] && [ ! -L "./$leaf" ] || exit 43; '
+        'actual=$(TZ=UTC0 stat --printf="%d|%i|%s|%h|%y" -- "./$leaf") || exit 43; '
+        '[ "$actual" = "$expected" ] || exit 43; '
+        'rm -- "./$leaf" || exit 44; '
+        '[ ! -e "./$leaf" ] && [ ! -L "./$leaf" ] || exit 45; done'
+    )
+    payload = "".join(parent + "\n" + leaf + "\n" + signature + "\n" for parent, leaf, signature in bindings)
+    completed = subprocess.run(["/bin/sh", "-c", script], input=payload, cwd=bindings[0][0],
+                               capture_output=True, text=True, timeout=30)
+    if completed.returncode != 0:
+        raise ValueError("PARENT_CD_FAILED" if completed.returncode in (41, 42) else "CACHE_TARGET_CHANGED")
+    if any(os.path.lexists(os.path.join(parent, leaf)) for parent, leaf, _ in bindings):
+        raise ValueError("CACHE_TARGET_REMAINS")
+
 
 def handle_action(root, action, payload, operation_id, op_id):
     if action == "rebuild-distributed-results":
@@ -13705,6 +13782,12 @@ def handle_action(root, action, payload, operation_id, op_id):
             return terminal_action(root, action, operation_id, op_id, "failed", str(exc))
     if action == "preview-cache-cleanup":
         try:
+            if "observePaths" in payload:
+                paths = payload["observePaths"]
+                if not isinstance(paths, list) or not paths or len(paths) > 200 or len({str(row) for row in paths}) != len(paths):
+                    raise ValueError("invalid observation batch")
+                return {"schemaVersion": SCHEMA_VERSION, "opId": op_id, "status": "completed",
+                        "observations": observe_cache_paths(root, [str(row) for row in paths])}
             if "planOutputPaths" in payload:
                 paths = payload["planOutputPaths"]
                 if not isinstance(paths, list) or not paths or len(paths) > 100:
@@ -13729,11 +13812,12 @@ def handle_action(root, action, payload, operation_id, op_id):
                 found = current.get(path)
                 if not found or found["token"] != row.get("token") or found["type"] != "file":
                     raise ValueError(f"缓存候选已变化，请刷新后重新审核：{path}")
-            deleted = []
+            deleted, bindings = [], []
             for row in selected:
                 path = row["path"]
-                cache_delete_exact_file(root, path, row["token"])
+                cache_delete_exact_file(root, path, row["token"], batch=bindings)
                 deleted.append(path)
+            cache_delete_confirmed_batch(bindings)
             append_event(root, {"type": "cache_cleanup_completed", "operationId": operation_id, "payload": {"deletedCount": len(deleted)}})
             return {"schemaVersion": SCHEMA_VERSION, "opId": op_id, "status": "completed", "deletedCount": len(deleted)}
         except Exception as exc:
@@ -17209,7 +17293,7 @@ def serve_http(args):
                     return self.send_json({"error": "worker result ownership mismatch"}, status=403)
             # Warm structural reuse still runs in the original asynchronous
             # operation: NFS source/output stats must not hold the HTTP accept.
-            if action in ("validate-plan", "dry-run-plan", "preflight-worker-task", "rebuild-distributed-results") or (action == "preview-cache-cleanup" and "planOutputPaths" in payload) or (action == "archive-worker-artifacts" and payload.get("quarantineFailedAttempt") is True):
+            if action in ("validate-plan", "dry-run-plan", "preflight-worker-task", "rebuild-distributed-results") or (action == "preview-cache-cleanup" and ("planOutputPaths" in payload or "observePaths" in payload)) or (action == "archive-worker-artifacts" and payload.get("quarantineFailedAttempt") is True):
                 worker = (selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker") if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan", "preflight-worker-task") else ""
                 return self.send_json(start_inactivity_action(root, action, payload, operation_id, op_id, worker), status=202)
             if action not in ("preview-cache-cleanup", "delete-cache-candidates"):

@@ -45,3 +45,6 @@ simple_cluster/
 baseline-source.zip
 release-artifacts/
 !docs/target-mode-plan.md
+
+# 用户长期裁决 2026-10-24：旧嵌套 SimpleSFTP 捆绑副本不回流仓库状态
+/extensions/simple-sftp/

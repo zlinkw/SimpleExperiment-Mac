@@ -27,10 +27,11 @@ function fixture() {
     vscode: { postMessage() {} }, render() {}, currentState: {}, lastState: null,
   };
   vm.createContext(sandbox);
-  vm.runInContext('const ' + sections + ';\n' + ['planPhaseCommand', 'commandInspectorSection', 'commandPhaseSection',
+  vm.runInContext('const ' + sections + ';\n' + ['planPhaseCommand', 'artifactSyncNoticeCommand', 'commandInspectorSection', 'commandPhaseSection',
     'renderCommandPhaseLine', 'isTerminalUiStatus', 'handleUiCommandStatus', 'payloadFromButton', 'commandNeedsLoading',
     'createClientActionId', 'pendingKeyForButton', 'pendingKeyForAction', 'pendingKeyFromButtonDataset']
     .filter(name => functions.has(name)).map(name => functions.get(name)).join('\n') + '\nthis.click = ' + click, sandbox);
+  for (const name of ['planPhaseCommand', 'artifactSyncNoticeCommand']) assert.ok(functions.has(name), name + ' missing from the panel script');
   function add(command, id = command, section = '') {
     const row = { command, clientActionId: id, pendingKey: command, label: command, actionSection: section, message: '正在执行', status: 'running' };
     sandbox.pendingActionsById[id] = row; sandbox.pendingActions[command] = row; sandbox.pendingButtonKeys.add(command);
@@ -39,13 +40,29 @@ function fixture() {
   return { sandbox, outlets, add };
 }
 
-test('result progress stays in the results section while concurrent Plan and execution feedback stays separate', () => {
-  for (const command of ['refreshLocalResults', 'syncPendingPlanArtifacts', 'rebuildProjectResultTables', 'syncAllResultArtifacts']) {
+// Requirement change (task ui-plan-gpu-progress-20261024 item 5): runPlan progress
+// now lives only in its per-operation VS Code Notification, so it must be absent
+// from every card grey line; results/execution routing coverage is unchanged.
+test('result progress stays in the results section while Plan progress moves to its Notification', () => {
+  for (const command of ['refreshLocalResults', 'rebuildProjectResultTables']) {
     const f = fixture(); f.add(command, command, 'sync'); f.add('runPlan'); f.add('stopAndClearPlan'); f.sandbox.renderCommandPhaseLine();
     assert.match(f.outlets.resultCommandPhaseLine.textContent, new RegExp(command));
-    assert.match(f.outlets.planCommandPhaseLine.textContent, /runPlan/);
+    assert.equal(f.outlets.planCommandPhaseLine.textContent, '', 'runPlan stage must not repeat as card grey text');
     assert.match(f.outlets.commandPhaseLine.textContent, /stopAndClearPlan/);
     assert.doesNotMatch(f.outlets.commandPhaseLine.textContent, new RegExp(command + '|runPlan'));
+  }
+  // r4 migration (task ui-plan-gpu-progress-20261024 返修): the four artifact-sync commands
+  // report through their per-operation Notification + full log now, so their grey phase
+  // text moved out of the cards. The pending row itself stays registered, so button
+  // loading/dedupe and terminal-state handling are unchanged; rebuildProjectResultTables
+  // stays out of scope and keeps the grey line above.
+  for (const command of ['syncPendingPlanArtifacts', 'syncAllResultArtifacts', 'refreshJobArtifacts', 'retryJobArtifactSync']) {
+    const f = fixture(); f.add(command, command, 'results'); f.add('refreshLocalResults'); f.sandbox.renderCommandPhaseLine();
+    assert.doesNotMatch(f.outlets.resultCommandPhaseLine.textContent, new RegExp(command), command + ': stage moved to its Notification');
+    assert.match(f.outlets.resultCommandPhaseLine.textContent, /refreshLocalResults/, 'out-of-scope result routing keeps its grey line');
+    assert.doesNotMatch(f.outlets.commandPhaseLine.textContent, new RegExp(command), command + ': must not leak into the execution line');
+    assert.doesNotMatch(f.outlets.planCommandPhaseLine.textContent, new RegExp(command));
+    assert.ok(f.sandbox.pendingActionsById[command], command + ': the pending row keeps button state and dedupe unchanged');
   }
 });
 
@@ -80,5 +97,8 @@ test('results have a stable live outlet outside the rerendered summary and actua
   f.sandbox.click({ preventDefault() {}, stopPropagation() {}, target: { closest: selector => selector === 'button[data-command]' ? button : null } });
   const item = Object.values(f.sandbox.pendingActionsById)[0]; assert.equal(item.actionSection, 'results');
   f.sandbox.handleUiCommandStatus({ command: item.command, clientActionId: item.clientActionId, status: 'running', message: '下载指标' });
-  assert.match(f.outlets.resultCommandPhaseLine.textContent, /下载指标/); assert.equal(f.outlets.commandPhaseLine.textContent, '');
+  // r4 migration: this command's live progress now goes to its per-operation Notification,
+  // so the card lines stay empty while the pending row (button loading/dedupe) is kept.
+  assert.equal(f.outlets.resultCommandPhaseLine.textContent, ''); assert.equal(f.outlets.commandPhaseLine.textContent, '');
+  assert.equal(f.sandbox.pendingActionsById[item.clientActionId].status, 'running', 'the button still tracks the in-flight sync');
 });

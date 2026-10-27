@@ -132,7 +132,10 @@ def environment():
 agent.fresh_task_runtime_env = environment
 agent.progress_action = lambda *args, **kw: events.append(args[6] if len(args) > 6 else kw)
 agent.redact_text = lambda value: value
-scale = 30
+# r100（GPT 实施许可，简报 §20）：零进度子进程变体不承担"压缩超时"验证职责，其看门狗窗口恢复产品真实
+# 30 秒——结构性竞争：×30 缩放只压缩窗口、不压缩解释器/AST 启动真实耗时（starting 仅证明未记录到有效
+# 进度，不区分启动与提取各自耗时）。stall 族与 identity 保持 ×30；消费者断言、轮询、定时器、执行预算不动。
+scale = 1 if variant in ("no-environment", "api", "api-environment", "api-completed", "fast", "duplicate", "pad", "staged") else 30
 agent.time = SimpleNamespace(**{name: getattr(time, name) for name in dir(time) if not name.startswith("__") and name not in ("monotonic", "sleep")},
     monotonic=lambda: time.monotonic() * scale, sleep=lambda seconds: time.sleep(min(seconds, 0.005)))
 original_run, original_popen = subprocess.run, subprocess.Popen

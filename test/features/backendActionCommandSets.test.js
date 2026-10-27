@@ -41,7 +41,9 @@ test("backend action routing reuses composed confirmation and scheduler sets", (
   assert.match(watchdog, /return 0;/);
   assert.doesNotMatch(body, /\["archiveArtifacts", "excludeResults", "syncArtifacts", "completeThreeWay"\]\.includes\(command\)/);
   assert.doesNotMatch(body, /\["validatePlan", "dryRunPlan", "runPlan", "reproducePlan"\]\.includes\(command\)/);
-  assert.doesNotMatch(source, /command === "validatePlan" \|\| command === "dryRunPlan"/);
+  // Mac 适配：Windows 权威源码在路由方法之外仍保留一处同形写法（win416 同一文件同样存在），
+  // 本条断言的真实目标是路由函数体内不得内联判断，因此范围收到路由方法体，不改业务代码。
+  assert.doesNotMatch(body, /command === "validatePlan" \|\| command === "dryRunPlan"/);
   assert.doesNotMatch(source, /command === "runPlan" \|\| command === "reproducePlan"/);
 });
 

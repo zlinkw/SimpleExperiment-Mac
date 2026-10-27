@@ -21,7 +21,8 @@ test('real assigned tmux Agent starts, reuses and restarts without pidfd/PID sig
 function vendorRepoRoot(){
   const env=process.env.SIMPLE_SFTP_REPO;
   if(env) return env;
-  const siblingNames=process.platform==='win32'?['simple-sftp']:['SimpleSFTP-Mac','simple-sftp'];
+  // Mac 适配：Mac 侧同级仓库目录名是 SimpleSFTP-Mac，两种布局都要能解析到 vendor 文件，不降低校验强度。
+const siblingNames=['SimpleSFTP-Mac','simple-sftp','SimpleSFTP'];
   let dir=__dirname;
   for(let depth=0;depth<10;depth+=1){
     for(const name of siblingNames){

@@ -7,6 +7,7 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..", "..");
+if (!process.env.LOCALAPPDATA) process.env.LOCALAPPDATA = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "preflight-speed-lease-")); // r17 约定：租约注册表落隔离目录（沙箱 homedir/AppData 只读，产品路径不变）——切片含真实回执释放链
 const legacySource = fs.readFileSync(path.join(root, "src/extension/legacy.ts"), "utf8");
 const distSource = fs.readFileSync(path.join(root, "dist/extension/legacy.js"), "utf8");
 
@@ -63,7 +64,11 @@ const createApi = new Function("SyncResolution_1", "CodeSyncDelta_1", "fingerpri
   ${compiled("patchPlanSubmissionProgress")}
   ${compiled("finishPlanSubmissionProgress")}
   ${compiled("trimPlanSubmissionEpochs")}
-  return { syncCodeTargets, safeWorkerCodeSyncTargets, syncManualWorkerCode, uploadProjectToWorkers, distributeCodeToWorkers, publishToGitHub, reportPlanStage, planSubmissionOperationId, planSubmissionPlanFile, beginPlanSubmissionProgress, patchPlanSubmissionProgress, finishPlanSubmissionProgress, trimPlanSubmissionEpochs };
+  ${compiled("operationNoticeKey")}
+  ${compiled("reportOperationNotice")}
+  ${compiled("logOperationFact")}
+  ${compiled("ensureOperationLogChannel")}
+  return { syncCodeTargets, safeWorkerCodeSyncTargets, syncManualWorkerCode, uploadProjectToWorkers, distributeCodeToWorkers, publishToGitHub, reportPlanStage, planSubmissionOperationId, planSubmissionPlanFile, beginPlanSubmissionProgress, patchPlanSubmissionProgress, finishPlanSubmissionProgress, trimPlanSubmissionEpochs, operationNoticeKey, reportOperationNotice, logOperationFact, ensureOperationLogChannel };
 `);
 function apiFactory(...args) { while(args.length<9)args.push(undefined);return createApi(...args,require("../../dist/extension/PlanCodeScopeHost.js"),require("../../dist/features/ProjectRootMap.js")); }
 
@@ -95,6 +100,15 @@ function syncHost(remote) {
     builds: 0,
     localMachineStateGuard: () => ({ prefixes: [], unknown: false }),
     targetRootGuard: () => ({ prefixes: [], unknown: false }),
+    // Fixture double for the new preparation step of syncCodeTargets: it
+    // consumes THIS fixture's already-resolved guard stub for every target and
+    // performs no probing (this file's domain is upload scope/progress; the
+    // real helper's semantics are covered by planSubmissionStateGuard.test.js).
+    prepareCodeSyncRootGuards: async targets => {
+      const guards = new Map();
+      for (const target of targets) guards.set(target, host.targetRootGuard(target));
+      return { guards, assertBindingsCurrent: () => {} };
+    },
   };
   const project = fs.mkdtempSync(path.join(os.tmpdir(), "plan-sync-root-"));
   fs.mkdirSync(path.join(project, "src"), { recursive: true });

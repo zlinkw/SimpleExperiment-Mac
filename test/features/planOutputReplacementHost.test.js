@@ -43,6 +43,7 @@ test('replacement fence persists before deletion and prevents re-mirroring after
   const queue = { plans: [{ id: 'run', jobs: [{ index: 0, commandId: 'c', status: 'completed' }, { index: 1, commandId: 'other', status: 'completed' }] }] };
   let saved;
   const instance = new Host(); instance.root = 'fixture'; instance.drainReconnects = async () => {};
+  instance.ensureOperationRecordsMigrated = async () => {}; // r17：切片只验证围栏/队列语义；迁移由 projectStatePaths 契约单独覆盖
   instance.host = { loadDistributedQueue: async () => structuredClone(queue), saveDistributedQueue: async (_, data) => { saved = structuredClone(data); },
     withHostOperationLease: async (_, __, work) => work() };
   instance.service = { registeredIsolationSource: async () => undefined, status: async () => ({ preview: { scope: { job: { purpose: 'replace_outputs', workflowId: 'run', index: 0, commandId: 'c' }, nodes: [{ id: 'w' }] } } }),

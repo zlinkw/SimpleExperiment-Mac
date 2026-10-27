@@ -42,7 +42,13 @@ test("rendered plan section closes planQuickGrid before the phase line and cards
   assert.doesNotMatch(section.slice(section.indexOf('id="planCommandPhaseLine"'), section.indexOf('id="recentPlans"')), /grid-column:\s*1\s*\/\s*-1/);
 });
 
-test("renderCommandPhaseLine writes plan commands only into the plan status", () => {
+// Requirement change (task ui-plan-gpu-progress-20261024 item 5): the in-flight
+// progress of 运行plan/实验准备 now lives in ONE VS Code Notification per
+// operation, so the card must NOT repeat it as tiny grey phase text. The plan
+// command assertions below were flipped from "writes into the plan status line"
+// to "stays out of both grey hosts"; out-of-scope command surfaces (tmux in the
+// execution line, results routing) keep their previous behaviour and coverage.
+test("renderCommandPhaseLine keeps plan commands out of the card phase lines (notification owns them)", () => {
   const html = renderPanelHtml();
   const scriptStart = html.indexOf("<script nonce=");
   const script = html.slice(scriptStart);
@@ -61,10 +67,10 @@ test("renderCommandPhaseLine writes plan commands only into the plan status", ()
     el(id) { return hosts[id]; }
   };
   vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
-  assert.match(hosts.commandPhaseLine.textContent, /fetchTmuxList|列出 sessions|校验/);
-  assert.match(hosts.planCommandPhaseLine.textContent, /校验：正在校验计划/);
-  assert.doesNotMatch(hosts.planCommandPhaseLine.textContent, /fetchTmuxList/);
-  assert.equal(hosts.planCommandPhaseLine.title, hosts.planCommandPhaseLine.textContent);
+  assert.match(hosts.commandPhaseLine.textContent, /fetchTmuxList|列出 sessions/);
+  assert.equal(hosts.planCommandPhaseLine.textContent, "", "plan/experiment-prep progress must not repeat as grey card text");
+  assert.doesNotMatch(hosts.commandPhaseLine.textContent, /校验/, "suppressed plan stage must not leak into the execution line");
+  assert.equal(hosts.planCommandPhaseLine.title, "");
 
   sandbox.pendingActionsById = {
     tmux: { command: "fetchTmuxList", label: "列出 sessions", message: "fetchTmuxList：正在执行." }
@@ -75,19 +81,22 @@ test("renderCommandPhaseLine writes plan commands only into the plan status", ()
   assert.equal(hosts.planCommandPhaseLine.textContent, "");
   assert.match(hosts.commandPhaseLine.textContent, /fetchTmuxList|列出 sessions/);
 
-  const longMessage = "正在校验计划 " + "路径".repeat(120);
-  const fullPlanText = "校验并提交运行：" + longMessage;
+  // Truncation coverage moves to an out-of-scope command; the suppressed runPlan
+  // stays out of both hosts even with a very long stage message.
+  const longMessage = "正在执行 " + "路径".repeat(120);
+  const fullTmuxText = "列出 sessions：" + longMessage;
   sandbox.pendingActionsById = {
+    tmux: { command: "fetchTmuxList", label: "列出 sessions", message: longMessage },
     plan: { command: "runPlan", label: "校验并提交运行", message: longMessage }
   };
   vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
-  assert.ok(hosts.planCommandPhaseLine.textContent.length <= 160);
-  assert.ok(fullPlanText.length > 160);
-  assert.match(hosts.planCommandPhaseLine.textContent, /校验并提交运行/);
-  assert.equal(hosts.commandPhaseLine.textContent, "", "Plan progress belongs only to its Plan status line");
-  assert.equal(hosts.planCommandPhaseLine.title, fullPlanText);
-  assert.equal(hosts.commandPhaseLine.title, "");
-  assert.notEqual(hosts.planCommandPhaseLine.title, hosts.planCommandPhaseLine.textContent);
+  assert.ok(hosts.commandPhaseLine.textContent.length <= 160);
+  assert.ok(fullTmuxText.length > 160);
+  assert.match(hosts.commandPhaseLine.textContent, /列出 sessions/);
+  assert.equal(hosts.planCommandPhaseLine.textContent, "", "suppressed runPlan stage must stay out of the plan line");
+  assert.equal(hosts.commandPhaseLine.title, fullTmuxText);
+  assert.equal(hosts.planCommandPhaseLine.title, "");
+  assert.notEqual(hosts.commandPhaseLine.title, hosts.commandPhaseLine.textContent);
 
   sandbox.pendingActionsById = {};
   vm.runInNewContext(require("../_helpers/panelFunction").declaration("COMMAND_INSPECTOR_SECTIONS").replace(/^const /, "var ") + require("../_helpers/panelFunction")("commandInspectorSection") + script.slice(phaseStart, renderEnd) + "\nrenderCommandPhaseLine();", sandbox);
@@ -129,9 +138,11 @@ test("automatic tmux refresh stays out of command progress and releases a lost r
 
 test("a persisted local wait is labelled as waiting rather than submitting", () => {
   const html = renderPanelHtml();
-  const from = html.indexOf("function executionSubmissionLabel");
+  // Slice starts at the progress helper because the label now consumes it; the
+  // pinned semantics below are unchanged.
+  const from = html.indexOf("function executionSubmissionProgressText");
   const to = html.indexOf("function executionNewerSubmission", from);
-  const sandbox = {};
+  const sandbox = { PLAN_EXECUTION_PHASE_LABELS: {} };
   vm.runInNewContext(html.slice(from, to), sandbox);
   assert.equal(sandbox.executionSubmissionLabel({ type: "run-plan", status: "queued", localSubmissionProgress: true }), "等待继续提交");
   assert.equal(sandbox.executionSubmissionLabel({ type: "run-plan", status: "running", localSubmissionProgress: true }), "提交中");

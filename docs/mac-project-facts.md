@@ -1,3 +1,10 @@
+## 2026-10-27 当前批次（087，宿主门禁中）
+
+- 候选为 Experiment Mac 0.5.317 与 SimpleSFTP Mac 0.2.104，Windows 权威冻结在 0.5.416（45209ae4）与 0.2.114（b2329b5）。只做 macOS 适配，一键开启隧道与不依赖 Xshell 的约定保持不变。
+- 共同业务落地：多项目分支与工作树、统一 CLI 命名动作面、结果对比与 HEAD 核对、缓存清理 observe/isolate 批次、插件日志保留、操作完整日志入口；SimpleSFTP 暂存槽两代与一次确认提前释放、consumer root、本地暂存收敛、交接标记新位置。
+- 修掉一个真实身份缺口：新采纳的 Windows 统一 CLI 会去读 Windows 插件的 api.json（本机验证时确实取回了 Windows 插件的真实运行数据），现改为 Mac 的发现目录与环境量，并把 32+1 个测试夹具改为注入 Mac 发现文件，测试不再依赖开发者机器上真实运行的插件。
+- 静态检查：678 行源码指纹双向校验通过（Experiment 554、SimpleSFTP 124），类型检查、Experiment 构建、SimpleSFTP 运行校验均通过；340 行逐文件串行回归正在跑，结果写进 docs/windows-alignment-2026-10-27.md，不以任何局部结果冒充通过。
+- macOS M5 真机、系统 OpenSSH 隧道连通、libproc 句柄证明与 darwin 中继落点尚未验证，不记为通过；本轮不连业务服务器、不跑真实训练或传输、不删除文件。
 ## 2026-10-24 当前交付（085，已发布）
 
 - 已发布 [preview-v0.5.316](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.316)：Experiment Mac 0.5.316 / SimpleSFTP Mac 0.2.103，冻结 Windows .403/.107。源码 PR #1 均经真实差异审核后合并；Exp c32916985f77bfd208f357dd84f14b60363c4464，SF 79e9cb7f457bc2052176060d53c43dc53b07d9c8。

@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const Module = require("node:module");
 const path = require("node:path");
@@ -16,7 +17,7 @@ const originalLoad = Module._load;
 Module._load = function (request, ...args) {
   return request === "vscode" ? vscodeStub : originalLoad.call(this, request, ...args);
 };
-const ROOT = "C:\\sync-scope-batch-fixture";
+const ROOT = process.platform === "win32" ? "C:\\sync-scope-batch-fixture" : "/fixture/sync-scope-batch"; // r17：项目根按平台为已解析绝对路径（holds 只读派生，不落真实盘）
 
 function record(name) {
   return { sha256: digest(name), size: name.length };
@@ -147,6 +148,79 @@ test("three confirmed files use one source inventory, one destination inventory,
   assert.equal(provider.saved["artifacts/pack"].fileHashes["artifacts/pack/c.bin"], digest("artifacts/pack/c.bin"));
   assert.equal(provider.saved["artifacts/pack"].fileHashes["artifacts/outside.txt"], undefined);
   assert.equal(scopeInventorySnapshot(files, ["artifacts/a.txt"]), JSON.stringify([["artifacts/a.txt", digest("artifacts/a.txt")]]));
+});
+
+// r117 接线迁移（r112 原 AST batch 用例 :86-93 的三条断言一一映射到这里，真实原型链 + dist 装载）：
+// ①fpsync 携带非空身份且等于按冻结清单手写的上线格式预期；②同输入第二次（跨实例）逐字同代；
+// ③改一个来源 SHA 开新代。方法必须完整走到 updateSyncScopeHolds 正常返回，不允许提前绕开。
+function batchIdentityFixture(shaOverride) {
+  const names = ["artifacts/a.txt", "artifacts/b.txt", "artifacts/pack/c.bin", "artifacts/pack/d.bin", "artifacts/outside.txt"];
+  const files = Object.fromEntries(names.map((name) => [name, record(name)]));
+  if (shaOverride) files["artifacts/a.txt"] = { sha256: shaOverride, size: 9 };
+  const fpsyncs = [];
+  const provider = {
+    context: { globalStorageUri: { fsPath: ROOT + "-identity-plugin-state" } },
+    localMachineStateGuard: () => ({ prefixes: [], unknown: false }),
+    targetRootGuard: () => ({ prefixes: [], unknown: false }),
+    simpleSftpCapability: async () => {},
+    simpleSftpApiCall: async (method, params) => {
+      if (method === "sync.projectInventory") return { files: structuredClone(files) };
+      if (method === "sync.serverToServerFpsync") { fpsyncs.push(params); return { ok: true }; }
+      throw new Error(`unexpected ${method}`);
+    },
+    assertSshTransportIdentities: async () => {},
+    deleteSyncScopeRemoteCopy: async () => {},
+    sftpServerOptions: (row) => ({ id: row.id, host: `${row.id}.example`, networkHost: `net-${row.id}`, remotePath: `/proj/${row.id}`, user: "u", port: 22 }),
+    updateSyncScopeHolds: async (_root, mutate) => { provider.saved = {}; mutate(provider.saved); },
+  };
+  provider.verifiedSftpProjectInventory = async (options) => provider.simpleSftpApiCall("sync.projectInventory", options);
+  const work = [
+    { path: "artifacts/a.txt", name: "a.txt", directory: false, endpointId: "w1" },
+    { path: "artifacts/b.txt", name: "b.txt", directory: false, endpointId: "w1" },
+    { path: "artifacts/pack", name: "pack", directory: true, endpointId: "w1" },
+  ];
+  return { provider, fpsyncs, work };
+}
+const batchIdentityOracle = (paths, hashes) => {
+  const sorted = [...paths].sort();
+  const manifest = sorted.map((file) => [file, hashes[file].toLowerCase()]);
+  return crypto.createHash("sha256").update(JSON.stringify(["sync-scope-retain", sorted, manifest])).digest("hex");
+};
+
+test("batch lane (:11084 批量保留文件版本) sends the frozen-manifest identity, reruns verbatim, and opens a generation on SHA change", async () => {
+  const originalExecute = vscodeStub.commands.executeCommand;
+  const originalConfig = vscodeStub.workspace.getConfiguration;
+  vscodeStub.commands.executeCommand = async () => { throw new Error("worker batch sync must not upload"); };
+  vscodeStub.workspace.getConfiguration = () => ({ get: () => [] });
+  const { __transferSyncScopeBatchForTest } = require("../../dist/extension/legacy.js");
+  try {
+    const expectedPaths = ["artifacts/a.txt", "artifacts/b.txt", "artifacts/pack/c.bin", "artifacts/pack/d.bin"];
+    const expectedHashes = Object.fromEntries(expectedPaths.map((name) => [name, digest(name)]));
+    const first = batchIdentityFixture();
+    const completed = await __transferSyncScopeBatchForTest(first.provider, ROOT, [{ id: "w1", role: "worker" }, { id: "w2", role: "worker" }], structuredClone(first.work), ["w2"], () => {});
+    assert.deepEqual(completed, ["artifacts/a.txt", "artifacts/b.txt", "artifacts/pack"], "方法必须完整返回（holds 保存步骤不被绕开）");
+    assert.equal(first.provider.saved["artifacts/pack"].fileHashes["artifacts/pack/c.bin"], digest("artifacts/pack/c.bin"), "完成证据须走到 :11139 的 holds 落盘");
+    assert.equal(first.fpsyncs.length, 1);
+    const sent = first.fpsyncs[0];
+    assert.ok(sent.retentionKey, "批量 lane 必须携带非空 retentionKey（r112 现场占死的就是缺身份的共享 project-files 槽）");
+    assert.match(sent.generation, /^[0-9a-f]{64}$/, "generation 64 位小写 hex，原样过 receiver transferScope64");
+    assert.equal(sent.retentionKey, 'sync-scope-retain:["artifacts/a.txt","artifacts/b.txt","artifacts/pack/c.bin","artifacts/pack/d.bin"]',
+      "scope 恰为冻结展开清单（目录已展开为子文件），不含 outside.txt");
+    assert.equal(sent.generation, batchIdentityOracle(expectedPaths, expectedHashes), "身份逐字等于手写上线格式（盐+排序 scope+排序 path+SHA 清单），不经被测函数自证");
+    const again = batchIdentityFixture();
+    await __transferSyncScopeBatchForTest(again.provider, ROOT, [{ id: "w1", role: "worker" }, { id: "w2", role: "worker" }], structuredClone(again.work), ["w2"], () => {});
+    assert.equal(again.fpsyncs.length, 1);
+    assert.deepEqual({ retentionKey: again.fpsyncs[0].retentionKey, generation: again.fpsyncs[0].generation },
+      { retentionKey: sent.retentionKey, generation: sent.generation }, "同输入跨实例逐字同代：同批重试复用己代走 receiver resume");
+    const changed = batchIdentityFixture("f".repeat(64));
+    await __transferSyncScopeBatchForTest(changed.provider, ROOT, [{ id: "w1", role: "worker" }, { id: "w2", role: "worker" }], structuredClone(changed.work), ["w2"], () => {});
+    assert.equal(changed.fpsyncs.length, 1);
+    assert.equal(changed.fpsyncs[0].retentionKey, sent.retentionKey, "同一逻辑批仍是同一逻辑源");
+    assert.notEqual(changed.fpsyncs[0].generation, sent.generation, "来源 SHA 变化必须开新代，不与旧代混淆");
+  } finally {
+    vscodeStub.commands.executeCommand = originalExecute;
+    vscodeStub.workspace.getConfiguration = originalConfig;
+  }
 });
 
 test("local files share one upload manifest and a destination hash mismatch does not save holds", async () => {

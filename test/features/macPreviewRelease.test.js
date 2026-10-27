@@ -113,7 +113,8 @@ test("403 and 429 back off; unreachable, malformed and empty releases stay failu
   for (const status of [403, 429]) {
     let count = 0, now = 0;
     const client = new PreviewReleaseClient(async () => { count++; return new Response("limited", { status, headers: { "retry-after": "120" } }); }, () => now);
-    await assert.rejects(client.check("1.100.0", () => "0.1.1"), /检查失败/);
+    // Windows 0.5.416 共同语义：带限流证据（retry-after/配额头/限流文案）的 403/429 属“延后”，不是“检查失败”。
+    await assert.rejects(client.check("1.100.0", () => "0.1.1"), /限流至/);
     await assert.rejects(client.check("1.100.0", () => "0.1.1"), /限流/); assert.equal(count, 1);
     now = 121000; await assert.rejects(client.check("1.100.0", () => "0.1.1")); assert.equal(count, 2);
   }

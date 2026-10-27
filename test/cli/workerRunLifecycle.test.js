@@ -10,6 +10,13 @@ const cli = path.resolve(__dirname, "../../dist/cli.js");
 const runId = "run0-123456-123";
 const workflowId = "workflow-run-1";
 const plan = "experiments/plans/baseline.yaml";
+// 新版 CLI 在业务 RPC 之前校验实例身份（name/version/pid/startedAt/instanceId），夹具必须提供合法握手。
+// 发现载荷里的 name 仍是内部协议槽位值 SimpleExperiment（Mac 身份由目录与环境变量区分，与 Windows 权威一致）。
+const FIXTURE_VERSION = require("../../package.json").version;
+const FIXTURE_NAME = "SimpleExperiment";
+const FIXTURE_STARTED_AT = new Date(Date.UTC(2026, 9, 27, 0, 0, 0)).toISOString();
+const FIXTURE_INSTANCE_ID = process.pid + ":" + FIXTURE_STARTED_AT;
+
 
 function callCli(root, apiFile, args) {
   return new Promise((resolve, reject) => {
@@ -17,7 +24,7 @@ function callCli(root, apiFile, args) {
       cwd: root, windowsHide:true,
       // Mac 适配：Mac 版 CLI 的发现文件读取 SIMPLE_EXPERIMENT_MAC_API_FILE（simpleExperimentMac 身份），
       // 同时保留 Windows 侧变量名以便两端契约一致。
-      env: { ...process.env, SIMPLE_EXPERIMENT_PROJECT_ROOT:root, SIMPLE_EXPERIMENT_API_FILE: apiFile, SIMPLE_EXPERIMENT_MAC_API_FILE: apiFile },
+      env: { ...process.env, SIMPLE_EXPERIMENT_PROJECT_ROOT:root, SIMPLE_EXPERIMENT_MAC_API_FILE: apiFile, SIMPLE_EXPERIMENT_API_FILE: "missing-original-api.json" },
     });
     let stdout = "", stderr="", expired=false;
     const timer=setTimeout(()=>{expired=true;child.kill();},10000);
@@ -53,7 +60,7 @@ test("scheduler worker run remains listed and inspectable after runtime disappea
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -72,7 +79,7 @@ test("scheduler worker run remains listed and inspectable after runtime disappea
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
 
   const active = await callCli(root, apiFile, ["list"]);
   assert.equal(active.code, 0);
@@ -140,7 +147,7 @@ test("Worker Agent task snapshot survives after scheduler and runtime rows disap
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -163,7 +170,7 @@ test("Worker Agent task snapshot survives after scheduler and runtime rows disap
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
 
   const listed = await callCli(root, apiFile, ["list", "--type", "worker_run"]);
   assert.equal(listed.code, 0);
@@ -268,7 +275,7 @@ test("historical launch config text survives a missing job config and terminal p
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -286,7 +293,7 @@ test("historical launch config text survives a missing job config and terminal p
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
   const config = await callCli(root, apiFile, ["config", workerRunId]);
   assert.equal(config.code, 0);
   assert.equal(config.body.config_path, configPath);
@@ -316,7 +323,7 @@ test("failed Worker task retrieves its remote log without persisting logPath", a
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -335,7 +342,7 @@ test("failed Worker task retrieves its remote log without persisting logPath", a
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
 
   const inspected = await callCli(root, apiFile, ["inspect", workerRunId]);
   assert.equal(inspected.code, 0);
@@ -387,7 +394,7 @@ test("rate-limited snapshots keep the last run while classification stays stable
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -406,7 +413,7 @@ test("rate-limited snapshots keep the last run while classification stays stable
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
 
   const first = await callCli(root, apiFile, ["list"]);
   assert.equal(first.body.find((row) => row.id === runId).type, "worker_run");
@@ -451,7 +458,7 @@ test("Scheduler operation provenance overrides stale experiment index", async (t
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -477,7 +484,7 @@ test("Scheduler operation provenance overrides stale experiment index", async (t
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
 
   const listed = await callCli(root, apiFile, ["list", "--full"]);
   assert.equal(listed.code, 0);
@@ -515,7 +522,7 @@ test("historical Worker task gains and retains a unique workflow parent", async 
   const server = http.createServer((req, res) => {
     if(req.url==='/api/v1/capabilities') {
       res.writeHead(200,{'content-type':'application/json'});
-      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
+      res.end(JSON.stringify({schemaVersion:1,rpc:'json-rpc-2.0',name:FIXTURE_NAME,version:FIXTURE_VERSION,instanceId:FIXTURE_INSTANCE_ID,methods:['status','tasks.list','operations.list','state.get','live.output']}));return;
     }
     const chunks = [];
     req.on("data", (chunk) => chunks.push(chunk));
@@ -535,7 +542,7 @@ test("historical Worker task gains and retains a unique workflow parent", async 
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => {server.closeAllConnections();return new Promise(resolve=>server.close(resolve));});
   const apiFile = path.join(root, "api.json");
-  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test" }), "utf8");
+  fs.writeFileSync(apiFile, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "test", name: FIXTURE_NAME, version: FIXTURE_VERSION, pid: process.pid, startedAt: FIXTURE_STARTED_AT, instanceId: FIXTURE_INSTANCE_ID, status: "running" }), "utf8");
 
   const listed = await callCli(root, apiFile, ["list", "--full"]);
   assert.equal(listed.code, 0);

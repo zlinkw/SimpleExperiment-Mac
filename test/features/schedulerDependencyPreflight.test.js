@@ -15,7 +15,19 @@ const schedulerSource = readSource("src/clusterSchedulerRuntime.ts");
 const extensionSource = readSource("src/extension.ts");
 const panelSource = readSource("src/ui/PanelHtml.ts");
 const probeSource = readSource("src/tunnel/XshellTunnelPortProbe.ts");
-const utf8PythonEnv = { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+// r90→r96（两入口分段环境，断言/期望/超时/夹具逐字未动）：本套件同一文件里存在两类相反前提——
+// ①"就绪"用例（不带 -S）要求 yaml 真实可见：经项目入口 `node scripts/test-workflow.js check:dev` 时，
+//   runner 十键隔离把 USERPROFILE 重定向（用户 site-packages 随之不可见），每批注入的
+//   PYTHONPATH=site.getusersitepackages()（test-workflow.js resolvePythonDependencyRoot，r28 机制）
+//   是该前提下 yaml 的唯一合法来源，必须保留；窄入口（node --test 直跑）无隔离无注入，真实
+//   USERPROFILE 的用户 site 自然可见——保留 PYTHONPATH 对两入口都成立。
+// ②"缺 yaml"用例（python -S）要求 yaml 不可见：-S 只跳过 site，不清 PYTHONPATH，runner 的注入会
+//   让"缺失"前提变假（r89 该两段红即此），必须剥离——剥离后 -S 下 sys.path 仅脚本目录+stdlib，
+//   两入口同样成立（窄入口 -S 本就隐藏 site-packages）。
+// 故按用例分段派生两个 env：缺失段用 utf8PythonEnv（剥离），就绪段用 utf8PythonReadyEnv（保留注入）。
+const { PYTHONPATH: _inheritedPythonPath, ...utf8PythonBaseEnv } = process.env;
+const utf8PythonEnv = { ...utf8PythonBaseEnv, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+const utf8PythonReadyEnv = { ...process.env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
 // Exercise only the explicit dependency functions, never exec the complete runtime.
 const diagnosticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'scheduler-diagnostic-functions-'));
 const diagnosticPath = path.join(diagnosticDir, 'probe.py');
@@ -34,7 +46,8 @@ function runPython(args, env = utf8PythonEnv) {
 }
 
 test("scheduler reports actionable PyYAML guidance without a traceback", () => {
-  const readyCheck = runPython([schedulerPath, "--check-dependencies-json"]);
+  // r96：就绪前提——保留 runner 注入的 PYTHONPATH（见上方两入口分段说明），其余用例仍用剥离后的 env。
+  const readyCheck = runPython([schedulerPath, "--check-dependencies-json"], utf8PythonReadyEnv);
   assert.equal(readyCheck.status, 0, readyCheck.stderr || readyCheck.stdout);
   const ready = JSON.parse(readyCheck.stdout.trim());
   assert.equal(ready.ok, true);

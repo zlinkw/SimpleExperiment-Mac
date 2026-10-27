@@ -1,12 +1,27 @@
-import { usageError } from "../errors";
+import { businessError, usageError } from "../errors";
 import { writeJson, writeText } from "../format";
 import { CliFlags, requirePositional } from "../parse";
 import { loadResults, ResultRow } from "./result";
+import { buildLeaderboard, leaderboardToMarkdown, parseMetricsFile } from "../../features/Metrics";
 
 export async function metricCommand(action: string, rest: string[], flags: CliFlags): Promise<number> {
   if (action === "list") return metricList(flags);
   if (action === "show") return metricShow(requirePositional(rest, 0, "experiment id"), flags);
+  if (action === "leaderboard") return metricLeaderboard(flags);
   throw usageError(`unknown metric action: ${action || "(missing)"}`);
+}
+
+/** First-class local metrics leaderboard (replaces the revoked `simpleex metrics leaderboard`). */
+export function metricLeaderboard(flags: CliFlags): number {
+  if (!flags.file) throw usageError("metric leaderboard needs --file <metrics file>");
+  const fs = require("node:fs") as typeof import("node:fs");
+  if (!fs.existsSync(flags.file)) throw businessError(`metrics file not found: ${flags.file}`);
+  const metrics = parseMetricsFile(fs.readFileSync(flags.file, "utf8"), flags.file);
+  if (!metrics.length) throw businessError("metrics file parsed no rows");
+  const board = buildLeaderboard(metrics, (row) => row.runKey, flags.primary || undefined);
+  if (flags.json) writeJson({ metrics: Object.keys(metrics[0]?.metrics || {}), board }, flags.compactJson);
+  else writeText(leaderboardToMarkdown(board, Object.keys(metrics[0]?.metrics || {})));
+  return 0;
 }
 
 export async function metricList(flags: CliFlags): Promise<number> {

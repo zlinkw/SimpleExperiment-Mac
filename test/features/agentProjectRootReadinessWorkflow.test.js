@@ -100,7 +100,10 @@ test("Hub-only checks and execution checks use different endpoint scopes", () =>
   assert.match(validateGuard, /assertPlanSchedulerAgentReady\(command,\s*body\)/);
   assert.doesNotMatch(validateGuard, /assertExecutionAgentProjectsReady\(\)/);
   assert.match(runGuard, /assertExecutionAgentProjectsReady\(body\)/);
-  assert.match(runAll, /return runAllPlans\(this, message\)/);
+  // 0.5.408 T3: the batch forwards the message plus the shared parentClientActionId through noticeMessage.
+  assert.match(runAll, /const noticeMessage = \{ \.\.\.message, parentClientActionId: parentKey \};/);
+  assert.match(runAll, /const result = await runAllPlans\(this, noticeMessage\);/);
+  assert.match(runAll, /return result;/);
   const batch = fs.readFileSync(path.join(__dirname, "../../src/extension/SelectedPlanBatchHost.ts"), "utf8");
   assert.match(batch, /await host\.runActionCommand\("runPlan", message\)/);
   assert.ok(runGuard.indexOf("assertExecutionAgentProjectsReady(body)") < runGuard.indexOf("ensureSimpleSftpReadyForSetup"));

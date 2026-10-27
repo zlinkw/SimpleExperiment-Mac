@@ -5,7 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 const {
   projectIdentityKey, resolveProjectRootMap, isMachineStateAbsolute,
-  machineStateRelativePrefixes, isUnderMachineStatePrefixes, machineStateGuard, canonicalRemotePath,
+  machineStateRelativePrefixes, isUnderMachineStatePrefixes, machineStateGuard, canonicalRemotePath, remoteRootsEqual,
 } = require("../../dist/features/ProjectRootMap");
 const { scopeInventoryPathAllowed, collectLocalScopeInventory, hashLocalScopeNames,
   collectSelectedLocalScopeFiles } = require("../../dist/features/SyncScopeStatus.js");
@@ -252,19 +252,45 @@ test("all machine roots and ancestors are protected, including code nested insid
   assert.equal(canonicalRemotePath("\\\\server\\share").ok, false);
 });
 
+test("remoteRootsEqual canonicalizes spelling drift and fails closed on invalid roots", () => {
+  assert.equal(remoteRootsEqual("/srv/work/MultiModal/", "/srv/work//MultiModal"), true);
+  assert.equal(remoteRootsEqual("D:\\Lab\\Proj", "d:/lab/proj"), true); // Windows drive root folds case
+  assert.equal(remoteRootsEqual("D:\\Lab\\Proj\\", "d:/lab/proj"), true);
+  assert.equal(remoteRootsEqual("/srv/work/MultiModal", "/srv/work/multimodal"), false); // POSIX case is significant
+  assert.equal(remoteRootsEqual("D:/lab", "/srv/lab"), false); // different root spaces never contain or equal
+  assert.equal(remoteRootsEqual("relative/path", "relative/path"), false); // invalid never equals invalid
+  assert.equal(remoteRootsEqual("", ""), false);
+  assert.equal(remoteRootsEqual("/srv/../../etc", "/etc"), false); // escaping is invalid, not a match
+});
+
 test("host maps configured roots and the bound worker probe using the actual code root", () => {
   const ts = require("typescript"), vm = require("node:vm");
   const source = fs.readFileSync(path.join(__dirname, "../../src/extension/legacy.ts"), "utf8");
   const ast = ts.createSourceFile("legacy.ts", source, ts.ScriptTarget.Latest, true);
-  let member;
-  function visit(node) { if (ts.isMethodDeclaration(node) && node.name.getText(ast) === "targetRootGuard") member = node; ts.forEachChild(node, visit); }
+  let member, probeConfigMember;
+  function visit(node) {
+    const name = ts.isMethodDeclaration(node) && node.name.getText(ast);
+    if (name === "targetRootGuard") member = node;
+    if (name === "codeSyncRootProbeConfig") probeConfigMember = node;
+    ts.forEachChild(node, visit);
+  }
   visit(ast);
-  const method = vm.runInNewContext(ts.transpileModule("class Host{" + member.getText(ast) + "};Host.prototype.targetRootGuard",
+  assert.ok(member && probeConfigMember, "targetRootGuard/codeSyncRootProbeConfig missing from legacy.ts");
+  // The sandbox must inject EXACTLY the identifiers the real module provides —
+  // a previously injected remotePathKey existed only here, masking an unbound
+  // identifier (ReferenceError swallowed as null) in production. The strict
+  // guard additionally consumes the real effective-config resolver, extracted
+  // verbatim below instead of mocked.
+  const proto = vm.runInNewContext(ts.transpileModule("class Host{" + probeConfigMember.getText(ast) + member.getText(ast) + "};Host.prototype",
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
-    { resolveProjectRootMap, machineStateGuard, remotePathKey: value => canonicalRemotePath(String(value || "")).path });
+    { resolveProjectRootMap, machineStateGuard, remoteRootsEqual });
   const host = { setupConfig: { workerTunnels: [{ id: "w", agentProjectDir: "/srv", agentInstallDir: "/opt/runtime",
     agentStateDir: "/srv/project/control", workerStateDir: "/srv/project/run/collector", remoteAgentPort: 23457, localForwardPort: 23456 }] },
     agentRuntimeDirs: () => ({ workDir: "/srv/project", installDir: "/opt/runtime" }), lastWorkerProbes: {} };
+  // The strict guard resolves its transport expectations through the real
+  // effective-config method — wire it the same way the production class does.
+  host.codeSyncRootProbeConfig = proto.codeSyncRootProbeConfig.bind(host);
+  const method = proto.targetRootGuard;
   const target = { id: "w", remotePath: "/srv/project", localForwardPort: 23456, remoteAgentPort: 23457 };
   assert.deepEqual(JSON.parse(JSON.stringify(method.call(host, target))), { prefixes: ["control", "run/collector"], unknown: false });
   host.lastWorkerProbes.w = { status: "ok", workerId: "w", projectRoot: "/srv/project", localForwardHost: "127.0.0.1",

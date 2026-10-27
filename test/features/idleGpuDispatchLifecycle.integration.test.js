@@ -38,19 +38,24 @@ function provider(names,extra={}) {
 
 const endpoints={declaredJobPaths:true,formalJobIdentityEnv:1,taskShellEnvironment:1,projectManagedValidation:1,gpuQuotaScheduling:1};
 function gpu(id,free=24){return {index:String(id),memoryTotalMb:32768,memoryFreeMb:free*1024,memoryUsedMb:(32-free)*1024,utilizationPercent:free<22?99:0,processes:[]};}
-function nativeFixture(){
-  const Provider=provider(['tickDistributedQueueCore']),p=new Provider(),remote={a:[],b:[]},sent=[],errors=[];
-  let queue=DistributedPlanQueue.enqueuePlan(DistributedPlanQueue.emptyDistributedQueue(),{projectId:DistributedPlanQueue.canonicalProjectId(root),
+function nativeFixture(options={}){
+  const projectRoot=options.projectRoot||root;
+  const Provider=provider(options.methods||['tickDistributedQueueCore'],options.context||{}),p=new Provider(),remote={a:[],b:[]},sent=[],errors=[];
+  let queue=DistributedPlanQueue.enqueuePlan(DistributedPlanQueue.emptyDistributedQueue(),{projectId:DistributedPlanQueue.canonicalProjectId(projectRoot),
     schedulingMode:'local_idle',planFile:'p.yaml',revision:'r',codeFingerprint:'f',executionMode:'train',
     jobs:[0,1].map(index=>({index,case:'bus',seed:index,outputDir:'runs/'+index,collectionResultCsv:'tmp/result/'+index+'.csv'}))},'p');
   let builds=0,gpus={a:[gpu(0)],b:[gpu(0)]};
   Object.assign(p,{taskLifecycleProtocol:2,distributedQueueGeneration:0,distributedPlanStopEpoch:0,distributedNextFailureDetailAt:Infinity,
+    unifiedDomainState:()=>({active:false,blocked:""}), // 块B：夹具根未登记 → 既有单机派发/发送路径（含真实 send 法身用例）
     distributedNextPostprocessAt:Infinity,distributedLaunchInFlight:new Set(),distributedNextProbeAt:0,lastWorkerProbes:{a:{status:'ok',capabilities:{endpoints}},b:{status:'ok',capabilities:{endpoints}}},
     lastCodeSyncState:{workerVersions:{a:{fingerprint:'f'},b:{fingerprint:'f'}}},workerActionTargets:()=>[{id:'a'},{id:'b'}],workerCodeSyncTargets:()=>[],
     enabledWorkerConfigs:()=>[{id:'a'},{id:'b'}],schedulerSettings:()=>({}),gpuOwnerConfig:()=>({}),isRealtimeMode:()=>true,
     projectTopologyAssessment:()=>({mode:'worker_pool'}),recordActionError:e=>errors.push(e),postState(){},scheduleDistributedPostprocess(){},
     queuePlanArtifactSyncStatusCheck(){},detachStaleDistributedTick(){},buildDistributedJobCodeManifest:async()=>{builds++;return {};},
-    loadDistributedQueue:async()=>structuredClone(queue),saveDistributedQueue:async(_root,value)=>{queue=structuredClone(value);},
+    loadDistributedQueue:async()=>structuredClone(queue),saveDistributedQueue:async(_root,value,options)=>{
+      if(options?.mutateLatest) queue=options.mutateLatest(structuredClone(queue));
+      else { assert.ok(value,'fixture requires an explicit queue or mutateLatest');queue=structuredClone(value); }
+    },
     client:{getGpu:async()=>gpus,postWorkerAction:async()=>{throw Error('unexpected stop/post');}},
   });
   p.readWorkerTaskSnapshotBatch=async ids=>ids.map(workerId=>({workerId,queryComplete:true,generatedAt:new Date().toISOString(),fetchedAt:new Date().toISOString(),
@@ -190,7 +195,7 @@ test('late native receipt after a generation change cannot save or publish the o
 });
 test('G1 actual native RPC preserves mode, quota and explicit GPU admission while returning only unknown',async()=>{
   const Provider=provider(['sendDistributedJob']),p=new Provider(),F='f'.repeat(64);const sent=[];
-  Object.assign(p,{distributedQueueGeneration:0,distributedPlanStopEpoch:0,workerActionTargets:()=>[{id:'w',condaEnv:'env'}],enabledWorkerConfigs:()=>[{id:'w'}],
+  Object.assign(p,{distributedQueueGeneration:0,distributedPlanStopEpoch:0,unifiedDomainState:()=>({active:false,blocked:""}),workerActionTargets:()=>[{id:'w',condaEnv:'env'}],enabledWorkerConfigs:()=>[{id:'w'}],
     schedulerSettings:()=>({}),lastWorkerProbes:{w:{capabilities:{endpoints,actionEndpoints:{'register-code-sync-proof':true}}}},
     lastWorkerTaskSnapshots:new Map([[root+'\u0000w',{capabilities:{taskLifecycle:2}}]]),
     lastCodeSyncState:{workerVersions:{w:{fingerprint:F,manifestDigest:F,codeSyncProofId:'a'.repeat(64)}}},
@@ -286,4 +291,176 @@ test('GPU read starts while task snapshots are still pending',async()=>{
 test('saved server_prequeue settings keep new unassigned jobs local',async()=>{
   const f=fixture();f.stored().plans[0].schedulingMode='server_prequeue';await f.p.tickDistributedQueueCore();
   assert.equal(f.calls.length,1);assert.equal(f.calls[0].gpuId,'0');assert.equal(f.stored().plans[0].localDispatchOverride,true);
+});
+
+// The normal native-tick fixture used to replace scheduleDistributedPostprocess with a no-op.
+// Keep production tick -> completion scheduler -> per-job merge -> SHA receipt connected here;
+// only Worker execution and the network transport are synthetic, inside a private project.
+test('native completion ticks mirror every interleaved job across plans once with real file SHA and no training replay',async()=>{
+  const projectRoot=fs.mkdtempSync(path.join(os.tmpdir(),'se-plan-job-chain-'));
+  const {CompletedJobSyncHost}=require('../../src/extension/CompletedJobSyncHost.ts');
+  const {buildScopeStatuses,scopeInventoryPathAllowed}=require('../../src/features/SyncScopeStatus.ts');
+  const {planLatestWorkerMerge}=require('../../src/features/SyncLatestMerge.ts');
+  const {runSyncScopeBatch}=require('../../src/features/SyncScopeBatch.ts');
+  const {loadSyncHolds,safeSyncPath}=require('../../src/features/SyncResolution.ts');
+  const {jobArtifactRunGeneration}=require('../../src/features/JobArtifactSyncIdentity.ts');
+  const {isUnderMachineStatePrefixes}=require('../../src/features/ProjectRootMap.ts');
+  const {normalizeMirrorScopePaths}=require('../../src/features/ProjectMirror.ts');
+  const f=nativeFixture({projectRoot,methods:['tickDistributedQueueCore','scheduleDistributedPostprocess',
+    'syncCompletedPlanArtifacts','mergeLatestWorkerVersions','patchDistributedJob'],context:{
+    workspaceRoot:()=>projectRoot,CompletedJobSyncHost,scopeInventoryPathAllowed,planLatestWorkerMerge,runSyncScopeBatch,
+    loadSyncHolds,safeSyncPath,path,jobArtifactRunGeneration,isUnderMachineStatePrefixes,normalizeMirrorScopePaths,
+    vscode:{workspace:{getConfiguration:()=>({get:(_key,fallback)=>fallback})},Uri:{file:value=>value}},
+    isLocalCodeOwnedPath:()=>false,workerFpsyncTaskLabel:()=>'',UiCommandCancelled:class extends Error{},
+  }});
+  const p=f.p,targets=['a','b','c'].map(id=>({id,host:id+'.invalid',port:2222,user:'synthetic',remotePath:'/synthetic/'+id}));
+  const locations=Object.fromEntries(targets.map(t=>[t.id,path.join(projectRoot,'synthetic-workers',t.id)]));
+  for(const dir of Object.values(locations))fs.mkdirSync(dir,{recursive:true});
+  const crypto=require('node:crypto'),sha=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  function inventory(id){const result={};function walk(dir,rel=''){
+    for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
+      const file=path.join(dir,entry.name),key=rel?rel+'/'+entry.name:entry.name;
+      if(entry.isDirectory())walk(file,key);else {const st=fs.statSync(file);result[key]={sha256:sha(file),size:st.size,modifiedAtMs:st.mtimeMs};}
+    }
+  }walk(locations[id]);return result;}
+  // Remove the old own-property no-op so this case actually exercises the production scheduler.
+  delete p.scheduleDistributedPostprocess;
+  Object.assign(p,{context:{globalStorageUri:{fsPath:path.join(projectRoot,'synthetic-old-storage')}},
+    captureProjectContext:()=>({root:projectRoot}),projectContextIsCurrent:ctx=>ctx.root===projectRoot,
+    workerCodeSyncTargets:()=>targets,enabledWorkerConfigs:()=>targets,sftpServerOptions:row=>row,
+    localMachineStateGuard:()=>({prefixes:[],unknown:false}),targetRootGuard:()=>null,
+    machineStatePrefixesById:()=>[],machineStatePrefixesForTarget:()=>[],assertSshTransportIdentities:async()=>{},
+    prepareCodeSyncRootGuards:async rows=>({guards:new Map(rows.map(t=>[t,{prefixes:[],unknown:false}])),assertBindingsCurrent:()=>{}}),
+    refreshSyncScopeStatus:async()=>buildScopeStatuses({local:{},workers:Object.fromEntries(targets.map(t=>[t.id,inventory(t.id)]))},'server-server',['.'],new Set(),{entries:{}}),
+    verifiedSftpProjectInventory:async({source})=>({files:inventory(source.id)}),
+  });
+  p.lastWorkerProbes.c={status:'ok',capabilities:{endpoints}};
+  const transfers=[];
+  p.simpleSftpApiCall=async(method,request)=>{
+    assert.equal(method,'sync.serverToServerFpsync');assert.ok(request.retentionKey);assert.ok(request.generation);
+    transfers.push(structuredClone(request));
+    for(const rel of request.relativePaths){const dest=path.join(locations[request.destination.id],rel);
+      fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.join(locations[request.source.id],rel),dest);}
+    return {ok:true};
+  };
+  const second=DistributedPlanQueue.enqueuePlan(f.stored(),{projectId:DistributedPlanQueue.canonicalProjectId(projectRoot),
+    schedulingMode:'local_idle',planFile:'q.yaml',revision:'r',codeFingerprint:'f',executionMode:'train',
+    jobs:[0,1].map(index=>({index,case:'bus',seed:index,outputDir:'runs/q/'+index,collectionResultCsv:'tmp/q/'+index+'.csv'}))},'q');
+  Object.assign(f.stored(),second);
+  f.own(0,'running');f.own(1,'queued');
+  for(const job of f.stored().plans.find(row=>row.id==='q').jobs){Object.assign(job,{status:'queued',workerId:'b',gpuId:String(job.index),commandId:'q-'+job.index,runKey:'q-'+job.index});f.publish(job.index,'queued','q');}
+  const expected=[];
+  function complete(planId,index){const job=f.stored().plans.find(row=>row.id===planId).jobs.find(row=>row.index===index);
+    const rel=job.outputDir+'/model.pth',bytes=planId+'-'+index+'-real-artifact';
+    fs.mkdirSync(path.dirname(path.join(locations[job.workerId],rel)),{recursive:true});fs.writeFileSync(path.join(locations[job.workerId],rel),bytes);
+    expected.push({planId,index,rel,bytes});f.publish(index,'completed',planId);
+  }
+  async function tick(){await p.tickDistributedQueueCore();if(p.distributedPostprocessPromise)await p.distributedPostprocessPromise;await new Promise(setImmediate);}
+  complete('p',0);await tick();assert.equal(transfers.length,2,'the first job syncs while other jobs are not complete');
+  f.publish(1,'running','p');complete('q',0);await tick();assert.equal(transfers.length,4,'another plan completion is not lost');
+  complete('p',1);complete('q',1);await tick();
+  assert.equal(transfers.length,8,'each of four jobs has exactly two other Worker destinations');
+  for(const item of expected){const job=f.stored().plans.find(row=>row.id===item.planId).jobs.find(row=>row.index===item.index);
+    assert.equal(job.status,'completed');assert.equal(job.latestArtifactSync.state,'synced');
+    for(const t of targets)assert.equal(fs.readFileSync(path.join(locations[t.id],item.rel),'utf8'),item.bytes);
+    assert.equal(new Set(targets.map(t=>sha(path.join(locations[t.id],item.rel)))).size,1);
+    assert.equal(transfers.filter(t=>t.relativePaths.includes(item.rel)).length,2);
+  }
+  await tick();assert.equal(transfers.length,8,'repeated completion observations never copy the same content again');
+  assert.equal(f.sent.length,0,'observing and syncing completed jobs never restarts their training');
+  assert.deepEqual(f.errors,[]);
+});
+
+// r49 返修 3：完成态与后台同步失败必须分离——真实 tick 触发生产 scheduleDistributedPostprocess，
+// 同步体（syncCompletedPlanArtifacts 入口）可控地保持真实 pending；队列完成状态照常发布且不被后续
+// tick 阻塞；释放为真实失败后，仅 diagnostics/原生通知记录错误，绝不改写运行完成状态。
+test('a pending automatic sync keeps completed queue state separate and its real failure lands only in diagnostics plus one native notice',async()=>{
+  const f=nativeFixture({methods:['tickDistributedQueueCore','scheduleDistributedPostprocess'],context:{
+    UiCommandCancelled:class UiCommandCancelled extends Error{constructor(message='操作已取消。',code='USER_CANCELLED'){super(message);this.name='UiCommandCancelled';this.code=code;}},
+  }});
+  delete f.p.scheduleDistributedPostprocess; // 与 G4 同一配方：去掉 own-property no-op，走生产调度成员
+  const notes=[];let startedCalls=0,releaseSync;
+  const pending=new Promise((_resolve,reject)=>{releaseSync=()=>reject(Error('mirror storage write failed'));});
+  let started;const startedSignal=new Promise(r=>started=r);
+  Object.assign(f.p,{captureProjectContext:()=>({}),projectContextIsCurrent:()=>true,
+    showNativePanelMessage:m=>notes.push(structuredClone(m)),
+    syncCompletedPlanArtifacts:async()=>{startedCalls++;started();await pending;}});
+  // :170 同配方让 tick 真实"观察"到完成事件（开场即 completed 无 newTerminal，生产不会调度）
+  f.own(0,'running');f.publish(0,'completed');f.own(1,'running');
+  await f.p.tickDistributedQueueCore();
+  assert.equal(f.stored().plans[0].jobs[0].status,'completed','真实完成事件经 tick 落盘后队列完成状态照常发布');
+  assert.ok(f.p.distributedPostprocessPromise,'真实生产 schedule 登记了后台同步 promise，不是 no-op');
+  await startedSignal;
+  assert.equal(startedCalls,1,'后台同步体真实启动且恰好一次');
+  assert.equal(f.stored().plans[0].jobs[0].status,'completed','完成状态不等待后台同步');
+  assert.equal(notes.length,0,'pending 期间零通知');
+  await f.p.tickDistributedQueueCore(); // 同步在途期间再次 tick：不阻塞、不重复派发
+  assert.equal(startedCalls,1,'在途 promise 未被重复派发（生产 single-promise 守卫生效）');
+  assert.equal(f.stored().plans[0].jobs[0].status,'completed');
+  const promise=f.p.distributedPostprocessPromise;
+  releaseSync();
+  await assert.rejects(promise,/mirror storage write failed/,'释放为生产 distributedPostprocessPromise 的真实失败');
+  assert.equal(f.p.distributedPostprocessPromise,undefined,'在途 promise 照常清空');
+  assert.equal(f.p.completedPlanMirrorDiagnostics?.status,'failed','失败仅落 diagnostics');
+  assert.equal(f.p.completedPlanMirrorDiagnostics.consecutiveFailures,1);
+  assert.match(f.p.completedPlanMirrorDiagnostics.reason,/mirror storage write failed/);
+  assert.equal(notes.length,1,'真实外层失败恰一条原生通知');
+  assert.match(notes[0].message,/自动产物同步未完成：mirror storage write failed/);
+  assert.match(notes[0].message,/运行完成状态不变，可在对应 Job 行重新同步/);
+  assert.equal(f.stored().plans[0].jobs[0].status,'completed','同步失败绝不改写运行完成状态（完成态分离）');
+});
+
+// r50 已证源码分支 + r53 去重上下文隔离（父审核 r53-main-review-blocked.json）：外层失败回调既不把旧
+// scope 的普通 Error 弹进切换后的新项目，也不能让"从未提示过/属另一 scope"的同 reason 失败压掉当前
+// 项目首条真提示。capture/match 用生产同事实 {root,generation}（仅标量，不存 signal/client）。
+// 双场景矩阵：A 未提示（原 r50 断言全保留）与 A 已实际提示 → 切 B → B 首条同 reason 必恰 1 条
+// → B 同 scope 连续再失败（第二、三轮）总提示不追加、key 在被抑制轮中保留 → 成功 ready 后同错可再提示。
+// 旧码（全局 reason 去重、无 scope）在"B 首错"一步必红：Native 先用旧生产 0e6ea0e4 跑本 suite 留真实红。
+test('notice suppression is scoped to the context that actually received it across a workspace switch',async()=>{
+ for(const aNoticedBeforeSwitch of [false,true]){
+  const f=nativeFixture({methods:['tickDistributedQueueCore','scheduleDistributedPostprocess'],context:{
+    UiCommandCancelled:class UiCommandCancelled extends Error{constructor(message='操作已取消。',code='USER_CANCELLED'){super(message);this.name='UiCommandCancelled';this.code=code;}},
+  }});
+  delete f.p.scheduleDistributedPostprocess;
+  const notes=[];const ctx={root:'projectA',generation:1};const REASON='同步已停止：项目、连接或清理操作已变化。';
+  let mode=aNoticedBeforeSwitch?'fail':'pending',releaseSync,started,startedSignal=new Promise(r=>{started=r;});
+  Object.assign(f.p,{captureProjectContext:()=>({root:ctx.root,generation:ctx.generation}),
+    projectContextIsCurrent:c=>c.root===ctx.root&&c.generation===ctx.generation,
+    showNativePanelMessage:m=>notes.push(structuredClone(m)),
+    syncCompletedPlanArtifacts:async()=>{if(mode==='pending'){started();await new Promise(r=>{releaseSync=r;});throw Error(REASON);}if(mode==='fail')throw Error(REASON);}});
+  f.own(0,'running');f.publish(0,'completed');f.own(1,'running');
+  await f.p.tickDistributedQueueCore();
+  const settle=async p=>{await p.catch(()=>{});await new Promise(setImmediate);};
+  if(aNoticedBeforeSwitch){
+    await settle(f.p.distributedPostprocessPromise);
+    assert.equal(notes.length,1,'A scope 首条真实故障恰一次原生提示');
+    mode='pending';startedSignal=new Promise(r=>{started=r;});
+    f.p.scheduleDistributedPostprocess(root,true); // A 第二轮同 reason 失败：已提示过，切走前也不再刷屏
+  }
+  const stalePromise=f.p.distributedPostprocessPromise;assert.ok(stalePromise,'旧项目后台同步已真实开始');
+  await startedSignal;
+  ctx.generation++; // 工作区切换：A 捕获的 generation 不再匹配
+  const promise=stalePromise;
+  releaseSync();
+  await settle(promise);
+  assert.equal(notes.length,aNoticedBeforeSwitch?1:0,'旧 scope 的错误（无论此前是否提示过）绝不向切换后的新项目追加原生提示（B 契约：仅当前项目真故障才弹）');
+  assert.equal(f.p.completedPlanMirrorDiagnostics?.status,'failed','诊断记录不受上下文守卫影响，照常保留');
+  assert.equal(f.p.completedPlanMirrorDiagnostics.reason,REASON,'原因原样保留');
+  assert.equal(f.p.distributedPostprocessPromise,undefined,'在途 promise 照常清空');
+  const baseline=aNoticedBeforeSwitch?1:0;
+  mode='fail'; // B scope（新 generation）首条同 reason 失败：旧码在此被全局去重吞掉 ⇒ 旧码反证必红
+  f.p.scheduleDistributedPostprocess(root,true);await settle(f.p.distributedPostprocessPromise);
+  assert.equal(notes.length,baseline+1,'B scope 首条同 reason 真失败必恰一次提示（旧 scope 未提示/已提示都绝不压制新项目）');
+  assert.match(notes.at(-1).message,/自动产物同步未完成/);
+  f.p.scheduleDistributedPostprocess(root,true);await settle(f.p.distributedPostprocessPromise);
+  f.p.scheduleDistributedPostprocess(root,true);await settle(f.p.distributedPostprocessPromise);
+  assert.equal(notes.length,baseline+1,'B scope 同 reason 连续第二、三轮失败总提示仍不追加');
+  const scopeKey=JSON.stringify([ctx.root,ctx.generation]);
+  assert.ok((f.p.completedPlanMirrorDiagnostics.notifiedScopes||[]).some(s=>s===scopeKey),
+    '去重标记只登记真实弹过的捕获 scope（root+generation 标量），且在被抑制的后续轮中保留');
+  mode='ok';f.p.scheduleDistributedPostprocess(root,true);await settle(f.p.distributedPostprocessPromise);
+  assert.equal(f.p.completedPlanMirrorDiagnostics.status,'ready','成功复位保留');
+  mode='fail';f.p.scheduleDistributedPostprocess(root,true);await settle(f.p.distributedPostprocessPromise);
+  assert.equal(notes.length,baseline+2,'ready 复位后同 reason 再失败可再次提示');
+ }
 });

@@ -27,7 +27,7 @@ function runCli(args, extra = {}) {
     const child = spawn(process.execPath, [cli, ...args], {
       cwd: extra.cwd || root,
       windowsHide: true,
-      env: { ...process.env, SIMPLE_EXPERIMENT_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
+      env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
     });
     let stdout = "";
     let stderr = "";
@@ -110,14 +110,17 @@ test("simpleex --help lists domains", async () => {
 });
 
 
-test("simpleex run retains the manual experiment recorder", async () => {
+// Migrated 2026-10-23: the recorded local run was revoked (it executed arbitrary local commands
+// outside the API). The migrated assertion proves the refusal and that the payload command never ran.
+test("simpleex run refuses the revoked recorded-run entry and never executes the payload", async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "simpleex-recorded-run-"));
   const result = await runCli(["run", "--name", "manual", "--", process.execPath, "-e", "console.log('AUC: 0.9')"], { cwd });
-  assert.equal(result.code, 0, result.stderr);
-  const recorded = JSON.parse(result.stdout);
-  assert.ok(recorded.runDir.startsWith(path.join(cwd, "experiments", "runs")));
-  assert.equal(recorded.metricsRows, 1);
-  assert.equal(fs.existsSync(path.join(recorded.runDir, "artifact_manifest.json")), true);
+  assert.equal(result.code, 1, `expected refusal: ${result.stdout}${result.stderr}`);
+  const text = result.stdout + result.stderr;
+  assert.match(text, /recorded local run removed/);
+  assert.match(text, /simpleex experiment run/);
+  assert.ok(!text.includes("AUC: 0.9"), "the revoked entry must never execute the supplied command");
+  assert.ok(!fs.existsSync(path.join(cwd, "experiments", "runs")), "no run directory may be created by a refused entry");
 });
 
 
@@ -140,18 +143,7 @@ test("simpleex project status is human readable and json", async () => {
 });
 
 
-test("simpleex plan validate reuses PlanBuilder contract", async () => {
-  const ok = await runCli(["plan", "validate", validPlan, "--json"]);
-  assert.equal(ok.code, 0);
-  assert.equal(JSON.parse(ok.stdout).valid, true);
-
-  const bad = await runCli(["plan", "validate", invalidPlan, "--json"]);
-  assert.equal(bad.code, 3);
-  const payload = JSON.parse(bad.stdout);
-  assert.equal(payload.valid, false);
-  assert.ok(Array.isArray(payload.errors));
-  assert.ok(payload.errors.length > 0);
-});
+test("simpleex plan validate uses the host contract and reports its failures", require("./serverPlanValidation.support.cjs"));
 
 
 test("simpleex experiment list --json is parseable and filterable", async () => {

@@ -10,7 +10,7 @@ export const BATCH_OBSERVATION_UPGRADE_CODE = "SFTP_BATCH_OBSERVATION_UPGRADE_RE
 export const BATCH_OBSERVATION_UPGRADE_MESSAGE = "当前 SimpleSFTP 不支持批量只读观察 observeBatch；请更新配套插件后重新查询。未重新执行任何文件操作，本轮不会退回逐文件远端查询。";
 
 export type ObserveTarget = { key: string; relativePath: string; type: "file" | "directory";
-  backendToken?: string; backendIndex?: number; device?: string | number; inode?: string | number; isolationRelativePath?: string };
+  backendToken?: string; backendIndex?: number; backendDigest?: string; device?: string | number; inode?: string | number; isolationRelativePath?: string };
 export type ObservationEntry = { key: string; relativePath?: string; type?: string;
   status?: "present" | "gone" | "replaced";
   target?: { relativePath?: string; type?: string; absolutePath?: string; missing?: boolean; device?: string | number; inode?: string | number } | null;
@@ -100,7 +100,7 @@ function sourceIdentity(digest: (value: unknown) => string, node: Record<string,
 }
 function targetFacts(digest: (value: unknown) => string, target: ObserveTarget): string {
   return digest({ key: target.key, relativePath: target.relativePath, type: target.type,
-    backendToken: target.backendToken ?? null, backendIndex: target.backendIndex ?? null,
+    backendToken: target.backendToken ?? null, backendIndex: target.backendIndex ?? null, backendDigest: target.backendDigest ?? null,
     device: target.device === undefined ? null : String(target.device), inode: target.inode === undefined ? null : String(target.inode),
     isolationRelativePath: target.isolationRelativePath ?? null });
 }

@@ -9,6 +9,7 @@ const { collectPlanCleanupEvidence } = require('../../dist/features/PlanCleanupE
 const { canonicalProjectId } = require('../../dist/features/DistributedPlanQueue');
 const { pendingPlanSyncs } = require('../../dist/features/PlanArtifactSync');
 const { plansForOutputSync } = require('../../dist/features/PlanOutputRetention');
+if(!process.env.LOCALAPPDATA)process.env.LOCALAPPDATA=require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(),'r17-lease-')); // 与 r3 isolatedTestEnv 同约定：租约注册表落隔离目录（沙箱 homedir/AppData 只读，产品路径不变）
 const clone = value => JSON.parse(JSON.stringify(value));
 
 async function fixture() {
@@ -51,6 +52,41 @@ async function fixture() {
   const confirm=async preview=>service.confirm({token:preview.token,digest:preview.digest,phase:1,confirm:true,exactTargets:preview.rows.filter(r=>r.disposition===preview.action).map(r=>r.node.id+':'+r.absolutePath)});
   return {root,scope,storageRoot,service,ports,sources,calls,confirm,get mutations(){return mutations},get indexed(){return indexed},disconnect(){failOnce=true},collision(){restoreCollision=true}};
 }
+
+test('two valid cleanup targets cannot be confirmed in a reordered echo',async()=>{
+  const f=await fixture(),p=await f.service.preview({planFile:f.scope.planFile});
+  const exact=p.rows.filter(r=>r.disposition===p.action).map(r=>r.node.id+':'+r.absolutePath);
+  assert.equal(exact.length,2,'both targets must be executable, not a vacuous blocked preview');
+  await assert.rejects(f.service.confirm({token:p.token,digest:p.digest,phase:1,confirm:true,exactTargets:[...exact].reverse()}),/CONFIRM_REQUIRED/);
+  assert.equal(f.mutations,0);
+  const operation=await f.service.confirm({token:p.token,digest:p.digest,phase:1,confirm:true,exactTargets:exact});
+  assert.equal(operation.preview.confirmations,1);
+  assert.equal(f.mutations,0);
+});
+// ── r87（块3 合并查询）：执行前逐目标复查按节点合并为一次批量预览；单目标不符仍逐条阻断、零 mutation ──
+test('r87 block3: the pre-execute recheck merges same-node targets into one batched preview while a per-target mismatch still blocks with zero mutations',async()=>{
+  const extra={nodeId:'local',relativePath:'work_dirs/exact/c.csv',type:'file',category:'专用产物',owners:['owner'],evidence:['exact job / attempt / command registration'],dependencies:[]};
+  const f=await fixture();f.scope.candidates.push(clone(extra));
+  f.sources.set('local:work_dirs/exact/c.csv','sha-work_dirs/exact/c.csv'); // r90：补上第三个候选在源台账里的事实（fixture 键 nodeId:relativePath）
+  const p=await f.service.preview({planFile:f.scope.planFile});
+  assert.equal(p.rows.filter(r=>r.disposition===p.action).length,3,'local 两个目标 + w1 一个目标');
+  const operation=await f.confirm(p);
+  const cut=f.calls.length;
+  await f.service.execute(operation.id);
+  const recheck=f.calls.slice(cut).filter(row=>row.method==='files.cleanup.preview');
+  assert.equal(recheck.length,2,'每个节点身份一次批量复查，而不是逐行一次');
+  assert.equal(recheck.find(row=>row.params.node.id==='local').params.targets.length,2,'同节点两个目标同批携带各自的 destination/expectedOwner');
+  assert.equal(f.mutations,3);
+  const g=await fixture();g.scope.candidates.push(clone(extra));
+  g.sources.set('local:work_dirs/exact/c.csv','sha-work_dirs/exact/c.csv'); // r93：与 f 镜像——同一候选的源台账事实两个分支都必须在，否则 g.confirm 先被 MISSING_TARGET 挡下，走不到篡改断言
+  const gp=await g.service.preview({planFile:g.scope.planFile});const gop=await g.confirm(gp);
+  const original=g.ports.sftp;
+  g.ports.sftp=async(method,params)=>{const result=await original(method,params);
+    if(method==='files.cleanup.preview'&&params.targets.length===2)result.targets[1].fingerprint='sha-tampered';
+    return result;};
+  await assert.rejects(g.service.execute(gop.id),error=>error.apiData?.code==='PREVIEW_CHANGED');
+  assert.equal(g.mutations,0,'一个目标的内容变化不得放行任何一次 mutation');
+});
 
 test('preview performs no journal writes, no mutation, keeps exact evidence and immutable returned records',async()=>{
   const f=await fixture(),p=await f.service.preview({planFile:f.scope.planFile});
@@ -264,7 +300,8 @@ test('partial restore discovery skips metadata files already restored and rechec
 test('Host refuses a backend without the required Git ancestor safety capability before approvals',async()=>{
   const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};
   vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>['vscode','./PlanCleanupPanel'].includes(name)?{}:from(name)});
-  let safe=false,formal=false;const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}},simpleSftpApiCall:async()=>({safety:{gitRepositoryAncestors:safe,readOnlyReceiptCheck:safe,formalJobOwner:formal,immutableArchiveBatch:formal}})},'C:/fixture');
+  // 能力门与 root 形状无关；root 必须是跨平台绝对路径（r17 返修#1：派生入口拒绝相对/伪绝对根）。
+  let safe=false,formal=false;const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}},simpleSftpApiCall:async()=>({safety:{gitRepositoryAncestors:safe,readOnlyReceiptCheck:safe,formalJobOwner:formal,immutableArchiveBatch:formal}})},path.resolve(os.tmpdir(),'cleanup-capability-fixture'));
   await assert.rejects(host.service.ports.sftp('files.cleanup.preview',{}),error=>error.apiData.code==='SFTP_SAFE_CLEANUP_UPGRADE_REQUIRED');
   safe=true;assert.equal((await host.service.ports.sftp('files.cleanup.preview',{})).safety.gitRepositoryAncestors,true);
   const params={targets:[{expectedOwner:{resultPathPolicy:'declared'},archiveBatch:'job-'+'a'.repeat(48)}]};
