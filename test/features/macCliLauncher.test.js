@@ -80,7 +80,7 @@ function registerCopiedCliCommand(extensionPath, componentDirectory) {
 // 用 --json 才能拿到可解析结果并及时退出（人类可读体检表格不保证退出），但执行的命令主体始终是复制出去的那一条。
 // 必须异步：替身本地服务在测试进程里，同步等待会把子进程的请求饿死。
 function runCopiedCli(command, directory, env) {
-  return new Promise(resolve => execFile(shell(), ["-c", command + " --json"], { cwd: directory, encoding: "utf8", timeout: 15000, windowsHide: true,
+  return new Promise(resolve => execFile(shell(), ["-c", command + " --json"], { cwd: directory, encoding: "utf8", timeout: 10000, windowsHide: true,
     env: { ...process.env, MSYS_NO_PATHCONV: "1", ...env } },
     (error, stdout, stderr) => resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0,
       stdout: String(stdout || ""), stderr: String(stderr || (error && error.stderr) || "") })));

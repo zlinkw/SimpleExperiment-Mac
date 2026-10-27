@@ -37,8 +37,27 @@ Module._extensions[".ts"] = (loadedModule, filename) => {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText, filename);
 };
+// 真实 mapper 的 host 侧只接受无越界 POSIX 绝对路径（src/platform/Filesystem.ts:4-10），Windows 宿主的
+// 临时目录是盘符路径，会被直接拒；这是宿主路径口径，不是本发布线的行为差异，也不允许为此去放宽生产 mapper。
+// 这里沿用已有的 Module._load 注入边界：只为被加载的 legacy 模块提供工作区位置适配器，把 file URI 的盘符
+// 路径规范化成正斜杠 hostPath 返回，其余行为原样透传真实 mapper；真实 mapper 自身的“接受 POSIX、拒绝盘符”
+// 契约在本文件末尾单独断言，不因为适配器而丢失。
+const hostWorkspacePath = fsPath => String(fsPath).replace(/\\/g, "/");
+const realWorkspaceMapper = require(path.join(repo, "src/core/WorkspacePathMapper.ts"));
+const workspaceLocationAdapter = {
+  ...realWorkspaceMapper,
+  resolveWorkspaceLocation(uri, config = {}) {
+    if (String(uri?.scheme || "").toLowerCase() === "file" && /^[A-Za-z]:[\\/]/.test(String(uri?.fsPath || ""))) {
+      const hostPath = hostWorkspacePath(uri.fsPath);
+      return { scheme: "file", editorUri: String(uri?.external || "file:///" + hostPath), hostPath, relativePath: "", remote: false };
+    }
+    return realWorkspaceMapper.resolveWorkspaceLocation(uri, config);
+  },
+};
+const legacyEntryFile = filename => /[\\/](src|dist)[\\/]extension[\\/]legacy\.(ts|js)$/.test(String(filename || ""));
 Module._load = function (request, parent, isMain) {
   if (request === "vscode") return vscode;
+  if (request === "../core/WorkspacePathMapper" && legacyEntryFile(parent?.filename)) return workspaceLocationAdapter;
   if (request === "node:worker_threads" || request === "worker_threads") {
     const workerThreads = originalLoad.call(this, request, parent, isMain);
     return { ...workerThreads, Worker: class extends workerThreads.Worker { constructor(filename, options) {
@@ -383,10 +402,11 @@ const scopeHostOriginal = {
   supportsPlanCodeScope: scopeHostModule.supportsPlanCodeScope,
   verifyWorkerPlanSource: scopeHostModule.verifyWorkerPlanSource,
 };
-// 本发布线的工作区身份只接受 POSIX 绝对路径（platform/Filesystem），Windows 盘符根由配套
-// Windows 仓的对应门禁覆盖；这里用两个真实可解析的 POSIX 根保持同一条切换围栏保证。
-const posixFolder = (fsPath) => ({ uri: { scheme: "file", path: fsPath, fsPath,
-  toString: () => "file://" + fsPath } });
+// 工作区根必须能被 resolveWorkspaceLocation 解析出 hostPath，否则 workspaceRoot() 退化成 undefined，
+// 测的就不是“同一根在册、随后切换”的围栏。适配器把盘符根规范成正斜杠 hostPath，因此快照键等
+// 以 hostPath 为键的地方必须用 hostWorkspacePath() 同一口径，不能再假设宿主原始反斜杠写法。
+const workspaceFolder = (fsPath) => ({ uri: { scheme: "file", path: fsPath, fsPath,
+  toString: () => "file://" + hostWorkspacePath(fsPath) } });
 
 function raceFixture(mode, flip) {
   const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "p6-race-"));
@@ -412,6 +432,8 @@ function raceFixture(mode, flip) {
   };
   if (mode === "p2") {
     host.lastWorkerTaskSnapshots = new Map([
+      // 生产用 `${workspaceRoot()}\u0000${workerId}` 取快照，适配器给出的 hostPath 是正斜杠形态。
+      [hostWorkspacePath(workspace) + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }],
       [workspace + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }],
       [String(undefined) + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }],
     ]);
@@ -486,13 +508,27 @@ test("R5 flip plus a preparation failure stays dispatchNotSent with zero sends f
 for (const mode of ["legacy", "p2"]) test(`R6 workspace switch between two resolvable roots during ${mode} preparation must send nothing`, async () => {
   const rootA = fs.mkdtempSync(path.join(os.tmpdir(), "p6-switch-a-"));
   const rootB = fs.mkdtempSync(path.join(os.tmpdir(), "p6-switch-b-"));
-  const f = raceFixture(mode, () => { vscode.workspace.workspaceFolders = [posixFolder(rootB)]; });
+  const f = raceFixture(mode, () => { vscode.workspace.workspaceFolders = [workspaceFolder(rootB)]; });
   try {
-    if (mode === "p2") f.host.lastWorkerTaskSnapshots = new Map([[rootA + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }]]);
-    vscode.workspace.workspaceFolders = [posixFolder(rootA)];
+    if (mode === "p2") f.host.lastWorkerTaskSnapshots = new Map([[hostWorkspacePath(rootA) + "\u0000worker-a", { capabilities: { taskLifecycle: 2 } }]]);
+    vscode.workspace.workspaceFolders = [workspaceFolder(rootA)];
     await assertFencedRace("R6-" + mode, f);
   } finally {
     Object.assign(scopeHostModule, scopeHostOriginal);
     vscode.workspace.workspaceFolders = [];
   }
+});
+
+// 适配器只补宿主口径，不改生产规则：真实 mapper 必须继续接受无越界 POSIX 根、继续拒绝盘符根与越界段，
+// 否则“Mac 侧工作区身份只认无越界 POSIX 绝对路径”这条生产契约就没人守；适配器本身只允许把盘符根规范成正斜杠。
+test("the real workspace mapper keeps its POSIX-only contract while the host adapter only normalises separators", () => {
+  const posix = realWorkspaceMapper.resolveWorkspaceLocation(
+    { scheme: "file", path: "/Users/demo/研究 项目", fsPath: "/Users/demo/研究 项目", toString: () => "file:///Users/demo/研究 项目" }, {});
+  assert.equal(posix.hostPath, "/Users/demo/研究 项目");
+  assert.equal(posix.remote, false);
+  assert.throws(() => realWorkspaceMapper.resolveWorkspaceLocation({ scheme: "file", path: "D:/demo", fsPath: "D:\\demo" }, {}),
+    /必须是无越界路径段的 POSIX 绝对路径/);
+  assert.throws(() => realWorkspaceMapper.resolveWorkspaceLocation({ scheme: "file", path: "/a/../../etc", fsPath: "/a/../../etc" }, {}),
+    /必须是无越界路径段的 POSIX 绝对路径/);
+  assert.equal(workspaceLocationAdapter.resolveWorkspaceLocation({ scheme: "file", fsPath: "D:\\demo\\研究 项目" }, {}).hostPath, "D:/demo/研究 项目");
 });

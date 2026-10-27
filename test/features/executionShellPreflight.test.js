@@ -8,7 +8,7 @@ function bashPath() {
   if (process.platform !== 'win32') return '/bin/bash';
   // 不能用 where.exe git 的第一条命中推导：本机 PATH 里可能先命中 ucrt64 等其他 git，推导出的不是 Git 自带 Bash。
   // 与 macCliLauncher 一致，从 git 自己的 exec-path 反推 Git 安装根的 bin/bash.exe。
-  const git = spawnSync('git', ['--exec-path'], { encoding: 'utf8', timeout: 10000, windowsHide: true });
+  const git = spawnSync('git', ['--exec-path'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
   assert.equal(git.status, 0, git.stderr);
   const bash = path.resolve(git.stdout.trim(), '../../..', 'bin/bash.exe');
   assert.ok(fs.existsSync(bash), 'a real local Git Bash is required: ' + bash);

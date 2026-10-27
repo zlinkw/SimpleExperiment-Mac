@@ -9,16 +9,26 @@ const { requirePositional } = require("../../dist/cli/parse");
 const { assertProjectPlan } = require("../../dist/cli/WorkflowRun");
 
 async function fixture(t) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "Mac Plan 中文 "));
+  // 两端都能表示的 Plan 名：保留中文名，但去掉首尾空白。Windows 的位置参数分支会 trim
+  // （src/cli/parse.ts:333-338），首尾空格在本机无法寻址，会让六项通用工作流行为整体停在
+  // “找不到 Plan 文件”的前置错误上，测不到真实围栏。首尾空格拼写只在末条用例里按分支断言，
+  // 并且仍留在发布延期清单里（非 win32 分支未在目标平台验证）。
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "Mac Plan 中文-"));
   const other = path.join(root, "另一个工作区"); fs.mkdirSync(other);
-  const planFile = "experiments/plans/ 计划 A.yaml ";
+  const planFile = "experiments/plans/计划 A.yaml";
   fs.mkdirSync(path.dirname(path.join(root, planFile)), { recursive: true });
   fs.writeFileSync(path.join(root, planFile), "name: mock-only\nbase_config: configs/mock.yaml\n", "utf8");
   fs.writeFileSync(path.join(root, "KEEP.txt"), "CLI mock evidence; no actual experiment or cleanup.\n", "utf8");
+  // 统一 CLI 入口契约（src/cli/LocalApiClient.ts:284-318）：发现文件必须带 pid/startedAt 实例身份，
+  // /api/v1/capabilities 必须回报同名插件槽位、同版本与同一 instanceId（`pid:startedAt`）。缺任一项，
+  // CLI 会在任何业务调用之前以 ENV 退出 2，六项工作流行为根本没跑到服务器。
+  const apiName = "SimpleExperiment", apiVersion = require("../../package.json").version;
+  const apiStartedAt = new Date(Date.UTC(2026, 9, 27, 0, 0, 0)).toISOString();
+  const apiInstanceId = process.pid + ":" + apiStartedAt;
   const calls = []; const state = { workspace: root, route: "ready", run: "pending", topology: "single_worker", failure: "", changeWorkspace: false };
   const server = http.createServer((req, res) => {
     assert.equal(req.headers.authorization, "Bearer workflow-fixture");
-    if (req.url === "/api/v1/capabilities") return res.end(JSON.stringify({ schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status", "workflow.plan", "workflow.run", "gpu.list"] }));
+    if (req.url === "/api/v1/capabilities") return res.end(JSON.stringify({ schemaVersion: 1, rpc: "json-rpc-2.0", methods: ["status", "workflow.plan", "workflow.run", "gpu.list"], name: apiName, version: apiVersion, instanceId: apiInstanceId }));
     const chunks = []; req.on("data", c => chunks.push(c));
     req.on("end", () => {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8")); calls.push(body);
@@ -41,7 +51,9 @@ async function fixture(t) {
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)); });
   const discovery = path.join(root, "发现文件 中文.json");
-  fs.writeFileSync(discovery, JSON.stringify({ baseUrl: `http://127.0.0.1:${server.address().port}`, token: "workflow-fixture" }), "utf8");
+  fs.writeFileSync(discovery, JSON.stringify({ schemaVersion: 1, name: apiName, version: apiVersion,
+    baseUrl: `http://127.0.0.1:${server.address().port}`, token: "workflow-fixture", status: "running",
+    pid: process.pid, startedAt: apiStartedAt, instanceId: apiInstanceId }), "utf8");
   const run = (args, offline = false) => new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.resolve(__dirname, "../../dist/cli.js"), "experiment", "run", planFile, ...args, "--json"], { cwd: root, windowsHide: true, env: { ...process.env, SIMPLE_EXPERIMENT_PROJECT_ROOT: root, SIMPLE_EXPERIMENT_MAC_API_FILE: offline ? path.join(root, "missing.json") : discovery } });
     let stdout = "", stderr = ""; const timer = setTimeout(() => child.kill(), 5000);
@@ -107,7 +119,11 @@ test("HTTP or business rejection never becomes submitted success and does not re
 
 test("Plan path spelling is retained and outside files or linked escapes are rejected", async t => {
   const f = await fixture(t);
-  assert.equal(requirePositional([" 计划 A.yaml "], 0, "plan"), " 计划 A.yaml ");
+  // 位置参数拼写保留本身是平台分支：win32 去首尾空白，非 win32 原样保留。本机只能观察到 win32 一侧，
+  // 非 win32 一侧继续留在延期清单（该分支未在目标平台验证），这里不新增平台跳过，只固定“每台主机都必须
+  // 说出自己的真实行为”这一条：结果必须精确等于该主机分支的既定处理，不能是第三种结果。
+  assert.equal(requirePositional([" 计划 A.yaml "], 0, "plan"),
+    process.platform === "win32" ? "计划 A.yaml" : " 计划 A.yaml ");
   assert.equal(assertProjectPlan(f.root, f.planFile), fs.realpathSync(f.root));
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), "other-Plan-"));
   fs.writeFileSync(path.join(outside, "outside.yaml"), "name: outside\n", "utf8");

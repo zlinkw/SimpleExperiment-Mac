@@ -6,7 +6,7 @@
     "experiment": "0.5.317",
     "sftp": "0.2.104"
   },
-  "note": "本轮在 Windows 开发机做限定预览打包。以下 21 行按真实签名分为四类：Mac 侧 POSIX 路径判定与宿主分隔符差异（15 行）、Mac 侧工作区根只接受 POSIX 绝对路径（3 行，生产 dist/core/WorkspacePathMapper.resolveWorkspaceLocation 直接拒绝宿主盘符路径，探针见证据目录 probe-workspace-cause.cjs）、需要真机 macOS 能力（1 行）、其余宿主差异与待上游定因（2 行）。这些行仍留在已评审的 520 行发布清单里，不执行、不计为通过，并在 release-notes.md 与 preview-deferral.json 公开；因此本包不声明 M5 或真机验收通过。上一版清单里 7 行经复核实为测试自身缺陷，已修好并退出延期：Mac 启动器命令模板改为现行 doctor 入口（生产 src/mac/CliLauncher.ts 同改）、缓存清理批处理两个用例、更新闸资源锁回执补齐 windowId 并按真实错误文案断言、任务窗口夹具改用与生产一致的 os.path.realpath 规范化、Git Bash 推导改用 git --exec-path、表写入失败注入按宿主分隔符匹配、本地删除脚本断言改用同源路径口径。映射结果身份一行不是 Mac 侧限制：Windows 权威仓同一处生产校验同样判坏暂存身份，已交权威仓负责人处置，本批不改动共享生产逻辑。",
+  "note": "本轮在 Windows 开发机做限定预览打包。以下 18 行仍留在已评审的 520 行发布清单里，不执行、不计为通过，并在 release-notes.md 与 preview-deferral.json 公开；因此本包不声明 M5 或真机 macOS 验收通过。分类按本轮实测结果点名，不再笼统写成“本机不可能验证”。① 已修并跑绿、本轮退出延期 3 行：两个结果工作流套件（metricsDownloadEndToEnd 19/19、metricAliasRebuildWorkflow 4/4）改用已有 Module._load 注入边界提供工作区位置适配器，返回各自真实临时目录的 hostPath、两个根互不相同，生产 mapper 一行未改，真实 mapper 的 POSIX 接受/盘符拒绝契约保留为独立断言；macSyncDelete 14/14 改用规范 POSIX 虚拟根，由注入磁盘层映射到唯一 Windows 临时目录，realpathSync 与 cwd 回报同一虚拟身份，真实文件变更、重解析点、冻结清单、句柄证明、./叶子名 与删后检查全部保留。② 确实需要目标平台 2 行：系统 OpenSSH 1 行只能真机验证；macCliWorkflow 1 行——src/cli/parse.ts:333-338 的位置参数分支在 win32 去首尾空白、非 win32 原样保留，本批把六项通用工作流行为改用两端都能表示的 Plan 名（保留中文名、去首尾空白）并补齐符合统一入口契约的发现文件后跑绿 6/6，但非 win32 一侧的拼写保留在本机无法观察，故整行仍按延期处理，且不新增平台跳过。③ 尚未闭合但不是宿主限制 1 行：shared-production-defect-mapped-staging-identity-awaiting-authority-repo-fix-and-sync——macMappedResultIdentity 9/11 的两条失败到达 legacy.ts 的暂存身份校验，同一处校验在 Windows 权威仓同样判坏，属共享生产缺陷，按既定顺序由 Windows 权威仓先修复再同步，本批不越界修改共享生产逻辑。④ 宿主分隔符差异 15 行按既有签名归档（探针与复跑记录在证据目录），本轮未改动，属需目标平台复验，不记通过。事实更正：上一版说明写“7 行退出延期”不对，26→21 实际只移除 5 行，7 是返修事项数，启动器与缓存清理此前不在这 26 行内；启动器复制已被移除的 self-check属 Mac 生产适配缺陷（已在 src/mac/CliLauncher.ts 修好），不是测试自身缺陷；同时删去“这些行在本 Windows 主机不可能通过”的过强说法。",
   "notVerified": [
     {
       "component": "experiment",
@@ -51,32 +51,17 @@
     {
       "component": "experiment",
       "file": "test/features/macCliWorkflow.test.js",
-      "reason": "mac-only-positional-argument-branch-trims-only-on-windows-host"
+      "reason": "mac-cli-positional-raw-spelling-branch-not-verified-on-target-platform"
     },
     {
       "component": "experiment",
       "file": "test/features/macMappedResultIdentity.test.js",
-      "reason": "shared-production-defect-mapped-staging-identity-awaiting-owner-decision"
+      "reason": "shared-production-defect-mapped-staging-identity-awaiting-authority-repo-fix-and-sync"
     },
     {
       "component": "experiment",
       "file": "test/features/macOpenSshTunnels.test.js",
       "reason": "requires-macos-real-host-system-openssh-user-authorized"
-    },
-    {
-      "component": "experiment",
-      "file": "test/features/macSyncDelete.test.js",
-      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
-    },
-    {
-      "component": "experiment",
-      "file": "test/features/metricAliasRebuildWorkflow.test.js",
-      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
-    },
-    {
-      "component": "experiment",
-      "file": "test/features/metricsDownloadEndToEnd.test.js",
-      "reason": "mac-posix-workspace-root-rejects-windows-absolute-path-not-mac-verifiable"
     },
     {
       "component": "experiment",
