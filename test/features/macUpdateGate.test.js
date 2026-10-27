@@ -37,7 +37,8 @@ test("cancelling update wait leaves transfers untouched and corrupt or live rece
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "mac-update-wait-")), leasePath = path.join(root, "lease.json"), directory = leasePath + ".resources-v2";
   fs.mkdirSync(directory);
   const file = path.join(directory, "c".repeat(64) + ".json");
-  const live = JSON.stringify({ schemaVersion: 2, processId: process.pid, leases: [], choosing: true, ticket: 1 });
+  // 生产 readResourceLeaseRegistrySecure 要求 windowId；缺字段的记录会被判为归属无法核实，测不到“活租约阻断等待”。
+  const live = JSON.stringify({ schemaVersion: 2, windowId: "other-window", processId: process.pid, leases: [], choosing: true, ticket: 1 });
   fs.writeFileSync(file, live, "utf8");
   const gate = new UpdateGate(leasePath, () => true), cancel = new AbortController();
   await gate.begin(root);
@@ -50,9 +51,16 @@ test("cancelling update wait leaves transfers untouched and corrupt or live rece
     await assert.rejects(waiting, /cancel only update wait/);
     // The wait never rewrites another window's registry file.
     assert.equal(fs.readFileSync(file, "utf8"), live);
-    // A corrupt registry blocks installation instead of silently draining.
-    fs.writeFileSync(file, JSON.stringify({ schemaVersion: 2, processId: 0, leases: [], choosing: true }), "utf8");
-    await assert.rejects(gate.wait(), /租约损坏/);
+    // 当前契约：读不回合法记录就要走归属核实，核实不了必须阻断安装，且原始记录保留（不得静默排空或清理）。
+    for (const corrupt of [
+      "{不是 json",
+      JSON.stringify({ schemaVersion: 2, processId: 0, leases: [], choosing: true }),
+      JSON.stringify({ schemaVersion: 2, windowId: "损坏窗口", processId: 0, leases: [{ resources: [] }], choosing: true }),
+    ]) {
+      fs.writeFileSync(file, corrupt, "utf8");
+      await assert.rejects(gate.wait(), /资源锁归属无法核实/);
+      assert.equal(fs.readFileSync(file, "utf8"), corrupt, "阻断必须保留原始租约记录");
+    }
   } finally { await gate.end(); }
 });
 

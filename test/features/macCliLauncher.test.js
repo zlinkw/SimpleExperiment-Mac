@@ -67,16 +67,36 @@ test("CLI command is registered independently of business code and startup failu
   assert.match(bootstrap, /try \{ cli\.refresh\(\); \}/);
 });
 
-test("actual Mac command refreshes and copies the quoted stable path without a business panel", async () => {
-  const directory = evidence(), commands = new Map(), copied = [];
+// 注册真实命令、让面板替身点“复制自检命令”，返回用户实际拿到的那条命令，后续用例必须执行这条命令本身。
+function registerCopiedCliCommand(extensionPath, componentDirectory) {
+  const commands = new Map(), copied = [];
   const exports = {}, vm = require("node:vm"), localRequire = require("node:module").createRequire(path.join(root, "dist/mac/CliLauncher.js"));
-  const sandbox = { exports, process: { ...process, platform: "darwin", arch: "arm64" }, require: name => name === "./MacPaths" ? { macComponentDirectory: () => path.join(directory, "component") } : localRequire(name) };
+  const sandbox = { exports, process: { ...process, platform: "darwin", arch: "arm64" }, require: name => name === "./MacPaths" ? { macComponentDirectory: () => componentDirectory } : localRequire(name) };
   vm.runInNewContext(fs.readFileSync(path.join(root, "dist/mac/CliLauncher.js"), "utf8"), sandbox);
-  exports.registerMacCli({ extensionPath: root, subscriptions: [] }, { commands: { registerCommand: (id, work) => { commands.set(id, work); return {}; } },
+  exports.registerMacCli({ extensionPath, subscriptions: [] }, { commands: { registerCommand: (id, work) => { commands.set(id, work); return {}; } },
     window: { showInformationMessage: async () => "复制自检命令" }, env: { clipboard: { writeText: async value => copied.push(value) } } });
-  const result = await commands.get(CLI_COMMAND)();
-  assert.equal(result.command, shellQuote(result.path) + " self-check"); assert.deepEqual(copied, [result.command]);
+  return { run: () => commands.get(CLI_COMMAND)(), copied };
+}
+// 用 --json 才能拿到可解析结果并及时退出（人类可读体检表格不保证退出），但执行的命令主体始终是复制出去的那一条。
+// 必须异步：替身本地服务在测试进程里，同步等待会把子进程的请求饿死。
+function runCopiedCli(command, directory, env) {
+  return new Promise(resolve => execFile(shell(), ["-c", command + " --json"], { cwd: directory, encoding: "utf8", timeout: 15000, windowsHide: true,
+    env: { ...process.env, MSYS_NO_PATHCONV: "1", ...env } },
+    (error, stdout, stderr) => resolve({ status: error ? (typeof error.code === "number" ? error.code : 1) : 0,
+      stdout: String(stdout || ""), stderr: String(stderr || (error && error.stderr) || "") })));
+}
+
+test("actual Mac command refreshes and copies the quoted stable health-check path without a business panel", async () => {
+  const directory = evidence();
+  const cli = registerCopiedCliCommand(root, path.join(directory, "component"));
+  const result = await cli.run();
+  // 复制出去的命令必须是当前 CLI 真支持的体检入口，不能再是被移除的 self-check。
+  assert.equal(result.command, shellQuote(result.path) + " doctor"); assert.deepEqual(cli.copied, [result.command]);
   assert.ok(fs.readFileSync(result.path, "utf8").includes("# extension-version: " + require("../../package.json").version));
+  const probe = await runCopiedCli(result.command, directory, {});
+  assert.ok(!(probe.stdout + probe.stderr).includes("removed entry"), "复制到剪贴板的命令不能再是被移除的入口: " + (probe.stdout + probe.stderr).slice(0, 200));
+  // 必须是真体检载荷（plugins 数组），而不是用法错误：证明复制出去的入口当前可用。
+  assert.ok(Array.isArray(JSON.parse(probe.stdout).plugins), "复制出去的命令必须落到体检载荷上: " + probe.stdout.slice(0, 200));
 });
 
 // self-check 已是从 CLI 移除的入口（生产会直接报 removed entry 并指向 doctor），体检改由 doctor 承担。
@@ -101,14 +121,21 @@ function writeApiDiscovery(file, name, version, port) {
   return file;
 }
 
-test("actual packaged CLI health check runs through the launcher via doctor with fresh local discovery", async () => {
-  const directory = evidence(), target = writeMacCliLauncher(root, path.join(directory, "component"));
+test("actual packaged CLI health check runs through the launcher using the copied command with fresh local discovery", async () => {
+  const directory = evidence();
+  // 不再手工拼启动器路径与子命令：直接执行面板复制到剪贴板的那条命令。
+  const cli = registerCopiedCliCommand(root, path.join(directory, "component"));
+  await cli.run();
+  const command = cli.copied[0];
+  assert.ok(command, "必须先拿到面板复制出去的体检命令");
   const experimentApi = await stubPluginApi("SimpleExperiment", require(path.join(root, "package.json")).version, ["status", "workflow.run"]);
   const sftpApi = await stubPluginApi("SimpleSFTP", "0.2.104", ["status"]);
   const experimentDiscovery = writeApiDiscovery(path.join(directory, "发现 中文.json"), "SimpleExperiment", require(path.join(root, "package.json")).version, experimentApi.port);
   const sftpDiscovery = writeApiDiscovery(path.join(directory, "sftp-api.json"), "SimpleSFTP", "0.2.104", sftpApi.port);
   try {
-    const result = await new Promise((resolve, reject) => execFile(shell(), [target, "doctor", "--json"], { cwd: directory, encoding: "utf8", timeout: 10000, windowsHide: true, env: { ...process.env, MSYS_NO_PATHCONV: "1", SIMPLE_EXPERIMENT_MAC_API_FILE: experimentDiscovery, SIMPLE_SFTP_MAC_API_FILE: sftpDiscovery } }, (error, stdout, stderr) => error ? reject(Object.assign(error, { stderr })) : resolve(JSON.parse(stdout))));
+    const run = await runCopiedCli(command, directory, { SIMPLE_EXPERIMENT_MAC_API_FILE: experimentDiscovery, SIMPLE_SFTP_MAC_API_FILE: sftpDiscovery });
+    assert.equal(run.status, 0, "复制出去的体检命令必须成功退出: " + (run.stdout + run.stderr).slice(0, 300));
+    const result = JSON.parse(run.stdout);
     assert.equal(result.ok, true, JSON.stringify(result.plugins));
     const blocks = Object.fromEntries((result.plugins || []).map(item => [item.plugin, item]));
     // 发现载荷里的名字保持产品名，仅发现文件位置与环境变量按 Mac 命名。

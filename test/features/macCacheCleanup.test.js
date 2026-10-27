@@ -4,9 +4,11 @@ const helperModule = { exports: {} }, helperFile = require.resolve("../../dist/m
 // Windows lacks O_NOFOLLOW; inject the native constant leaf, retaining the compiled helper.
 const noFollow = 0x100;
 let proofFailure=false;const proofCalls=[];
+// 多目标用例里每个目标各有自己的 inode；单目标用例未登记时仍按原来的 44n 严格要求。
+const proofIno=new Map();
 const proofPort={assertDarwinCleanupHandles(file,full,identity){
   assert.equal(file,'/fixture/sftp/mac_cleanup_handles.py');assert.ok(full.startsWith('/Users/test/研究 项目/Model/tmp/'));
-  assert.equal(identity.dev,1n);assert.equal(identity.ino,44n);proofCalls.push({file,full});
+  assert.equal(identity.dev,1n);assert.equal(identity.ino,proofIno.get(full) ?? 44n);proofCalls.push({file,full});
   if(proofFailure)throw Error('HANDLE_CHECK_UNAVAILABLE: isolated proof unavailable');
 }};
 vm.runInNewContext(fs.readFileSync(helperFile, "utf8"), { module: helperModule, exports: helperModule.exports, Buffer, process,
@@ -121,7 +123,7 @@ test("a zero-effect child cannot report completion while the target still exists
    assert.equal(f.events.some(row=>row[0]==='unlink'),false);assert.ok(proofCalls.some(row=>row.full===f.full));
  });
 // 批量入口在 Mac 侧仍是一项一进程：下面两条锁住“仅预览项不下发删除”和“复核不过就进 skipped，绝不删除”。
-function panelHarness(f) {
+function panelHarness(f, harnessOptions = {}) {
   const calls = [], file = path.resolve(__dirname, "../../dist/extension/CacheCleanupPanel.js"), localRequire = createRequire(file);
   const module = { exports: {} }, promises = { lstat: async (...args) => f.disk.lstatSync(...args), realpath: async value => f.disk.realpathSync(value) };
   const customRequire = name => {
@@ -132,7 +134,9 @@ function panelHarness(f) {
     if (name === "node:child_process") return { spawn(command, args, options) {
       assert.notEqual(command, "pwsh.exe", "Mac must not launch Windows PowerShell"); calls.push({ command, args, options });
       const child = new EventEmitter(); child.stderr = new EventEmitter();
-      queueMicrotask(() => { try { helper.deleteApprovedCacheFile(JSON.parse(args[1]), f.disk, f.host); child.emit("close", 0); }
+      queueMicrotask(() => { const approval = JSON.parse(args[1]);
+        if (harnessOptions.failRelative === approval.relative) { child.stderr.emit("data", "夹具注入的隔离子进程失败"); child.emit("close", 1); return; }
+        try { helper.deleteApprovedCacheFile(approval, f.disk, f.host); child.emit("close", 0); }
         catch (error) { child.stderr.emit("data", error.message); child.emit("close", 1); } });
       return child;
     } };
@@ -171,4 +175,67 @@ test("a row that changes after intake is skipped by the executor re-check instea
   assert.equal(skipped.length, 1);
   assert.match(skipped[0], /目标已变化/);
   assert.equal(f.events.some(row => row[0] === "unlink"), false);
+});
+// 批量语义必须由真实多目标用例锁住：每个目标各自的文件身份、令牌与内容指纹，各自一个隔离子进程。
+function cacheFixtures(names) {
+  const root = "/Users/test/研究 项目/Model", parent = root + "/tmp/目录";
+  const directory = { dev: 1, isDirectory: () => true, isSymbolicLink: () => false };
+  const events = [], owners = new Map();
+  let cwd = root, opened = null;
+  const host = { chdir(value) { events.push(["cd", value]); cwd = value; }, cwd: () => cwd };
+  const parts = names.map((name, index) => {
+    const relative = "tmp/目录/" + name, full = root + "/" + relative, leaf = "./" + name;
+    const content = Buffer.from("保留旧日志内容 " + name + "\n");
+    const stat = { dev: 1n, ino: BigInt(44 + index), size: BigInt(content.length), mtimeMs: BigInt(Date.now() - 8 * 86400000), nlink: 1n,
+      isFile: () => true, isDirectory: () => false, isSymbolicLink: () => false };
+    stat.mtimeNs = stat.mtimeMs * 1000000n;
+    const part = { relative, full, leaf, parent, content, stat, removed: false, approval: { root, relative, fullPath: full,
+      token: crypto.createHash("sha256").update(`${relative}|${stat.dev}|${stat.ino}|${stat.size}|${stat.mtimeNs}|${stat.nlink}`).digest("hex"),
+      sha256: crypto.createHash("sha256").update(content).digest("hex"), confirm: true, secondConfirmation: true,
+      confirmedAbsolutePath: full, handleProbe: "/fixture/sftp/mac_cleanup_handles.py" } };
+    owners.set(full, part); owners.set(leaf, part); proofIno.set(full, stat.ino);
+    return part;
+  });
+  const disk = {
+    lstatSync(file) { if (file === root || file === parent) return directory;
+      const owner = owners.get(file); assert.ok(owner, "越界访问: " + file);
+      if (owner.removed) throw Object.assign(Error("absent"), { code: "ENOENT" }); return owner.stat; },
+    realpathSync(file) { return file === "." ? cwd : file; },
+    openSync(file, flags) { const owner = owners.get(file); assert.ok(owner, "越界打开: " + file); assert.ok(flags & noFollow); owner.position = 0; opened = owner; return 5; },
+    fstatSync() { assert.ok(opened, "未打开就取身份"); return opened.stat; }, closeSync() { opened = null; },
+    readSync(_fd, buffer) { assert.ok(opened); const count = Math.min(buffer.length, opened.content.length - opened.position);
+      opened.content.copy(buffer, 0, opened.position, opened.position + count); opened.position += count; return count; },
+    unlinkSync(file) { const owner = owners.get(file); assert.ok(owner, "越界删除: " + file);
+      events.push(["unlink", file, host.cwd()]); owner.removed = true; },
+  };
+  return { root, parent, parts, disk, host, events };
+}
+
+test("a batch deletes every approved target through its own isolated child", async () => {
+  const f = cacheFixtures(["旧甲 ' %20.log", "旧乙.log"]);
+  const { deleteLocalCandidates, calls } = panelHarness(f);
+  const skipped = [];
+  await deleteLocalCandidates(f.root, f.parts.map(part => ({ path: part.relative, token: part.approval.token })), skipped, "worker-mac");
+  assert.deepEqual(skipped, [], "确认过的多项目标都不应被跳过");
+  assert.equal(calls.length, f.parts.length, "每个目标各自一次隔离子进程");
+  for (const part of f.parts) {
+    const mine = calls.filter(call => JSON.parse(call.args[1]).relative === part.relative);
+    assert.equal(mine.length, 1, part.relative + " 必须恰好一次删除进程");
+    assert.equal(mine[0].options.cwd, part.parent, "子进程必须落在各自已核验的直接父目录");
+    assert.equal(JSON.parse(mine[0].args[1]).fullPath, part.full);
+  }
+  assert.deepEqual(f.events.filter(row => row[0] === "unlink").map(row => row[1]).sort(), f.parts.map(part => part.leaf).sort(),
+    "每个目标各自删除一次且只用当前目录下的最短叶子路径");
+});
+
+test("a failing child is reported as skipped without stopping the remaining targets", async () => {
+  const f = cacheFixtures(["坏掉.log", "正常.log"]);
+  const { deleteLocalCandidates, calls } = panelHarness(f, { failRelative: f.parts[0].relative });
+  const skipped = [];
+  await deleteLocalCandidates(f.root, f.parts.map(part => ({ path: part.relative, token: part.approval.token })), skipped, "worker-mac");
+  assert.equal(calls.length, 2, "一个目标失败不得阻止下一个目标执行");
+  assert.equal(skipped.length, 1, "skipped=" + JSON.stringify(skipped) + " events=" + JSON.stringify(f.events));
+  assert.ok(skipped[0].includes("坏掉.log"), "跳过记录必须点名失败目标: " + skipped[0]);
+  assert.equal(f.parts[0].removed, false, "失败目标必须仍在盘上，交由复核而不是静默丢失");
+  assert.equal(f.parts[1].removed, true, "成功目标必须真的被删除");
 });

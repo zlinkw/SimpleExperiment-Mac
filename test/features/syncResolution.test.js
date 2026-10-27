@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const path = require("node:path");
 const { chosenSyncHash, filterHeldFiles, isSyncHeld, localDeleteScript, safeSyncPath } = require("../../dist/features/SyncResolution.js");
 
 test("deleted copy pauses automatic sync for an exact file or held directory", () => {
@@ -18,11 +19,14 @@ test("resolved choice persists SHA without blocking future reconciliation", () =
 });
 
 test("local deletion script enters exact parent before shortest literal child deletion", () => {
+  // 生产按宿主口径解析父目录，期望值必须用同一口径生成，不能硬编码 POSIX 写法。
+  const parent = path.resolve("/data/project", "results");
   const script = localDeleteScript("/data/project", "results/a.bin");
-  assert.match(script, /Set-Location -LiteralPath '\/data\/project\/results'/);
+  assert.ok(script.includes("Set-Location -LiteralPath '" + parent + "'"), "必须先精确进入已核验父目录: " + script);
   assert.match(script, /PARENT_CD_FAILED/);
   assert.ok(script.includes("Remove-Item -LiteralPath './a.bin'"));
-  assert.doesNotMatch(script, /Remove-Item -LiteralPath '\/data/);
+  // 任何删除都必须走当前目录下的最短字面量子路径，不得出现绝对路径删除。
+  assert.ok(!/Remove-Item -LiteralPath '(?!.\/)/.test(script), "删除只能使用最短子路径: " + script);
   const guarded = localDeleteScript("/data/project", "results/a.bin", { type: "file", size: "7", modifiedTicks: "631234567890000000" });
   assert.match(guarded, /TARGET_CHANGED/);
   assert.match(guarded, /\$item\.Length -ne '7'/);
