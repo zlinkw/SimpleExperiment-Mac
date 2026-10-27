@@ -68,6 +68,7 @@ test('job cleanup indexes only that failed job; successful jobs and the PLAN/syn
       replacementLifecycleJob: require('../../src/features/PlanOutputReplacement.ts').replacementLifecycleJob });
   const provider = new Provider(), before = structuredClone(input.queue);
   provider.root = root; provider.assertWorkspace = () => {};
+  provider.ensureOperationRecordsMigrated = async () => {}; // r17：vm 切片只验证索引语义；一次性迁移由 projectStatePaths/回执迁移契约单独覆盖
   let stored, ledgerCalls = 0;
   provider.host = { loadDistributedQueue: async () => structuredClone(input.queue), saveDistributedQueue: async (_root, value) => { stored = value; },
     updatePlanSyncLedger: async () => { ledgerCalls++; }, postState() {} };

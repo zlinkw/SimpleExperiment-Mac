@@ -122,6 +122,7 @@ export async function transferPlanArtifacts(
       await sftpCall("sync.serverToServerFpsync", {
         source,
         destination: destinationTarget,
+        retentionKey: "plan-artifacts:" + entry.planFile, generation: entry.runId,
         relativePath,
         directory: true,
         confirm: true,
@@ -150,6 +151,7 @@ export async function transferPlanArtifacts(
     await sftpCall("sync.serverToServerFpsync", {
       source,
       destination: destinationTarget,
+      retentionKey: "plan-artifacts:" + entry.planFile, generation: entry.runId,
       relativePaths,
       confirm: true,
       pathConfirmed: true,

@@ -52,6 +52,7 @@ function fixture(options = {}) {
     tmuxListCache: { workerId: "worker-b", sessions: [], gpuIds: [], tmuxSessionPrefix: "custom" }, tmuxClearTaskTabsBusy: false,
     document: { hidden: false },
     vscode: { postMessage: row => requests.push(row) },
+    panelDocumentGeneration: "4", console,
     el: id => elements[id] || null,
     esc: value => String(value ?? "").replaceAll("<", "&lt;"),
     escAttr: value => String(value ?? "").replaceAll('"', "&quot;"),
@@ -88,18 +89,20 @@ function fixture(options = {}) {
   return { sandbox, requests, navigations, notices, persisted, elements, timers, click, deliver, toastNodes };
 }
 
-test("missing real tmux windows report a bounded toast without a showToast ReferenceError", () => {
+test("missing real tmux windows send native notification messages without a disappearing webpage toast", () => {
   const f = fixture({ realToast: true });
   f.click("closed-command", "work_dirs/a/attempts/closed");
   assert.doesNotThrow(() => f.deliver("worker-a", windows()));
-  assert.equal(f.toastNodes.length, 1);
-  assert.match(f.elements.simpleExperimentToast.textContent, /窗口|标签/);
-  const oldTimer = f.sandbox.showToast.hideTimer;
+  const notices = f.requests.filter(row => row.command === "webviewNotice");
+  assert.equal(notices.length, 1);
+  assert.match(notices[0].message, /窗口|标签/);
+  assert.equal(notices[0].tone, "warning");
+  assert.equal(notices[0].documentGeneration, "4");
+  assert.equal(f.toastNodes.length, 0, "native notifications do not create a second webpage toast");
   assert.doesNotThrow(() => f.click("", "", ""));
-  assert.equal(f.toastNodes.length, 1);
-  assert.equal(f.timers.has(oldTimer), false);
-  const hide = f.timers.get(f.sandbox.showToast.hideTimer); hide();
-  assert.equal(f.elements.simpleExperimentToast.hidden, true);
+  assert.equal(f.requests.filter(row => row.command === "webviewNotice").length, 2);
+  assert.equal(f.toastNodes.length, 0);
+  assert.equal(f.timers.size, 0, "no five-second auto-hide timer survives either failure");
 });
 
 test("manual recall keeps the exact command identity and cannot forward a historical attempt override", () => {

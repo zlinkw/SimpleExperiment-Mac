@@ -7,6 +7,12 @@ export type PlanExecutionSource = { digest: string; manifest: Record<string, { s
 const resolving = new WeakMap<object, Promise<PlanExecutionSource | undefined>>();
 const digest = (manifest: PlanExecutionSource["manifest"]) => createHash("sha256").update(JSON.stringify(
   Object.keys(manifest).sort().map(key => [key, { size: manifest[key].size, sha256: manifest[key].sha256 }]))).digest("hex");
+/** Single source of truth for manifest self-verification (also consumed by the C3 HEAD binding). */
+export const planExecutionSourceDigest = digest;
+/** Same relative-path safety rules verifyLocalPlanSource enforces before touching the filesystem. */
+export function planManifestPathSafe(relative: string): boolean {
+  return Boolean(relative) && !relative.startsWith("/") && !/[:\\\x00-\x1f]/.test(relative) && !relative.split("/").some(p => !p || p === "." || p === "..");
+}
 export const supportsPlanCodeScope = (h: any, workerId: string) => h.lastWorkerProbes?.[workerId]?.capabilities?.endpoints?.planCodeScope === 1;
 /** This filter is for automatic execution preparation; manual transfer scopes keep their own semantics. */
 export function runSourceManifest(manifest: Record<string, any>) {
@@ -89,7 +95,7 @@ export async function verifyLocalPlanSource(root: string, source: PlanExecutionS
   const load = async () => {
   const canonical = await fs.realpath(root);
   for (const [relative, expected] of Object.entries(source.manifest)) {
-    if (!relative || relative.startsWith("/") || /[:\\\x00-\x1f]/.test(relative) || relative.split("/").some(p => !p || p === "." || p === "..")) throw Error("PLAN_SOURCE_PATH_INVALID");
+    if (!planManifestPathSafe(relative)) throw Error("PLAN_SOURCE_PATH_INVALID");
     let file = canonical;
     for (const part of relative.split("/")) {
       file = path.join(file, part);

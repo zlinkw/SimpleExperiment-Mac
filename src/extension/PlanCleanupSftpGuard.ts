@@ -3,7 +3,14 @@
 import { cleanupError } from "../features/PlanCleanup";
 import { assertFastDeletePreviewSafety, fastDeleteUpgradeError, isFastDeleteUpgradeCode } from "../features/FastDeleteContract";
 
-export async function guardCleanupSftpCall(host: any, method: string, params: any): Promise<any> {
+/** r17-D consumerRoot: 每个 files.cleanup.* 请求都携带本主机的冻结消费项目绝对 root（令牌台账的
+ * 归属就写在这个项目内）。remote 的 node.root 绝不参与归属；调用方传入的同名字段一律被冻结 root
+ * 覆盖——服务端只认这份原主会话上下文携带的身份，缺它后端会明确拒绝而不是猜 cwd。 */
+export async function guardCleanupSftpCall(host: any, consumerRoot: string, method: string, params: any): Promise<any> {
+  if (typeof method === "string" && method.startsWith("files.cleanup.")) {
+    if (!consumerRoot) cleanupError("WORKSPACE_CHANGED", "消费项目根未冻结，未发送任何清理请求。");
+    params = { ...params, consumerRoot };
+  }
   let result: any;
   try { result = await host.simpleSftpApiCall(method, params); }
   catch (error: any) {

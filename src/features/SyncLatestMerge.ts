@@ -1,26 +1,29 @@
 import type { ScopeStatus } from "./SyncScopeTree";
 
 export type LatestMergeItem = { path: string; sourceId: string; destinationIds: string[] };
+/** r10：与 skipped 逐条 1:1 对齐的结构化原因（additive；旧调用方继续只消费 items/skipped）。 */
+export type LatestMergeSkip = { path: string; kind: "unverified" | "no-latest" };
 
 /** Plan/manual authority wins; otherwise use a unique newest Worker timestamp. */
-export function planLatestWorkerMerge(statuses: Record<string, ScopeStatus>, workerIds: string[], completedSourceId?: string): { items: LatestMergeItem[]; skipped: string[] } {
+export function planLatestWorkerMerge(statuses: Record<string, ScopeStatus>, workerIds: string[], completedSourceId?: string): { items: LatestMergeItem[]; skipped: string[]; skippedPaths: LatestMergeSkip[] } {
   const ids = [...new Set(workerIds)];
   const items: LatestMergeItem[] = [];
   const skipped: string[] = [];
+  const skippedPaths: LatestMergeSkip[] = [];
   for (const [path, status] of Object.entries(statuses).sort(([a], [b]) => a.localeCompare(b))) {
     if (path === "." || status.copies || status.state === "same" || status.detail === "当前同步范围外") continue;
     const versions = status.versions || {};
     if (status.unverified || status.state === "unknown" && !(completedSourceId && versions[completedSourceId]?.sha256)) {
-      skipped.push(`${path}：版本未校验${status.detail ? `（${status.detail.slice(0, 1024)}）` : ""}`); continue;
+      skipped.push(`${path}：版本未校验${status.detail ? `（${status.detail.slice(0, 1024)}）` : ""}`); skippedPaths.push({ path, kind: "unverified" }); continue;
     }
     const choices = ids.filter((id) => versions[id]?.sha256 && ["manual", "plan", "candidate", "same"].includes(versions[id].latest || ""));
     const priority: Record<string, number> = { manual: 0, plan: 1, candidate: 2, same: 3 };
     choices.sort((a, b) => priority[versions[a].latest!] - priority[versions[b].latest!] || a.localeCompare(b));
     const sourceId = completedSourceId ? versions[completedSourceId]?.sha256 ? completedSourceId : undefined : choices[0];
-    if (!sourceId) { skipped.push(`${path}：没有可靠的最新版`); continue; }
+    if (!sourceId) { skipped.push(`${path}：没有可靠的最新版`); skippedPaths.push({ path, kind: "no-latest" }); continue; }
     const sourceHash = versions[sourceId].sha256.toLowerCase();
     const destinationIds = ids.filter((id) => id !== sourceId && versions[id]?.sha256?.toLowerCase() !== sourceHash);
     if (destinationIds.length) items.push({ path, sourceId, destinationIds });
   }
-  return { items, skipped };
+  return { items, skipped, skippedPaths };
 }

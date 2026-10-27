@@ -19,7 +19,8 @@ function provider(names, extra = {}) {
   const code = 'class Provider {' + cls.members.filter((node) => names.includes(node.name?.getText(ast))).map((node) => node.getText(ast)).join('\n') + '}; Provider;';
   return vm.runInNewContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText,
     { ...require('../_helpers/nativeHostScope'), DistributedPlanQueue: queueApi, workspaceRoot: () => root, makeOpId: (kind) => `${kind}-12345678`,
-      errorMessage: (error) => error.message, vscode: { window: { showInformationMessage: () => undefined, showWarningMessage: async()=> "确认召回" } }, ...extra });
+      errorMessage: (error) => error.message, vscode: { window: { showInformationMessage: () => undefined, showWarningMessage: async()=> "确认召回" } },
+      trustedTerminalProofFor: require('../../dist/features/VerifiedCompletion.js').trustedTerminalProofFor, ...extra });
 }
 function snapshot(plan, job, status = 'queued', aliases = false, extra = {}) {
   const now = new Date().toISOString();

@@ -7,6 +7,8 @@ const vm=require('node:vm');
 const {PlanCleanup}=require('../../dist/features/PlanCleanup');
 const {collectPlanCleanupEvidence}=require('../../dist/features/PlanCleanupEvidence');
 const {canonicalProjectId}=require('../../dist/features/DistributedPlanQueue');
+const fsSync=require('node:fs');
+if(!process.env.LOCALAPPDATA)process.env.LOCALAPPDATA=fsSync.mkdtempSync(path.join(fsSync.realpathSync(os.tmpdir()),'plan-reconnect-lease-')); // r17 约定：租约注册表落隔离目录（沙箱 homedir/AppData 只读，产品路径不变）
 
 async function fixture(){
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'plan-cleanup-reconnect-'));
@@ -100,8 +102,9 @@ test('the retired connection hook never checks or prompts for cleanup on heartbe
   const modulePath=require.resolve('../../dist/extension/PlanCleanupHost'),from=require('node:module').createRequire(modulePath),exports={};let checks=0,notices=0;
   const vscode={workspace:{workspaceFolders:[{uri:{fsPath:'C:/fixture'}}]},window:{showWarningMessage:()=>{notices++;return new Promise(()=>{});}}};
   vm.runInNewContext(await fs.readFile(modulePath,'utf8'),{exports,require:name=>name==='vscode'?vscode:name==='./PlanCleanupPanel'?{}:from(name)});
-  const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}}},'C:/fixture');
-  host.service.recheckNode=async()=>{checks++;return [{operationId:'a'.repeat(48)}]};
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'plan-cleanup-reconnect-host-')); // r17-A：消费项目根恒为已解析绝对路径（相对/盘符根一律拒绝推导）
+  const host=new exports.PlanCleanupHost({context:{globalStorageUri:{fsPath:os.tmpdir()}}},root);
+  host.service.recheckNode=async()=>{checks++;return [{operationId:'a'.repeat(48),state:'confirmation_required',targets:[{state:'pending'}]}]};
   const online={id:'worker',streamStatus:'polling',reconnectCount:0};
   await host.observeConnections([online]);await host.observeConnections([online]);assert.equal(checks,0);assert.equal(notices,0);
   await host.observeConnections([{...online,streamStatus:'disconnected'}]);await host.observeConnections([online]);assert.equal(checks,0);assert.equal(notices,0);

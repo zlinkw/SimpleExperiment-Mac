@@ -4,6 +4,11 @@ const path = require("node:path");
 const { EXPERIMENT_ROOT, SFTP_ROOT, REPOSITORY, run, npm, json, fingerprint, assertSource } = require("./mac-release-common");
 const { createPackageProjection, assertPackageProjection } = require("./mac-package-projection");
 
+// 单文件宿主超时例外（用户 2026-10-27 明确批准，仅限下列一行）：
+// test/agent/gpuCollectorFrame.test.js 在开发机上稳定耗时 20.96 秒（11/11 通过），
+// 20 秒宿主上限会把它误判为超时；其余所有行仍是 20000 毫秒，禁止未经批准扩大本表。
+const ROW_TIMEOUT_EXCEPTIONS = new Map([["experiment|test/agent/gpuCollectorFrame.test.js", 40000]]);
+const rowTimeout = (component, file) => ROW_TIMEOUT_EXCEPTIONS.get(component + "|" + file) || 20000;
 function main() {
   const roots = [SFTP_ROOT, EXPERIMENT_ROOT], repos = ["SimpleSFTP-Mac", "SimpleExperiment-Mac"];
   const commits = roots.map((root, index) => assertSource(root, repos[index]));
@@ -106,8 +111,11 @@ function runValidationTests(execute, roots, nodeExecutable, alreadyRun = new Set
   for (const row of require("./mac-release-regressions.json")) {
     if (!["experiment", "sftp"].includes(row.component) || !/^test\/[^\\:]+\.test\.js$/.test(row.file)
       || row.file.split("/").includes("..")) throw new Error("Unsafe release regression path");
+    // 跨仓用例（docs/unified-cli-coverage.md 前置条件）需要显式指向配套 SimpleSFTP Mac 检出根；未配置时按设计失败而非跳过。
+    // 超时默认 20 秒；仅 ROW_TIMEOUT_EXCEPTIONS 里经用户批准的行可放宽，node --test 的用例内超时仍是 20000。
     run(nodeExecutable, ["--test", "--test-force-exit", "--test-timeout", "20000", row.file],
-      row.component === "experiment" ? EXPERIMENT_ROOT : SFTP_ROOT, { inherit: true, timeout: 20000 });
+      row.component === "experiment" ? EXPERIMENT_ROOT : SFTP_ROOT,
+      { inherit: true, timeout: rowTimeout(row.component, row.file), env: row.component === "experiment" ? { ...process.env, SIMPLE_TEST_SFTP_ROOT: path.resolve(SFTP_ROOT) } : undefined });
   }
 }
 
@@ -126,24 +134,21 @@ function buildReleaseNotes(commits, versions) {
   return `Apple Silicon macOS 26 及以上 preview。
 
 本版变化
-新增机器级GPU单源采集与请求绑定准入、项目/程序/机器状态/产物四根保护、独立隔离重跑审核与批次账本，精确busy拒绝及系统Python解析修复。Mac保留精确POSIX身份与合法尾空格；冷构建从已跟踪源码生成checksum，用户模板不依赖随包文档。
-同步 Windows Experiment 0.5.403/c30d607f1b63d224e8a65ab94371d86b4dd81c0d 及 SFTP 0.2.107/fc962236210ca692397dd58eefbefd0bf108f85a，采用正式任务身份/精确停止、进度与真实shell预检、人工拒绝恢复、失败job审核、全部正式Plan成功后的Worker镜像及更新等待优化。批次、平台边界与提交矩阵见docs/windows-alignment-2026-10-24.md。另修复隧道 -L 改按 ssh -G 单源判定、隧道生命周期身份/nonce与kill/取消只报告已验证事实、同步范围整树冻结与写前复查、macOS尾空格Plan文件选择及workflow工作区严格POSIX身份。保留Mac独立身份/preview静态索引/Termius手动端点/POSIX/认证/本机中转/共享租约/GPU内部标签，未复制Windows发布或自动部署。
-正式任务身份通过独立shell传递，清除继承的其他job环境与Agent token；停止只针对原command绑定Pane，不关闭共享GPU容器。正式控制无需attempt；历史attempt只读，现有任务不迁移。Worker缺匹配正式身份/停止/环境预检能力时明确拒绝新控制。
-启动前预检只按真实资产进度延长等待，重复阶段心跳/停滞/计数倒退/坏JSON/取消都拒绝并保留neverStarted回执。预检和执行使用同一配置shell/解释器，缺环境先失败。tasks.preflight、tasks.preflight.status、tasks.preflight.cancel仅诊断原失败job，不训练或改队列；environmentOnly只检查原环境，调用前须读discovery和live capabilities。
-失败卡片“重新排队此 job”遇占用输出可进入“审核遗留文件”。只读预览冻结workflow/index/command，只处理独占正式目录和声明CSV，经完整终态owner及SHA核验。归档batch纳入不可变摘要/精确确认，CSV先于owner目录；成功同伴、PLAN和共享引用保留。全部节点完成后仍需返回原卡片人工确认重排，不自动清理或重跑。
-全部正式Plan成功后通过SimpleSFTP在启用Worker间镜像其声明权重、日志、配置和CSV，冻结原run身份、路径、owner/hash，持久回执合并、重连只补缺项。失败/运行中/取消/不可用/恢复不完整/历史attempt不触发；活动writer、清理hold、来源身份或目标内容冲突均阻止覆盖。本机解析、汇总、归档及论文发布继续手动，原始指标不自动下载到本机。
-更新门禁保留已有传输续租/验主，可取消更新等待且原传输继续。未知安装回执即使首项无完成记录也保持业务封锁；原批次/清单冻结，重载后仅提示用户点击补装，不自动安装。未完成入场ticket和存活/无法证明退出的持有者都要等待；本版配套最低要求SFTP Mac至少0.2.103；共同更新等待协议继续兼容已安装的0.2.102，以便正常升级本配套。
-macOS清理已接入原生句柄证明及整树冻结；权限、ABI或句柄证据不完整时仍报HANDLE_CHECK_UNAVAILABLE并阻断。本轮未验证真机libproc或实际删除。永久删除两次完整路径确认、物理直接父目录与最短子项执行器不放宽。
+同步 Windows Experiment 0.5.416/45209ae43da37a0c4a2c9d82ca2aad88caef7b44 与 SimpleSFTP 0.2.114/b2329b5de8b1723d03d7470af8dbb0dad96898d5，只做 macOS 适配，未改动 Windows 侧仓库。
+新增多项目分支与工作树登记、统一 CLI 命名动作面（只允许命名命令，无原始调用透传）、结果对比与 HEAD 核对、科研 PR 与祖先快进、缓存清理的 observe/isolate 批次与忙时整体拒绝、插件日志保留、查看操作完整日志入口。
+配套 SimpleSFTP Mac 提供暂存槽两代保留与过期回收、一次确认提前释放、consumer root、本地暂存收敛、交接标记新位置与传输忙快照。
+统一 CLI 的发现文件改走 Mac 身份目录与环境量（Mac 命令不会再连到 Windows 插件的 api.json），限流命中改为按已确证的延后时间提示并跨窗口持久化，不再当作检查失败。
+macOS 清理沿用直接父目录核对、指纹复核、darwin 句柄证明与两次绝对路径确认；一键开启隧道与不依赖 Xshell 会话文件的约定保持不变。
 
 本地验证
-全部构建与验证在本机完成：两仓build、生成面板脚本及vm，发布门禁逐文件串行执行（每文件20秒上限、失败即停、完整日志留存），Windows派生回归与本轮隧道生命周期、映射下载、更新恢复门禁包含在内；测试仅在替身传输下运行，所有服务器API/传输/清理动作均为替身，没有科研训练。Windows PowerShell安装策略与真实Extension Host集成门禁由配套发布流程在真实Windows执行，其结果以该真实执行记录为准，本文件不代为宣称。macOS真机（M5）验收本轮未完成，本版本不宣称任何真机通过。历史失败日志与回执保留原样，旧结果不记为本版通过，本版以完整门禁日志为准。
+两仓构建、面板脚本与 vm 门禁、678 行源码指纹对冻结快照双向校验（Experiment 554、SimpleSFTP 124）、发布门禁逐文件串行执行（每文件 20 秒上限、失败即停、完整日志留存）。逐文件结果与因宿主契约移出宿主门禁的说明见 docs/windows-alignment-2026-10-27.md；文中的历史计数，不表示本版本验收完成。发布准备必须在 macOS 执行：门禁清单含只在 darwin 通过的 POSIX 路径校验、libproc 句柄与真实隧道用例，在 Windows 主机上无法全部通过。
 
 M5 真机验证
-本版本的隧道 ssh -G 单源探测、隧道生命周期诚实报告、同步整树冻结复查、尾空格Plan选择、workflow工作区POSIX身份、正式执行/预检/停止、完成Worker镜像、失败审核与更新恢复均未在M5真机执行，属发布后待验证项。用户既有 .309/.97 真机报告只覆盖旧版本，不构成本版本的真机验证。本轮没有连接生产服务器、启停现有任务、部署Agent、真实传输/清理、开发机安装或Actions操作。固定原目标清单仍整体paused；历史"18已验证/11剩余"仅为历史计数，不表示本版本验收完成。
+未在M5真机执行：一键隧道的实际连通、libproc 句柄证明、darwin 中继与交接标记实际落点、真机删除与真机更新安装。本版本对这些内容不宣称任何真机通过。
 
 安装与更新
-从同一Release先安装SimpleSFTP Mac ${versions[0]}，再安装SimpleExperiment Mac ${versions[1]}并重载；首次过渡先等待本地传输完成，旧锁阻断时无需删锁，直接依次安装两份VSIX。以后点击底部Mac preview状态栏，或⇧⌘P“检查 preview 配套更新”，或面板“设置 → 插件配套更新 → 检查更新”；发现新版点击更新并重载，未完成时点击“安装 preview 配套更新”补原批次。
-插件更新不会部署远端Agent。任务空闲后用户主动通过“准备项目与 Agent”核对/确认上传，再在Termius手动处理并检测；不要为验证新runtime中断现有实验。
+从同一Release先安装SimpleSFTP Mac ${versions[0]}，再安装SimpleExperiment Mac ${versions[1]}并重载窗口；两者必须成对更新，单侧更新会被拒绝。
+插件更新不会部署远端Agent。任务空闲后用户主动通过“准备项目与 Agent”核对/确认上传，插件不自动改写远端运行时。
 
 源码提交
 SimpleSFTP-Mac ${commits[0]}
@@ -151,4 +156,4 @@ SimpleExperiment-Mac ${commits[1]}
 `;
 }
 if (require.main === module) { try { main(); } catch (error) { process.stderr.write(`${error.message}\n`); process.exitCode = 1; } }
-module.exports = { main, buildReleaseNotes, runValidationTests, getReleaseValidationInventory };
+module.exports = { main, buildReleaseNotes, runValidationTests, getReleaseValidationInventory, ROW_TIMEOUT_EXCEPTIONS };

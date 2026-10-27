@@ -7,6 +7,7 @@ const path = require("node:path");
 const test = require("node:test");
 
 const scope = require("../../dist/features/SyncScopeStatus.js");
+if(!process.env.LOCALAPPDATA)process.env.LOCALAPPDATA=require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(),'r17-lease-')); // 与 r3 isolatedTestEnv 同约定：租约注册表落隔离目录（沙箱 homedir/AppData 只读，产品路径不变）
 
 function digest(content) {
   return crypto.createHash("sha256").update(content).digest("hex");
@@ -84,7 +85,7 @@ test("a fresh process reuses persisted hashes and keeps rows from another scope"
   const modulePath = path.join(__dirname, "../../dist/features/SyncScopeStatus.js");
   const run = (phase) => spawnSync(process.execPath, ["-e", script], {
     encoding: "utf8", timeout: 10000, windowsHide: true,
-    env: { ...process.env, SCOPE_MODULE: modulePath, SCOPE_ROOT: root, SCOPE_CACHE: scope.localScopeHashCachePath(storage, root), SCOPE_PHASE: phase },
+    env: { ...process.env, SCOPE_MODULE: modulePath, SCOPE_ROOT: root, SCOPE_CACHE: scope.localScopeHashCachePath(root), SCOPE_PHASE: phase },
   });
   try {
     const seeded = run("seed");
@@ -114,7 +115,7 @@ test("same size and mtime with a changed ctime is not reused", async () => {
     const full = path.join(root, "results", "same-size.csv");
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, "aaaa");
-    const cacheFile = scope.localScopeHashCachePath(storage, root);
+    const cacheFile = scope.localScopeHashCachePath(root);
     const first = await scope.hashLocalScopeNames(root, [relative], undefined, cacheFile);
     const document = JSON.parse(fs.readFileSync(cacheFile, "utf8"));
     document.files[relative].ctimeMs += 25;
@@ -139,7 +140,7 @@ test("a damaged scope hash cache is ignored and rewritten from a fresh hash", as
   try {
     const relative = "metrics.json";
     fs.writeFileSync(path.join(root, relative), "{\"ok\":true}");
-    const cacheFile = scope.localScopeHashCachePath(storage, root);
+    const cacheFile = scope.localScopeHashCachePath(root);
     fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
     fs.writeFileSync(cacheFile, "{not-json");
     const hashed = await scope.hashLocalScopeNames(root, [relative], undefined, cacheFile);

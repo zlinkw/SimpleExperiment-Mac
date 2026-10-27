@@ -1,58 +1,21 @@
 const { test, assert, fs, os, path, fork, ledger, runSelectedPlans, Q, ts, tmpFile, replacementState, extractMethodBody, legacySource, transpile, seed, observed, spawnChild, batchFixture, runBatch } = require("./planIsolatedBatchLedger.support.cjs");
 
-test('跨进程锁：正常创建者释放；活 owner 与过期未知 owner 都保留原锁并快速 fail closed',async()=>{
-  const file=tmpFile('ledger.json');
-  await ledger.freezeBatchScope(file,{batchId:'b-1',projectRoot:'/proj'},[{planFile:'plans/a.yaml',submissionOperationId:'op-a'}]);
-  assert.equal(fs.existsSync(file+'.lock'),false,'正常创建者工作结束后释放自己的锁');
-  assert.deepEqual(fs.readdirSync(path.dirname(file)).filter(name=>name.includes('.stolen.')||name.includes('.released.')),[],'回收与释放不留残片');
-  fs.writeFileSync(file+'.lock',JSON.stringify({token:'alive',host:os.hostname(),pid:process.pid,expiresAt:new Date(Date.now()+3_600_000).toISOString()}));
-  const before=fs.readFileSync(file,'utf8');
-  const startedAt=Date.now();
-  await assert.rejects(()=>ledger.freezeBatchScope(file,{batchId:'b-2',projectRoot:'/proj'},[{planFile:'plans/x.yaml',submissionOperationId:'op-x'}]),
-    /ISOLATED_BATCH_LEDGER_LOCKED/);
-  assert.ok(Date.now()-startedAt<3000,'活锁必须快速失败（不阻塞提交/派发回合）');
-  assert.equal(fs.readFileSync(file,'utf8'),before,'等不到锁绝零写入');
-  assert.equal(fs.existsSync(file+'.lock'),true,'抢锁失败者绝不删除他人活锁（TTL 未到也不可）');
-  const unknownFile=tmpFile('unknown.json'),raw=JSON.stringify({token:'dead',expiresAt:new Date(0).toISOString()});
-  fs.writeFileSync(unknownFile+'.lock',raw);
-  await assert.rejects(ledger.freezeBatchScope(unknownFile,{batchId:'b-1',projectRoot:'/proj'},[{planFile:'p',submissionOperationId:'o'}]),/ISOLATED_BATCH_LEDGER_LOCKED/);
-  assert.equal(fs.readFileSync(unknownFile+'.lock','utf8'),raw);
-  assert.equal(fs.existsSync(unknownFile),false,'无法证明失主时零账本写入');
-});
+// 用户裁定 B（2026-10-26）退役两条锁协议用例（所测行为已随锁移除，完整退役清单见 planIsolatedLedgerLock.test.js 头注）：
+//   原:3  '跨进程锁：正常创建者释放；活 owner 与过期未知 owner 都保留原锁并快速 fail closed'（锁获取/释放/遗留锁保留）
+//   原:23 '真实进程互斥：竞争者不能摘走活锁；原 owner 释放后才进入'（跨进程锁互斥与锁内事件序）
+// 跨进程"第二写入者"场景现在由写前指纹比对 fail closed，覆盖在 planIsolatedLedgerLock.test.js（CAS 套件）。
 
-test('真实进程互斥：竞争者不能摘走活锁；原 owner 释放后才进入',async()=>{
+test('helper 反例（r28-U1）：子进程真实 IPC error 即时拒绝 done 等待并附完整诊断，不伪装 3000ms IPC 超时',async()=>{
   const distFile=path.resolve(__dirname,'../../dist/features/PlanIsolatedBatchLedger.js');
   assert.ok(fs.existsSync(distFile),'双进程夹具消费编译产物；请先 npm run typecheck');
-  const file=tmpFile('ledger.json');
-  const eventsFile=file+'.events';// 锁内物理事件账本：仅持锁进程在临界区内追加，行序=真实串行序（2026-10-23 等强证明返修）
-  const b=spawnChild(distFile,file,'ordinary',eventsFile);let a;
-  const cleanup=async()=>{for(const w of [a,b].filter(Boolean)){try{if(w.p.connected)w.p.send('release');}catch{/* 已断开 */}}
-    for(const w of [a,b].filter(Boolean))await Promise.race([new Promise(r=>w.p.on('close',r)),new Promise(r=>setTimeout(r,200))]);
-    for(const w of [a,b].filter(Boolean))if(w.p.exitCode===null){w.p.kill('SIGKILL');}};
-  try{
-    const bEntered=await b.wait('entered');
-    const originalLock=fs.readFileSync(file+'.lock','utf8');a=spawnChild(distFile,file,'ordinary',eventsFile);
-    await new Promise(r=>setTimeout(r,400));
-    assert.ok(!a.events.some(m=>m.event==='entered'),'旧回收者用过期观察 rename 掉 B 活锁后不得进入临界区');
-    const live=JSON.parse(fs.readFileSync(file+'.lock','utf8'));
-    assert.equal(JSON.stringify(live),originalLock,'B 活锁始终在位，不能先摘走再还原');
-    try{a.p.send('release');}catch{/* 已结束 */}
-    try{b.p.send('release');}catch{/* 已结束 */}
-    await b.wait('done');
-    await a.wait('done');
-    assert.notEqual(a.p.pid,b.p.pid,'回归必须由两个真实进程完成');
-    const aEntered=a.events.find(m=>m.event==='entered');
-    assert.ok(aEntered,'A 应串行排队——本场景 B 已释放故 A 必须随后进入');
-    // 等强串行证明（2026-10-23 返修，替换原 enteredAt>=bDoneAt-50 观测时刻断言）：
-    // ENTER/LEAVE 由各持锁进程在生产锁持有期内追加，锁本身保证写入互斥，
-    // 因此账本行序就是临界区的真实串行序——不依赖任何父进程观测时刻，零时间容差。
-    // 偷锁/插入会直接破坏严格 4 行序；活锁原位、不同 PID、无残片断言全部保留在下方。
-    const seq=fs.readFileSync(eventsFile,'utf8').trim().split(/\r?\n/);
-    assert.deepEqual(seq,['ENTER '+b.p.pid,'LEAVE '+b.p.pid,'ENTER '+a.p.pid,'LEAVE '+a.p.pid],
-      '锁内事件账本必须呈严格 B.enter→B.leave→A.enter→A.leave（真实串行恢复）');
-    assert.equal(fs.existsSync(file+'.lock'),false,'两进程收尾后锁已释放');
-    assert.deepEqual(fs.readdirSync(path.dirname(file)).filter(name=>name.includes('.stolen.')||name.includes('.released.')),[],'CAS 回收与还原不留残片');
-  }finally{await cleanup();}
+  const c=spawnChild(distFile,tmpFile('ledger-boom.json'),'boom','');
+  await assert.rejects(c.wait('done'),err=>{
+    assert.match(err.message,/fixture-boom/,'真实错误消息必须原样上报');
+    assert.doesNotMatch(err.message,/IPC timeout/,'即时拒绝不得伪装成超时（job-107 首因伪装层）');
+    assert.match(err.message,/events=/,'诊断必须含实际 IPC 事件清单');
+    assert.match(err.message,/stdout=|stderr=/,'诊断必须含已 drain 的子进程 stdio');
+    return true;});
+  await assert.rejects(c.wait('entered'),/fixture-boom/,'后续 wait 同样即时拒绝，不再吊满预算');
 });
 
 test('真实 producer 链：真 enqueuePlan→真 commit 方法→真 mergeDurableWorkerSnapshots 投影→真 promote 方法；取消+resultQueryError 非证明、窗口观察才是、粘性不丢',async()=>{
@@ -157,10 +120,13 @@ test('legacy 文案：删除后最终写入身份漂移不谎称「未删除文�
 
 test('源码钉：账本安全原语、真实 producer 接线与提升来源约束',()=>{
   const module=fs.readFileSync(path.resolve(__dirname,'../../src/features/PlanIsolatedBatchLedger.ts'),'utf8');
-  assert.match(module,/fs\.open\(lockPath, "wx"\)/);
-  assert.doesNotMatch(module,/fs\.(rename|link)\(lockPath,/,'竞争者不得先摘锁后复核');
-  assert.doesNotMatch(module,/pidAlive|ownerRemovable/,'TTL/PID 不授权自动摘取任何锁');
-  assert.match(module,/ownerToken !== fence\.token/,'写盘前失主 fencing');
+  // 裁定 B（2026-10-26）：锁原语钉整体替换为 CAS 原语钉（去锁＋写前指纹比对，复用既有身份/哈希实现）。
+  assert.match(module,/identityFromStat\(await fs\.stat\(file\)\)/,'读取时记身份元组：复用 LocalCodeManifestCache 身份函数，未新造判据');
+  assert.match(module,/sameIdentity\(expected, identity\)/,'快路径：身份六项全未变即落盘，不重算哈希');
+  assert.match(module,/sha256File\(file\)/,'慢路径内容比对复用既有 sha256File，未新写文件哈希');
+  assert.match(module,/LEDGER_STALE = "ISOLATED_BATCH_LEDGER_STALE"/,'写前不符 fail closed 的新错误码');
+  assert.doesNotMatch(module,/acquireLedgerLock|releaseScript|classifyAbandonedZeroByteLock|nextIsolatedLedgerReport|LEDGER_LOCK_LOST/,'锁文件全链、零字节分类与限流已随裁定 B 移除');
+  assert.doesNotMatch(module,/pidAlive|ownerRemovable/,'不存在任何自动摘锁取锁代码路径');
   assert.match(module,/const PROOF_STATUSES = \["running"\]/);
   assert.match(module,/now - at < 0/,'任何未来观察都拒绝');
   const queue=fs.readFileSync(path.resolve(__dirname,'../../src/features/DistributedPlanQueue.ts'),'utf8');
@@ -175,4 +141,51 @@ test('源码钉：账本安全原语、真实 producer 接线与提升来源约�
   const batch=fs.readFileSync(path.resolve(__dirname,'../../src/extension/SelectedPlanBatchHost.ts'),'utf8');
   assert.ok(batch.indexOf('const planMessages')<batch.indexOf('await freezeBatchScope('));
   assert.ok(!/admitted\s*=\s*true/.test(batch));
+});
+
+// ─── 用户授权 2026-10-26（裁定 B 后续）：两处原静默失败点补可见性 ───────────────────────────
+// attach 隔离事实与 committed 终局的账本写失败原为空 catch/return false 静默消失，现经既有
+// action_errors 通道（command isolatedLedgerWrite）如实记录一条；fail-closed 准入语义一字未动。
+// 测试落点选本套件：仓内唯一已装配 commitIsolatedEnqueueLocal 真实方法体提取（makeCommit 同款）
+// 与源码钉约定的套件；planOperationNoticeLifecycle 管的是 operation notice 瞬时通知道，而本次
+// 选择的通道是 action_errors 持久诊断，不是 notice，故不放那边、也不新开文件。
+const errorMessageStub=error=>String(error?.message||error);
+const observeWriteFailure=(()=>{const make=new Function('errorMessage','return function (kind, batchId, operationId, error) {'
+  +transpile(extractMethodBody(legacySource,'observeIsolatedLedgerWriteFailure(kind, batchId, operationId, error) {'))+'};');
+  return make(errorMessageStub);})();
+
+test('可见性（用户授权）：committed 终局写失败 ⇒ action_errors 记一条可见诊断，入队结果与 fail-closed 语义不变',async()=>{
+  const makeCommit=new Function('markPlanTerminal','return async function (submissionOperationId, planFile, cardId, queuedPlan) {'
+    +transpile(extractMethodBody(legacySource,'async commitIsolatedEnqueueLocal(submissionOperationId, planFile, cardId, queuedPlan) {'))+'};');
+  const records=[];
+  const stubThis={currentIsolatedBatchLocal:{batchId:'b-vis'},isolatedReplacementLedgerFileLocal:()=>'ledger-vis.json',
+    observeIsolatedLedgerWriteFailure:observeWriteFailure,recordActionError:row=>records.push(row)};
+  const stale=new Error('ISOLATED_BATCH_LEDGER_STALE：写盘前比对发现账本已被其他写入者改动；本轮零写入（临时文件保留为证据、不删），原文件保持原样，审核入口本回合关闭。路径: ledger-vis.json。可能有第二个窗口在写，请只保留一个窗口后重试。');
+  const commit=makeCommit(async()=>{throw stale;});
+  assert.equal(await commit.call(stubThis,'submit-vis','plans/a.yaml','card',{jobs:[{index:0,commandId:'cmd-0'}]}),false,
+    'fail-closed 原样：终局写失败仍 return false，不阻断已提交入队');
+  assert.equal(records.length,1,'恰一条可见记录，无双通道重复');
+  assert.equal(records[0].command,'isolatedLedgerWrite');
+  assert.match(records[0].message,/committed 终局/);assert.match(records[0].message,/批次 b-vis/);assert.match(records[0].message,/操作 submit-vis/);
+  assert.match(records[0].message,/ISOLATED_BATCH_LEDGER_STALE/);assert.match(records[0].message,/第二个窗口/);
+  assert.match(records[0].message,/隔离副本已保留，本次不进入清理审核，需人工确认后可重试/);
+});
+
+test('可见性（用户授权）：attach 隔离事实失败接线 isolatedLedgerWrite；原空 catch 移除，SelectedPlanBatchHost 提示链不重复记账',()=>{
+  const records=[];
+  observeWriteFailure.call({recordActionError:row=>records.push(row)},'隔离事实','b-vis-2','op-iso-2',
+    new Error('ISOLATED_BATCH_LEDGER_STALE：写盘前比对发现账本已被其他写入者改动'));
+  assert.equal(records.length,1);
+  assert.equal(records[0].command,'isolatedLedgerWrite');
+  assert.match(records[0].message,/隔离事实.*批次 b-vis-2.*操作 op-iso-2/);
+  assert.match(records[0].message,/隔离副本已保留，本次不进入清理审核，需人工确认后可重试/);
+  const at=legacySource.indexOf('try { await attachIsolatedCleanup(isolatedLedgerFile');
+  assert.ok(at>0,'attach 调用点仍在');
+  const region=legacySource.slice(at,at+1200);
+  assert.match(region,/catch \(error\) \{[\s\S]*this\.observeIsolatedLedgerWriteFailure\("隔离事实", isolatedBatchInfo\.batchId, operationId, error\)/,
+    'attach 失败必须经可见通道记录（含批次与操作身份）');
+  assert.ok(!/catch \{ \/\* 账本写入失败/.test(region),'原静默空 catch {} 已移除');
+  const batchHost=fs.readFileSync(path.resolve(__dirname,'../../src/extension/SelectedPlanBatchHost.ts'),'utf8');
+  assert.ok(!batchHost.includes('isolatedLedgerWrite'),
+    '去重：freeze 失败仍只走 :147 既有 ledgerError 提示链；单个写操作失败只产生一条可见记录，两个通道不叠加');
 });

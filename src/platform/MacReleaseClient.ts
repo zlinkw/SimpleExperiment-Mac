@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ReleaseClient } from "../updates/ReleaseClient";
+import { ReleaseClient, RetryStore } from "../updates/ReleaseClient";
 import { PreviewReleaseClient, parseManifest } from "../mac/PreviewRelease";
 import { ComponentUpdate, PluginUpdatePlan, planPairedUpdates, compareSemanticVersions } from "../features/ExtensionUpdates";
 
@@ -15,8 +15,13 @@ export function macComponents(manifest: any, installed: (id: string) => string):
       digest: "sha256:" + c.sha256, targetPlatform: c.targetPlatform } }));
 }
 export class MacReleaseClient extends ReleaseClient {
-  private readonly previewSource = new PreviewReleaseClient();
-  constructor(private readonly vscodeVersion: string) { super(); }
+  // 静态 preview 索引是唯一更新来源；限流退避经 Bootstrap 的 globalState store 持久化，
+  // 与 Windows 共同实现同一“延后而非失败”语义。
+  private readonly previewSource: PreviewReleaseClient;
+  constructor(private readonly vscodeVersion: string, retryStore?: RetryStore) {
+    super();
+    this.previewSource = new PreviewReleaseClient(fetch, Date.now, retryStore);
+  }
   override async check(installed: (id: string) => string, manual = false): Promise<PluginUpdatePlan> {
     const source = await this.previewSource.check(this.vscodeVersion, installed, manual);
     const components = macComponents(source.manifest, installed);

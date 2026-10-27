@@ -90,7 +90,8 @@ function hostFor(operation, accepted = true, outputChoice) {
   helperNames.push("remoteOperationDurationMs");
   // commitIsolatedEnqueueLocal 是入队落盘后的真实批次账本 producer（新主线接线）：本夹具无隔离批次上下文，
   // 真实方法在 currentIsolatedBatchLocal 缺失时即返回 false 早退——提取真身而非 stub（同 distributedPlanExecutionMode 口径）。
-  const methodNames = ["runPlanPreflight", "waitForOperationTerminalResult", "refreshOperationStatus", "confirmPlanExistingOutputs", "confirmPlanExistingOutputsFromValidation", "confirmDeclaredPlanOutputs", "confirmDistributedPlanExistingOutputs", "enqueueDistributedPlan", "commitIsolatedEnqueueLocal"];
+  // 块C：真实 enqueue 含队列窄溯源收敛（queueGitProvenance/stripGitUrlCredentials 纯法身一并提取）。
+  const methodNames = ["runPlanPreflight", "waitForOperationTerminalResult", "refreshOperationStatus", "confirmPlanExistingOutputs", "confirmPlanExistingOutputsFromValidation", "confirmDeclaredPlanOutputs", "confirmDistributedPlanExistingOutputs", "enqueueDistributedPlan", "commitIsolatedEnqueueLocal", "queueGitProvenance", "stripGitUrlCredentials"];
   const emitted = ts.transpileModule(
     helperNames.map((name) => functions.get(name)).join("\n") + "\nthis.production = {\n" + methodNames.map((name) => methods.get(name)).join(",\n") + "\n}; this.accepted = planCheckAccepted;",
     { compilerOptions: { target: ts.ScriptTarget.ES2022 } },

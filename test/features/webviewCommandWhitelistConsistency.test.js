@@ -136,6 +136,10 @@ test("extension safety whitelist stays covered by webview declarations (reverse)
     "copyPanelDiagnostics", "reloadPanelLowEffects", "webviewBootstrapPhase",
     "webviewLayoutEvidence", "webviewRuntimeIncident", "webviewSectionInterest",
     "webviewSectionTelemetry", "webviewStateRendered", "answerRunConfirmation",
+    // 主线 0.5.410 内部协议：PanelHtml.legacy 以 vscode.postMessage literal 直发（非 DOM 点击动作集，
+    // webviewCommands()/uiCapabilityMap 天然不收）；行为闭包由 panelMessageDispatch
+    // （仅当前 documentGeneration 路由）与 planOperationNoticeLifecycle 实跑证据绑定。
+    "webviewNotice",
   ]);
   const retired = new Map([['startHub', 'startHubTunnel'], ['uploadProjectToHub', 'uploadProjectToHub']]);
   const compiled = fs.readFileSync(path.join(root, 'dist/extension/legacy.js'), 'utf8');

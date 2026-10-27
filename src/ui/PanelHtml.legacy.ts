@@ -1449,6 +1449,24 @@ export function renderPanelHtml(platform: string = process.platform): string {
             <button data-command="snapshot" class="secondary" title="刷新识别：重新扫描工作区&#10;更新实验计划列表与项目接入状态&#10;不会修改任何文件">刷新识别</button>
           </div>
         </div>
+        <div class="branchProjectsCard" data-branch-projects-card="true" style="margin:0 0 10px 0;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--subtle-bg);">
+          <div class="section-head" style="margin-bottom:6px;">
+            <div class="section-title">
+              <h3 style="margin:0;font-size:13px;">项目与分支</h3>
+              <div class="section-desc">本机祖先项目与创新分支登记；副本目录独立，状态按真实 Git 读取，科研验证另计</div>
+            </div>
+            <div class="toolbar">
+              <button type="button" data-command="registerAncestorProject" class="secondary" title="登记一个本机已有的祖先项目仓库根&#10;只记录目录、目标分支与 remote，不修改任何文件">登记祖先项目</button>
+              <button type="button" data-command="registerBranchProject" class="secondary" title="把已有独立副本（worktree 或 clone）登记为某祖先的创新分支&#10;只登记归属，不合并、不移动提交">登记分支副本</button>
+              <button type="button" data-command="createBranchFromAncestor" class="secondary" title="在祖先仓库上创建新分支并生成独立 worktree 目录&#10;创建前展示精确分支/基点/目录并需确认；不覆盖已有分支或目录">从祖先创建分支</button>
+              <button type="button" data-command="refreshBranchProjects" class="secondary" title="重新读取所有登记的真实 Git 状态（只读）">刷新状态</button>
+              <button type="button" data-command="refreshUnifiedDispatchPolicy" class="secondary" title="把当前用户配额设置保存为统一派发策略快照，并登记本机 Worker 别名（不修改任何项目文件）&#10;所有纳入管理的分支共用这一份策略做统一派发判定">刷新统一策略</button>
+              <button type="button" data-command="refreshBranchRuns" class="secondary" title="逐个已登记项目做真实实例握手并拉取其最近操作记录（只读）">刷新运行状态</button>
+              <button type="button" data-command="compareBranchResults" class="secondary" title="读本机各登记项目的队列磁盘投影，对比已确证完成数与运行溯源（只读；不替用户做科研优劣判断）">结果对比与选优</button>
+            </div>
+          </div>
+          <div id="branchProjectsList" data-anchor="branch-projects"></div>
+        </div>
         <div id="planDetectedProject" data-anchor="plans-detected"></div>
         <div id="planQuickGrid" class="planQuickGrid" data-anchor="plans-actions">
           <div class="planSelectorControls" aria-label="计划筛选与排序">
@@ -2359,20 +2377,17 @@ export function renderPanelHtml(platform: string = process.platform): string {
       tmuxJobLogSelection = null;
     }
     function showToast(message, tone) {
-      let toast = el("simpleExperimentToast");
-      if (!toast && document.body && document.createElement) {
-        toast = document.createElement("div");
-        toast.id = "simpleExperimentToast";
-        toast.setAttribute("role", "status");
-        toast.style.cssText = "position:fixed;right:16px;bottom:16px;z-index:10000;max-width:480px;padding:10px 14px;border:1px solid var(--vscode-panel-border);border-radius:6px;background:var(--vscode-editorWidget-background);color:var(--vscode-editorWidget-foreground);box-shadow:0 3px 12px #0003;";
-        document.body.appendChild(toast);
+      const text = String(message || "").trim();
+      if (!text) return;
+      try {
+        const posted = vscode.postMessage({ command: "webviewNotice", documentGeneration: panelDocumentGeneration,
+          message: text, tone: String(tone || "info") });
+        if (posted === false) throw new Error("VS Code 原生通知通道不可用");
+      } catch (error) {
+        const meta = el("tmuxCaptureMeta");
+        if (meta) meta.textContent = text;
+        console.error("VS Code 原生通知发送失败", error, text);
       }
-      if (!toast) { const meta = el("tmuxCaptureMeta"); if (meta) meta.textContent = String(message || ""); return; }
-      toast.textContent = String(message || "");
-      toast.dataset.tone = String(tone || "info");
-      toast.hidden = false;
-      clearTimeout(showToast.hideTimer);
-      showToast.hideTimer = setTimeout(() => { toast.hidden = true; }, 5000);
     }
     function failJobTmuxLogJump(message) {
       if (!tmuxJobLogSelection) return;
@@ -3014,7 +3029,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       endpointId: "endpoint-id", planFile: "plan-file", planRevision: "plan-revision", planId: "plan-id", file: "file", runKey: "run-key", taskUiKey: "task-ui-key", experimentId: "experiment-id",
       archiveKey: "archive-key", experimentIndex: "experiment-index", gpuId: "gpu-id", workerId: "worker-id", remotePath: "remote-path", confirmationPath: "confirmation-path",
       artifactPath: "artifact-path", resultPath: "result-path", logPath: "log-path", savePlan: "save-plan", deferredPlanId: "deferred-plan-id", sourcePath: "source-path", sourceLabel: "source-label",
-      presentationPath: "presentation-path", chartType: "chart-type", styleMode: "style-mode"
+      presentationPath: "presentation-path", chartType: "chart-type", styleMode: "style-mode", branchProjectId: "branch-project-id", branchRoot: "branch-root"
     });
     const BUTTON_PAYLOAD_ATTRIBUTE_KEYS = Object.freeze(Object.keys(BUTTON_PAYLOAD_ATTRIBUTE_NAMES));
     const PENDING_SCOPE_KEYS = Object.freeze(["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "workerId", "configScope", "savePlan", "batchSelected"]);
@@ -3313,6 +3328,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     const webviewHandledCommands = new Set([
       "startTensorBoard", "runDraftDebug", "promoteDraft", "rejectDraft", "reviewDraft", "cleanupDrafts", "resetPptPathConfirmations",
       "retryPlanSubmission", "cancelPlanSubmission", "dispatchJobs", "queueRemainingJobs", "refreshJobArtifacts", "retryJobArtifactSync",
+      "releaseJobStageBlockSlots",
       "analyzeRuntimeLog",
       "retryDistributedJob",
       "recallFailedJob",
@@ -3326,6 +3342,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
       "cleanupPlan", "reviewIsolatedPlanBatches",
       "publishGithub", "syncGithub", "overwriteGithub",  "uploadProjectToWorkers", "distributeCodeToWorkers", "deployLatestAgent", "configureDownloadScope", "configureCodeSyncIncludes", "configureServerSyncScope", "resetRemotePathConfirmations", "downloadDebugBundle", "downloadRemoteResult", "openResultArtifact", "syncAllResultArtifacts", "rebuildProjectResultTables", "syncPendingPlanArtifacts", "refreshLocalResults", "splitProjectResultTable", "openLocalResultTable", "editResultColumnMapping", "openAuditTail", "applyPlanDatasetMapping", "autoMatchPlanDatasets",
       "selectPlan", "selectExperiment",
+      "registerAncestorProject", "registerBranchProject", "createBranchFromAncestor", "refreshBranchProjects", "openBranchProject", "forgetBranchProject", "forgetAncestorProject", "refreshUnifiedDispatchPolicy",
+      "submitBranchPlanRun", "refreshBranchRuns", "compareBranchResults", "verifyBranchHeadBinding", "createBranchPr", "mergeBranchPr",
       "abortScheduler", "clearOperations", "clearCache", "openScalarViewer", "openTensorBoard", "stopTensorBoard", "getTensorBoardStatus", "copyTensorBoardUrl", "openTensorBoardUrl", "showLogHistory", "openFullLog", "copyText", "openLastCheckStaticReport", "copyLastCheckStaticReport", "runCheckStatic", "verifyAgentVersion", "fetchTmuxList", "fetchTmuxCapture", "killTmuxWindow", "clearTmuxTaskTabs",
       ...Object.keys(uiCapabilityMap)
     ]);
@@ -4568,6 +4586,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         renderWorkbenchInspector(state);
         updateResourceTreeActiveSection(activeResourceSection, activeResourceAnchor);
         renderVisibleSections(state);
+        try { renderBranchProjectsCard(state); } catch (e) {}
         try { renderTmuxOverview(tmuxListCache.sessions || []); } catch (e) {}
         applyLayoutColumns();
         schedulePostRenderMaintenance();
@@ -4663,6 +4682,132 @@ export function renderPanelHtml(platform: string = process.platform): string {
         '<div class="projectOnboardingNoticeBody"><b>当前项目待接入</b><span>' + esc(detail) + '</span></div>' +
         '<button type="button" data-command="bootstrapProject" title="扫描工作区，识别 experiments/plans 下的实验计划与项目配置&#10;同时检查服务器与 Agent 等前置条件&#10;已有的计划与接入配置不会重复写入">识别工作区</button>'
       );
+    }
+
+    function renderBranchProjectsCard(state) {
+      const target = el("branchProjectsList");
+      if (!target) return;
+      const projection = (state && state.branchProjects) || {};
+      const ancestors = asArray(projection.ancestors);
+      const branches = asArray(projection.branches);
+      const currentRoot = String(projection.currentWorkspaceRoot || "");
+      const STATE_LABELS = { verified: "已验证", missing: "目录缺失", "not-a-repository": "不是Git仓库", "identity-drift": "身份漂移", dirty: "有未提交修改", detached: "detached HEAD", error: "读取失败" };
+      const RELATION_LABELS = { "ancestor-equal": "与祖先同点", "ancestor-ahead": "领先祖先", diverged: "已分叉", "separate-repository": "独立仓库（关系未证明）", unavailable: "关系未知" };
+      if (projection.error) { setHtmlIfChanged(target, '<div class="status-failed">项目与分支登记读取失败：' + esc(String(projection.error).slice(0, 300)) + '（为避免覆盖登记数据，未做任何写入；请处理后可重新登记。）</div>'); return; }
+      if (projection.pending !== false && ancestors.length === 0 && branches.length === 0 && !projection.verifiedAt) {
+        setHtmlIfChanged(target, '<div class="muted">尚未登记本机项目/分支，或正在首次读取。点上方按钮登记，或「刷新状态」立即重读真实 Git 状态。</div>');
+        return;
+      }
+      if (ancestors.length === 0 && branches.length === 0) { setHtmlIfChanged(target, '<div class="muted">尚未登记本机项目/分支。点上方「登记祖先项目」开始。</div>'); return; }
+      const chip = (label) => '<span class="status-chip">' + esc(label) + '</span>';
+      const shortSha = (value) => String(value || "").slice(0, 8) || "（空）";
+      const rowStatus = (value) => chip(STATE_LABELS[String(value || "")] || String(value || "未知"));
+      const isCurrent = (root) => currentRoot && String(root || "").replace(/[\\/]+$/, "").toLowerCase() === currentRoot.replace(/[\\/]+$/, "").toLowerCase();
+      const parts = [];
+      if (projection.verifiedAt) parts.push('<div class="muted" style="margin-bottom:4px;">上次核验：' + esc(String(projection.verifiedAt)) + '</div>');
+      for (const ancestorRow of ancestors) {
+        const record = (ancestorRow && ancestorRow.record) || {};
+        const git = (ancestorRow && ancestorRow.git) || {};
+        const kids = branches.filter((row) => String(((row && row.record) || {}).ancestorId || "") === String(record.id || ""));
+        parts.push('<div class="branchProjectAncestor" style="border-left:3px solid var(--border);padding:4px 8px;margin:6px 0;">' +
+          '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><b>祖先 ' + esc(String(record.label || "")) + '</b>' + rowStatus(ancestorRow.state) + (isCurrent(record.gitRoot) ? chip("当前窗口") : "") +
+          '<button class="mini secondary" type="button" data-command="openBranchProject" data-branch-project-id="' + escAttr(String(record.id || "")) + '" title="在新窗口打开该项目（独立实例）">打开</button>' +
+          '<button class="mini secondary" type="button" data-command="forgetAncestorProject" data-branch-project-id="' + escAttr(String(record.id || "")) + '" title="仅移除插件内登记，不删除目录与 Git 内容">移除登记</button></div>' +
+          '<div class="muted" style="font-size:11px;word-break:break-all;">' + esc(String(record.gitRoot || "")) + ' · ' + esc(String(record.targetBranch || "")) + ' @ ' + esc(shortSha(git.headCommit)) + (git.dirty ? ' · 未提交修改' : '') + (record.remoteUrl ? ' · remote: ' + esc(String(record.remoteUrl)) : '') + '</div>' +
+          ((ancestorRow.errors || []).length ? '<div class="status-warn" style="font-size:11px;">' + esc(String((ancestorRow.errors || []).join("；")).slice(0, 400)) + '</div>' : '') +
+          (kids.length ? '' : '<div class="muted" style="font-size:11px;">该祖先下暂无分支登记。</div>') +
+          '</div>');
+        for (const branchRow of kids) {
+          const b = (branchRow && branchRow.record) || {};
+          const bgit = (branchRow && branchRow.git) || {};
+          parts.push('<div class="branchProjectBranch" style="margin:2px 0 6px 16px;padding:4px 8px;border:1px dashed var(--border);border-radius:6px;">' +
+            '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;"><b>分支 ' + esc(String(b.label || "")) + '</b>' + rowStatus(branchRow.state) + chip("关系：" + (RELATION_LABELS[String(branchRow.relation || "")] || "未知")) + (bgit.dirty ? chip("有未提交修改") : "") + (isCurrent(b.workspaceRoot) ? chip("当前窗口") : "") +
+            '<button class="mini secondary" type="button" data-command="openBranchProject" data-branch-project-id="' + escAttr(String(b.id || "")) + '" title="在新窗口打开该分支项目（独立实例）">打开</button>' +
+            '<button class="mini secondary" type="button" data-command="createBranchPr" data-branch-project-id="' + escAttr(String(b.id || "")) + '" title="推送该分支到登记祖先真实 origin 并创建 PR（modal 确认、普通快推、不 force、未知不重放）">创建PR</button>&#32;' + '<button class="mini secondary" type="button" data-command="mergeBranchPr" data-branch-project-id="' + escAttr(String(b.id || "")) + '" title="仅当存在远端头＝本机HEAD的开放PR时 --merge＋match-head 合并；真实 MERGED 后才 ff-only 更新干净祖先">合并PR</button>&#32;' + '<button class="mini secondary" type="button" data-command="forgetBranchProject" data-branch-project-id="' + escAttr(String(b.id || "")) + '" title="仅移除插件内登记，不删除目录、分支或 worktree">移除登记</button></div>' +
+            '<div class="muted" style="font-size:11px;word-break:break-all;">' + esc(String(b.workspaceRoot || "")) + ' · ' + esc(String(bgit.branch || b.branch || "")) + ' @ ' + esc(shortSha(bgit.headCommit)) + ' · 登记来源：' + esc(String(b.source === "created-worktree" ? "本机创建 worktree" : "登记已有副本")) + '</div>' +
+            ((branchRow.errors || []).length ? '<div class="status-warn" style="font-size:11px;">' + esc(String((branchRow.errors || []).join("；")).slice(0, 400)) + '</div>' : '') +
+            '<div class="muted" style="font-size:11px;">科研验证状态：未在本卡自动执行，需在该分支窗口另行计划/运行与质量门禁。</div>' +
+            '</div>');
+        }
+      }
+      const unified = projection.unified || {};
+      if (unified.active) {
+        const POLICY_LABELS = { ok: "策略已就绪", missing: "尚未登记统一策略（点“刷新统一策略”）", corrupt: "快照损坏", unknown: "未知" };
+        const uParts = ['<div class="muted" style="margin:6px 0 2px;font-size:11px;">统一派发队列（同一逻辑队列；实例活性只认本机真实握手，陈旧记录不算打开）</div>'];
+        if ((unified.blockers || []).length)
+          uParts.push('<div class="status-warn" style="font-size:11px;">' + esc(String((unified.blockers || []).join("；")).slice(0, 500)) + '</div>');
+        if (unified.truncated)
+          uParts.push('<div class="status-warn" style="font-size:11px;">实例记录目录超过单次枚举上限，“已打开”判定不完整，请先清理发现目录。</div>');
+        for (const row of asArray(unified.roots)) {
+          const flags = [row.isCurrent ? chip("当前窗口") : "", row.live ? chip("已打开(握手确认)") : chip("未确认打开"),
+            row.queueState === "corrupt" ? chip("队列读取失败") : row.queueState === "missing" ? chip("队列为空") : ""].join("");
+          uParts.push('<div style="font-size:11px;margin:2px 0 2px 16px;word-break:break-all;">' + esc(String(row.label || "")) + flags +
+            ' 待派发 ' + esc(String(row.waiting == null ? "?" : row.waiting)) + ' · 运行中 ' + esc(String(row.running == null ? "?" : row.running)) +
+            ' · 待核实 ' + esc(String(row.unknown == null ? "?" : row.unknown)) +
+            ((row.blockReasons || []).length ? ' · <span class="status-warn">' + esc(String((row.blockReasons || []).join("；")).slice(0, 300)) + '</span>' : '') +
+            '<button class="mini secondary" type="button" data-command="submitBranchPlanRun" data-branch-root="' + escAttr(String(row.root || "")) + '" title="经该分支实例的已验证 workflow 入口选择并提交 PLAN（产物冲突等确认仍在该窗口进行）">提交运行</button>' +
+            '</div>');
+        }
+        uParts.push('<div class="muted" style="font-size:11px;">策略状态：' + esc(POLICY_LABELS[String(unified.policyState || "")] || String(unified.policyState || "")) +
+          (asArray(unified.servers).length ? ' · 服务器：' + esc(asArray(unified.servers).join("，")) : '') + '</div>');
+        parts.push('<div class="branchProjectsUnified" style="margin-top:6px;border-top:1px dashed var(--border);padding-top:4px;">' + uParts.join("") + '</div>');
+      }
+      const runs = projection.runs;
+      if (runs && typeof runs === "object") {
+        const rParts = ['<div class="muted" style="margin:6px 0 2px;font-size:11px;">分支运行状态（每次点「刷新运行状态」按真实握手逐个拉取操作记录；未刷新的不猜测）</div>'];
+        if (runs.error) rParts.push('<div class="status-warn" style="font-size:11px;">' + esc(String(runs.error).slice(0, 300)) + '</div>');
+        if (!asArray(runs.roots).length) rParts.push('<div class="muted" style="font-size:11px;">尚无已登记项目。</div>');
+        for (const row of asArray(runs.roots)) {
+          const ops = asArray(row.operations);
+          rParts.push('<div style="font-size:11px;margin:2px 0 2px 16px;word-break:break-all;"><b>' + esc(String(row.label || "")) + '</b>' +
+            (row.error ? ' <span class="status-warn">' + esc(String(row.error).slice(0, 300)) + '</span>' : ops.length ? "" : ' <span class="muted">无操作记录</span>') + '</div>');
+          for (const op of ops.slice(0, 8))
+            rParts.push('<div class="muted" style="font-size:11px;margin-left:24px;word-break:break-all;">[' + esc(String(op.type || "?") + " · " + String(op.status || "?")) + '] ' +
+              esc(String(op.planFile || op.operationId || "").slice(0, 120)) + (op.message ? ' · ' + esc(String(op.message).slice(0, 160)) : '') +
+              (op.startedAt ? ' · ' + esc(String(op.startedAt)) : '') + (op.finishedAt ? ' → ' + esc(String(op.finishedAt)) : '') + '</div>');
+        }
+        if (runs.refreshedAt) rParts.push('<div class="muted" style="font-size:11px;">刷新时间：' + esc(String(runs.refreshedAt)) + '</div>');
+        parts.push('<div class="branchProjectsRuns" style="margin-top:6px;border-top:1px dashed var(--border);padding-top:4px;">' + rParts.join("") + '</div>');
+      }
+      const results = projection.results;
+      if (results && typeof results === "object") {
+        const resParts = ['<div class="muted" style="margin:6px 0 2px;font-size:11px;">结果对比（读本机各项目队列磁盘投影；“已确证”=身份绑定的完成证明，不等于科研结论通过；优劣由用户判断）</div>'];
+        if (results.error) resParts.push('<div class="status-warn" style="font-size:11px;">' + esc(String(results.error).slice(0, 300)) + '</div>');
+        if (!asArray(results.roots).length) resParts.push('<div class="muted" style="font-size:11px;">尚无已登记项目。</div>');
+        for (const row of asArray(results.roots)) {
+          resParts.push('<div style="font-size:11px;margin:2px 0 2px 16px;word-break:break-all;"><b>' + esc(String(row.label || "")) + '</b>' +
+            (row.queueState === "corrupt" ? chip("队列读取失败") : row.queueState === "missing" ? chip("队列为空") : "") +
+            (row.error ? ' <span class="status-warn">' + esc(String(row.error).slice(0, 200)) + '</span>' : '') + '</div>');
+          if (!asArray(row.plans).length && row.queueState === "ok") resParts.push('<div class="muted" style="font-size:11px;margin-left:24px;">队列内暂无 PLAN。</div>');
+          for (const plan of asArray(row.plans)) {
+            const gp = plan.gitProvenance;
+            resParts.push('<div class="muted" style="font-size:11px;margin-left:24px;word-break:break-all;">' + esc(String(plan.planFile || "").slice(0, 120)) +
+              ' · 已确证 ' + esc(String(plan.verified ?? "?")) + '/' + esc(String(plan.jobs ?? "?")) +
+              ' · 运行 ' + esc(String(plan.running ?? "?")) + ' · 未知 ' + esc(String(plan.unknown ?? "?")) + ' · 等待 ' + esc(String(plan.waiting ?? "?")) +
+              (Number(plan.failed) ? ' · 失败 ' + esc(String(plan.failed)) : '') + (Number(plan.cancelled) ? ' · 中止 ' + esc(String(plan.cancelled)) : '') +
+              (gp ? ' · 来源 ' + esc(String(gp.branch || "?")) + '@' + esc(String(gp.localCommit || "").slice(0, 8)) +
+                (gp.dirty === true ? '（当时有未提交修改）' : gp.dirty === null ? '（当时脏状态未知）' : '') : ' · 无运行溯源') +
+              (plan.hasExecutionSource ?
+                ' <button class="mini secondary" type="button" data-command="verifyBranchHeadBinding" data-branch-root="' + escAttr(String(row.root || "")) + '" title="只读核对：当前提交树逐文件（类型/大小/blob 字节 SHA）对比已验源码清单；不 stage、不 commit">核对HEAD</button>'
+                : ' · 无已验清单') + '</div>');
+          }
+        }
+        if (results.refreshedAt) resParts.push('<div class="muted" style="font-size:11px;">刷新时间：' + esc(String(results.refreshedAt)) + '</div>');
+        parts.push('<div class="branchProjectsResults" style="margin-top:6px;border-top:1px dashed var(--border);padding-top:4px;">' + resParts.join("") + '</div>');
+      }
+      const headVerify = projection.headVerify;
+      if (headVerify && typeof headVerify === "object") {
+        const hvOk = headVerify.ok === true;
+        parts.push('<div class="' + (hvOk ? 'muted' : 'status-warn') + '" style="margin-top:4px;font-size:11px;word-break:break-all;">HEAD 核对 ' +
+          esc(String(headVerify.planFile || "").slice(0, 90)) + '：' +
+          (hvOk ? chip("提交树与已验清单一致") + ' 覆盖 ' + esc(String(headVerify.coveredFiles ?? "?")) + ' 个文件' +
+            (headVerify.sameRunCommit ? '（与原运行同一提交）' : headVerify.provenanceCommit ? '（原运行 ' + esc(String(headVerify.provenanceCommit).slice(0, 8)) + ' → 现 ' + esc(String(headVerify.headCommit || "").slice(0, 8)) + '，已提交内容一致，可复用不重跑）' : '（无运行溯源可比对）')
+            : chip("无法证明此 HEAD") + ' ' + esc(String(headVerify.reason || "").slice(0, 200))) +
+          (headVerify.dirty ? chip("工作区有未提交修改") : '') + ' · ' + esc(String(headVerify.checkedAt || "")) + '</div>');
+        for (const failure of asArray(headVerify.failures).slice(0, 3))
+          parts.push('<div class="status-warn" style="font-size:11px;word-break:break-all;">✘ ' + esc(String(failure.path || "").slice(0, 120)) + '：' + esc(String(failure.reason || "").slice(0, 160)) + '</div>');
+      }
+      setHtmlIfChanged(target, parts.join(""));
     }
 
     function schedulePostRenderMaintenance(force) {
@@ -6024,6 +6169,16 @@ export function renderPanelHtml(platform: string = process.platform): string {
       return value === "runAllPlans" || value === "runPlan" || value === "reproducePlan" || value === "validatePlan" || value === "dryRunPlan";
     }
 
+    // r4 (task ui-plan-gpu-progress-20261024 返修): these four artifact-sync operations report
+    // through their per-operation VS Code Notification + full log, so the card no longer
+    // repeats them as grey phase text. Their pending rows stay registered, so button
+    // loading, dedupe and terminal-state handling are unchanged; rebuildProjectResultTables
+    // and every other command keep their original routing.
+    function artifactSyncNoticeCommand(command) {
+      const value = String(command || "");
+      return value === "retryJobArtifactSync" || value === "refreshJobArtifacts" || value === "syncPendingPlanArtifacts" || value === "syncAllResultArtifacts";
+    }
+
     function formatWaited(ms) {
       const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
       const minutes = Math.floor(seconds / 60);
@@ -6043,7 +6198,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const shown = full.length > 160 ? full.slice(0, 157) + "..." : full;
         return { shown, full };
       };
-      const pending = Object.values(pendingActionsById || {});
+      // 运行plan/实验准备的进行中进度改由每次操作的 VS Code Notification 展示
+      // （任务 ui-plan-gpu-progress-20261024），此处不再重复微小灰字；其它命令面
+      // （如执行/结果区的 tmux 等操作）保持原样，卡片历史行与按钮终态不受影响。
+      const pending = Object.values(pendingActionsById || {}).filter((row) => !(row && (planPhaseCommand(row.command) || artifactSyncNoticeCommand(row.command))));
       const hosts = [["commandPhaseLine", "execution"], ["planCommandPhaseLine", "plans"], ["resultCommandPhaseLine", "results"]];
       for (const pair of hosts) {
         const host = el(pair[0]);
@@ -6071,7 +6229,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function pendingKeyFromButtonDataset(button) {
       const payload = {};
-      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "attempt", "commandId", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "session", "window"].forEach((key) => {
+      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "attempt", "commandId", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "session", "window", "branchProjectId"].forEach((key) => {
         if (key === "attempt" && button.dataset.command === "recallFailedJob") return;
         if (button.dataset[key]) payload[key] = button.dataset[key];
       });
@@ -6081,7 +6239,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function pendingKeyForAction(command, payload) {
       const parts = [command];
-      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "attempt", "commandId", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "batchSelected"].forEach((key) => {
+      ["runKey", "taskUiKey", "experimentId", "archiveKey", "experimentIndex", "gpuId", "endpointId", "remotePath", "file", "planFile", "planId", "jobIndex", "attempt", "commandId", "workerId", "configScope", "savePlan", "sourcePath", "sourceLabel", "presentationPath", "chartType", "styleMode", "target", "batchSelected", "branchProjectId"].forEach((key) => {
         const value = payload && payload[key];
         if (value || (key === "jobIndex" && value === 0)) parts.push(key + "=" + String(value));
       });
@@ -6208,17 +6366,14 @@ export function renderPanelHtml(platform: string = process.platform): string {
         renderCommandPhaseLine();
         try {
           if (String(data.command || "") === "analyzeRuntimeLog" && data.message) {
-            showToast(String(data.message).slice(0, 400), String(data.status).toLowerCase() === "completed" ? "info" : "warning");
-          }
-          if (String(data.command || "") === "runAllPlans" && data.message && data.message !== "completed") {
-            showToast(String(data.message).slice(0, 480), String(data.status).toLowerCase() === "completed" ? "info" : "warning");
+            showToast(String(data.message), String(data.status).toLowerCase() === "completed" ? "info" : "warning");
           }
           if (String(data.command || "") === "killTmuxWindow" || String(data.command || "") === "clearTmuxTaskTabs") {
             if (String(data.command || "") === "clearTmuxTaskTabs" || String(data.command || "") === "killTmuxWindow") {
               if (String(data.command || "") === "clearTmuxTaskTabs") tmuxClearTaskTabsBusy = false;
               const clearText = String(data.message || "");
               if (clearText && clearText !== "completed") {
-                try { if (typeof showToast === "function") showToast(clearText.slice(0, 240), String(data.status || "").toLowerCase() === "completed" ? "info" : "warning"); } catch (e) {}
+                try { if (typeof showToast === "function") showToast(clearText, String(data.status || "").toLowerCase() === "completed" ? "info" : "warning"); } catch (e) {}
               }
             }
             refreshTmuxList();
@@ -11460,6 +11615,44 @@ export function renderPanelHtml(platform: string = process.platform): string {
     function requestGpuHistoryRemote(payload) {
       vscode.postMessage(Object.assign({ command: "loadGpuHistory" }, payload));
     }
+    // Gap decisions are materialized per segment at that segment's OWN granularity
+    // before coarse and fine runs are concatenated, so a merged fine-run median
+    // can never re-judge a coarse gap (and vice versa). Explicit booleans stay
+    // authoritative; holes beyond a segment's own limit are marked, never bridged,
+    // and no values are synthesized.
+    function gpuHistorySegmentGapLimit(expectedStep) {
+      return Math.max(Number(gpuHistoryMeta.bucketSeconds) || 0, Number(expectedStep) || 0) * GPU_HISTORY_GAP_FACTOR;
+    }
+    function mergeGpuHistorySegments(coarseRows, fineRows) {
+      const kept = asArray(coarseRows);
+      if (kept.length > 1) {
+        const coarseLimit = gpuHistorySegmentGapLimit(historyExpectedStepFromSortedTimes(
+          kept.map(function(row) { return Number(row && row.bucketEpoch); })));
+        for (let index = 1; index < kept.length; index += 1) {
+          const row = kept[index];
+          if (typeof row.gapBefore === "boolean") continue; // remote-declared stays authoritative
+          const step = Number(row.bucketEpoch) - Number(kept[index - 1].bucketEpoch);
+          row.gapBefore = !Number.isFinite(step) || step > coarseLimit;
+        }
+      }
+      const fine = asArray(fineRows);
+      if (fine.length > 1) {
+        const fineLimit = gpuHistorySegmentGapLimit(historyExpectedStepFromSortedTimes(
+          fine.map(function(row) { return Number(row && row.bucketEpoch); })));
+        for (let index = 1; index < fine.length; index += 1) {
+          const step = Number(fine[index].bucketEpoch) - Number(fine[index - 1].bucketEpoch);
+          if (!Number.isFinite(step) || step > fineLimit) fine[index].gapBefore = true;
+        }
+      }
+      if (kept.length && fine.length) {
+        const coarseStep = historyExpectedStepFromSortedTimes(kept.map(function(row) { return Number(row && row.bucketEpoch); }));
+        const fineStep = historyExpectedStepFromSortedTimes(fine.map(function(row) { return Number(row && row.bucketEpoch); }));
+        const boundaryLimit = gpuHistorySegmentGapLimit(Math.max(coarseStep, fineStep));
+        const boundary = Number(fine[0].bucketEpoch) - Number(kept[kept.length - 1].bucketEpoch);
+        fine[0].gapBefore = fine[0].gapBefore === true || !Number.isFinite(boundary) || boundary > boundaryLimit;
+      }
+      return kept.concat(fine);
+    }
     function applyGpuWindowSamples(message) {
       // Consume only the exact request this answer belongs to: unknown, duplicate,
       // late-after-timeout or post-reload answers are dropped instead of cancelling
@@ -11490,7 +11683,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
           if (!byGpu.has(gpuId)) byGpu.set(gpuId, []);
           const used = Number(raw.memoryUsedMb !== undefined ? raw.memoryUsedMb : raw.memory_used_mb);
           const total = Number(raw.memoryTotalMb !== undefined ? raw.memoryTotalMb : raw.memory_total_mb);
-          byGpu.get(gpuId).push({ timestamp: new Date(collectedAt).toISOString(), bucketEpoch: collectedAt,
+          // The history pipeline (remote buckets, time range, canvas) is on the
+          // epoch-SECONDS scale; GpuSampleRing.collectedAt is epoch milliseconds.
+          byGpu.get(gpuId).push({ timestamp: new Date(collectedAt).toISOString(), bucketEpoch: Math.round(collectedAt / 1000),
             gpuUtilPercent: Number(raw.utilizationPercent !== undefined ? raw.utilizationPercent : raw.utilization),
             memoryUtilPercent: Number.isFinite(used) && Number.isFinite(total) && total > 0 ? Math.round(used / total * 1000) / 10 : null,
             memoryUsedMb: Number.isFinite(used) ? used : null, memoryTotalMb: Number.isFinite(total) ? total : null,
@@ -11507,7 +11702,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const kept = existing && Array.isArray(existing.points)
           ? existing.points.filter(function(row) { return Number(row && row.bucketEpoch) < points[0].bucketEpoch; }) : [];
         gpuHistorySeriesCache.delete(key);
-        gpuHistorySeriesCache.set(key, { serverId: workerId, gpuId: gpuId, points: kept.concat(points) });
+        gpuHistorySeriesCache.set(key, { serverId: workerId, gpuId: gpuId, points: mergeGpuHistorySegments(kept, points) });
         applied += points.length;
       });
       if (applied) {
@@ -14496,12 +14691,27 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
 
 
+    // Human-readable progress from the SAME operation row the card already shows
+    // (patchPlanSubmissionProgress writes the stage sentence into message/stage);
+    // machine tokens fall back to the existing phase label meanings. The label
+    // never claims more than the row states: submitted stays 提交中, never 运行中.
+    function executionSubmissionProgressText(row) {
+      // normalizeOperationRows fills messageless rows with the display placeholder "-";
+      // a placeholder is not real stage progress and must never surface in the label.
+      const message = String((row && row.message) || "").trim();
+      if (message && message !== "-") return message;
+      const stage = String((row && row.stage) || "").trim();
+      if (!stage || stage === "-") return "";
+      return PLAN_EXECUTION_PHASE_LABELS[stage] || stage;
+    }
     function executionSubmissionLabel(row) {
       if (row && row.localSubmissionProgress === true && String(row.status || "").toLowerCase() === "queued") return "等待继续提交";
       const action = String((row && (row.type || row.action)) || "").toLowerCase();
-      if (action.indexOf("validate") >= 0 || action.indexOf("dry-run") >= 0 || action.indexOf("dryrun") >= 0) return "校验中";
-      if (action.indexOf("run-plan") >= 0 || action.indexOf("reproduce") >= 0 || action.indexOf("workflow") >= 0) return "提交中";
-      return "处理中";
+      let base = "处理中";
+      if (action.indexOf("validate") >= 0 || action.indexOf("dry-run") >= 0 || action.indexOf("dryrun") >= 0) base = "校验中";
+      else if (action.indexOf("run-plan") >= 0 || action.indexOf("reproduce") >= 0 || action.indexOf("workflow") >= 0) base = "提交中";
+      const progress = executionSubmissionProgressText(row);
+      return progress && progress !== base ? base + " · " + progress : base;
     }
 
     function executionOperationWorkflowId(row) {
@@ -14657,12 +14867,14 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const label = group.planFile ? planBaseName(group.planFile) : "未关联 Plan 的操作";
         const totalJobs = Math.max(currentJobs.length, !submission && !deferredCurrent ? recovery.expectedJobCount : 0) || (!submission && !deferredCurrent ? group.tasks.length : 0);
         const failedJobs = currentJobs.filter((job) => String(job.status || "") === "failed").length;
+        // r82：计数区分——"隔离暂停"（旧产物隔离未完成，可见但不可派发）既不计入可执行也不计"沿用完成"。
+        const isolationPausedJobs = currentJobs.filter((job) => job.outputIsolationBlocked).length;
         const unavailableJobs = currentJobs.filter((job) => job.unavailable && job.status === "cancelled").length;
         const cancelledJobs = currentJobs.filter((job) => String(job.status || "") === "cancelled" && !job.unavailable).length;
         const successRate = totalJobs ? Math.round(completed * 100 / totalJobs) : 0;
         const statusText = submission ? executionSubmissionLabel(submission) : deferredView ? deferredView.statusText : unknown || recovery.unresolved ? "待核实" : tone === "blocked" ? (reviewJobs ? (anomalyJobs ? "完成但有异常，待复核" : "运行日志待核实") : "阻塞") : tone === "queued" ? "排队" : running ? "运行中" : dispatching ? "派发中" : tone === "failed" ? "失败" : missingWindows ? "远端未发现执行窗口" : unavailableJobs ? "已结束（含不可用 job）" : cancelledJobs === totalJobs && totalJobs ? "已中止" : cancelledJobs ? "已结束" : currentJobs.length ? "已完成" : "已结束";
         let countText = submission ? (statusText + " · 待生成 job") : deferredView ? deferredView.countText : totalJobs
-          ? ("成功 " + completed + "/" + totalJobs + " · " + successRate + "%" + (running ? " · 运行 " + running : "") + (queued ? " · 排队 " + queued : "") + (blockedCount ? " · 阻塞 " + blockedCount : "") + (failedJobs ? " · 失败 " + failedJobs : "") + (recovery.missingCount ? " · 待核实 " + recovery.missingCount : "") + (recovery.conflict ? " · 服务器状态冲突" : ""))
+          ? ("成功 " + completed + "/" + totalJobs + " · " + successRate + "%" + (running ? " · 运行 " + running : "") + (queued ? " · 排队 " + queued : "") + (isolationPausedJobs ? " · 隔离暂停 " + isolationPausedJobs : "") + (blockedCount ? " · 阻塞 " + blockedCount : "") + (failedJobs ? " · 失败 " + failedJobs : "") + (recovery.missingCount ? " · 待核实 " + recovery.missingCount : "") + (recovery.conflict ? " · 服务器状态冲突" : ""))
           : ("操作 " + group.operations.length);
         if (group.schedulingMode === "server_prequeue" && currentJobs.length) {
           countText += " · 服务器接收 " + group.remoteAcceptedJobCount + "/" + totalJobs;
@@ -14682,7 +14894,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const taskStamps = group.tasks.map((row) => Date.parse(row.enqueuedAt || row.createdAt || row.startedAt || "")).filter(Number.isFinite);
         const stamp = Date.parse(submitted || "") || (operationStamps.length ? Math.max(...operationStamps)
           : taskStamps.length ? Math.min(...taskStamps) : Number.MAX_SAFE_INTEGER);
-        return { ...group, currentJobs, totalJobs, missingInputs: Math.max(0, recovery.expectedJobCount-currentJobs.length), tone, active, distributedActive, blockedOnly, blockedCount, queued, completed, running, submitting: !!submission, waitingSubmission, deferredCurrent, statusText, countText, failedJobs, unavailableJobs, label, stamp };
+        return { ...group, currentJobs, totalJobs, missingInputs: Math.max(0, recovery.expectedJobCount-currentJobs.length), tone, active, distributedActive, blockedOnly, blockedCount, queued, completed, running, submitting: !!submission, waitingSubmission, deferredCurrent, statusText, countText, failedJobs, isolationPausedJobs, unavailableJobs, label, stamp };
       });
       items.sort((a, b) => a.stamp - b.stamp || a.key.localeCompare(b.key));
       if (typeof executionPlanFiles !== 'undefined') executionPlanFiles = Array.from(new Set(items.map(item => item.planFile).filter(Boolean)));
@@ -14722,6 +14934,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const distributedHtml = distributedRows.length ? '<h3>' + loadingPrefix(group.distributedActive) + '当前 job · 成功 ' + group.completed + '/' + group.totalJobs + '</h3>'
           + (group.missingInputs ? '<div class="executionDistributedFailure" role="status">缺少 ' + group.missingInputs + ' 个 job 的任务输入（声明 ' + group.totalJobs + '，当前 ' + distributedRows.length + '）。缺项不计入完成；选中对应 PLAN 后，可校验并选择“仅补跑未完成任务”。</div>' : '')
           + (group.failedJobs ? '<div class="executionDistributedFailure">' + group.failedJobs + ' 个当前 job 失败，未计入成功。打开对应日志查看原因。</div>' : '')
+          + (group.isolationPausedJobs ? '<div class="executionDistributedFailure" role="status">' + group.isolationPausedJobs + ' 个 job 旧产物隔离未完成：训练未启动、不会自动派发，也不计入沿用完成；请在对应 job 行通过“重新排队此 job”或手动派发重新审核产物处理。</div>' : '')
           + (group.logicalMerged ? '<div class="muted">补跑已合并 · ' + (group.mixedVersions ? '混合源码版本；逐 job 保留原始来源' : '保留逐 job 原始来源') + '</div>' : '')
           + Array.from(new Set(distributedRows.map(job => job.planId || group.distributedPlanId))).map(id => '<button type="button" class="mini" data-manual-dispatch="batch" data-plan-id="'+escAttr(id||'')+'" title="仅处理同一原始提交内的选中 job；已有文件另行审核">停止原任务并派发所选 job</button>').join('')
           + '<div class="executionDistributedJobs">' + distributedRows.map((job) => {
@@ -14734,7 +14947,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const unavailable = job.unavailable && status === "cancelled";
           const preflightRejected = Boolean(job.admissionRejection && status === "failed");
           const needsReview = status === "completed" && job.completionState !== "verified";
-          const statusLabel = needsReview ? (job.completionState === "review_required" ? "完成但有异常，待复核" : "产物完整，运行日志待核实") : job.executionState === "starting" ? "正在启动命令" : job.retainExistingOutputs ? "保留已有产物" : job.lifecycleProtocol === 2 && status === "unknown" ? (job.statusQueryError ? "查询失败，状态未知" : job.executionState === "exited" ? "执行结束，结果待确认" : job.executionState === "missing" ? "远端未发现该任务" : "执行状态待核实") : unavailable ? "不可用" : blocked ? (String(job.blockReason || "").indexOf("PLAN 所需源码待核实") === 0 ? "源码待核实" : String(job.blockReason || "").indexOf("等待当前代码版本") === 0 ? "等待代码版本" : "代码版本不匹配") : retryView.label || ({ pending: "本机等待空卡", queued: "服务器排队", dispatching: "派发中", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已中止", unknown: "待核实" }[status] || status);
+          const statusLabel = needsReview ? (job.completionState === "review_required" ? "完成但有异常，待复核" : "产物完整，运行日志待核实") : job.executionState === "starting" ? "正在启动命令" : job.outputIsolationBlocked ? "隔离暂停，未启动" : job.retainExistingOutputs ? "保留已有产物" : job.lifecycleProtocol === 2 && status === "unknown" ? (job.statusQueryError ? "查询失败，状态未知" : job.executionState === "exited" ? "执行结束，结果待确认" : job.executionState === "missing" ? "远端未发现该任务" : "执行状态待核实") : unavailable ? "不可用" : blocked ? (String(job.blockReason || "").indexOf("PLAN 所需源码待核实") === 0 ? "源码待核实" : String(job.blockReason || "").indexOf("等待当前代码版本") === 0 ? "等待代码版本" : "代码版本不匹配") : retryView.label || ({ pending: "本机等待空卡", queued: "服务器排队", dispatching: "派发中", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已中止", unknown: "待核实" }[status] || status);
           const placement = (job.workerId ? job.workerId + (preflightRejected ? " · 未启动" : job.gpuId == null || job.gpuId === "" ? "" : " · GPU " + job.gpuId) : "未派发") + (job.manualDispatch ? " · 手动指定" : "");
           const canJumpLog = Boolean(!preflightRejected && job.workerId && (job.commandId || job.outputDir));
           const logButton = '<button type="button" class="mini secondary" data-job-tmux-log="1" data-worker-id="' + escAttr(job.workerId || "") + '" data-command-id="' + escAttr(job.commandId || "") + '" data-output-dir="' + escAttr(job.outputDir || "") + '"' + (canJumpLog ? '' : ' disabled') + ' title="' + (canJumpLog ? '在 TMUX 区域选中该 Worker 的真实任务窗口标签' : '等待任务派发后定位对应的 TMUX 日志标签') + '">查看窗口日志</button>';
@@ -14771,10 +14984,32 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const analyzeButton = job.commandId && job.workerId ? '<button type="button" class="mini secondary" data-command="analyzeRuntimeLog" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '">重新分析运行日志</button>' : '';
           const artifactButtons = status === "completed" && job.lifecycleProtocol === 2 && job.workerId && job.commandId && !unavailable
             ? ['refreshJobArtifacts', 'retryJobArtifactSync'].map((command, index) => '<button type="button" class="mini secondary" data-command="' + command + '" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="只核对或增量同步此 job 当前勾选范围的产物，保留训练完成状态。">' + (index ? '重试产物同步' : '刷新产物状态') + '</button>').join('') : '';
+          // 暂存槽卡点（SimpleSFTP 0.2.113 结构化证据）：显示「卡在哪台/哪个范围/通道/身份＋两槽」。
+          // 释放按钮仅当结构化候选 releaseCandidate 且 SE 实时能力门成立（stageBlockReleaseCapable，由扩展端
+          // 读 capabilities 得出，绝不按版本号推断）才出现；显示可缩写代/身份，后台释放只绑定持久化完整值。
+          const stageSlotAge = (ms) => Number.isInteger(ms) && ms >= 0
+            ? (ms >= 86400000 ? Math.floor(ms / 86400000) + ' 天' : Math.max(1, Math.floor(ms / 3600000)) + ' 小时') : '未知';
+          const stageBlock = job.artifactStageBlock && job.artifactStageBlock.schemaVersion === 1 && job.artifactStageBlock.code === 'TRANSFER_STAGE_PENDING'
+            ? job.artifactStageBlock : null;
+          const stageBlockHtml = !stageBlock ? '' : '<div class="executionDistributedJobError">暂存槽卡点：主机 '
+            + esc(String(stageBlock.destination && stageBlock.destination.host || '未知'))
+            + (stageBlock.destination && stageBlock.destination.profile ? '（profile ' + esc(String(stageBlock.destination.profile)) + '）' : '')
+            + ' · 范围 ' + esc(String(stageBlock.scope || '未声明')) + ' · 通道 ' + esc(String(stageBlock.lane === 1 ? 1 : 0))
+            + ' · 身份 ' + esc(String(stageBlock.identity || '').slice(0, 12)) + '… · 待进入代 ' + esc(String(stageBlock.incomingGeneration || '').slice(0, 12)) + '…'
+            + asArray(stageBlock.slots).map((slot) => '<div>槽 ' + esc(String(slot.slot || '?')) + ' · 代 ' + esc(String(slot.generation || '').slice(0, 12))
+              + '… · 状态 ' + esc(String(slot.status || '未知')) + (slot.locked === true ? ' · 正在被占用' : '')
+              + (slot.protectedReason ? ' · 受保护：' + esc(String(slot.protectedReason)) : '') + ' · 已存在 ' + esc(stageSlotAge(slot.ageMs)) + '</div>').join('')
+            + (stageBlock.releaseCandidate === true && job.stageBlockReleaseCapable === true && job.commandId
+              ? '<button type="button" class="mini secondary" data-command="releaseJobStageBlockSlots" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="实时复核后展示精确绝对/相对路径，经一次确认隔离并登记删除这条最旧 committed 暂存槽；不改变训练完成状态，只自动重试这条同步。">释放旧文件占用</button>'
+              : '<div class="muted">' + (stageBlock.releaseCandidate === true ? '配套 SimpleSFTP 未提供受控释放能力或实时能力未确认；仅显示卡点，不会猜测路径。' : '该卡点当前无可释放候选（被占用、非终态或时间不明），不会提供释放入口。') + '</div>')
+            + '</div>';
           const anomalyRerunButton = status === "completed" && job.completionState === "review_required" && job.lifecycleProtocol === 2 && job.workerId && job.commandId
             ? '<button type="button" class="mini secondary" data-command="retryDistributedJob" data-runtime-anomaly-rerun="true" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="仅重跑此 job；已有产物沿用完整路径双确认，保留其他任务。">覆盖产物并重跑此 job</button>' : '';
-          const blockText = job.lifecycleProtocol === 2 ? String(job.statusQueryError || job.blockReason || "") : blocked ? String(job.blockReason || "") : "";
+          const blockText = job.lifecycleProtocol === 2 ? String(job.statusQueryError || job.blockReason || "") : job.outputIsolationBlocked || blocked ? String(job.blockReason || "") : "";
           const blockAdvice = blocked ? (blockText.indexOf("PLAN 所需源码待核实") === 0 ? "仅核实本 PLAN 的入口、配置与依赖；产物和缓存不参与。按具体路径处理源码变化，协议较旧时更新 Agent/Scheduler 后刷新即可，无需重新提交已在队列的 job。" : blockText.indexOf("等待当前代码版本") === 0 ? "这个已提交 job 保留排队；其他 Worker 可运行匹配版本。被占用的 Worker 收到旧任务结束回执后自动释放版本锁，无需再次提交。" : "下一步：空闲 GPU 不能运行这份旧代码。到实验准备的 Plan 列表手动选中，再点“校验并提交运行”；或恢复提交前的代码并重新同步 Worker。") : "";
+          // r86：jobNext 唯一消费点要求 errorText∧(preflightRejected∨codeProofBlocked)，"启动器冲突/隔离阻断"在此永不可达，不留死分支；
+          // 隔离暂停的可见面=blockText（下方独立渲染 blockReason）+statusLabel"隔离暂停，未启动"+组级提示；
+          // 现场启动器失败走既有错误行契约（错误摘要+查看窗口日志提示+"重新排队此 job"按钮）。链头恢复 413 原形。
           const jobNext = preflightRejected
             ? '<div class="muted">启动前预检已拒绝此 job，训练未开始，不会自动重派。请核对上面的输出与结果路径；保留已有权重和结果，显式处理冲突或修改正式 job 声明后再提交。</div>'
             : codeProofBlocked
@@ -14793,7 +15028,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             + (job.manualDispatchNotice ? '<div class="muted">' + esc(job.manualDispatchNotice) + '</div>' : '')
             + (job.latestArtifactSync ? '<div class="muted">最新产物同步：' + esc(job.latestArtifactSync.state === "synced" ? "已同步到全部启用服务器" : job.latestArtifactSync.state === "excluded" ? "不在当前勾选范围内" : "未完成，可刷新重试") + '</div>' : '')
             + (blockText ? '<div class="executionDistributedJobError">' + esc(blockText) + (blockAdvice ? '<div>下一步：' + esc(blockAdvice.replace(/^下一步：/, "")) + '</div>' : '') + '</div>' : '')
-            + (errorText ? '<div class="executionDistributedJobError">' + esc(executionJobErrorSummary(errorText)) + (job.artifactError && artifactButtons ? '<div class="muted">点“刷新产物状态”核对；需要补传时点“重试产物同步”，无需重跑训练。</div>' : preflightRejected || codeProofBlocked ? jobNext : '<div class="muted">点击“查看窗口日志”查看完整输出。</div>') + '</div>' : '') + '</div>';
+            + (errorText ? '<div class="executionDistributedJobError">' + esc(executionJobErrorSummary(errorText)) + (job.artifactError && artifactButtons ? '<div class="muted">点“刷新产物状态”核对；需要补传时点“重试产物同步”，无需重跑训练。</div>' : preflightRejected || codeProofBlocked ? jobNext : '<div class="muted">点击“查看窗口日志”查看完整输出。</div>') + '</div>' : '') + stageBlockHtml + '</div>';
         }).join("") + '</div>' : '';
         const opHtml = opRows.length ? '<h3>最近操作</h3><div class="operationTimeline">' + opRows.map(renderOperationItem).join("") + '</div>' : "";
         const taskHtml = taskRows.length ? '<h3>任务与日志</h3>' + renderPlanTaskCards(state, sortedTasks, selected, group.key) : "";
@@ -14843,7 +15078,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const foldRow = (group) => {
         const totalJobs = (group.currentJobs || []).length;
         const statusText = group.statusText;
-        const count = totalJobs ? ("成功 " + group.completed + "/" + totalJobs + (group.failedJobs ? " · 失败 " + group.failedJobs : "") + (group.unavailableJobs ? " · 不可用 " + group.unavailableJobs : "")) : group.countText;
+        const count = totalJobs ? ("成功 " + group.completed + "/" + totalJobs + (group.failedJobs ? " · 失败 " + group.failedJobs : "") + (group.isolationPausedJobs ? " · 隔离暂停 " + group.isolationPausedJobs : "") + (group.unavailableJobs ? " · 不可用 " + group.unavailableJobs : "")) : group.countText;
         const foldRaw = stopClearForPlan(group.planFile);
         const foldClear = foldRaw && !stopClearNewerThan(group, foldRaw) && String(foldRaw.outcome || "") !== "completed" ? foldRaw : null;
         const foldOutcome = String(foldClear && foldClear.outcome || "");
@@ -14989,7 +15224,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
           localSubmissionProgress: row.localSubmissionProgress,
           workflowId: executionOperationWorkflowId(row),
           error: row.error,
-          message: active ? "" : row.message,
+          // The group label now displays an ACTIVE submission's stage/message
+          // (same-source progress), so the key must carry exactly that displayed
+          // text; timestamps stay excluded to avoid per-frame rerenders.
+          message: active ? String(row.message || "") : row.message,
+          stage: active ? String(row.stage || "") : "",
           reconcileEvidenceActive: row.reconcileEvidenceActive,
         };
       });
@@ -15030,6 +15269,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
             trainLogPath: job.trainLogPath,
             error: job.error,
             artifactError: job.artifactError,
+            artifactStageBlock: job.artifactStageBlock,
+            stageBlockReleaseCapable: job.stageBlockReleaseCapable === true,
             latestArtifactSync: job.latestArtifactSync,
             retainExistingOutputs: job.retainExistingOutputs,
             automaticRetry: job.automaticRetry,
@@ -17715,7 +17956,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       else if (planCommand && el("planFileInput")) payload.planFile = el("planFileInput").value;
       if (!payload.planFile && command === "archivePlan" && el("planFileInput")) payload.planFile = el("planFileInput").value;
       if (button.dataset.planId) payload.planId = button.dataset.planId;
-      if (["refreshJobArtifacts", "retryJobArtifactSync"].includes(command)) {
+      if (["refreshJobArtifacts", "retryJobArtifactSync", "releaseJobStageBlockSlots"].includes(command)) {
         if (button.dataset.planIds) { try { payload.planIds = JSON.parse(button.dataset.planIds); } catch {} }
         if (button.dataset.commandId) payload.commandId = button.dataset.commandId;
       }
@@ -17736,6 +17977,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       }
       if (button.dataset.report) { payload.report = button.dataset.report; payload.file = payload.file || button.dataset.report; payload.name = payload.name || button.dataset.report; }
       if (button.dataset.name && (command === "openLastCheckStaticReport")) { payload.report = payload.report || button.dataset.name; payload.file = payload.file || button.dataset.name; payload.name = button.dataset.name; }
+      if (button.dataset.branchProjectId) payload.branchProjectId = button.dataset.branchProjectId;
       if (button.dataset.runKey) payload.runKey = button.dataset.runKey;
       if (button.dataset.taskUiKey) payload.taskUiKey = button.dataset.taskUiKey;
       if (button.dataset.experimentId) payload.experimentId = button.dataset.experimentId;

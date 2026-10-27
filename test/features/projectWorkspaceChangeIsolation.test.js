@@ -170,14 +170,42 @@ test("offline bundle import cannot apply stale project state", () => {
   assert.match(source, /if \(generation === this\.projectContextGeneration && root === workspaceRoot\(\)\)\s*this\.postState\(\)/);
 });
 
-test("plan save checks project context before and after each file operation", () => {
+test("plan save checks project context before and after each file operation", async () => {
   const save = methodBody("async savePlanFromUi", "async archivePlanFromUi");
   assert.match(save, /const generation = this\.projectContextGeneration/);
-  assert.ok([...save.matchAll(/generation !== this\.projectContextGeneration \|\| root !== workspaceRoot\(\)/g)].length >= 6);
-  assert.match(save, /await fs\.mkdir\(path\.dirname\(fullPath\), \{ recursive: true \}\)/);
-  assert.match(save, /await fs\.readFile\(fullPath, "utf8"\)/);
-  assert.match(save, /await atomicWriteText\(fullPath, ensurePlanPurposeHeader/);
+  assert.match(save, /const assertCurrent = \(\) => \{\s*if \(generation !== this\.projectContextGeneration \|\| root !== workspaceRoot\(\)\)/);
+  assert.match(save, /await writeWorkspaceTextWithBackup\(fullPath, ensurePlanPurposeHeader\(text, path\.basename\(file\)\), assertCurrent\)/);
   assert.match(save, /if \(generation === this\.projectContextGeneration && root === workspaceRoot\(\)\)\s*this\.postState\(\)/);
+  const start = source.indexOf("async function writeWorkspaceTextWithBackup(");
+  const end = source.indexOf("// Backups are plugin-owned", start);
+  assert.ok(start > 0 && end > start);
+  // Exercise the production helper: a workspace change at any awaited file boundary
+  // must stop all later writes, including history allocation and current publication.
+  const vm = require("node:vm");
+  for (const boundary of ["mkdir", "readFile", "slot", "backup", "publish"]) {
+    let current = true;
+    const calls = [];
+    const step = name => {
+      calls.push(name);
+      if (name === boundary) current = false;
+    };
+    const context = {
+      path, workspaceRoot: () => path.resolve("workspace"),
+      fs: {
+        mkdir: async () => step("mkdir"),
+        readFile: async () => { step("readFile"); return "old"; },
+        writeFile: async (file, text, options) => { assert.equal(options.flag, "wx"); step("backup"); },
+      },
+      nextWorkspaceBackupSlot: async () => { step("slot"); return "history.bak"; },
+      atomicWriteText: async () => step("publish"),
+    };
+    vm.createContext(context);
+    vm.runInContext(source.slice(start, end) + ";this.save = writeWorkspaceTextWithBackup;", context);
+    await assert.rejects(context.save(path.resolve("workspace", "plan.yaml"), "new", () => {
+      if (!current) throw new Error("workspace changed");
+    }), /workspace changed/);
+    assert.deepEqual(calls, ["mkdir", "readFile", "slot", "backup", "publish"].slice(0, ["mkdir", "readFile", "slot", "backup", "publish"].indexOf(boundary) + 1));
+  }
 });
 
 test("Plan archive stays bound to its initiating project and client", () => {
@@ -211,7 +239,10 @@ test("batch Plan execution keeps project, SFTP root, and Agent client authority"
   const scheduler = methodBody("async postPlanSchedulerAction", "workerPoolActionBody");
   const workerAction = methodBody("async postWorkerTunnelAction", "activeWorkerActionOperation");
   const wait = methodBody("async waitForOperationTerminalResult", "async finishOperationWatchdog");
-  assert.match(runAll, /return runAllPlans\(this, message\)/);
+  // 0.5.408 T3: the batch forwards the message plus the shared parentClientActionId through noticeMessage.
+  assert.match(runAll, /const noticeMessage = \{ \.\.\.message, parentClientActionId: parentKey \};/);
+  assert.match(runAll, /const result = await runAllPlans\(this, noticeMessage\);/);
+  assert.match(runAll, /return result;/);
   const batch = fs.readFileSync(path.join(__dirname, "../../src/extension/SelectedPlanBatchHost.ts"), "utf8");
   assert.match(batch, /const context = host\.captureProjectContext\(\)/);
   assert.match(batch, /!host\.projectContextIsCurrent\(context\) \|\| targetKey\(\) !== targets/);

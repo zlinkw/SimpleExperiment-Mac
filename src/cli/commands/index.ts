@@ -9,3 +9,8 @@ export { logCommand } from "./log";
 export { metricCommand } from "./metric";
 export { compareEntry } from "./compare";
 export { resourceCommand } from "./resource";
+export { draftCommand } from "./draft";
+export { planCleanupCommand } from "./planCleanup";
+export { projectOpsCommand } from "./projectOps";
+export { agentsLifecycleCommand } from "./agentsLifecycle";
+export { actionsListCommand } from "./actionsCatalog";

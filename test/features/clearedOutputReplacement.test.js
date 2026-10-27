@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
+if (!process.env.LOCALAPPDATA) process.env.LOCALAPPDATA = require('node:fs').mkdtempSync(require('node:fs').realpathSync(os.tmpdir()) + path.sep + 'cleared-output-host-lease-'); // r17 约定：租约注册表落隔离目录（沙箱 homedir/AppData 只读，产品路径不变）——r32 注入真实 ProjectStatePaths 后 Host 流程触达真实租约接口
 const vm = require('node:vm');
 const ts = require('typescript');
 require('../_helpers/registerTsRequire');
@@ -97,8 +98,13 @@ test('actual cleanup Host uses current file observations without requiring retir
   await fs.mkdir(path.dirname(queuePath),{recursive:true});await fs.writeFile(queuePath,JSON.stringify(f.queue),'utf8');
   const bytes=await fs.readFile(queuePath,'utf8'),events=[];
   const json=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='json');
-  const Host=vm.runInNewContext(ts.transpileModule(json.getText(ast)+'\n'+cls.getText(ast).replace(/^export /,'')+';PlanCleanupHost;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
-    {fs,path,...C,...Q,...R,...ledger,...G,managedNodesOf:G.managedNodes,machineStateForNodeOf:G.machineStateForNode,collectPlanCleanupEvidence,AbortSignal,vscode:{workspace:{workspaceFolders:[{uri:{fsPath:f.root}}],textDocuments:[]}}});
+  // r32#2：类文本经 r17 新增调用闭包引用真实 ProjectStatePaths 导出与模块级 jsonWithMigration——
+  // 按已修复 Host 夹具模式一次补齐（真实模块/AST，非 stub），迁移/守卫逻辑走真实实现。
+  const P=require('../../src/features/ProjectStatePaths.ts');
+  const jsonWithMigration=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='jsonWithMigration');
+  assert.ok(jsonWithMigration,'PlanCleanupHost.ts 必须保留模块级 jsonWithMigration');
+  const Host=vm.runInNewContext(ts.transpileModule(json.getText(ast)+'\n'+jsonWithMigration.getText(ast)+'\n'+cls.getText(ast).replace(/^export /,'')+';PlanCleanupHost;', {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
+    {fs,path,...C,...Q,...R,...ledger,...G,projectStateDir:P.projectStateDir,projectStateFile:P.projectStateFile,ensureProjectDirectorySnapshotsMigrated:P.ensureProjectDirectorySnapshotsMigrated,ensureProjectSnapshotMigrated:P.ensureProjectSnapshotMigrated,managedNodesOf:G.managedNodes,machineStateForNodeOf:G.machineStateForNode,collectPlanCleanupEvidence,AbortSignal,vscode:{workspace:{workspaceFolders:[{uri:{fsPath:f.root}}],textDocuments:[]}}});
   let saved;
   const rootMaps = require('../../src/features/ProjectRootMap.ts');
   const guard = projectDir => rootMaps.machineStateGuard(rootMaps.resolveProjectRootMap({projectDir, installDir:'/private/plugin', stateDir:'/private/machine-state', machineStateDirs:['/private/worker-state']}));

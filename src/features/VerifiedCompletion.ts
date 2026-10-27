@@ -18,6 +18,19 @@ export function verifiedCompletionProjection(plan: any, job: any) {
     runtimeDiagnostics: { schemaVersion: 1 as const, commandId: job.commandId, runId: job.commandId,
       state: "clear" as const, count: 0, scanComplete: true } };
 }
+/** Compact proven terminal fact for the SAME identity: proves this exact command ended
+ * (integer exit, proven cancellation, or server-recorded terminal state), never that results verified.
+ * Survives the projection wash like VerifiedCompletion; local-only status text never creates one. */
+export type TrustedTerminalProof = { schemaVersion: 1; identity: string; provenAt: string; outcome: "completed" | "failed" | "cancelled" };
+export function trustedTerminalProofFor(plan: any, job: any, outcome: "completed" | "failed" | "cancelled", now: number): TrustedTerminalProof {
+  return { schemaVersion: 1, identity: completionIdentity(plan, job), provenAt: new Date(now).toISOString(), outcome };
+}
+export function hasTrustedTerminalProof(plan: any, job: any): boolean {
+  const proof = job.trustedTerminalProof;
+  return Boolean(proof?.schemaVersion === 1 && ["completed", "failed", "cancelled"].includes(proof.outcome)
+    && Number.isFinite(Date.parse(proof.provenAt)) && job.commandId && plan.projectId && job.workerId
+    && proof.identity === completionIdentity(plan, job));
+}
 export function nextVerifiedCompletion(plan: any, job: any, observation: TaskObservation, state: any, now: number): VerifiedCompletion | undefined {
   const exact = !observation.queryError;
   const confirmed = hasVerifiedCompletion(plan, job);

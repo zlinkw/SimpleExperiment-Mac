@@ -35,6 +35,7 @@ function classify(pathLike) {
   const docMarkdownSkipped = new Set();
   if (POLICY.markdown_runtime_allow_files.includes(norm)) docMarkdownSkipped.add(".md");
   for (const rule of POLICY.forbidden_ordered) {
+    if (rule.paths && rule.paths.some(candidate => norm === normalizePath(candidate))) return rule.category;
     if (rule.basename_contains && base.includes(rule.basename_contains)) return rule.category;
     if (rule.path_segments && rule.path_segments.some(seg => norm.split("/").includes(seg))) return rule.category;
     if (rule.suffixes && rule.suffixes.some(suffix => base.endsWith(suffix))) return rule.category;

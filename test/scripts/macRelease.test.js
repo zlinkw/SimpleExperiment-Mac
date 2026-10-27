@@ -107,8 +107,12 @@ test("release inventory uses the executing gate list and avoids rerunning the bu
   assert.ok(paths.includes(path.resolve(__dirname, '../agent/durablePlanQueue.test.js')));
   for (const file of ['macResultPlanDirectoryKey', 'serverQueueLifecycle.integration', 'metricAliasRebuildWorkflow', 'syncResolution'])
     assert.ok(paths.includes(path.resolve(__dirname, '../features/' + file + '.test.js')), file);
+  // 宿主超时默认 20 秒；唯一例外是经用户 2026-10-27 批准的 gpuCollectorFrame（实测 20.96 秒），且必须逐条写死，防止被悄悄扩大。
+  const { ROW_TIMEOUT_EXCEPTIONS } = require('../../scripts/mac-release-prepare');
+  assert.deepEqual([...ROW_TIMEOUT_EXCEPTIONS.entries()], [['experiment|test/agent/gpuCollectorFrame.test.js', 40000]]);
   for (const item of inventory) {
-    assert.equal(item.timeout, 20000);
+    const excepted = /test[\\/]agent[\\/]gpuCollectorFrame\.test\.js$/.test(item.file);
+    assert.equal(item.timeout, excepted ? 40000 : 20000, item.file);
     assert.deepEqual(item.args.slice(0, 4), ['--test', '--test-force-exit', '--test-timeout', '20000']);
   }
   const panel = path.resolve(__dirname, '../features/panelWebviewScriptHealth.test.js');

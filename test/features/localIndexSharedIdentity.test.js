@@ -54,7 +54,7 @@ test('a real concurrent code-manifest hash never steals an in-flight legacy loca
     await gate; return { files:{ 'a.txt':{ exists:true,size:1 } } };
   });
   // 真实 manifest 入口：带 code-manifest-cache 缓存路径的哈希构建，末尾上报 local.code-manifest 读。
-  await hashLocalCodeFiles(root,['a.txt'],localCodeManifestCachePath(storage,root));
+  await hashLocalCodeFiles(root,['a.txt'],localCodeManifestCachePath(root));
   releaseGate();
   // 基线在此 reject：FILE_INDEX_CONNECTION_REPLACED（owners 被并发实例夺走）。
   await reading;

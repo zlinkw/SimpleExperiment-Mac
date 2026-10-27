@@ -1,63 +1,133 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-10-24",
-  "scope": "Frozen .403/.107 raw source snapshots with normalized Windows SHA and current Mac SHA. Static equality or documented platform overlay only; behavioral acceptance and real macOS validation remain separate.",
+  "recordedAt": "2026-10-27",
+  "scope": "Frozen .416/.114 raw source snapshots with normalized Windows SHA and current Mac SHA. Static equality after the recorded identity mapping or documented platform overlay only; behavioral acceptance and real macOS validation remain separate.",
   "identityMapping": [
     "simple-local.simple-experiment -> simple-local.simple-experiment-mac",
     "simple-local.simple-sftp -> simple-local.simple-sftp-mac",
     "simpleExperiment.* -> simpleExperimentMac.*",
-    "simpleSftp.* -> simpleSftpMac.*"
+    "simpleSftp.* -> simpleSftpMac.*",
+    "SIMPLE_EXPERIMENT_API_FILE -> SIMPLE_EXPERIMENT_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_SFTP_API_FILE -> SIMPLE_SFTP_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_EXPERIMENT_API_FILE -> SIMPLE_EXPERIMENT_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_SFTP_API_FILE -> SIMPLE_SFTP_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_EXPERIMENT_API_FILE -> SIMPLE_EXPERIMENT_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_SFTP_API_FILE -> SIMPLE_SFTP_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_EXPERIMENT_API_FILE -> SIMPLE_EXPERIMENT_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_SFTP_API_FILE -> SIMPLE_SFTP_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_EXPERIMENT_API_FILE -> SIMPLE_EXPERIMENT_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_SFTP_API_FILE -> SIMPLE_SFTP_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_EXPERIMENT_API_FILE -> SIMPLE_EXPERIMENT_MAC_API_FILE (Mac 发现文件注入)",
+    "SIMPLE_SFTP_API_FILE -> SIMPLE_SFTP_MAC_API_FILE (Mac 发现文件注入)"
   ],
   "components": [
     {
       "name": "experiment",
-      "windowsVersion": "0.5.403",
-      "windowsCommit": "c30d607f1b63d224e8a65ab94371d86b4dd81c0d",
+      "windowsVersion": "0.5.416",
+      "windowsCommit": "45209ae43da37a0c4a2c9d82ca2aad88caef7b44",
       "files": [
         {
+          "path": ".gitignore",
+          "windowsSha256": "b9a147b903741e537ffa3a9b25be054edc4ff1893eb41a49a5eb685840d09279",
+          "localSha256": "0a078eed8368d5c01f50bdca61ac92a4578f7d07bc64f7eb8b6b508dc4a17322",
+          "classification": "platform-overlay",
+          "reason": "Mac 发行忽略项按 Mac 包投影与 release-artifacts 目录设置，不登记 Windows 打包/测试编排中间产物。"
+        },
+        {
           "path": ".vscodeignore",
-          "localSha256": "3bc6a360ad539ff203494539519f6c357d6a21e1a7c7c66bffb6379eea5c4614",
-          "windowsSha256": "d018adb070ef75a7870336551e75f16317b4bf52986d86951f2dfd61c5ce42aa",
+          "windowsSha256": "c83e6e3d78b7008dab216f34ab58e499a33c40aa00e4dda6e4aa3ef58d78514d",
+          "localSha256": "5ebfe22611be504eece69a0cd87369931c48818b93e67cfa423771071b6062f0",
           "classification": "platform-overlay",
           "reason": "Mac runtime closure and required entrypoints determine packaging. Excludes unreachable generated JS, publisher-only preview index, Windows launcher and all project template documents/resources; legal and toolchain-required root README retained."
         },
         {
+          "path": "README.md",
+          "windowsSha256": "bb7fd673b0bbb8a65ceed96927a9125030e55bedae1bf6dc88386d724ba89025",
+          "localSha256": "1823d6eb8eb0b46cc9412983312f5a2103b356b7b42891733c9391a7ab5dad7d",
+          "classification": "platform-overlay",
+          "reason": "Mac README 面向 darwin 安装、Mac 数据目录与 preview 更新入口；本轮按 Windows 0.5.416 补入“多项目分支与工作树”共同业务章节，并把登记表路径改为 ~/Library/Application Support/SimpleExperimentMac/branch-projects.json，配套版本与 Release 链接改为 Mac 值。"
+        },
+        {
+          "path": "docs/mac-project-facts.md",
+          "localSha256": "2aac42fdef2518669deda4376a70fa072508bdf214d0693535306005f0735512",
+          "classification": "platform-only",
+          "reason": "Mac 专属事实清单（版本谱系、Mac 契约、宿主边界），Windows 无对应文件，保留 Mac 权威。"
+        },
+        {
+          "path": "docs/target-mode-plan.md",
+          "localSha256": "794d8dc4e5640057cc71e216a67cf25625bfc765c33f45d93d186d54c16a8d34",
+          "classification": "platform-only",
+          "reason": "Mac 专属当前活动目标计划（含字符上限与压缩契约），Windows 无对应文件，保留 Mac 权威。"
+        },
+        {
+          "path": "docs/unified-cli-coverage.md",
+          "windowsSha256": "52a76e0e430f2fdf2d95d10d90b222f5a59bead45fff6ec484de4890a18672f0",
+          "localSha256": "e8c5be1ecdd5b5c595d6e88e2e51507ee8b63db01152fc4a248fd9d493c3bb8c",
+          "classification": "platform-overlay",
+          "reason": "Windows 统一 CLI 覆盖率文档整体采纳为 Mac 记录，仅可执行名改为 simpleex-mac、候选版本行改为 Mac 配套版本说明，覆盖率表逐字保留。"
+        },
+        {
+          "path": "docs/windows-alignment-2026-10-27.md",
+          "localSha256": "5f58da7c9243e98d1db54ad174b15ab2c296d0f00f4602261998fb65f145c0f0",
+          "classification": "platform-only",
+          "reason": "Mac 专属对齐记录（本批 087 证据、合并清单、真机缺口），Windows 无对应文件。"
+        },
+        {
           "path": "package-lock.json",
-          "windowsSha256": "785c1b93f5fdedaa62aa11bd1325c00d86e526b2a1c34da85ded4b7fb4ff6586",
-          "localSha256": "1563aa2b551eec48eebd13bf469c8bf8544216fc34beb1f2dfd65fcf3b16933a",
+          "windowsSha256": "b7e5b009e51e24c033c0f5077b39d38c274c9540a47efcf973e682576d0427d9",
+          "localSha256": "84ef8499409397d7215096d50a1081cd18c08f66935ca883a555e27d76938c4a",
           "classification": "platform-overlay",
           "reason": "Mac root package identity/version only; common dependency lock retained."
         },
         {
           "path": "package.json",
-          "windowsSha256": "b797c96f7f7d8b6ab993449862db982db1fb574a810a370a30a10f8efd8670e5",
-          "localSha256": "b867a53dd6a50caaf7da45ec20df2fd8066689d54a57e43d55f92f76cbcbb1fb",
+          "windowsSha256": "f76771d10ba432fdd0dbc9ea981e648fb34e3c11f96843342215f4ff2fc563fd",
+          "localSha256": "ee8b8fec12ba87a0543b7bc1e3835d5d398af4e7e014c852720916b943507307",
           "classification": "platform-overlay",
           "reason": "Mac extension identity, OS entry, CLI/native runtime files and existing scripts; common contributions/defaults copied."
         },
         {
+          "path": "scripts/mac-release-prepare.js",
+          "localSha256": "5169345979b2d4f69919f06d21ff46d0aff0be19a5deca337496a9a86c9b4ba8",
+          "classification": "platform-only",
+          "reason": "Mac 发布前置脚本（Windows 侧由 test-workflow 编排，无对应实现）：Mac 包投影 + 逐文件串行回归；本轮为跨仓用例注入 SIMPLE_TEST_SFTP_ROOT 前置条件。"
+        },
+        {
+          "path": "scripts/mac-release-regressions.json",
+          "localSha256": "ff5cdd62064edf717890328128708c99097f0c9615e6a5115eb0c9eddb1fc45b",
+          "classification": "platform-only",
+          "reason": "Mac 逐文件门禁清单（替代 Windows 的 test-workflow 登记）：本轮登记 35 个 Experiment 与 4 个 SimpleSFTP 新测试，并排除 Windows 发行工具用例与需要 POSIX 宿主绝对路径的跨机对账用例。"
+        },
+        {
           "path": "scripts/package-content-policy.js",
-          "localSha256": "16d86686893d6e524320b37cfa46fabae7da24b48abc635d5e10eaa5661b139a",
-          "windowsSha256": "16d86686893d6e524320b37cfa46fabae7da24b48abc635d5e10eaa5661b139a",
+          "windowsSha256": "d408aa39ecb787a2fe0dce3bbc48f107047a1bb634c4570acb722a81f94383f0",
+          "localSha256": "d408aa39ecb787a2fe0dce3bbc48f107047a1bb634c4570acb722a81f94383f0",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "scripts/package-content-policy.json",
-          "localSha256": "7a0349d3bb6598991c42bf2501bdeb827777e8e42ab35751f3e953360111853a",
-          "windowsSha256": "0d5888fe35da6f2020c48a22902d5e4fcae450ded0867cac09cc5b1d885935c3",
+          "windowsSha256": "9e63664cbd02abcf99b27cfebf2840d781d733c0d3bbffccbdab75b9fe8b59cd",
+          "localSha256": "9410a8aaedf39a01ef997e646f0181e71b7431842c7f860a9c71d59f29c1271d",
           "classification": "platform-overlay",
           "reason": "Mac uses its actual Bootstrap/CLI entrypoints and forbids packaged project Markdown; legal/root README toolchain exceptions retained."
         },
         {
           "path": "scripts/package_content_policy.py",
-          "localSha256": "0aa25747e906a09e33899c966de8a50ea4a3d25cf924b0e82a25158daf9a41ec",
-          "windowsSha256": "0aa25747e906a09e33899c966de8a50ea4a3d25cf924b0e82a25158daf9a41ec",
+          "windowsSha256": "0ae935357f4c65e362b26409b0f67ca3dfc544d90dbe4ca9d056ba5489808a31",
+          "localSha256": "0ae935357f4c65e362b26409b0f67ca3dfc544d90dbe4ca9d056ba5489808a31",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
+          "path": "scripts/verify-vsix-runtime.js",
+          "windowsSha256": "bd7c3c2380d0f8dcb86959421531f7a89f5ff1131553f1ce131321dd77431253",
+          "localSha256": "aeaebfb8e97911f42c4cff8dcfea2a1e2e661c241c30af696a8382b126283f25",
+          "classification": "platform-overlay",
+          "reason": "Mac VSIX 运行时核验按 Mac 包投影（darwin-arm64、Mac 入口与 CLI 清单）执行，不调用 Windows 的最小 README 生成与清单核验工具。"
+        },
+        {
           "path": "scripts/write-agent-runtime.js",
-          "localSha256": "864c2326d7de61c0bab324936ee79116927886cf6c6cb97bfa43fc487bcc9f09",
           "windowsSha256": "4c81c241dcf16b399c8cf4b2c176543b223ad4dc8bf8ddb6eee359dfb75ee0c8",
+          "localSha256": "864c2326d7de61c0bab324936ee79116927886cf6c6cb97bfa43fc487bcc9f09",
           "classification": "platform-overlay",
           "reason": "Mac cold builds create missing checksums; templates come from the tracked compiled producer, never ignored packaged documentation."
         },
@@ -93,8 +163,8 @@
         },
         {
           "path": "src/api/LocalApiServer.legacy.ts",
-          "windowsSha256": "fd35836800587ed200400c4ccac415984988779c786864591fd98931e5a302f0",
-          "localSha256": "fd35836800587ed200400c4ccac415984988779c786864591fd98931e5a302f0",
+          "windowsSha256": "4cc61fc417bd5b73627f2b02128c4982fa4355d594ff7ddc77d36138cc382330",
+          "localSha256": "4cc61fc417bd5b73627f2b02128c4982fa4355d594ff7ddc77d36138cc382330",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -112,15 +182,16 @@
         },
         {
           "path": "src/cli.ts",
-          "windowsSha256": "73bbf3f8ee6207c6949e359b1bf1784c30f8e4285f7765ceb43955ac00e25769",
-          "localSha256": "73bbf3f8ee6207c6949e359b1bf1784c30f8e4285f7765ceb43955ac00e25769",
+          "windowsSha256": "c679c889b9e017265c218ca8f04bb798d0f456f33287ff935d0e4274675a26af",
+          "localSha256": "c679c889b9e017265c218ca8f04bb798d0f456f33287ff935d0e4274675a26af",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/cli/LocalApiClient.ts",
-          "windowsSha256": "5d1198819cd817ea76b262f77b5507093571ceb6302b6ab557e9b82597727e1b",
-          "localSha256": "5d1198819cd817ea76b262f77b5507093571ceb6302b6ab557e9b82597727e1b",
-          "classification": "windows-identical-after-identity-mapping"
+          "windowsSha256": "b854db258a04b4f3365ff1cf97fb0d9fdbbb9c3bad762238124c00c143146384",
+          "localSha256": "d57305c026d16135df24cc790c9c6552de4febaa30ac203c6023c04f37f6c099",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：统一 CLI 发现文件目录改用 platform/HostPaths.componentDirectory，注入变量改用 SIMPLE_EXPERIMENT_MAC_API_FILE / SIMPLE_SFTP_MAC_API_FILE；发现文件内的 label 仍按 Windows 事实保留，因为 Mac 扩展写入的内部插件名参与槽位核验。"
         },
         {
           "path": "src/cli/WorkflowRun.ts",
@@ -130,8 +201,26 @@
         },
         {
           "path": "src/cli/api.ts",
-          "windowsSha256": "892eecd134d6000068287a5cefb7b2d73fb3355881656f623e28df43a6130d42",
-          "localSha256": "892eecd134d6000068287a5cefb7b2d73fb3355881656f623e28df43a6130d42",
+          "windowsSha256": "68015461913c7a22510e101a5fd3e78dfad8374da1f3784e38ae5884bb51d1d2",
+          "localSha256": "68015461913c7a22510e101a5fd3e78dfad8374da1f3784e38ae5884bb51d1d2",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/cli/commands/action.ts",
+          "windowsSha256": "50e947056ed417d1107e3f1f8e623d74d5d3515154378d049e953825d10d97ae",
+          "localSha256": "50e947056ed417d1107e3f1f8e623d74d5d3515154378d049e953825d10d97ae",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/cli/commands/actionsCatalog.ts",
+          "windowsSha256": "a070d8354b1f52781fe058890a6a6c459f0085d47dc18de2ea490df9bce54c9e",
+          "localSha256": "a070d8354b1f52781fe058890a6a6c459f0085d47dc18de2ea490df9bce54c9e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/cli/commands/agentsLifecycle.ts",
+          "windowsSha256": "0c8d8e256bd38cd50c0078090a9feccf6f52626b151fa576f30f5717e565b91a",
+          "localSha256": "0c8d8e256bd38cd50c0078090a9feccf6f52626b151fa576f30f5717e565b91a",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -147,9 +236,21 @@
           "classification": "windows-identical-after-identity-mapping"
         },
         {
+          "path": "src/cli/commands/control.ts",
+          "windowsSha256": "9a62a504f6d456d718dd43978283c3f7d6e7374342bb1bc4c47b1c4c3e5f192d",
+          "localSha256": "9a62a504f6d456d718dd43978283c3f7d6e7374342bb1bc4c47b1c4c3e5f192d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/cli/commands/draft.ts",
+          "windowsSha256": "f1ed98df38c5e862f2204f5627ff7d9670b383845a9d82c82d0c571a41a6a8f5",
+          "localSha256": "f1ed98df38c5e862f2204f5627ff7d9670b383845a9d82c82d0c571a41a6a8f5",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
           "path": "src/cli/commands/experiment.ts",
-          "windowsSha256": "24dc79dc3f07839439059aee637fcce43f91160bc4fe0f975a9f3732326994dc",
-          "localSha256": "24dc79dc3f07839439059aee637fcce43f91160bc4fe0f975a9f3732326994dc",
+          "windowsSha256": "e1c2826d48acd0b10d19aee7e1e338fdfdbdaa14b8b562d01c117374b5494262",
+          "localSha256": "e1c2826d48acd0b10d19aee7e1e338fdfdbdaa14b8b562d01c117374b5494262",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -160,8 +261,8 @@
         },
         {
           "path": "src/cli/commands/index.ts",
-          "windowsSha256": "957b4759f3d8516152eb0127c3bf158a9fefd2f3706324a362873e7ae9cbf276",
-          "localSha256": "957b4759f3d8516152eb0127c3bf158a9fefd2f3706324a362873e7ae9cbf276",
+          "windowsSha256": "9022e0e4cd0f0d56e60c2966deccc1a04085e4df50e8d771b814c94e7554ec36",
+          "localSha256": "9022e0e4cd0f0d56e60c2966deccc1a04085e4df50e8d771b814c94e7554ec36",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -172,20 +273,32 @@
         },
         {
           "path": "src/cli/commands/metric.ts",
-          "windowsSha256": "38be642e7ba66f52ff3a5b66f1427eaac21d1a6b1f72305b52385b1068c373d2",
-          "localSha256": "38be642e7ba66f52ff3a5b66f1427eaac21d1a6b1f72305b52385b1068c373d2",
+          "windowsSha256": "bd48c8b33e68e35eabf35f04b99ba47b956211b1c0902d6c596a1ced4019a4c5",
+          "localSha256": "bd48c8b33e68e35eabf35f04b99ba47b956211b1c0902d6c596a1ced4019a4c5",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/cli/commands/plan.ts",
-          "windowsSha256": "384d4b37f18dab051797c83bd5ee1d2dd2580ab09f2d54c4cb5700c359e12b00",
-          "localSha256": "384d4b37f18dab051797c83bd5ee1d2dd2580ab09f2d54c4cb5700c359e12b00",
+          "windowsSha256": "d28938e1c595b91e8c370a578518cb4db02ad5bbed9fd048c01e31d8faac5bcb",
+          "localSha256": "d28938e1c595b91e8c370a578518cb4db02ad5bbed9fd048c01e31d8faac5bcb",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/cli/commands/planCleanup.ts",
+          "windowsSha256": "553e19d6c20866a6c0d3b483947df69119902291e83c80267f750ba9ae999f47",
+          "localSha256": "553e19d6c20866a6c0d3b483947df69119902291e83c80267f750ba9ae999f47",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/cli/commands/project.ts",
           "windowsSha256": "095fd1ff8247419e390c4a5e7ff0329045c78870be6ebdf98c46b349830a3bd5",
           "localSha256": "095fd1ff8247419e390c4a5e7ff0329045c78870be6ebdf98c46b349830a3bd5",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/cli/commands/projectOps.ts",
+          "windowsSha256": "e678458b7f792388f5f78e5bdb68c86261320247481a03303e732643362e24da",
+          "localSha256": "e678458b7f792388f5f78e5bdb68c86261320247481a03303e732643362e24da",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -196,8 +309,8 @@
         },
         {
           "path": "src/cli/commands/result.ts",
-          "windowsSha256": "feb71e278ea3327c34262ab5aba2878dc3c59cf95bfb5595c0629a54fccbf36c",
-          "localSha256": "feb71e278ea3327c34262ab5aba2878dc3c59cf95bfb5595c0629a54fccbf36c",
+          "windowsSha256": "7f50a59d346f514c8a731ad5c45eebb6219496060a731822abcde8f2d57a6472",
+          "localSha256": "7f50a59d346f514c8a731ad5c45eebb6219496060a731822abcde8f2d57a6472",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -215,8 +328,8 @@
         },
         {
           "path": "src/cli/errors.ts",
-          "windowsSha256": "bfed6247be0aa9bf3b9c2ddcd04ac6bfd3c848c53248a0bf8ac887a68b3412fc",
-          "localSha256": "bfed6247be0aa9bf3b9c2ddcd04ac6bfd3c848c53248a0bf8ac887a68b3412fc",
+          "windowsSha256": "f0843e87e8436385db3aef49439235cb1a2b6fc377b05205434779c1a77e9d14",
+          "localSha256": "f0843e87e8436385db3aef49439235cb1a2b6fc377b05205434779c1a77e9d14",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -227,22 +340,29 @@
         },
         {
           "path": "src/cli/help.ts",
-          "windowsSha256": "9e9ee79400fb8da6120ae3e109ee9245072fe1dfd31dc49fd05dca4661075c0f",
-          "localSha256": "9e9ee79400fb8da6120ae3e109ee9245072fe1dfd31dc49fd05dca4661075c0f",
-          "classification": "windows-identical-after-identity-mapping"
+          "windowsSha256": "0d656e4953f5cee08889035648696fa1d570cbce2e31e93864aa1574619cd348",
+          "localSha256": "0321520063d12301797df2ddcdfb3cab7deae742479edfb904bdc97b543aa46f",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份说明：帮助文本新增 macOS 安装名 simpleex-mac、扩展标识与发现变量的双名说明，Windows 权威无此段。"
         },
         {
           "path": "src/cli/index.ts",
-          "windowsSha256": "269e9cbbea329e6d9dc9c0c30d1baac66d5725179ad6d2516c15a969f83d5990",
-          "localSha256": "269e9cbbea329e6d9dc9c0c30d1baac66d5725179ad6d2516c15a969f83d5990",
+          "windowsSha256": "f80c8c60d2261dce9e5cde1dece76d518a30cb5d29ee9575ce0f0ae34eb72b06",
+          "localSha256": "f80c8c60d2261dce9e5cde1dece76d518a30cb5d29ee9575ce0f0ae34eb72b06",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/cli/parse.ts",
-          "windowsSha256": "e97fcb33ec1196f0780709ff3287e3f10b22db39a0770a15e75014dddc8409bc",
-          "localSha256": "2fd6d99315a65d61bf6a77e5ee2b37f7ce443e6313e964afa18d837084a874c1",
+          "windowsSha256": "d9293e886471bd3867535af636ec5dfdb6ad6ac925a902d4d826fc83b83af8d0",
+          "localSha256": "56deabc782db59274ddd5f1929daf6e7ca81cfbbcf8df1b48ff73cd8c0f8fa4c",
           "classification": "platform-overlay",
           "reason": "083 non-Windows positional filenames preserve leading/trailing whitespace; Windows trimming behavior unchanged."
+        },
+        {
+          "path": "src/cli/plugins.ts",
+          "windowsSha256": "697a4da6c7bb4c9ff6d967101c6321ced6384af3ba88d83570c36f892ce0be5c",
+          "localSha256": "697a4da6c7bb4c9ff6d967101c6321ced6384af3ba88d83570c36f892ce0be5c",
+          "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/cli/runtime.ts",
@@ -258,8 +378,8 @@
         },
         {
           "path": "src/clusterAgentRuntime.legacy.ts",
-          "windowsSha256": "7569fe9070d05cd25ebe4cdcad5b0e94bdc98b0e51cd220b4704f876508872d3",
-          "localSha256": "453220b15ea4cba6836920315191f89cc74f6574c5d4fc8b6cad9fbbb0d37159",
+          "windowsSha256": "cf982d4f9735b1c4f59cddd163cb0f8af0499f1405e601316f931a26063afc7a",
+          "localSha256": "c7771cd53f95ee839b19c074cfe39436f20cb56c96eb3630e768f3cc94fee30f",
           "classification": "platform-overlay",
           "reason": "083 strict POSIX filename identity and physical launch-path adapters; reject typed/conflicting aliases, links and changed Plan parents without trimming legal spaces. Frozen current admission/control and protocol-2 state remain; 1MiB original Plan cap retained. Common used-log root and credential deny policy remains in force before directory creation."
         },
@@ -377,8 +497,8 @@
         },
         {
           "path": "src/core/ResourceOperationLease.ts",
-          "windowsSha256": "ee2ef98c2a03eb84ba599b037309bec2999703e8f4578cd82d03809f48a8b8bb",
-          "localSha256": "c5a173b385c1eb02274a5b586d09077a6a1593c75ae24b8595ac4de43896c0c2",
+          "windowsSha256": "f79dde7189c37f9e5bc5aa13694f8c1233f51723b867bd774d63ef8cbf95c67a",
+          "localSha256": "d5efc05593cce39b5b07eba265aeb93ee6ea097f1a0dc8e833620b6b8b32a719",
           "classification": "platform-overlay",
           "reason": "Native case-sensitive registry path and read compatibility for existing Mac update leases."
         },
@@ -396,8 +516,14 @@
         },
         {
           "path": "src/core/SimpleSftpProgressWait.ts",
-          "windowsSha256": "7bd1ee53d23313f1d199dd68ba8b71c281668e87868cd05a397a6905d8f79e9e",
-          "localSha256": "7bd1ee53d23313f1d199dd68ba8b71c281668e87868cd05a397a6905d8f79e9e",
+          "windowsSha256": "544954acfd6742874d52b43fd6a6d1fb80a572d7562c42961be4c270404c7b7e",
+          "localSha256": "544954acfd6742874d52b43fd6a6d1fb80a572d7562c42961be4c270404c7b7e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "src/core/UiCommandCancelled.ts",
+          "windowsSha256": "b79acdbdd1534dbdf88ebd6ed12d8d32e0fbb54dff1bccb113718754ad5fdad7",
+          "localSha256": "b79acdbdd1534dbdf88ebd6ed12d8d32e0fbb54dff1bccb113718754ad5fdad7",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -457,15 +583,15 @@
         },
         {
           "path": "src/extension/CacheCleanupPanel.ts",
-          "windowsSha256": "2f94184d47ba42588a92ab2ec1bea86cdfbf4818f0e6c8f9515fdec06d729d05",
-          "localSha256": "00d0090c07d634926b77cb1a5eeab4046b58fd67b1f8387d9ad59916fe1afb6f",
+          "windowsSha256": "5d2c4caecd0c772aa0d0905252f0011c12864db55b867c3d56ca7bfdd851fd93",
+          "localSha256": "6ef05124877a293c3553ccbcffe67962d523fce5f2e1b60ed0f9da767165b9ed",
           "classification": "platform-overlay",
           "reason": "Only native local deletion executor replaced; common candidate UI, evidence and confirmations retained."
         },
         {
           "path": "src/extension/CompletedJobSyncHost.ts",
-          "windowsSha256": "f65ce3ae0b7e458c0f35f12c09bb824bc478e707c75c176ab122689e53225815",
-          "localSha256": "f65ce3ae0b7e458c0f35f12c09bb824bc478e707c75c176ab122689e53225815",
+          "windowsSha256": "f3a9dbe6f22f7076db180a3836338465b4533beb1a7fccc9c7f0d996fe521484",
+          "localSha256": "f3a9dbe6f22f7076db180a3836338465b4533beb1a7fccc9c7f0d996fe521484",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -483,8 +609,8 @@
         },
         {
           "path": "src/extension/GpuQuotaPolicyHost.ts",
-          "localSha256": "1b7652dbd3b9551a14f5853e4d5ffb40639abcac632efe9e93a03ae4fb89347f",
           "windowsSha256": "1b7652dbd3b9551a14f5853e4d5ffb40639abcac632efe9e93a03ae4fb89347f",
+          "localSha256": "1b7652dbd3b9551a14f5853e4d5ffb40639abcac632efe9e93a03ae4fb89347f",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -495,26 +621,26 @@
         },
         {
           "path": "src/extension/ManualDispatchHost.ts",
-          "windowsSha256": "f90ab360c0e2148028df1289be997a4a9eea0b03b57e497a53d2f220004ce68e",
-          "localSha256": "f90ab360c0e2148028df1289be997a4a9eea0b03b57e497a53d2f220004ce68e",
+          "windowsSha256": "809283e6de0118e40a7da488394c7daa7b5be6532647869b890d31da412fcf2c",
+          "localSha256": "809283e6de0118e40a7da488394c7daa7b5be6532647869b890d31da412fcf2c",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanCleanupHost.ts",
-          "windowsSha256": "298be075991ea620b607e194442ba092679bdd1103788621223e021f71c46fb4",
-          "localSha256": "298be075991ea620b607e194442ba092679bdd1103788621223e021f71c46fb4",
+          "windowsSha256": "791587482bd97d3bf6daa25fb64a12987d1248d84f851c90553eb12830c13dee",
+          "localSha256": "791587482bd97d3bf6daa25fb64a12987d1248d84f851c90553eb12830c13dee",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanCleanupIsolatedReviews.ts",
-          "localSha256": "ecea5276e7612ce0de2172234da46d4a188021e8e0d6980126a66d10ed9e53f5",
           "windowsSha256": "ecea5276e7612ce0de2172234da46d4a188021e8e0d6980126a66d10ed9e53f5",
+          "localSha256": "ecea5276e7612ce0de2172234da46d4a188021e8e0d6980126a66d10ed9e53f5",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanCleanupNodeGuards.ts",
-          "localSha256": "6227120732d33f06fdbe044a38f232b0bb616fb5f4e09f5d688d67648e800c8e",
           "windowsSha256": "6227120732d33f06fdbe044a38f232b0bb616fb5f4e09f5d688d67648e800c8e",
+          "localSha256": "6227120732d33f06fdbe044a38f232b0bb616fb5f4e09f5d688d67648e800c8e",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -525,32 +651,32 @@
         },
         {
           "path": "src/extension/PlanCleanupSftpGuard.ts",
-          "localSha256": "f6cb86a2af7ff7ebf1f2f1b00c382fa86bbe433c1ee86344350931ae6589fe54",
-          "windowsSha256": "f6cb86a2af7ff7ebf1f2f1b00c382fa86bbe433c1ee86344350931ae6589fe54",
+          "windowsSha256": "415e36aca2badde7c21d2383c5c72987a4e70c1b0be6e12da847167edf0c22bc",
+          "localSha256": "415e36aca2badde7c21d2383c5c72987a4e70c1b0be6e12da847167edf0c22bc",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanCleanupTargetVerification.ts",
-          "localSha256": "604342cd42a7b11ed05a0ee0f7ef6f9fc9528cef9c18e4522b4cfafbf47cfb87",
           "windowsSha256": "604342cd42a7b11ed05a0ee0f7ef6f9fc9528cef9c18e4522b4cfafbf47cfb87",
+          "localSha256": "604342cd42a7b11ed05a0ee0f7ef6f9fc9528cef9c18e4522b4cfafbf47cfb87",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanCodeScopeHost.ts",
-          "localSha256": "8c930e42fcdd245e48ca031e117e5b7c03901ff9f392561735c0984fdd0739c7",
-          "windowsSha256": "8c930e42fcdd245e48ca031e117e5b7c03901ff9f392561735c0984fdd0739c7",
+          "windowsSha256": "be11acacffaaabbd6cc8df76f158abdc3029e2a9790b71e1812a5b71bb82b9c5",
+          "localSha256": "be11acacffaaabbd6cc8df76f158abdc3029e2a9790b71e1812a5b71bb82b9c5",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanRunHost.ts",
-          "windowsSha256": "557e8b95519af29ecbcff3fc6db4d51bd4e41863b8e901d0b836b4d9f238643f",
-          "localSha256": "557e8b95519af29ecbcff3fc6db4d51bd4e41863b8e901d0b836b4d9f238643f",
+          "windowsSha256": "c45491179edbb53166950278ba4a8d7523f478adc6d4e55753890ceb6d1180e0",
+          "localSha256": "c45491179edbb53166950278ba4a8d7523f478adc6d4e55753890ceb6d1180e0",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/PlanStopClearBatchHost.ts",
-          "localSha256": "28bae5da486ba100ab63df31c1ea5f06917353f098e2a3d1a7d61beb9203b492",
           "windowsSha256": "28bae5da486ba100ab63df31c1ea5f06917353f098e2a3d1a7d61beb9203b492",
+          "localSha256": "28bae5da486ba100ab63df31c1ea5f06917353f098e2a3d1a7d61beb9203b492",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -597,14 +723,14 @@
         },
         {
           "path": "src/extension/SelectedPlanBatchHost.ts",
-          "windowsSha256": "8ba79834082573a06abcdb8c9c6b6accdd9576fd87ea2d9d372217a6de78f8b9",
-          "localSha256": "8ba79834082573a06abcdb8c9c6b6accdd9576fd87ea2d9d372217a6de78f8b9",
+          "windowsSha256": "c155189d0fe82334157812f7c6f242124c6aebff49c37da262f20ce39d5773af",
+          "localSha256": "c155189d0fe82334157812f7c6f242124c6aebff49c37da262f20ce39d5773af",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/extension/ServerQueueHost.ts",
-          "localSha256": "1b66c072362bf2f0a25c760c967b3bdb5a5730baff5e0886fee0fdacb513bb2c",
           "windowsSha256": "1b66c072362bf2f0a25c760c967b3bdb5a5730baff5e0886fee0fdacb513bb2c",
+          "localSha256": "1b66c072362bf2f0a25c760c967b3bdb5a5730baff5e0886fee0fdacb513bb2c",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -615,8 +741,8 @@
         },
         {
           "path": "src/extension/legacy.ts",
-          "windowsSha256": "f0ed48819fa4b6901cbcb8de8fe6a535f3ae7719371686b901755791b59ae515",
-          "localSha256": "7ccc7f73a5dda2b97c9052567d0bab8cc596c0866b5fd61f8dc876e4005bec18",
+          "windowsSha256": "fd60618c27e498a56f48e7b6a3bf8b4782f0f8d2ff89932c1dc01fdcbc161012",
+          "localSha256": "ce4bcfb69507622ad8586b864066f8d0e27591b268f73fd2b0fbefb522b26703",
           "classification": "platform-overlay",
           "reason": "Preserves Mac identity, worker-only entrypoints, strict POSIX spelling, independent authentication and paired preview updates while merging .403 GPU/root-map/isolated-review behavior. Runtime templates no longer read packaged project documentation."
         },
@@ -702,8 +828,8 @@
         },
         {
           "path": "src/features/AutomaticScopeContent.ts",
-          "localSha256": "9cb0d2f59ff004ee1263feee49ccc374771190c93c4a2197b4ec6c9ec3dba59d",
           "windowsSha256": "9cb0d2f59ff004ee1263feee49ccc374771190c93c4a2197b4ec6c9ec3dba59d",
+          "localSha256": "9cb0d2f59ff004ee1263feee49ccc374771190c93c4a2197b4ec6c9ec3dba59d",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -744,8 +870,8 @@
         },
         {
           "path": "src/features/DispatchWake.ts",
-          "localSha256": "e4a2d53083bf1f80d6734ec341ffe679f5724340514fb54d513ee5c8e3e19ba4",
           "windowsSha256": "e4a2d53083bf1f80d6734ec341ffe679f5724340514fb54d513ee5c8e3e19ba4",
+          "localSha256": "e4a2d53083bf1f80d6734ec341ffe679f5724340514fb54d513ee5c8e3e19ba4",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -762,8 +888,8 @@
         },
         {
           "path": "src/features/DistributedPlanQueue.ts",
-          "windowsSha256": "5bdd5ca449f08f5a69da43fada713deb533d103614b0298daeb2d0ebaaf239f2",
-          "localSha256": "e007f8af2dee0360edc51b769281a07a55ba9812b49a38f6c4cb34133f7d0c60",
+          "windowsSha256": "550c26cfce00e46589c19e062a799d7c306d612e8bf3170601ffdba5b79142a9",
+          "localSha256": "228a4be8b353b363328831f9533e4db5afe26a44f254ee6ff3c22332fe36f8ac",
           "classification": "platform-overlay",
           "reason": "Darwin exact POSIX identity in Plan matching, latest grouping and selected manual targets only. Preserve current protocol-2 lifecycle, declared outputs, manual retry and historical-attempt read-only guards."
         },
@@ -825,8 +951,8 @@
         },
         {
           "path": "src/features/FastDeleteContract.ts",
-          "localSha256": "39a7540d73d6f8f9b40321d800e31fb368957fe35a3571cf534c3269368c9fd4",
           "windowsSha256": "39a7540d73d6f8f9b40321d800e31fb368957fe35a3571cf534c3269368c9fd4",
+          "localSha256": "39a7540d73d6f8f9b40321d800e31fb368957fe35a3571cf534c3269368c9fd4",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -861,14 +987,14 @@
         },
         {
           "path": "src/features/GpuQuotaScheduling.ts",
-          "localSha256": "3edad6c700e98016b698b2ac4e654197ca6a4d3c4dc4bea433fbe4534e936145",
           "windowsSha256": "3edad6c700e98016b698b2ac4e654197ca6a4d3c4dc4bea433fbe4534e936145",
+          "localSha256": "3edad6c700e98016b698b2ac4e654197ca6a4d3c4dc4bea433fbe4534e936145",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/GpuSampleRing.ts",
-          "localSha256": "004545d9cd8a5527a6b157cca7a6e87e9f9ca00598af12b10b1c14a55c171c63",
           "windowsSha256": "004545d9cd8a5527a6b157cca7a6e87e9f9ca00598af12b10b1c14a55c171c63",
+          "localSha256": "004545d9cd8a5527a6b157cca7a6e87e9f9ca00598af12b10b1c14a55c171c63",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -879,10 +1005,16 @@
         },
         {
           "path": "src/features/IncrementalLocalMetadata.ts",
-          "localSha256": "1ebf1f352fdb2bdc3a123944f1eac1f80fc0de3af9cabaf6b0328c18ca0cdec4",
           "windowsSha256": "deea6123022fab9560ce78d02ad0ad0c013319d317b6b373db5b6cfcc4f0515f",
+          "localSha256": "1ebf1f352fdb2bdc3a123944f1eac1f80fc0de3af9cabaf6b0328c18ca0cdec4",
           "classification": "platform-overlay",
           "reason": "Compare native root paths case-sensitively outside win32; shared live-stat fallback retained."
+        },
+        {
+          "path": "src/features/JobArtifactSyncIdentity.ts",
+          "windowsSha256": "424d68efae40a92e9ce8e27b31998a797ad1390cbca1f4fc841766176e7e760e",
+          "localSha256": "424d68efae40a92e9ce8e27b31998a797ad1390cbca1f4fc841766176e7e760e",
+          "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/JobAvailability.ts",
@@ -904,20 +1036,20 @@
         },
         {
           "path": "src/features/LocalCodeManifestCache.ts",
-          "windowsSha256": "7a9394b6defe3dfa03c641fe412dd9b11485d2a373a03dc4e35dc0a8f90201d0",
-          "localSha256": "3753630a533573306167e415164f335870848690f893cd5bf00d7dc53c90f723",
+          "windowsSha256": "3cf74f924bb7918b0ccc067c746e48c05a4a1457dcb567bb0d849cfb3a805133",
+          "localSha256": "4bf0a39f896da5ff94ce0fab11ec56110a580148d7192a37b9e0665d4b21d9da",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/LocalMetadataChanges.ts",
-          "localSha256": "79ee2ed6e3b7fb7c01f99135696e5de44c2e76c9cbe59c46fd7e023641c34da4",
           "windowsSha256": "79ee2ed6e3b7fb7c01f99135696e5de44c2e76c9cbe59c46fd7e023641c34da4",
+          "localSha256": "79ee2ed6e3b7fb7c01f99135696e5de44c2e76c9cbe59c46fd7e023641c34da4",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/LogicalPlanProgress.ts",
-          "localSha256": "aee127a2530fd17deba995f19c642739fda2f0234c29842d768300a4989d130d",
           "windowsSha256": "aee127a2530fd17deba995f19c642739fda2f0234c29842d768300a4989d130d",
+          "localSha256": "aee127a2530fd17deba995f19c642739fda2f0234c29842d768300a4989d130d",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -928,8 +1060,8 @@
         },
         {
           "path": "src/features/ManualJobDispatch.ts",
-          "windowsSha256": "ff4e159069035249e34fbc9490d22212a23fab0d72831051e495202074b25914",
-          "localSha256": "ff4e159069035249e34fbc9490d22212a23fab0d72831051e495202074b25914",
+          "windowsSha256": "959bb3e3eb0c40de8398615a656ad484952d41f69399b3365c379ca1d967b981",
+          "localSha256": "959bb3e3eb0c40de8398615a656ad484952d41f69399b3365c379ca1d967b981",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -952,8 +1084,8 @@
         },
         {
           "path": "src/features/ObservationRound.ts",
-          "localSha256": "b93ba4ef521f71287edb0aed03dc1cbb7799476f30fa0d01076729b47dd35647",
-          "windowsSha256": "b93ba4ef521f71287edb0aed03dc1cbb7799476f30fa0d01076729b47dd35647",
+          "windowsSha256": "efa3e39f3f0282d21ccf05384080a0a594719436571917282c7e9b8be70b6bbf",
+          "localSha256": "efa3e39f3f0282d21ccf05384080a0a594719436571917282c7e9b8be70b6bbf",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1030,8 +1162,8 @@
         },
         {
           "path": "src/features/PlanArtifactSync.ts",
-          "windowsSha256": "c3de2c5c5f8a5e988fdb04986ae3a2b0023822a18fa1d5e8296abd64ef46b3a4",
-          "localSha256": "c3de2c5c5f8a5e988fdb04986ae3a2b0023822a18fa1d5e8296abd64ef46b3a4",
+          "windowsSha256": "839d1a2614e648335334f3adf81950dfb8b36c35259d8bfbc3409196c1e9ec86",
+          "localSha256": "839d1a2614e648335334f3adf81950dfb8b36c35259d8bfbc3409196c1e9ec86",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1042,8 +1174,8 @@
         },
         {
           "path": "src/features/PlanArtifactTransfer.ts",
-          "windowsSha256": "236eafeaaa8c0068c318d0e8045d165a4ae9b7eba68ca52e15f1ab92ae8316b3",
-          "localSha256": "236eafeaaa8c0068c318d0e8045d165a4ae9b7eba68ca52e15f1ab92ae8316b3",
+          "windowsSha256": "1b7ea4cd6abc7afcd658572c59000ea1554d0d16915c7fd736e5a69d3dcd7401",
+          "localSha256": "1b7ea4cd6abc7afcd658572c59000ea1554d0d16915c7fd736e5a69d3dcd7401",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1073,8 +1205,8 @@
         },
         {
           "path": "src/features/PlanCleanup.ts",
-          "windowsSha256": "05eed21fe237ab89adb637b91c3cfae4bd760dc3ddac167ee6e70e65eaefe646",
-          "localSha256": "05eed21fe237ab89adb637b91c3cfae4bd760dc3ddac167ee6e70e65eaefe646",
+          "windowsSha256": "3f5f7be4f29341561929fd88685d4d71fc87a20f1ce2da9bfb1488764961f947",
+          "localSha256": "3f5f7be4f29341561929fd88685d4d71fc87a20f1ce2da9bfb1488764961f947",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1091,14 +1223,14 @@
         },
         {
           "path": "src/features/PlanIsolatedBatchLedger.ts",
-          "localSha256": "0f0bfafbf181d719f100c82236eaf867c4718b460aaf7c55828f57e4bdd31532",
-          "windowsSha256": "0f0bfafbf181d719f100c82236eaf867c4718b460aaf7c55828f57e4bdd31532",
+          "windowsSha256": "ba57787c7dc09c7bb775fe742fc4a0cfcf8379d2bbf75dc0afd2dedbec891680",
+          "localSha256": "ba57787c7dc09c7bb775fe742fc4a0cfcf8379d2bbf75dc0afd2dedbec891680",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/PlanIsolatedReview.ts",
-          "localSha256": "cab525f88e172299701a9a88532d95260697a1405dc9ddce1d155788bd2cf7b8",
-          "windowsSha256": "cab525f88e172299701a9a88532d95260697a1405dc9ddce1d155788bd2cf7b8",
+          "windowsSha256": "7760a4c496d9546db125aaf21e9b0b1145ff1ee47c67fb681fad392d61ea90ae",
+          "localSha256": "7760a4c496d9546db125aaf21e9b0b1145ff1ee47c67fb681fad392d61ea90ae",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1115,8 +1247,8 @@
         },
         {
           "path": "src/features/PlanRunReplacement.ts",
-          "windowsSha256": "f8d092ba0995cffaf07d4fe3ee628736229e06a640228a799deaffbb58a6536f",
-          "localSha256": "f8d092ba0995cffaf07d4fe3ee628736229e06a640228a799deaffbb58a6536f",
+          "windowsSha256": "06d249daa956a750b3c30bdb6055b18f7d78d786d5878a10f1f5cc4760cb882d",
+          "localSha256": "06d249daa956a750b3c30bdb6055b18f7d78d786d5878a10f1f5cc4760cb882d",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1133,8 +1265,8 @@
         },
         {
           "path": "src/features/PlanSubmissionBatch.ts",
-          "localSha256": "a6d9a889544814aab35465b6b888154bdb73444285d965801de9cd0e8d558243",
-          "windowsSha256": "a6d9a889544814aab35465b6b888154bdb73444285d965801de9cd0e8d558243",
+          "windowsSha256": "91d6dc69e100f37bc10cd375267ca6aad41f70055c77ffecdf324321b7e80132",
+          "localSha256": "91d6dc69e100f37bc10cd375267ca6aad41f70055c77ffecdf324321b7e80132",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1150,9 +1282,15 @@
           "classification": "windows-identical-after-identity-mapping"
         },
         {
+          "path": "src/features/PluginLogRetention.ts",
+          "windowsSha256": "9cbcd8d7a79640edc9d26ea2cee5f78cb4c11524b1d966c6fe494868bba860e9",
+          "localSha256": "9cbcd8d7a79640edc9d26ea2cee5f78cb4c11524b1d966c6fe494868bba860e9",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
           "path": "src/features/ProjectFileIndex.ts",
-          "localSha256": "c2a889889cd8a21a743313e944f1b114fbb9958f14e58da31315f3958087acd7",
           "windowsSha256": "c2a889889cd8a21a743313e944f1b114fbb9958f14e58da31315f3958087acd7",
+          "localSha256": "c2a889889cd8a21a743313e944f1b114fbb9958f14e58da31315f3958087acd7",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1163,10 +1301,16 @@
         },
         {
           "path": "src/features/ProjectRootMap.ts",
-          "localSha256": "077bba3bb1432255401b4f940a55898ca50faa8e150966bd478d1a051fbe2ba4",
-          "windowsSha256": "93724d5d9a4c358dc1ef1dec1acce7e5b2f898ce366bd61af613aa764da2e62c",
+          "windowsSha256": "621bc4abd831dcb8bd536ece3620426a5d7dca5599575c2ac5d558d60ce82f4b",
+          "localSha256": "085a0997142e063eea8e43f2ca25e14213ae2eb1d712d8b95dcdd00058c184e4",
           "classification": "platform-overlay",
           "reason": "Mac POSIX root identity preserves legal final spaces; Windows drive normalization and conservative state-protection semantics retained. Dedicated root-map/sync/cleanup regressions cover non-alias identity."
+        },
+        {
+          "path": "src/features/ProjectStatePaths.ts",
+          "windowsSha256": "e1ce28a629f54e5893f60f41a24d5d5eda4e76b7e397d8f3272bf3dfec4014d2",
+          "localSha256": "b458e463b32a7c005ab8d7dc35ea77844c6dae584e8089aafec5ff68eda28e3d",
+          "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/ProjectStaticCheck.ts",
@@ -1260,14 +1404,14 @@
         },
         {
           "path": "src/features/ServerQueueDispatch.ts",
-          "localSha256": "a6f4e6d10eb75cf270af46c10acc235ab2b4e04a670e6e6cb4f6b8e96ba814cd",
-          "windowsSha256": "a6f4e6d10eb75cf270af46c10acc235ab2b4e04a670e6e6cb4f6b8e96ba814cd",
+          "windowsSha256": "97ba4f659f83249e1446984af548c2a7c8d1c667f23d44d9c0a21a537a6d4fc8",
+          "localSha256": "97ba4f659f83249e1446984af548c2a7c8d1c667f23d44d9c0a21a537a6d4fc8",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/SetupGuideSource.ts",
-          "localSha256": "33d0efb88da2c4ef9f4def9cba93a6268b28959e4b9cbed7adc3e620a2fb5c68",
           "windowsSha256": "10d88b1514efb7d1685061f4a22cd0266d003fbad17109d1651e6e133341e3cc",
+          "localSha256": "33d0efb88da2c4ef9f4def9cba93a6268b28959e4b9cbed7adc3e620a2fb5c68",
           "classification": "platform-overlay",
           "reason": "Mac repository fallback URL; shared file-or-online resolution unchanged."
         },
@@ -1297,21 +1441,21 @@
         },
         {
           "path": "src/features/SyncLatestMerge.ts",
-          "windowsSha256": "67ddda53b8a3eb3b9fdcb737d4af26f13e2a13f7f34a3cb9bf55ed7a11409f2b",
-          "localSha256": "67ddda53b8a3eb3b9fdcb737d4af26f13e2a13f7f34a3cb9bf55ed7a11409f2b",
+          "windowsSha256": "1129b590e09bb6d28d71cebcb0b58e913407171529574e86e4620169d9bd938b",
+          "localSha256": "1129b590e09bb6d28d71cebcb0b58e913407171529574e86e4620169d9bd938b",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/SyncResolution.ts",
-          "windowsSha256": "4389e8d732953cfb597405a191ae3c0ef0dfecd8067dca7541953f72120c38fb",
-          "localSha256": "1e1ac8654381033500ebb9a6b1d40db617caf1221d3e717d86500a339a7ef2d3",
+          "windowsSha256": "6495fbd7e60950b6f33cabc38a5f071ccdcec62f33b3d217579acc788e276cb8",
+          "localSha256": "e3aec8d29ed144040548711486e205f361d2a7fd3aec809bbba9d24c02cd6ac5",
           "classification": "platform-overlay",
           "reason": "Mac deletes through an isolated child that re-verifies the safety root, physical parent, frozen vnode inventory and the shared Darwin libproc handle proof before any removal; Windows branch byte-identical; non-Windows/macOS executors fail closed."
         },
         {
           "path": "src/features/SyncScopeAgentIndex.ts",
-          "localSha256": "6f4055021681dea31172efcbb93a59f65f80c183acb138b12c97d70e8929e545",
           "windowsSha256": "6f4055021681dea31172efcbb93a59f65f80c183acb138b12c97d70e8929e545",
+          "localSha256": "6f4055021681dea31172efcbb93a59f65f80c183acb138b12c97d70e8929e545",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1334,8 +1478,8 @@
         },
         {
           "path": "src/features/SyncScopeLocalIndex.ts",
-          "localSha256": "10327cc08905840c26e43420efdab537b0ef31b0055aa46e1cce32bd5a1119f6",
           "windowsSha256": "10327cc08905840c26e43420efdab537b0ef31b0055aa46e1cce32bd5a1119f6",
+          "localSha256": "10327cc08905840c26e43420efdab537b0ef31b0055aa46e1cce32bd5a1119f6",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1346,14 +1490,14 @@
         },
         {
           "path": "src/features/SyncScopeMetadata.ts",
-          "localSha256": "78e3f65f438e62882c5cbdbb7cc20b98b0ad63e1b2096006a33f29bc09f11d43",
           "windowsSha256": "78e3f65f438e62882c5cbdbb7cc20b98b0ad63e1b2096006a33f29bc09f11d43",
+          "localSha256": "78e3f65f438e62882c5cbdbb7cc20b98b0ad63e1b2096006a33f29bc09f11d43",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/SyncScopeStatus.ts",
-          "windowsSha256": "8b62831d6bed45cbcf8c9fa7273318c50e786b9d6df5a6dfb36e4630e7fc7371",
-          "localSha256": "7bf1341f4379ce76b54d343452a9506857753169ca9a02aafd5b4c042e7f58f5",
+          "windowsSha256": "89982f7142019f769ce3a318708534f999dbc55936acbe59c5823bcaa34c2e6a",
+          "localSha256": "adf2fa6e440427dc89cc7012885ae833a68e03ffe79dbf2933b079e25ebb3e46",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1388,8 +1532,8 @@
         },
         {
           "path": "src/features/VerifiedCompletion.ts",
-          "localSha256": "b8eb1f4e2725570018996dd5786bff44b1f13a5579f184b2cbea3cc70e11750a",
-          "windowsSha256": "b8eb1f4e2725570018996dd5786bff44b1f13a5579f184b2cbea3cc70e11750a",
+          "windowsSha256": "cb77df5ebc0588a96243c36e815aaacf956720910d48bec3381d9b9778c79ff0",
+          "localSha256": "cb77df5ebc0588a96243c36e815aaacf956720910d48bec3381d9b9778c79ff0",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1406,20 +1550,20 @@
         },
         {
           "path": "src/features/WorkerProgressDiagnostics.ts",
-          "localSha256": "a0671202c0db7fffd41276c1d5f01fbb676c70692a5deb8defee530cadf966f4",
           "windowsSha256": "a0671202c0db7fffd41276c1d5f01fbb676c70692a5deb8defee530cadf966f4",
+          "localSha256": "a0671202c0db7fffd41276c1d5f01fbb676c70692a5deb8defee530cadf966f4",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/WorkerProgressEvidence.ts",
-          "localSha256": "a2428d06b5c3737fc0e4c31147a9b61180ac0fec49d5d946844b6a1a1ebef885",
           "windowsSha256": "a2428d06b5c3737fc0e4c31147a9b61180ac0fec49d5d946844b6a1a1ebef885",
+          "localSha256": "a2428d06b5c3737fc0e4c31147a9b61180ac0fec49d5d946844b6a1a1ebef885",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/features/WorkerProgressQuery.ts",
-          "localSha256": "380ccada19aa3a9db149822f09a9dda7ba86da530111bbc6e2d37c53bd6feba8",
           "windowsSha256": "380ccada19aa3a9db149822f09a9dda7ba86da530111bbc6e2d37c53bd6feba8",
+          "localSha256": "380ccada19aa3a9db149822f09a9dda7ba86da530111bbc6e2d37c53bd6feba8",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1521,7 +1665,7 @@
         },
         {
           "path": "src/mac/PreviewRelease.ts",
-          "localSha256": "9cdfa55cf4625dfa117390c220df083274a00b9d9cdf1ce9b0fe24888173f633",
+          "localSha256": "211a41fa67b109f47b74f08043250acb485cc9bf21c12469284119aa7361aa51",
           "classification": "platform-only",
           "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
         },
@@ -1611,7 +1755,7 @@
         },
         {
           "path": "src/platform/MacReleaseClient.ts",
-          "localSha256": "e50d4f1fa2ce1180d430d389e101832acfee3788048d5be0988ae26edbf3a71f",
+          "localSha256": "9aeb3915cbc45fdb90ab5362ef9e9b01ea5bbf6cbf640c5ecdf1271301296f6c",
           "classification": "platform-only",
           "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
         },
@@ -1641,8 +1785,8 @@
         },
         {
           "path": "src/results/LatestResultExport.ts",
-          "windowsSha256": "a717c71c29aecca86f61c2e9edfb0da770dda9fd68584a7850b8a243ed32e17d",
-          "localSha256": "a717c71c29aecca86f61c2e9edfb0da770dda9fd68584a7850b8a243ed32e17d",
+          "windowsSha256": "dd07d23fe49d1265196f8ae8fb34a45cc5d1c35a85e8d33ee2b13294df0b45b8",
+          "localSha256": "dd07d23fe49d1265196f8ae8fb34a45cc5d1c35a85e8d33ee2b13294df0b45b8",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1711,8 +1855,8 @@
         },
         {
           "path": "src/results/plan-run-intent-selector.ts",
-          "localSha256": "d72528d4f581408c6042781455f2bb4c3e82b9261441ab5f4efa988b0f8a24cc",
           "windowsSha256": "d72528d4f581408c6042781455f2bb4c3e82b9261441ab5f4efa988b0f8a24cc",
+          "localSha256": "d72528d4f581408c6042781455f2bb4c3e82b9261441ab5f4efa988b0f8a24cc",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1747,14 +1891,14 @@
         },
         {
           "path": "src/runtime/GpuCollector.ts",
-          "localSha256": "c93aa85b2c86960554748fcca4176848a16f6fd6ea99fdbac3ff3409813a0284",
           "windowsSha256": "c93aa85b2c86960554748fcca4176848a16f6fd6ea99fdbac3ff3409813a0284",
+          "localSha256": "c93aa85b2c86960554748fcca4176848a16f6fd6ea99fdbac3ff3409813a0284",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "src/runtime/IncrementalScopeMetadata.ts",
-          "localSha256": "ef4e5646561cb42d09e24189c0722e2c1d9004f2d7890d3f64b3d106a2da55d5",
           "windowsSha256": "ef4e5646561cb42d09e24189c0722e2c1d9004f2d7890d3f64b3d106a2da55d5",
+          "localSha256": "ef4e5646561cb42d09e24189c0722e2c1d9004f2d7890d3f64b3d106a2da55d5",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1771,8 +1915,8 @@
         },
         {
           "path": "src/runtime/PlanCodeScope.ts",
-          "localSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
+          "localSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -1801,15 +1945,15 @@
         },
         {
           "path": "src/runtime/RuntimeManifest.ts",
-          "windowsSha256": "1cc078fe2d0db61573e1b584939af5dc36113f05e10a82a9543cf16b11430706",
-          "localSha256": "986e657917618c42d8a8a9aaa6ca861923dd33b165af22fec650ff613443fc3d",
+          "windowsSha256": "81fc4b62563837e5318414d879298540b486b29b9d751abe959d1539d381e367",
+          "localSha256": "8458c7593cd508271ba61dd7597704b4f2e65dc524dba4b28c2f538a80a7b777",
           "classification": "platform-overlay",
           "reason": "Historical unbuilt Mac version retained; version bump must accompany the next authorized build."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",
-          "localSha256": "7cf8882619df997399f995ef6115d04569396dee3dbb439fe38c84eb1006960e",
           "windowsSha256": "7cf8882619df997399f995ef6115d04569396dee3dbb439fe38c84eb1006960e",
+          "localSha256": "7cf8882619df997399f995ef6115d04569396dee3dbb439fe38c84eb1006960e",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -2309,8 +2453,8 @@
         },
         {
           "path": "src/ui/PanelHtml.legacy.ts",
-          "windowsSha256": "aa663bb180c8108368cd38d14e9509c37b2999d48250b8a68dc915c88841f294",
-          "localSha256": "bc28410d0dc20e1acb21930151911b3e2691ba7702195d9a16cb80ea21367d75",
+          "windowsSha256": "394cbfaac95a5fd9faa218441b6a79a5217ce50c956ab044830bea0508c6c5c6",
+          "localSha256": "9f0beb0d6997761abd193765d26dcfc6e3b25d8bc5a90be4014afc50fc9eb09b",
           "classification": "platform-overlay",
           "reason": "Retain current frozen Windows business script and layout; adapt only VS Code system theme palette, high-contrast borders and focus colors. Real Chromium light/dark/high-contrast contrast assertions pass unchanged; current script and non-color layout bytes preserved."
         },
@@ -2472,22 +2616,22 @@
         },
         {
           "path": "src/updates/Bootstrap.ts",
-          "windowsSha256": "3b4055f0c5387c89337d37ca07fc7c7bb99e4ccd6775bf8c44553a75969a331c",
-          "localSha256": "a86c6aa2f9cf924a4d86caf14fa64768c9835745de4fe4ca3075d56588598d1e",
+          "windowsSha256": "22d0a748225376c76ddc03d4864f228dde7863d56e4656f56cd7af10009b5e5d",
+          "localSha256": "04d65a1d11a048ae492e90a875031e149a0831ac4bf71911b70b208d30c80c7e",
           "classification": "platform-overlay",
           "reason": "Mac preview metadata client, old receipt/lease compatibility and minimum paired-gate SFTP Mac version; common transaction unchanged."
         },
         {
           "path": "src/updates/ReleaseClient.ts",
-          "windowsSha256": "c79c959920813d9bcb6c267a111f38e8f708e9905f4acceac630ad0a228bc0c8",
-          "localSha256": "b33fd9e555aa119abaf1a6166c0d5c2f62558241684f8d8405aa8d6aa818f681",
+          "windowsSha256": "b6ece367b9b30f845c7b3d675d9dbd4458d86287a18426d2440c37eef08e8247",
+          "localSha256": "addaec5f14192becc5ce01c49e83053ea481cf3e498dec924a2ffaf1dff70c51",
           "classification": "platform-overlay",
           "reason": "Two source repositories use one Mac asset release repository."
         },
         {
           "path": "src/updates/UpdateGate.ts",
-          "windowsSha256": "6162380ed055cddce8796a00632cf2a0f37ecf36ec9200e52073cc7d7e792f33",
-          "localSha256": "692d2afed357edfd4d4a131bed6cc8451911c62cba89cced89bd4a0cb74a8794",
+          "windowsSha256": "b69572ee0bbc4fcea1aa6160d91aa35d3a4d39551ca01bf8d8cc7b24915ab5c2",
+          "localSha256": "8867582fa0db3a27e09ff8d1697b4281bd409fa2041085c5dcda38466f86aa8a",
           "classification": "platform-overlay",
           "reason": "Mac extension identity and action label; common paired-update protocol unchanged."
         },
@@ -2509,14 +2653,809 @@
           "windowsSha256": "db6e2cb6e546c7e297cda7c7da06dba7a9c91cf078f40e7bbffa3839c6b4f2ef",
           "localSha256": "db6e2cb6e546c7e297cda7c7da06dba7a9c91cf078f40e7bbffa3839c6b4f2ef",
           "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/_helpers/isolatedReviewWorld.js",
+          "windowsSha256": "b9df6185199d3f3787f4fe109187070cdf06f28e89fed9003d61f0cf5d522228",
+          "localSha256": "b9df6185199d3f3787f4fe109187070cdf06f28e89fed9003d61f0cf5d522228",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/_helpers/nativeHostScope.js",
+          "windowsSha256": "0b2feac4a770d795ae6083494cec638972c0777843012569c088f22cfa073958",
+          "localSha256": "0b2feac4a770d795ae6083494cec638972c0777843012569c088f22cfa073958",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/_helpers/projectStateMigrationWorker.js",
+          "windowsSha256": "dd8bcbb7aa5ef86fe9c99f840171bb05d9855acd7570ff87f257e9b66c32d9b9",
+          "localSha256": "e68b47a0615682d97fa06029f9e7e4b0bbc73edd4fec568ecf2a4ee39c0fb85d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/agent/cacheRetentionBatch.test.js",
+          "windowsSha256": "403f3421b0a4ac8fad90a7c7fe2600b49f64a60c1ac6d128f3993acc31e611bd",
+          "localSha256": "403f3421b0a4ac8fad90a7c7fe2600b49f64a60c1ac6d128f3993acc31e611bd",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/agent/schedulerStateCleanupOwnership.test.js",
+          "windowsSha256": "83f5b95d6e2c6ad4f37ca220bb2839ed2aea317322da70ab1cfcacd9b2d0fb63",
+          "localSha256": "83f5b95d6e2c6ad4f37ca220bb2839ed2aea317322da70ab1cfcacd9b2d0fb63",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/api/localApi.test.js",
+          "windowsSha256": "53627fdb363d51c2adfe3330ce04cdae0ed20906ce181fbc67f3dad56d222115",
+          "localSha256": "09d732143f8515e579ea4d7d4b031fc7a00bc60d15df77fcf6ee15290599db47",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：发现文件注入改用 Mac 环境变量名，其余与 Windows .416 一致。"
+        },
+        {
+          "path": "test/cli/serverPlanValidation.support.cjs",
+          "windowsSha256": "95ab96da2cafe316ed15dfe39e68188ce5241e97564fb1459bf56d141be32854",
+          "localSha256": "335a59250c5eda619391a4f175e945c554b2dc931efbb02e654c5a4d61992789",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCli.test.js",
+          "windowsSha256": "582bbb130a5c4702e74c925300df4e71d6483daa93ebbb7040c104a20c7ea12d",
+          "localSha256": "cf61602344afc7cafa0157b501e34c0e164f23d3959e2bb330b6ff7529550322",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：发现文件注入改用 Mac 环境变量名；保留 Mac 自 0.5.403 起的 seed 契约断言注释，其余为 Windows .416 权威。"
+        },
+        {
+          "path": "test/cli/simpleCliActionsCatalog.test.js",
+          "windowsSha256": "56f23fe820456355e33625e17ce4caf30ef9acf81e2a58b8969c32571cb00f2b",
+          "localSha256": "241342a954eb9ce022e7a83f63a7de1181e36f923cf395db2ff097c5e13fc74c",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliAgentsLifecycle.test.js",
+          "windowsSha256": "7133fe8b0c63fd61af0a8fd9b60753ba7bd288c0771b51ae39ee062bbe91ff20",
+          "localSha256": "c766ab11e26d2e813d9d233f4aa46b85f02f71f19c3c5ad9b3b2450c8915160e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands1.test.js",
+          "windowsSha256": "039d4704e08b0f2f93629f38317cc4369fbc8b6a0125598ea566e6a8b3eb6fb6",
+          "localSha256": "135f2bdd65924e216434fa4515013c06155f587d080ab80ddd38087edeb33261",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands10.test.js",
+          "windowsSha256": "3572b759541d7aa19c3d307b693325c2c5a6248a19ccb4eb963edafdde0218ee",
+          "localSha256": "735d4980cd1a7019e511a1b4c787fb56cea601930f69ba1c57aad45969f93863",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands11.test.js",
+          "windowsSha256": "ee7c2f1ea0d70df16286eb5e1a2e11496781e95198073cfe4e761a949bf51de0",
+          "localSha256": "b3d9a825bf0d32e512659dda9bb76271cd9e6295eb2ecc8c1aebdce5f2f40a28",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands12.test.js",
+          "windowsSha256": "9c04789a97fe6cb8228d516aa4b079cc003bcd91879d613c666cc735cd52289c",
+          "localSha256": "66ca4aa6fb6461ad02f8bf9c6ed1dfa3c6ab1913ac1f45b9dc656cd615b386a4",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands13.test.js",
+          "windowsSha256": "36b621bd4dd57c08acbf2c85d12e32cadadb9e3609d2013cf9f0e4fbd5c4a70f",
+          "localSha256": "8c6c79fae88439d69a5e3ad23211bc78888cf0cf52409390ab7781e75f7d6e40",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands14.test.js",
+          "windowsSha256": "96273faa1b0ff3bdc207df716c84444908d1675f36042d562077cd5ad1c6ba68",
+          "localSha256": "11a78d6a2df009048c47da2fa244d54ab98e70970029ef56a3f94a87dad458d5",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands15.test.js",
+          "windowsSha256": "f8c323b4f59402b655cce1ee5196983ae584096c4a1db8d742356b7847424a46",
+          "localSha256": "92496dbb0e262cc3dc0efbf88f81f1c5329c332f0e65a3c5d9c88c5f8693ebb5",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands16.test.js",
+          "windowsSha256": "01ce40016100bd2de662d27a39ba02c0f51517b97ad7f7cc4583487bdd476bc5",
+          "localSha256": "005154061e8ffb5c630ea9ecd50dc2acea5954d90ef81a93e84b3693716bbd91",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands2.test.js",
+          "windowsSha256": "272ca3504019e1140c171f107adc62dab949dc9eeb224bdce1c6a3de0e0a9eb3",
+          "localSha256": "01ff1736e9e529cc275316cc7a8c3fc78db42c97369ffadc4b86a52462bb2ae0",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands3.test.js",
+          "windowsSha256": "69fecfdf1964d072f3da7a9bbe2ccc2de6e1ae7e5e2e226d4ed160bf566f2674",
+          "localSha256": "86d6a6fffdd0bc45d9c249cbe3c039ab372b5921e347e666cac897798ff818f4",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands4.test.js",
+          "windowsSha256": "dd5163df82dc162f75cc459bf63b022e25857ab1db162006f4c520b86b43f970",
+          "localSha256": "1ddb56d7cd05130b8a0367476f94e007a1f0dfe99a1e4a0091dac5c6a1444099",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands5.test.js",
+          "windowsSha256": "b793165af8609a170a74a6efb7354bb41b972ded2d068b057ec6e4437ab7d1c0",
+          "localSha256": "04e9a081ce2cc20ab2e80c4463d4563113984c10c90bc5b3e07cb43b8cbbfc39",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands6.test.js",
+          "windowsSha256": "008794cec4829db00fb67828d114d47bcf1b434f3338ad9d67da2b42526bc289",
+          "localSha256": "726db84339aa792f1c9d9967e63672e325b03d78780d4d436b373c235d4d2018",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands7.test.js",
+          "windowsSha256": "e1d905f09f7fc4238feb0315d6225169e84221eac2362fac4417db076bd2fe64",
+          "localSha256": "a4dd3e50a87c4736e90194f41d452268804262525388d62d0946094b2e6b0dfe",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands8.test.js",
+          "windowsSha256": "098bd280117a967b03dd7ce26f807dccbf7fb9dfc83df6b9fc686e3db86bc581",
+          "localSha256": "f3d3d171aa71ba6f75584cd6d4c7078c676a58bf8a841c1807cb7c9491d1257c",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliCommands9.test.js",
+          "windowsSha256": "f35e7289897d3a5f439d4773fc301f91740a55e3eb4ad4305ef00f7245780f23",
+          "localSha256": "aaefb34e821c2fca4f77d64681e7ae69d305d2a542eb3c471bacd05dbd3a4b24",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliControl.test.js",
+          "windowsSha256": "31d8948488648a6c1ccdd4a47f2958f9e4bc8548298e9190e2b1005a481e3079",
+          "localSha256": "dea9c76d247887abd7366448cf2eb4ec0a84c9766b3d1c472156266d20c30bef",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliDraft.test.js",
+          "windowsSha256": "1d5bece4bdfed9fb5a66581ef205ebafcd1c3490ecfd89fb877e66cae174e8da",
+          "localSha256": "6a90e7af4c1e144e2b71cf5f822293eeab683745d21cd455c6cf15bc2f21500f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliLegacyRemoval.test.js",
+          "windowsSha256": "0b43c817b5579f16923dcb0ed7573d022a3505dfd44257cc66ebb169e0854925",
+          "localSha256": "0b43c817b5579f16923dcb0ed7573d022a3505dfd44257cc66ebb169e0854925",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliLifecycleCommands.test.js",
+          "windowsSha256": "042b7c1cb4d0f152a6063717daf9d2869467a35030044d4ee752348d0bf2ec8d",
+          "localSha256": "042b7c1cb4d0f152a6063717daf9d2869467a35030044d4ee752348d0bf2ec8d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliNamedActions.test.js",
+          "windowsSha256": "e7e676c06ed9074a29d774628c8e777be6e4a5d1c8d08840aeb2f320143c473e",
+          "localSha256": "a3a7a7c7cb1c61849e3fcc8a1e20056c6fca4c3893925d7b540532789f164c33",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliPlanCleanup.test.js",
+          "windowsSha256": "7c485f9cd76e593e8fbc30c4934b61ad15d76b3a3be9a77b86d74ada00fca005",
+          "localSha256": "e85e9cfc2c3019e713ddb59d4227a769d1c6a679ca28349f9d1d568ad4bcff1b",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliPreflight.test.js",
+          "windowsSha256": "32ee8e8004d2ca2508182caf8f72e3cc31fb69575d51fb7d8cb1b864af949741",
+          "localSha256": "ebae6cf507e3861e384ea458aa40088adb0dc023da3c133685e047985e048d42",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliProjectOps.test.js",
+          "windowsSha256": "c422cd82cc9bff49672ae911de7454bc69e8dc58f8c0f11136582ec0abc74f78",
+          "localSha256": "db2bd4aba9e43eabfadde8d7204e57121332e5c59202b7b2d1dfcb100a71354d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpCleanupAgents.test.js",
+          "windowsSha256": "25a6a24352c66ce9a1997a1a4f72b1ccaf992adffb16d820ebd15eb9a7e9773d",
+          "localSha256": "c329c5e374affb6ce1d75340f6f9e87f6c47c52c9a1e4267cdad963802237a60",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpCleanupEngine.test.js",
+          "windowsSha256": "56183e5024e8ff7d1f632689199dc6d87a87c069c5a4c2c88d24c67c252cfc35",
+          "localSha256": "0fcd472600625d9ac06d6909668efcc215abc5d57d9ff8feecea29f430d0a1dd",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpSync.test.js",
+          "windowsSha256": "f967e4efeb084a0dbb6935719217cf67ebd7ffe69908d4cb2f79c451cad5969a",
+          "localSha256": "261a7dd20cc048ac6fbe26fa8fe8c943cde90d584b50e6b06f7e85b3b5466e69",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpTransfer.support.cjs",
+          "windowsSha256": "95e428e97a430521babf81acc0d05daefc51aa702a30fb218449abb6a7a1bd96",
+          "localSha256": "4aaf3d7f8c3a903ad4cd147aeaa5ed78f6d14ff82b266212a869c1a4f5e9ee15",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpTransfer.test.js",
+          "windowsSha256": "dff9b56c0fcbc3c83acf2c4acb54f59ede045538e27a70994d9834e5ebe7c290",
+          "localSha256": "dff9b56c0fcbc3c83acf2c4acb54f59ede045538e27a70994d9834e5ebe7c290",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpTransferMapped.test.js",
+          "windowsSha256": "82360643d2d9fad449a427d33704288bd89cb49bcdf10ee1cd2ad4cd7078dd7b",
+          "localSha256": "82360643d2d9fad449a427d33704288bd89cb49bcdf10ee1cd2ad4cd7078dd7b",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliSftpTransferServer.test.js",
+          "windowsSha256": "f07278182bded1ac3bac2bcaf4cb9a5b481bd1babe47ed68c9bd6a3b95897a11",
+          "localSha256": "f07278182bded1ac3bac2bcaf4cb9a5b481bd1babe47ed68c9bd6a3b95897a11",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cli/simpleCliUnifiedEntry.test.js",
+          "windowsSha256": "6feb19dacfc7362b02b2144f38d3dd04c0ddf963a56383316ea4eee28f858284",
+          "localSha256": "fddf4ec054c36da03ac17c40898f247383d59665cc38186e005f9c25743acf99",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：服务发现变量改用 SIMPLE_EXPERIMENT_MAC_API_FILE / SIMPLE_SFTP_MAC_API_FILE，默认发现目录断言改为 Mac 的 SimpleSFTPMac；本批还按冻结 .416 快照重建该文件并补上 macOS 安装名 simpleex-mac 的帮助断言。"
+        },
+        {
+          "path": "test/cli/workerRunLifecycle.test.js",
+          "windowsSha256": "236acdb1f2e813a4cb1b0c041dcb759ce9b2031d29f4cd15df59e6aee8b6cea2",
+          "localSha256": "4e938e8ef7e96e896ba041b59d62c08a2a19144dfb2b55c84181c30b7f5dca9e",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：同时注入 Windows 与 Mac 发现环境变量名，因为 Mac 版 CLI 读取 SIMPLE_EXPERIMENT_MAC_API_FILE。"
+        },
+        {
+          "path": "test/features/agentProjectRootReadinessWorkflow.test.js",
+          "windowsSha256": "f3968facba328daaea9721fc10684311e12046974c6186329203f091010b6ba8",
+          "localSha256": "8c73eff70de5e0341ad6ac50791eaf93a0de063422aaf0fcddb9e2999175659e",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：沙箱注入真实 ApiWorkflow（POSIX 精确字节语义）替代 Windows 平台桩。"
+        },
+        {
+          "path": "test/features/backendActionCommandSets.test.js",
+          "windowsSha256": "b42e6a18178823811e8e0dd27c0dc24227dea09aaa4c29ac0899f0d643ae2a53",
+          "localSha256": "5ffc48fa9e4934f8ade6daa9a441397348172f1f5153cfb8d7c9c18389a602c4",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：改为校验命名动作命令出现在暴露集合内；原先靠字符串出现次数的判定在 Mac 命名命令面下不成立，断言目标不变。"
+        },
+        {
+          "path": "test/features/clearedOutputReplacement.test.js",
+          "windowsSha256": "215f25580b2b4a8829bd0bd03f0fef5c4135044e3ff2824d1f25baa25d4e8ecf",
+          "localSha256": "215f25580b2b4a8829bd0bd03f0fef5c4135044e3ff2824d1f25baa25d4e8ecf",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/completedJobArtifactRootBinding.test.js",
+          "windowsSha256": "489e631f243c9a43c3e7efac3d8bd8d4e3eebe0703713c66faa8efa6f01d9f6e",
+          "localSha256": "489e631f243c9a43c3e7efac3d8bd8d4e3eebe0703713c66faa8efa6f01d9f6e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/completedJobForeignSourceClassify.test.js",
+          "windowsSha256": "9b43401a007085b7a9bf96df31923fb93cc7fa93ced8860aa032759fbfb1e3af",
+          "localSha256": "9b43401a007085b7a9bf96df31923fb93cc7fa93ced8860aa032759fbfb1e3af",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/completedJobLatestSync.test.js",
+          "windowsSha256": "75fbfea4712ce4b8dfefdc5e0a9bdc4c000bf54dee61fbbbf38b17a46339f4f9",
+          "localSha256": "75fbfea4712ce4b8dfefdc5e0a9bdc4c000bf54dee61fbbbf38b17a46339f4f9",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/completedPlanWorkerMirror.test.js",
+          "windowsSha256": "5a54991b29cdf68e49d90f741a6cecea148c916fdd103db98d618ea28a38c87d",
+          "localSha256": "a6f68a006e02a3fd68d754686fc35e82b7a769db1ae84fe3117d0ee8da352fb8",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：夹具需把 dist/results/NativeResultManifest 真实实现注入沙箱，因此保留 Mac 版 fixture 形参，其余采用 Windows .416。"
+        },
+        {
+          "path": "test/features/distributedPlanExecutionMode.test.js",
+          "windowsSha256": "ee34b03afd394f311bf4252b20e83d957572e73e84dbdfbded03ace07a697f37",
+          "localSha256": "ee34b03afd394f311bf4252b20e83d957572e73e84dbdfbded03ace07a697f37",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/distributedPlanQueue.test.js",
+          "windowsSha256": "fbede8c593da8575c56ff55e8a0bfa46bef427e20871b31ae617462685846caa",
+          "localSha256": "fbede8c593da8575c56ff55e8a0bfa46bef427e20871b31ae617462685846caa",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/distributedQueueCacheStability.test.js",
+          "windowsSha256": "7e26426aa634400d82746d57a73c0796407d4dac3ae6b8a0667811ef46a4277a",
+          "localSha256": "7e26426aa634400d82746d57a73c0796407d4dac3ae6b8a0667811ef46a4277a",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/distributedQueueStartupRecovery.test.js",
+          "windowsSha256": "14ea656cdcc1ce6efaa39812c81c0e43276706da3b598628cfe32407bef7c12d",
+          "localSha256": "14ea656cdcc1ce6efaa39812c81c0e43276706da3b598628cfe32407bef7c12d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/failedJobCleanup.test.js",
+          "windowsSha256": "882f59e7d635f7d55d91f99f822bdd28a2f1189458038693caaf2758ceab385a",
+          "localSha256": "a023bf47085ba5cd67e204c69b63d74d98f28aa4a82aa43118eb55ef94709b36",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：vm 沙箱注入 PlanCleanup.cleanupError 与 PlanOutputReplacement.replacementLifecycleJob 的写法差异，断言语义与 Windows 相同。"
+        },
+        {
+          "path": "test/features/formalIdentityContract.test.js",
+          "windowsSha256": "8e19c57bd867b7a2b6da3531bcd22103b25e6e4cca53c22483bfdc0ebb13f897",
+          "localSha256": "8e19c57bd867b7a2b6da3531bcd22103b25e6e4cca53c22483bfdc0ebb13f897",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/formalJobPreflightProgress.fixture.py",
+          "windowsSha256": "bb5990efd151c168a85615b650a85f0aa003406d2545b400a135449926a3d747",
+          "localSha256": "b587388ff8dfa025aa222eda42d1d9a5ed662fdc51851b132316b86878addc39",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：grow/cancel 变体加入最小 sleep，以适配 macOS 调度抖动下的进度观察，阈值未降低。"
+        },
+        {
+          "path": "test/features/idleGpuDispatchLifecycle.integration.test.js",
+          "windowsSha256": "037f64e83f3dc005f5792008b1fd7cbc010380d9b2e2f5b1d536933e9dd2258e",
+          "localSha256": "037f64e83f3dc005f5792008b1fd7cbc010380d9b2e2f5b1d536933e9dd2258e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/jobArtifactStagedSlot.support.cjs",
+          "windowsSha256": "e47a1f907bce44ed4d6dfc1f252588c0f9330c0713b139658bb65e7640551aa6",
+          "localSha256": "e47a1f907bce44ed4d6dfc1f252588c0f9330c0713b139658bb65e7640551aa6",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/jobArtifactStagedSlotIdentity.test.js",
+          "windowsSha256": "90b704a67e5176724bb15dada7a826d90bf300c9c63b97c810db6a4e6d867916",
+          "localSha256": "90b704a67e5176724bb15dada7a826d90bf300c9c63b97c810db6a4e6d867916",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/jobArtifactSyncIdentity.test.js",
+          "windowsSha256": "13cb0d7817b24bc54b066679ecfe21d60e43020157c118f5799ad8800ec792f0",
+          "localSha256": "13cb0d7817b24bc54b066679ecfe21d60e43020157c118f5799ad8800ec792f0",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/latestResultExportDarwinLock.test.js",
+          "windowsSha256": "090ceb402017c5b7de2dd94a4e8481d82c077e5da876aa7e35b0e2ddcd2d60a9",
+          "localSha256": "090ceb402017c5b7de2dd94a4e8481d82c077e5da876aa7e35b0e2ddcd2d60a9",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/localCodeManifestCache.test.js",
+          "windowsSha256": "1bf34ea1e384df162ef8d918c62e697001578d9915f4ef6ba48df5a38f54cb2f",
+          "localSha256": "1bf34ea1e384df162ef8d918c62e697001578d9915f4ef6ba48df5a38f54cb2f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/localIndexSharedIdentity.test.js",
+          "windowsSha256": "6bc466fd2c3fef49fb9550c35f01b5e6957894f15f81132a8fa9172ca8ea022c",
+          "localSha256": "6bc466fd2c3fef49fb9550c35f01b5e6957894f15f81132a8fa9172ca8ea022c",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/macCliApi.test.js",
+          "localSha256": "9ae20b028907875b5a601583d304dff8a579fe0b9698f5e762fb016bf1e896b0",
+          "classification": "platform-only",
+          "reason": "Mac 专属统一 CLI 契约测试（校验 Mac 发现文件身份），Windows 无对应文件。"
+        },
+        {
+          "path": "test/features/macPreviewRelease.test.js",
+          "localSha256": "5f4854b4470c40283f1da982c91342e9ea2de3630405fa4c997fa3756f60d282",
+          "classification": "platform-only",
+          "reason": "Mac 静态 preview 索引专属测试；本轮把带限流证据的 403/429 断言改为 Windows 0.5.416 的“延后而非检查失败”语义。"
+        },
+        {
+          "path": "test/features/manualDistributedResultSync.test.js",
+          "windowsSha256": "d53c90ec47b928617b3eecc0b5f7b3443e41d24b125978997d897d39d533b094",
+          "localSha256": "5ef00565e598ea6df86443f28cd09aaa48fabfff58c27379e3fada638960682e",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：分片与输出目录夹具改用 POSIX 相对路径写法（Windows 侧用盘符路径）。"
+        },
+        {
+          "path": "test/features/packageContentPolicy.test.js",
+          "windowsSha256": "3d77d69adc11ad8f6e1de0808554dfe410f5cc164737fece03b2b1e13177b868",
+          "localSha256": "dc154aadd642bf4ed66cf5832026333b234ccb14c842d9a8fe9d83d92ac4cc8e",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：模板目录文档条目按 Mac 文件系统大小写不敏感语义声明（README.md 与 claims.md 的 doc-markdown 分类）。"
+        },
+        {
+          "path": "test/features/pairedUpdateLegacyLease.test.js",
+          "windowsSha256": "8e32fada47c7d739a0e4a924e56dd943d42bc8e108f8d9aad7ff4a25d2d8e219",
+          "localSha256": "8e32fada47c7d739a0e4a924e56dd943d42bc8e108f8d9aad7ff4a25d2d8e219",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/pairedUpdateRateLimit.test.js",
+          "windowsSha256": "f3a75542b38c9e76f7308c0e94007562a5a66791883ee57a9cb9fae34ac28921",
+          "localSha256": "4d861610d90580e598d28ddc99ae8289e9318d683533ac54feea85886879efac",
+          "classification": "platform-overlay",
+          "reason": "Windows 限流用例的 Mac 适配：Release 仓库改用 Mac 常量、状态键改用 simpleExperimentMac.*，并按 Mac 单份静态索引模型断言一次检查只取一次索引文件。"
+        },
+        {
+          "path": "test/features/panelMessageDispatch.test.js",
+          "windowsSha256": "221285d8d1d9b59385e2f53e07b65d7794cde6479fab3a4917a1273caff7fc20",
+          "localSha256": "221285d8d1d9b59385e2f53e07b65d7794cde6479fab3a4917a1273caff7fc20",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planArtifactSync.test.js",
+          "windowsSha256": "8067674a005d44afa53cabb560778d5c1585a14d37de2796efb24509eabe223b",
+          "localSha256": "8067674a005d44afa53cabb560778d5c1585a14d37de2796efb24509eabe223b",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planBatchDispatchFirst.test.js",
+          "windowsSha256": "bbeeb2f427f0bbe8379111d2cf928e47971a2b895d36424f4a3572424343abbd",
+          "localSha256": "bbeeb2f427f0bbe8379111d2cf928e47971a2b895d36424f4a3572424343abbd",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planCleanup.test.js",
+          "windowsSha256": "e25c1e3cfc6515671afd6f1eb000365352784e98961ba8349453de517a58f036",
+          "localSha256": "987543f312bac312f89d71bd950a5f01e1c8ceb558515df5e5e145cda8e6f7e7",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：本机清理走隔离删除子进程与 libproc 句柄证明，夹具按 Mac 契约注入。"
+        },
+        {
+          "path": "test/features/planCleanupReconnect.test.js",
+          "windowsSha256": "f3eb08f19e6c8c2be0bc57f46eabcc1be1df2ad67f3499564cc09e55fd2442a7",
+          "localSha256": "b483fdad5a4ab652b7a4f4b706b87413d8aef98115ae11bd4ff59c5466bed645",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：保留退役连接钩子不触发清理的 Mac 断言标题，其余采用 Windows .416。"
+        },
+        {
+          "path": "test/features/planIsolatedBatchLedger.lockChild.cjs",
+          "windowsSha256": "e1246e1822eb1ee4f7f52f94ecf25e2c13b1221454dba96803c6ae55b13d6014",
+          "localSha256": "e1246e1822eb1ee4f7f52f94ecf25e2c13b1221454dba96803c6ae55b13d6014",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planIsolatedBatchLedger.support.cjs",
+          "windowsSha256": "cb8b90bb16c25dda878cdef8ecc0295654277ac9ea8b7e9fcefec3b7b7c087ca",
+          "localSha256": "cb8b90bb16c25dda878cdef8ecc0295654277ac9ea8b7e9fcefec3b7b7c087ca",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planIsolatedBatchLedgerLifecycle.test.js",
+          "windowsSha256": "f7351bcd8b3f35d9c0b4994f00c45f301cb2bfac81dea2a7af788863a95bb72e",
+          "localSha256": "f7351bcd8b3f35d9c0b4994f00c45f301cb2bfac81dea2a7af788863a95bb72e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planIsolatedLedgerLock.fixture.cjs",
+          "windowsSha256": "f398e9f455d9311aa075800cedf92f781a1a6a84d3997f3bbab65ec81bdf408f",
+          "localSha256": "f398e9f455d9311aa075800cedf92f781a1a6a84d3997f3bbab65ec81bdf408f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planIsolatedLedgerLock.test.js",
+          "windowsSha256": "e6e0a10a5140f9bb1616817d29679282ffb19787d6bea8b5405a2edfd50d47b7",
+          "localSha256": "e6e0a10a5140f9bb1616817d29679282ffb19787d6bea8b5405a2edfd50d47b7",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planIsolatedReview.test.js",
+          "windowsSha256": "1a73a77c19860bc895ae5ad2856db64ad8ab52cdbc67d27333576e0633b3d709",
+          "localSha256": "1a73a77c19860bc895ae5ad2856db64ad8ab52cdbc67d27333576e0633b3d709",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planJobDeleteRequeue.test.js",
+          "windowsSha256": "3ed4e6ce58cc93dabd445c868a6eba6792e449a6d8f38973a012d2c6ba72a6f5",
+          "localSha256": "3ed4e6ce58cc93dabd445c868a6eba6792e449a6d8f38973a012d2c6ba72a6f5",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planOperationNoticeLifecycle.test.js",
+          "windowsSha256": "8045153f28cb50a20a1bccd67827d70475196a959297484662fc0031600e558f",
+          "localSha256": "8045153f28cb50a20a1bccd67827d70475196a959297484662fc0031600e558f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planOutputReplacementHost.test.js",
+          "windowsSha256": "a5e5505387590ba8d457cdd7f666ce438be0c6ca17fbe775292ef9257a8a771f",
+          "localSha256": "a5e5505387590ba8d457cdd7f666ce438be0c6ca17fbe775292ef9257a8a771f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planOutputRetention.test.js",
+          "windowsSha256": "37b234aa053555516c9ba19e790c826f6fe399c2fddef81419611904a3479943",
+          "localSha256": "549e538269e63e6cfa0165f7adcc5f57710233652f64debd51497d0dfc00b37c",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：远程副本删除注入真实 SyncScopeDelete 实现（POSIX 语义），Windows 侧用桩。"
+        },
+        {
+          "path": "test/features/planPreflightProgressSpeed.test.js",
+          "windowsSha256": "35b936440792d1ea4eaece964fa7b53611cea45ed5a42717a14232bfea77e774",
+          "localSha256": "4178123ff82c5fe22a2cd258fa7ef14356046606932d5c7aef1c42b8b69f5922",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：保留生产实际方法名 ensureWorkerCodeReadyForPlanCheck（Windows 权威源码同名，其测试侧使用重命名后的桩名），并保留 Mac 的 sftp 上传路由注释。"
+        },
+        {
+          "path": "test/features/planRunHoldClearedChain.test.js",
+          "windowsSha256": "1d88c82dc556577c77b100727bee52c2d3bd9d53b8a09c99113e4f636096a7ea",
+          "localSha256": "1d88c82dc556577c77b100727bee52c2d3bd9d53b8a09c99113e4f636096a7ea",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planRunIsolateRerun.test.js",
+          "windowsSha256": "3b837d01be0718e7b06cd73877dd3c9813ac28f3a26d392379faf66969f1e1bf",
+          "localSha256": "3b837d01be0718e7b06cd73877dd3c9813ac28f3a26d392379faf66969f1e1bf",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planRunSharedSubmission.test.js",
+          "windowsSha256": "b1a4d2208a1feaef90647ad1350a6c2469432768a3c9b4211dc2f21fede2bfaf",
+          "localSha256": "b1a4d2208a1feaef90647ad1350a6c2469432768a3c9b4211dc2f21fede2bfaf",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planStopClear.test.js",
+          "windowsSha256": "1c2d545a99bd9bc9cb8a13480c937564a6c893d3c6e1f11d85d31ac6aff6cd8e",
+          "localSha256": "e9eed62d2eb8b2fafaf4de29185156aadfbfaa1b69e47a04dfb8476ea95381ec",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：注入 MAC_PLAN_IDENTITY=true 与 POSIX 计划键语义（面板顶层 platform==darwin 分支）。"
+        },
+        {
+          "path": "test/features/planSubmissionStateGuard.test.js",
+          "windowsSha256": "8af9f6db7d01085692543a454f252a813095d885d02fc9c8b37e4f0a283dfe53",
+          "localSha256": "8af9f6db7d01085692543a454f252a813095d885d02fc9c8b37e4f0a283dfe53",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/planSubmissionVisiblePreflight.test.js",
+          "windowsSha256": "8a603c2437d5bf50c7228fd66be2fd16e94dc1e1210d709bab0ec24ce265e010",
+          "localSha256": "30f8d2d6bff41ac9e1908165a2698ed7fbc651a9f8a450c3492474091db5edb2",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：保留 Mac 面板构造与 TunnelGateway 注入方式，断言语义采用 Windows .416 预检载荷契约。"
+        },
+        {
+          "path": "test/features/planValidationOperationPayload.test.js",
+          "windowsSha256": "96212bdded2acbedfb58da3efe5e299c1de410be39647cec894f90aa5b224c3c",
+          "localSha256": "f7c2d981962459c16b248290472fdd15ac4b8ddfa694418d5f250ad073f61bf7",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：用 os.tmpdir 真实临时目录满足 POSIX 工作区探测（Windows 侧用固定夹具根）。"
+        },
+        {
+          "path": "test/features/pluginLogRetention.test.js",
+          "windowsSha256": "e0dbf4b7aa113c4ac180b81ccd5f1ffae8e3480af118b541cf0676ecdf23092b",
+          "localSha256": "ba8ccdf64b587b90a67af97e8453c7b695860686f02e00f43fbd94529b216fe3",
+          "classification": "platform-overlay",
+          "reason": "Windows 日志保留用例的 vm 沙箱补 process.platform，使 Mac 的 darwin 结果路径规范化分支可在宿主内判定。"
+        },
+        {
+          "path": "test/features/pluginLogRetentionProcesses.test.js",
+          "windowsSha256": "7e588db0e69dacea235dfd0f7949aa5c8c2f5c3378a44fe7eb16d166125d4569",
+          "localSha256": "7e588db0e69dacea235dfd0f7949aa5c8c2f5c3378a44fe7eb16d166125d4569",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/prequeueRecallLifecycle.test.js",
+          "windowsSha256": "d3327cf1ccc9ecffa1c1b4fb296fb66fa362453c4c61939481fcd3e8536dfe84",
+          "localSha256": "efc830885be9259602a83124d50baa9e469924449f56a9bb4a8e8a745fe42b42",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：保留 durable v1 队列回执可读兼容夹具，v2 召回围栏断言与 Windows 一致。"
+        },
+        {
+          "path": "test/features/projectRootMap.test.js",
+          "windowsSha256": "e3e8918eaac9c8f09a318cee9c4e4e970eba98b652668f9ba622767f623fee2c",
+          "localSha256": "bca6539b55ede77915a49070e7944a55a33a0d701b4591d00c223ab637e7b969",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：POSIX 根映射与项目/机器状态身份尾随空格语义测试（Mac 契约）。"
+        },
+        {
+          "path": "test/features/projectStatePaths.test.js",
+          "windowsSha256": "db6d291955ec979b394c57223fbe5976b9d3aee99292d2255b2be14b5b411fad",
+          "localSha256": "db6d291955ec979b394c57223fbe5976b9d3aee99292d2255b2be14b5b411fad",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/projectWorkspaceChangeIsolation.test.js",
+          "windowsSha256": "cbe70480220e628fa544af66d5179dd1b503d73155a76e0cead15e79d4e44c3d",
+          "localSha256": "cbe70480220e628fa544af66d5179dd1b503d73155a76e0cead15e79d4e44c3d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/remoteResultInspectionWorkflow.test.js",
+          "windowsSha256": "e18ecff600936c57c2f2a7e66d1005f0ccf50597f1fed3dcb7a78a7c204ac30d",
+          "localSha256": "1ccdc626de44b8cacc130341e32db93df8584a777157d2d6a5c75736c96cec3c",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：保留真实回环监听夹具（Windows 已改用另一种夹具），断言集合与 Windows 相同。"
+        },
+        {
+          "path": "test/features/resultSyncFailureVisibility.test.js",
+          "windowsSha256": "fefd3002400d08db0fccd89183536b478d86794aebaf91ccca49ae3736685aa3",
+          "localSha256": "fefd3002400d08db0fccd89183536b478d86794aebaf91ccca49ae3736685aa3",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/schedulerDependencyPreflight.test.js",
+          "windowsSha256": "c441efbd57c06ca2e4d8ad9b2968dc01ec699e3c5d11eeae8094c7faa0c5611d",
+          "localSha256": "acc10752b56175702acf24267a880b219326390a0cbecd65aa272a17f4f9fc30",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：使用隔离 Python 夹具写入器，避免污染仓库内运行时脚本。"
+        },
+        {
+          "path": "test/features/staleQueueRoundBehavior.test.js",
+          "windowsSha256": "03ff4b127801ec0e94f55b2b352d9818e0702d0fd4d4ca60e0cd638f92e52e12",
+          "localSha256": "03ff4b127801ec0e94f55b2b352d9818e0702d0fd4d4ca60e0cd638f92e52e12",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/stopRoutingAndResultParseDedup.test.js",
+          "windowsSha256": "af350296765ac826cca61831b9a71b6eb0f39b21fa247780b37c309d3b59aa21",
+          "localSha256": "5cdb0a8416832da93d3cf6df37f8b322de61cae1b902ab23266f4bd25d125a9a",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：停止路由夹具注入 POSIX workspaceRoot 与项目标识，保留 Mac 侧路由注释。"
+        },
+        {
+          "path": "test/features/syncLatestMerge.test.js",
+          "windowsSha256": "3153718efb3cc61944a99b4f27ca5d3989bcd5d5b8e43c9a06978f2f7a7ec65f",
+          "localSha256": "3153718efb3cc61944a99b4f27ca5d3989bcd5d5b8e43c9a06978f2f7a7ec65f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/syncScopeHashCache.test.js",
+          "windowsSha256": "cc537fcd7ed31dfa253c2d0a767a182d926cf5dead14b6f209157ae9baee5cc8",
+          "localSha256": "cc537fcd7ed31dfa253c2d0a767a182d926cf5dead14b6f209157ae9baee5cc8",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/syncScopeStagingIdentityWiring.test.js",
+          "windowsSha256": "dc7bed82ec0cd69b430840e1637f3f18e2f46ecaf3e9ce2d4cd27f953cc22d5d",
+          "localSha256": "dc7bed82ec0cd69b430840e1637f3f18e2f46ecaf3e9ce2d4cd27f953cc22d5d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/syncScopeTransferBatch.test.js",
+          "windowsSha256": "0aa86195207868f27d3a64a0140d214e8ccae45bf5cb69f757bf2fae8fc0da9e",
+          "localSha256": "a87b7517bd10a80ef6399d3b5f077e610979e2c6d03c12563e866678496a00ea",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/syncScopeWorkerAuthority.test.js",
+          "windowsSha256": "45a8843020294c8ea898bc9541cc9650e14d2a0169001c21f7acf29abfe60e00",
+          "localSha256": "45a8843020294c8ea898bc9541cc9650e14d2a0169001c21f7acf29abfe60e00",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/vsixRuntimeClosure.test.js",
+          "windowsSha256": "9df1891f6dcae81980bba47b1184dd80c9711868f14dddf2892c389bd554334f",
+          "localSha256": "c92f06f680b3b19548077d0eeeb5e969b5186a15261ad7d14631dcfeb0b25caa",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：校验器读取 Mac 打包实现 scripts/list-vsix-files.js 的闭包要求。"
+        },
+        {
+          "path": "test/features/webviewCommandWhitelistConsistency.test.js",
+          "windowsSha256": "6ae98155fdd62eee449ab8575732ca85ce6252e84dfb65c1b0120ba174b199cc",
+          "localSha256": "6ae98155fdd62eee449ab8575732ca85ce6252e84dfb65c1b0120ba174b199cc",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/workerCodeVersionIsolation.test.js",
+          "windowsSha256": "74cfd4fd74d36c346b98231a3cd6ebcd5c4135073d4bfd035e1486b9f25d7463",
+          "localSha256": "74cfd4fd74d36c346b98231a3cd6ebcd5c4135073d4bfd035e1486b9f25d7463",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/workerFpsyncTaskLabel.test.js",
+          "windowsSha256": "e2d5a8950fd0dcae2e4ae734d770e29fa0da27fd315778ee1e32853aa8d3bf9d",
+          "localSha256": "e2d5a8950fd0dcae2e4ae734d770e29fa0da27fd315778ee1e32853aa8d3bf9d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/features/workerPreparationPipeline.test.js",
+          "windowsSha256": "ecd4f61e5ca8826de172af16478319ae85a3430c32890d394d8bc29005c0b5ec",
+          "localSha256": "9d92df294d20fb0bf051300b209941dcdaa37a00153a7adede9858ded71d1a60",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：能力发现注入 platform/HostPaths.componentDirectory(\"sftp\")，路径无关 mock 计数断言强度不变。"
+        },
+        {
+          "path": "test/fixtures/cache-retention-batch.py",
+          "windowsSha256": "ddcf104282d86f0f3f61c41abcc4d2dcfdcd9473df96f00dc6be9bf85709f1b2",
+          "localSha256": "ddcf104282d86f0f3f61c41abcc4d2dcfdcd9473df96f00dc6be9bf85709f1b2",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/fixtures/retention-claim-worker.js",
+          "windowsSha256": "0e170ea11fff4a84e4c98182e3d5792a8c823d306659badbe6f858ff4764bcb8",
+          "localSha256": "0e170ea11fff4a84e4c98182e3d5792a8c823d306659badbe6f858ff4764bcb8",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/tunnel/agentLifecycle.test.js",
+          "windowsSha256": "2e977d83089796083ec76e08c2005ee824fe941b2ba9901e51f90c87b8f1a740",
+          "localSha256": "b76469a9113648eb748c9da91fb336519528594e71dc4988e825d4ff46ffd8fd",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：兄弟扩展名单使用 Mac 标识 simple-local.simple-sftp-mac 与 CLI 名 simpleex-mac，隧道行为断言未改。"
+        },
+        {
+          "path": "test/ui/cacheCleanupPanel.test.js",
+          "windowsSha256": "021b8c34501f2056854f2d2a10aa5cf4f8f214a13351272932c8a29aab1fce87",
+          "localSha256": "63fa149dc8ae352eb09c709be54e983a52b3d0667a14f2c7cae271628c00289e",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：删除执行器夹具按 Mac 协议改写（每个已确认目标一个隔离子进程、两次绝对路径确认字段、cwd 为已核验父目录），并补齐测试沙箱的模块解析与扩展定位能力；Windows 的 PowerShell 批量删除语义在 Mac 不成立。"
+        },
+        {
+          "path": "test/ui/executionCompactOverview.test.js",
+          "windowsSha256": "37f0e6688ed99ae433071eb68f58e94f872f072e685f8e99d6cbfe8976291bb2",
+          "localSha256": "d6015da5e01cd71325c1cd5e7e520bb91cd175be591aeffaf4e47bbc96d68d38",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：面板脚本切片沙箱注入 Mac 身份常量 MAC_PLAN_IDENTITY 声明，保持原有渲染与计划身份断言。"
+        },
+        {
+          "path": "test/ui/executionPlanListProgressLagRepro.test.js",
+          "windowsSha256": "a329f52abfcdb181a2e8847f64744de22810ec19db91223aaf257cbd5515a82d",
+          "localSha256": "a329f52abfcdb181a2e8847f64744de22810ec19db91223aaf257cbd5515a82d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/ui/gpuHistoryMixedGranularityScatterRepro.test.js",
+          "windowsSha256": "7c0c3a681319e1be3017d17018936082560ed0a4ac4f327bad900d470f1ac784",
+          "localSha256": "7c0c3a681319e1be3017d17018936082560ed0a4ac4f327bad900d470f1ac784",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/ui/jobTmuxLogNavigation.test.js",
+          "windowsSha256": "388fb6b9a7a4f3dd15f451047ac42b59ddf666d012a553ac835b1a4782796b4b",
+          "localSha256": "4b838c6a0b88e58e5907ad0586828956105fa427ffc6e2c4165182d34401cbb9",
+          "classification": "platform-overlay",
+          "reason": "Mac 适配：面板 vm 夹具注入 tmux 缓存与任务页签字段，按 Mac 面板读取方式取值。"
+        },
+        {
+          "path": "test/ui/planNoticeLayout.test.js",
+          "windowsSha256": "05b02b30b68f3d3374f734b73dd8ce97249f2441e320a5bed73d1db3887f5909",
+          "localSha256": "05b02b30b68f3d3374f734b73dd8ce97249f2441e320a5bed73d1db3887f5909",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/ui/resultCommandPhaseRouting.test.js",
+          "windowsSha256": "f5f95ffe4f12b6259e629d5c7bdf859b3a33157e4899a755c40f0c650c0e65d2",
+          "localSha256": "f5f95ffe4f12b6259e629d5c7bdf859b3a33157e4899a755c40f0c650c0e65d2",
+          "classification": "windows-identical-after-identity-mapping"
         }
       ]
     },
     {
       "name": "sftp",
-      "windowsVersion": "0.2.107",
-      "windowsCommit": "fc962236210ca692397dd58eefbefd0bf108f85a",
+      "windowsVersion": "0.2.114",
+      "windowsCommit": "b2329b5de8b1723d03d7470af8dbb0dad96898d5",
       "files": [
+        {
+          "path": ".gitignore",
+          "windowsSha256": "2f78f0eeedabf9ecebed37851a932b372d5d4ed950c2055beb862a534ce7b256",
+          "localSha256": "19718a39185a03c680d68a177177ba8d27665b842b176d5e407de7d1abdf1a8f",
+          "classification": "platform-overlay",
+          "reason": "Mac 宿主忽略项（系统 .DS_Store 与 Mac 构建产物），Windows 权威不需要。"
+        },
+        {
+          "path": "CHANGELOG.md",
+          "windowsSha256": "a375e8ae32b47e670f01a41687aef5381c603e22c67e64df7fecd0bb735b2fc2",
+          "localSha256": "4784ed939d779fbe7b38656d80ebb8f3774f26fe287dd9697c38ed23c3cd6c46",
+          "classification": "platform-overlay",
+          "reason": "Mac 变更日志保留自有条目结构，只新增 0.2.104 一节的共同能力说明（暂存槽过期回收与一次确认提前释放、忙快照/批次上限/后台维护删除/consumer root/本地暂存收敛、交接标记新位置），不复制 Windows 版本叙述。"
+        },
+        {
+          "path": "LICENSE.txt",
+          "windowsSha256": "cd4b6fddb8532ebf742741d80d9f8dcab84d92029f818e0447a1f41b0ab12d46",
+          "localSha256": "cd4b6fddb8532ebf742741d80d9f8dcab84d92029f818e0447a1f41b0ab12d46",
+          "classification": "windows-identical-after-identity-mapping"
+        },
         {
           "path": "agent-lifecycle.js",
           "windowsSha256": "a790f295de7dd1bff884bf537cfc93dc801a1a07c95a7d4031088df314213c3a",
@@ -2538,21 +3477,21 @@
         },
         {
           "path": "bin/simple-sftp-api.js",
+          "windowsSha256": "14c8a7c4273e25e75e58bfe9b21e9f23ce46169f818b00179a176294be99b66b",
           "localSha256": "2b91233012253e800522dc283bf6cd6ffa9412e2929cd1498b5431206f6ce163",
           "classification": "platform-overlay",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership.",
-          "windowsSha256": "94e50e0a3e2928c5be3854af7182ecbebe5f75d733d9cad9cd0711ea99db18c1"
+          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
         },
         {
           "path": "cleanup-file-api.js",
-          "windowsSha256": "9026ac6acb0c497b62c340f6612c24865ec2c23e3bff07051aa2464376f1d0a1",
-          "localSha256": "9026ac6acb0c497b62c340f6612c24865ec2c23e3bff07051aa2464376f1d0a1",
+          "windowsSha256": "2123f4bc0541bdf3d2e8bff6de2cee8fd3ab84cd7ead47a00ab7608fbc3fcc30",
+          "localSha256": "2123f4bc0541bdf3d2e8bff6de2cee8fd3ab84cd7ead47a00ab7608fbc3fcc30",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
           "path": "cleanup-files.py",
-          "windowsSha256": "0cd703ff920c9cc368094c56a2bb40c6e9723eaf7f73147a7b4772b1c763915d",
-          "localSha256": "348ddc0fc9fbb773afff0d08a3f5ad776cfc6be232420f957424f15d727c1774",
+          "windowsSha256": "5198c52e47105e72f188a2afe8cfa43c294116130824551180238770c4307850",
+          "localSha256": "4481153d9c7e63124dad553640a125815e16272cab060d9b4a09a1ee74d42584",
           "classification": "platform-overlay",
           "reason": "Retain Darwin libproc adapter and bounded frozen inventory before new fast/path-only/archive mutations; common authorization and parent guards unchanged."
         },
@@ -2569,9 +3508,15 @@
           "classification": "windows-identical-after-identity-mapping"
         },
         {
+          "path": "docs/mac-migration.md",
+          "localSha256": "26998dfbb30b540ff6c4ddf0830dd6259cc4d5fe48f4a535449cc9d5dbeff19c",
+          "classification": "platform-only",
+          "reason": "Mac 专属迁移说明文档，Windows 权威无此文件。"
+        },
+        {
           "path": "extension.js",
-          "windowsSha256": "ed367d30b8118bd20714fd5de12dfd184e9a98d837ea22ba48b26b87b8145eb6",
-          "localSha256": "2c1001afe259f09e2eff607fa79da96f57e03bf4a07d10222eac20aa95e27272",
+          "windowsSha256": "6c74f1e0b0029be36e3f6ddc2020fcaf75339ae4c4d43d73c070f04819d8e51e",
+          "localSha256": "2a0de5e0110cb14a7268c180e6d5a9ed0d9d6c6f056439e907a1bfdf60017789",
           "classification": "platform-overlay",
           "reason": "Mac credential/askpass bridge, source/destination relay exit diagnostics, exact old-transfer settlement, and authentication notStarted boundaries reviewed with isolated tests. Existing common inventory/cleanup/task policy remains frozen; missing donor overlay bytes still require host_windows verification."
         },
@@ -2650,15 +3595,15 @@
         },
         {
           "path": "package-lock.json",
-          "windowsSha256": "a2de6f6a36d3b29185aa3998f48610731d1cc04448c02cca152ec65928c6fba5",
-          "localSha256": "c82043802e1a82651a969a27a90c34fca83c51cdd3606a1c3434a0ec8f9cd954",
+          "windowsSha256": "334543a18a35cb29c42295f1c85e445c8e40de3b1f72fcad8523c0d360d4cf97",
+          "localSha256": "5b13606106ef70593e66a52a795d3d7abee7e2f2591e8b8bcfd0925dd7a38051",
           "classification": "platform-overlay",
           "reason": "Mac root package identity/version only; common dependency lock retained."
         },
         {
           "path": "package.json",
-          "windowsSha256": "2164550a1e15a01343688613fcc2a251fc32b835c73e34d33c40daad43205161",
-          "localSha256": "e147ebe07b183589cbe7b9c3f3d6d8dc7c27b7749390dcfaf3738813f78fd06d",
+          "windowsSha256": "90d9163bbed7f29d7e69b0452fbe24ac423e5ed4fcac1f0cbfe87d65d802bbf7",
+          "localSha256": "9abbdc9e58c6094ee56a69275efb54440557ee6cc5ba9cf9175ece41dd278318",
           "classification": "platform-overlay",
           "reason": "Mac extension identity, OS entry, CLI/native runtime files and existing scripts; common contributions/defaults copied."
         },
@@ -2669,6 +3614,13 @@
           "classification": "windows-identical-after-identity-mapping"
         },
         {
+          "path": "readme.md",
+          "windowsSha256": "9fed6d9aef119482a1a5c753a06f79d94565a461b9caddc007d8214ed5068238",
+          "localSha256": "3073f42f99cc7d445ff85e4720300163eff6a4e3c9d083b50d1ae7e6010e0379",
+          "classification": "platform-overlay",
+          "reason": "Mac 说明保留 darwin 安装与 Mac 数据/认证路径结构（不采纳 Windows 的 simpleex 段与 %APPDATA% 段），补配套版本、交接标记新位置与暂存槽两代保留/忙时 fail-closed 说明。"
+        },
+        {
           "path": "resource-operation-lease.js",
           "windowsSha256": "6bdb27d5f34719e294632c95dcbe70cf6655fa85821798ff048c0394ca2ed2e2",
           "localSha256": "f1714ad5683032cb44a9f7713cbab551fcc7aeaf87db5fee911260e61a884e38",
@@ -2676,9 +3628,41 @@
           "reason": "Existing mac-preview-update lease compatibility while using the common paired-plugin-update protocol."
         },
         {
+          "path": "scripts/install-latest.ps1",
+          "windowsSha256": "4ef5693a29838aa9503f36d2627d7cddcaf64564f5cba613e060fdc25450061c",
+          "localSha256": "4ef5693a29838aa9503f36d2627d7cddcaf64564f5cba613e060fdc25450061c",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "scripts/package-vsix.js",
+          "windowsSha256": "d3a561be5b851b84f41e4e15bdc7d63af30614bf34a6c32532fa3f632e8d753a",
+          "localSha256": "6d5ce797145ebf85d886dc24e5c7cc36436576d9fe9661bb4adead3e77b397ad",
+          "classification": "platform-overlay",
+          "reason": "Mac 打包目标为 darwin-arm64 且写入 Mac 扩展标识与命令名，Windows 权威按 win32 打包。"
+        },
+        {
+          "path": "scripts/test-serial.js",
+          "windowsSha256": "5946ebfd5a369e948ab26c779c8a0ec1c54a5aad825105a615abb84e84f8b66a",
+          "localSha256": "5946ebfd5a369e948ab26c779c8a0ec1c54a5aad825105a615abb84e84f8b66a",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "scripts/verify-python.py",
+          "windowsSha256": "6493ebaf4d67b46b9e45a97e17163924c18fe55eec333c1cb2ba850fe8a6ffd7",
+          "localSha256": "6493ebaf4d67b46b9e45a97e17163924c18fe55eec333c1cb2ba850fe8a6ffd7",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "scripts/verify-runtime.js",
+          "windowsSha256": "10834dfe715a0a571c72c4943edc80330ba94f71b0225230d90e452d0f26687a",
+          "localSha256": "2d449c995e6febbbe9ca2ca83ba68035cf60df678ada7e9654ce25520cec52fd",
+          "classification": "platform-overlay",
+          "reason": "Mac 运行时清单校验按 Mac 目录结构与 Mac 标识解析，Windows 权威按 Windows 布局。"
+        },
+        {
           "path": "staged-tar-receive.py",
-          "windowsSha256": "567243e9ada90f34d34db17621047bb2302b699f4cb793363aad500cb8438b67",
-          "localSha256": "567243e9ada90f34d34db17621047bb2302b699f4cb793363aad500cb8438b67",
+          "windowsSha256": "036e9d3c38c2f823ef20f428e43f046b72350b0887b4cf871f9646f28d105268",
+          "localSha256": "036e9d3c38c2f823ef20f428e43f046b72350b0887b4cf871f9646f28d105268",
           "classification": "windows-identical-after-identity-mapping"
         },
         {
@@ -2693,6 +3677,514 @@
           "localSha256": "494283f01b77eab674baba14e803149fd56f3e0f680528f450c4964ab5d857ea",
           "classification": "platform-overlay",
           "reason": "POSIX local tar paths, case and native file-name identity."
+        },
+        {
+          "path": "test/_helpers/closeFixtureTmuxWindows.py",
+          "windowsSha256": "3e5615f8446182f147ceb1147e62009ea0e7bb2391c8916482bbdcfbc3ca354f",
+          "localSha256": "3e5615f8446182f147ceb1147e62009ea0e7bb2391c8916482bbdcfbc3ca354f",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/_helpers/supportedHostPlatform.js",
+          "localSha256": "7cb546ea1c361ed0c65a8f3ba0c142f83ef6a4d4c4846e360d985c4c51aafe0b",
+          "classification": "platform-only",
+          "reason": "Mac 适配：宿主平台切片辅助清单补齐 Windows .114 新增的 mappedStagingDirectory 等函数，避免提取缺段导致 ReferenceError。"
+        },
+        {
+          "path": "test/agentLifecycle.test.js",
+          "windowsSha256": "314e86f1f21219a1cbbbbf40454e96a9d5a7eaadcecc5f2bcb6da2ef370fd863",
+          "localSha256": "314e86f1f21219a1cbbbbf40454e96a9d5a7eaadcecc5f2bcb6da2ef370fd863",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/agentPythonResolution.test.js",
+          "windowsSha256": "41c7fbc311674a4ef400d9fe3aa1d624ff1f976a5333fc238fb77ca75ff6bdfb",
+          "localSha256": "41c7fbc311674a4ef400d9fe3aa1d624ff1f976a5333fc238fb77ca75ff6bdfb",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/api.test.js",
+          "windowsSha256": "6dbb7fd298e9f9e0f0bc4416c66c44d4bbacd34ff049cc65e19e6362ab750a2c",
+          "localSha256": "060e215dd3c648623ed31c744c81137a85354f3a99dccaac0892791a62d7586e",
+          "classification": "platform-overlay",
+          "reason": "保留 Mac 的 simple-sftp-mac-api CLI 四处测试（Windows 已把该入口改为撤销桩并删除相应用例；Mac CLI 是平台专属入口）；导出证明改用 Windows 更强的 vm 只求值 module.exports 哨兵断言；能力描述符用例按 Mac 版本与 simpleSftpMac.* 命名空间核对。"
+        },
+        {
+          "path": "test/apiBackpressure.test.js",
+          "windowsSha256": "2283eb2102491a2bc9459db823978a7170b2ee09318f4ac0d28856cadfb9f124",
+          "localSha256": "2283eb2102491a2bc9459db823978a7170b2ee09318f4ac0d28856cadfb9f124",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/apiUploadProgress.test.js",
+          "windowsSha256": "6c3191b1df3a29df6fbd650d4a18a39ab3240a94c07ebb450e84cce4184e7b26",
+          "localSha256": "9e09745bfc9c73f7e27acd546e877ce5a17018757794653fcd22a804b65ffe41",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/cleanupConsumerRoot.test.js",
+          "windowsSha256": "4d16007ba7adf4f0a0560ebf008aa3adb7d8323080c05177a8b200a6cf353061",
+          "localSha256": "4d16007ba7adf4f0a0560ebf008aa3adb7d8323080c05177a8b200a6cf353061",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cleanupFiles.test.js",
+          "windowsSha256": "5beb3acc0d983b5236bdc73d2d36418503fc42de8e4b1f3f9f223b90a116b8f2",
+          "localSha256": "ddbd82a53585dcfdd7ca25038cd3105feb1c92d432cf4dac0c25ac2f4c6d91c1",
+          "classification": "platform-overlay",
+          "reason": "vm 沙箱按 Mac 平台事实注入 process.platform=darwin 与 normalizeMacRelativePath，替换 Windows 的 toPosixPath 反斜杠归一化。"
+        },
+        {
+          "path": "test/cleanupObserveBatch.fixture.py",
+          "windowsSha256": "375c929e79649526bf2dcaf55910fcd8a63388c011f1dccd28892028262ffb27",
+          "localSha256": "375c929e79649526bf2dcaf55910fcd8a63388c011f1dccd28892028262ffb27",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cleanupObserveBatch.test.js",
+          "windowsSha256": "f3b31e29237223c4d914272b64490f479574bf50ad14767fc332753bc29699d3",
+          "localSha256": "f3b31e29237223c4d914272b64490f479574bf50ad14767fc332753bc29699d3",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/cleanupStatusScale.test.js",
+          "windowsSha256": "19acc23800570cdc689393f11e09291ad97319f2159b1a2153bb0bf8acbe4811",
+          "localSha256": "19acc23800570cdc689393f11e09291ad97319f2159b1a2153bb0bf8acbe4811",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/compressedWorkerBatch.test.js",
+          "windowsSha256": "7f6297a4ec8abdaf25a9bcba28aa405c0f978ebc345f43ad235231f0ad7d634b",
+          "localSha256": "bc41cf349102ff12a31e10cc5a04938244ce594f87ec1d187dc323ffdeb36055",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/compressionNegotiation.test.js",
+          "windowsSha256": "0f6fd0f0fc85709f86f9f2df3d2b227d33083100551f2d470aa66a3600adeee1",
+          "localSha256": "977a48f3f956bf93c120da55d08f9527b7fe63f6edffb060ebda7e8eac2546e3",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/compressionPolicy.test.js",
+          "windowsSha256": "b808d307042e1b927a93ba2cc9feb67b3880eff8d1ca678d36643458065875da",
+          "localSha256": "b808d307042e1b927a93ba2cc9feb67b3880eff8d1ca678d36643458065875da",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/compression_sample_probe.py",
+          "windowsSha256": "c92854dc5e7fa87fa1748d406a096e826e4ed4e63b3f3de92b19b65f98907f38",
+          "localSha256": "c92854dc5e7fa87fa1748d406a096e826e4ed4e63b3f3de92b19b65f98907f38",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/downloadScope.test.js",
+          "windowsSha256": "ef9623981a407c93653b88614a372b74a050d55b01b4c7ae519ba13a7ff6b906",
+          "localSha256": "26c7d79c8b78302ee797f20806292f2352df96a4e62a910e47166f871451b92d",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/downloadScopePaths.test.js",
+          "windowsSha256": "5c5aacdc58b7b324f56a46cd1f99738e8bd8bf8fa065f04e1aab28c13b0a9ee6",
+          "localSha256": "023266ac3ef8f24c0687de3b84a8516e984ca36383b202dc02167e0cbfe729f2",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/download_scope_probe.py",
+          "windowsSha256": "4e10a0089d12137da8809db2f62a1441d9df3b981ac7c9400590064824ace4f9",
+          "localSha256": "4e10a0089d12137da8809db2f62a1441d9df3b981ac7c9400590064824ace4f9",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/explicitScopedDownload.test.js",
+          "windowsSha256": "8202e5278fddf802bdfd7774426c2740441e204016b5819d3e1c5289f8f9c2cb",
+          "localSha256": "ae18b2fa6fd6837d330e85368e51e9c51aab8356c69096c47e4fd729aca7ce8b",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/fastdelete_harness.py",
+          "windowsSha256": "a69fc3bcf7972b7ed1a6f3c34bcdae08dbdad62661f369c2579578a54ec3e6ee",
+          "localSha256": "a69fc3bcf7972b7ed1a6f3c34bcdae08dbdad62661f369c2579578a54ec3e6ee",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/formalJobCleanupOwner.test.js",
+          "windowsSha256": "58e89dd061298778a408ac2adc56a2aa261b297101e885b04645a22860c0e161",
+          "localSha256": "58e89dd061298778a408ac2adc56a2aa261b297101e885b04645a22860c0e161",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/formalJobCleanupOwnerPosix.fixture.py",
+          "windowsSha256": "3de667f286b34d4e3bfa958126ea66f1b84c4be1acd6b41141afb2e3b48a57ef",
+          "localSha256": "3de667f286b34d4e3bfa958126ea66f1b84c4be1acd6b41141afb2e3b48a57ef",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/handoffMarkerPlacement.test.js",
+          "windowsSha256": "61af0cd67103b69956378ecf43f22d1d379f68cbce6d74bcf12637138692b56a",
+          "localSha256": "61af0cd67103b69956378ecf43f22d1d379f68cbce6d74bcf12637138692b56a",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/hashCacheBenchmark.test.js",
+          "windowsSha256": "c0b5a3ecefb120c930099643eadbb537faf258fda808d1ffe5876f581fb79c36",
+          "localSha256": "2f808a4eb45024d11ca739a1126cefa77da5d5cc46f5cc9e36e26094c2d87e6b",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/hash_probe.py",
+          "windowsSha256": "ebc3b2cbae8caec44d04a274e5f312f45836b0893f98937b835a62c0739a651d",
+          "localSha256": "ebc3b2cbae8caec44d04a274e5f312f45836b0893f98937b835a62c0739a651d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/hostOperationLease.test.js",
+          "windowsSha256": "fdb8759c97c3a5a7fc81a630b33475c76806e1f054779a143b8b2ac8bf0eff94",
+          "localSha256": "fdb8759c97c3a5a7fc81a630b33475c76806e1f054779a143b8b2ac8bf0eff94",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/installPolicy.test.js",
+          "windowsSha256": "07d0345675a6c99ef3f8eb00301f3e5c463411009b34b7465bc42d2eaebc3fa9",
+          "localSha256": "fe4e9e4eb11811f72ceac9f17a455a1ceec984058373fbe63bbd1ab4b8e15cb8",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/inventoryScopeTransport.test.js",
+          "windowsSha256": "e1fe894a372a504a6ab020baccb5a3f8fb76cda8df8fab27a8d40dd3bbdf2312",
+          "localSha256": "e1fe894a372a504a6ab020baccb5a3f8fb76cda8df8fab27a8d40dd3bbdf2312",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/isolateBusyFailClosedGate.test.js",
+          "windowsSha256": "f5509bf7d3ba1ceda5bca7bf97bc58c9b7708e95097a9687da26c3ccff6279d4",
+          "localSha256": "f5509bf7d3ba1ceda5bca7bf97bc58c9b7708e95097a9687da26c3ccff6279d4",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/localStagingContainment.test.js",
+          "windowsSha256": "c36e1fc99c89f6dcc3ab092538f1b0a55d3c13cd175178af5bd17deb8b5c6e93",
+          "localSha256": "c36e1fc99c89f6dcc3ab092538f1b0a55d3c13cd175178af5bd17deb8b5c6e93",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/macAuthentication.test.js",
+          "localSha256": "a70a455687411a991de0a2c78a4013d5dbd998c4dd55532f95ed4c9d61664f02",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macBootstrap.test.js",
+          "localSha256": "5e6b479af2d409d567f5475992c77e561046ba9ac2b9509874efe0b85d084e10",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macCliApi.test.js",
+          "localSha256": "7534890ac3cd3e4bc41e2c2609c609415eef0beb7d440a29e385ddf28b492079",
+          "classification": "platform-only",
+          "reason": "Mac 专属统一 CLI 契约测试（校验 Mac 发现文件身份与 simpleSftpMac 命名空间），Windows 无对应文件。"
+        },
+        {
+          "path": "test/macCliLauncher.test.js",
+          "localSha256": "59b1e95e69daf503bccfba5d981bc7cc804db5347afcac300ab392053092b3bb",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macDownloadScope.test.js",
+          "localSha256": "b5afbd335f5e3a0bad90778715421dde98287f406a3943c26c16b16043e0d1ef",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macLeasePaths.test.js",
+          "localSha256": "f4df308367545bf2f05d82b563e84a86b94e62b5facac0115a0b923bb788b57a",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macNativeAcceptanceRecovery.test.js",
+          "localSha256": "4f8b712e5c63edda8bc3f40825044c33e339cfc69db0f4d76db9be3fdc34eb9b",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macPosixPaths.test.js",
+          "localSha256": "9ba0a37f6209fd5ca291bef66f1ceb731635a39695d9db2334aa6db01e5e031c",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macRelativePaths.test.js",
+          "localSha256": "861445012665eb891540e086e8de4b0b319fc294386545d5e03d4f17cb1d4967",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macRelay.test.js",
+          "localSha256": "149e3cb5924ae5921865babe9194b728f91ff8099617002ad8f08ff66798897a",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macTransferExitProof.test.js",
+          "localSha256": "63336942cfcc5ffc0ed517d814b5ac2279ef2d4ce31abb54e3eca7b71b6681f8",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/macTunnelAuthBridge.test.js",
+          "localSha256": "1772ccb4a91cc2aa1ebb616ab01de759f043139a846b9082e7e89de663cb2e9e",
+          "classification": "platform-only",
+          "reason": "Mac 专属用例：只在 macOS 生效（系统 OpenSSH 隧道、Launch Services、libproc 句柄、Mac 路径与更新流程），Windows 权威无同名文件。"
+        },
+        {
+          "path": "test/mappedBatchDownload.test.js",
+          "windowsSha256": "55c771f59026605c07c17b5eace83113039a57109081714101a1af6cd238b4cd",
+          "localSha256": "0222bc3f371963fadfd976c33ff549003ec8707aaf2b6259ff10e4cec7b9753b",
+          "classification": "platform-overlay",
+          "reason": "Mac 用 vm 沙箱执行映射下载的真实链路切片，并把租约根重定向到进程临时目录（门禁宿主无 AppData 写权限）；本轮采纳 Windows 改名后的传输替身接口与用例名，Mac 夹具保留。"
+        },
+        {
+          "path": "test/packedSyncProgress.test.js",
+          "windowsSha256": "13bad59344dd585e6e60e69e48e876775402599d0d3152d447a95086185e3c94",
+          "localSha256": "f9e313bd03b207705d8949f48ec5f2a847612addbeb0c5b9d1e1deccd0a71e8f",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/pairedUpdateDrain.test.js",
+          "windowsSha256": "eb7b8d14dd62726b06df233d678e60302ef1922e237cf2d07755d117a5209c89",
+          "localSha256": "af702aeb147dfeaf5450277fdba6e9df85b7785898458fcae0a4815838d65e6c",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/persistentEvents.test.js",
+          "windowsSha256": "ca4bf8ccfa302983bf962e781abcbfdb9f7b2db527376e6038f79ad5601e93fb",
+          "localSha256": "ca4bf8ccfa302983bf962e781abcbfdb9f7b2db527376e6038f79ad5601e93fb",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/planIsolate.fixture.py",
+          "windowsSha256": "0b4f9faa62acd50a57579df3db8926e906d591c00f76820068509a1078ee0b88",
+          "localSha256": "0b4f9faa62acd50a57579df3db8926e906d591c00f76820068509a1078ee0b88",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/planIsolate.test.js",
+          "windowsSha256": "630e1804fe2cc847f0749647ae74563145246fe8db1bfed8ceb4b4abdce68df2",
+          "localSha256": "630e1804fe2cc847f0749647ae74563145246fe8db1bfed8ceb4b4abdce68df2",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/planIsolate.tmux.fixture.py",
+          "windowsSha256": "66f6694fe3cda0d54e400c3098e3598cfdfb287b38b23295a1d0dbb99f70416d",
+          "localSha256": "66f6694fe3cda0d54e400c3098e3598cfdfb287b38b23295a1d0dbb99f70416d",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/planIsolate.tmux2.fixture.py",
+          "windowsSha256": "a39bbdb12dbc4d12594260346554f9befd984bc71e25b10c80b26cee75d430a0",
+          "localSha256": "a39bbdb12dbc4d12594260346554f9befd984bc71e25b10c80b26cee75d430a0",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/planIsolateBusyWindow.test.js",
+          "windowsSha256": "ac817a4582b51ba2fac4f0301e389157e0dbefe5c3ca68cc1fdb7b9980663315",
+          "localSha256": "ac817a4582b51ba2fac4f0301e389157e0dbefe5c3ca68cc1fdb7b9980663315",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/planIsolateWindow.test.js",
+          "windowsSha256": "f0f4ca373b14423ce3af1145e82ab90cc66ad38a67a3b4c49a040c649926fcba",
+          "localSha256": "f0f4ca373b14423ce3af1145e82ab90cc66ad38a67a3b4c49a040c649926fcba",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/publicBranding.test.js",
+          "windowsSha256": "20c3e3948ee10f39b8d83f47cf7087a3e757a8613a05f2af3cddf8715ac17839",
+          "localSha256": "68be74a398f01f67a394a06f99bf3097c0a36888d4d05b6d12d13149ef8815cf",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/serverToServerSync.test.js",
+          "windowsSha256": "1be596e7596f99f8c9c969cf496f7253c9a92bd699e28098a9403c7bf895e97c",
+          "localSha256": "b7f75b4fc320cd0704f47316b01648e566593405ad95178431f7c882e8068802",
+          "classification": "platform-overlay",
+          "reason": "Mac 产品在传输清单前执行原生认证握手，派生切片夹具需声明该 Mac 步骤已完成（ensureMacTransferAuthentication 替身），其余逐字等于 Windows 0.2.114。"
+        },
+        {
+          "path": "test/stagedSlotLifecycle.fixture.py",
+          "windowsSha256": "0c2ddf1d786182f7717458c49f38794fbd676af0f0654e5075f19c1a6520f7c0",
+          "localSha256": "0c2ddf1d786182f7717458c49f38794fbd676af0f0654e5075f19c1a6520f7c0",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/stagedSlotLifecycle.test.js",
+          "windowsSha256": "6ebfeb939248303cfecf0c4ed642a40e880753b935a589ec5f0b4cc11d9fed48",
+          "localSha256": "847a369c984e9e47b24728d9485283a7236bbb3b4d7b2817336ce98011f9cbc9",
+          "classification": "platform-overlay",
+          "reason": "仅把 Windows 的发行身份断言（pkg.version 0.2.114 与 simpleSftp.* 配置键）改为 Mac 值（0.2.104 与 simpleSftpMac.*），type/default/minimum 逐值不变；其余暂存槽两代协议、10 秒上限与 darwin/WSL 分支逐字保留。"
+        },
+        {
+          "path": "test/stagedTarReceive.test.js",
+          "windowsSha256": "f1b30342768b7190246f32af1adddebab51022c52960988728aaef835fc12b77",
+          "localSha256": "f1b30342768b7190246f32af1adddebab51022c52960988728aaef835fc12b77",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/staged_receive_probe.py",
+          "windowsSha256": "f740cb846f442cad099d4d2b3900fa175f6fcf76a0d7fa3510b3b0fdcfec3737",
+          "localSha256": "f740cb846f442cad099d4d2b3900fa175f6fcf76a0d7fa3510b3b0fdcfec3737",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/targetResolution.test.js",
+          "windowsSha256": "b5b6b89e1e4b465b8bd3ea704694e60f9e6c0c05ff27f3ffa69c62712ac1ea0c",
+          "localSha256": "d33d64e62b4ac61bf04133c0279cc9f14450caa79c2e441726abb6c7130d89b3",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/testSerialFailureMetadata.test.js",
+          "windowsSha256": "a4b85ce46e96ff60d2f87afc80e6e4a94f77b613a18570862d8b7876204a22b1",
+          "localSha256": "a4b85ce46e96ff60d2f87afc80e6e4a94f77b613a18570862d8b7876204a22b1",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialHeadOutput.fixture.js",
+          "windowsSha256": "68f631089e20db9a8986ca38872a3f06ff676c434a232addbccf1f99f95c384b",
+          "localSha256": "68f631089e20db9a8986ca38872a3f06ff676c434a232addbccf1f99f95c384b",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialLogIdentity.test.js",
+          "windowsSha256": "f1e2bdba66ffbcf6fdaf948992e97ef465aa3896ad79309f8bb73b47d0405b11",
+          "localSha256": "f1e2bdba66ffbcf6fdaf948992e97ef465aa3896ad79309f8bb73b47d0405b11",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialMultiByte.fixture.js",
+          "windowsSha256": "3eff5a8deeb82e22c7357be130b217b96cee9a99aff2b872b4997fabad9b2a96",
+          "localSha256": "3eff5a8deeb82e22c7357be130b217b96cee9a99aff2b872b4997fabad9b2a96",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialMultiFail.fixture.js",
+          "windowsSha256": "e307ec1bc4f1f928f2813249ac27d5ea022388cc5abe31032054fd3e1fcb5c04",
+          "localSha256": "e307ec1bc4f1f928f2813249ac27d5ea022388cc5abe31032054fd3e1fcb5c04",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialOutputPreservation.support.cjs",
+          "windowsSha256": "30485bcd988228c1ac024a4911955427ec26af131489fd15486ce8e015783713",
+          "localSha256": "30485bcd988228c1ac024a4911955427ec26af131489fd15486ce8e015783713",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialOutputPreservation.test.js",
+          "windowsSha256": "5282e88fbfbbe708ae8b7976298b7b36bfcd981b790923ae77fc10c3aec5f060",
+          "localSha256": "5282e88fbfbbe708ae8b7976298b7b36bfcd981b790923ae77fc10c3aec5f060",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialPassing.fixture.js",
+          "windowsSha256": "dfcc78a1fd210e0cb7c345d950a8cce724efa77518801061042d090faa4ca143",
+          "localSha256": "dfcc78a1fd210e0cb7c345d950a8cce724efa77518801061042d090faa4ca143",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/testSerialTimeout.fixture.js",
+          "windowsSha256": "ea734fd31d6994172312effc61b32cc8644bb277cbb88b78366d9232b66d5220",
+          "localSha256": "ea734fd31d6994172312effc61b32cc8644bb277cbb88b78366d9232b66d5220",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transferBusySnapshot.test.js",
+          "windowsSha256": "c99afb5503253a434b177c019f3c148baf66c776c93dc0e4dd6de654801d72b9",
+          "localSha256": "c99afb5503253a434b177c019f3c148baf66c776c93dc0e4dd6de654801d72b9",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transferCapacity.test.js",
+          "windowsSha256": "9103181922d105e2b60096122025cb2a0617329560d410ca4197d71c7a3583db",
+          "localSha256": "9103181922d105e2b60096122025cb2a0617329560d410ca4197d71c7a3583db",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transferErrors.test.js",
+          "windowsSha256": "b0117296c1ec2bb9edf70c582baa15bddc6d3353953b6328bac24a43a7b51962",
+          "localSha256": "b0117296c1ec2bb9edf70c582baa15bddc6d3353953b6328bac24a43a7b51962",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transferInactivity.test.js",
+          "windowsSha256": "2ce9893a751f108279e0a75cb2d20e91112563e3e6e284ca988c2b911311e06c",
+          "localSha256": "4845f69631a8cee4279cfb975db2f2b1f15fd61fb70345ec6e45f7455b5d0a7d",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/transferMetadata.test.js",
+          "windowsSha256": "4445baae4e7eb1ca46f4904fa10905a9c07c9a17f229241cc7b19b2ba9efd42e",
+          "localSha256": "4445baae4e7eb1ca46f4904fa10905a9c07c9a17f229241cc7b19b2ba9efd42e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transferProgressAccuracy.test.js",
+          "windowsSha256": "8a92c6457e50ec4b0603fde16ad9cd01f8c071b0c914583d2fd015b7a023a976",
+          "localSha256": "8a92c6457e50ec4b0603fde16ad9cd01f8c071b0c914583d2fd015b7a023a976",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transferRecovery.test.js",
+          "windowsSha256": "7a022a9108f68f0d240db01622e75208942e91542a68c614ecd54019740caee2",
+          "localSha256": "cff4502458ba8488b4888d2a05b26c7972d6a851a6bf73895583364142d57565",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/transferSettlement.test.js",
+          "windowsSha256": "175e5802e1aace771bf4ad94fd7cea8144bcb6fd50c317bd06b8cc466e675236",
+          "localSha256": "175e5802e1aace771bf4ad94fd7cea8144bcb6fd50c317bd06b8cc466e675236",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/transfer_settlement_probe_test.py",
+          "windowsSha256": "e587bc2168a591dd9f80f201d6f0e4bfd5e479ae78d886b7002069477861685e",
+          "localSha256": "e587bc2168a591dd9f80f201d6f0e4bfd5e479ae78d886b7002069477861685e",
+          "classification": "windows-identical-after-identity-mapping"
+        },
+        {
+          "path": "test/uploadPlan.test.js",
+          "windowsSha256": "cdda35080ea6a59952d2fdea3127514632e20f7ccb9f4672bafc92980e320d98",
+          "localSha256": "2d99f3cbffd2b9c32113ae5dee95b819363a8c65aad8aadd30250bbc69bc3d68",
+          "classification": "platform-overlay",
+          "reason": "身份映射改名之外，另加 Windows 自带 tar 对绝对盘符路径的解析差异适配（--force-local），仍用外部 tar 解包校验归档内容。"
+        },
+        {
+          "path": "test/workspaceIntegration.test.js",
+          "windowsSha256": "30475000413d3b18c0a1d2434e1610e18329734e93785c46ca3ff3f4a39045db",
+          "localSha256": "ff2061a6b0cbd6094e529306156e6b70e6b407cfcf9ae0ec9d9834b56173fd1d",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
+        },
+        {
+          "path": "test/workspacePathMapper.test.js",
+          "windowsSha256": "9ea49fbeb770db97d0a59c634a3eb3535a6f8c17ab7145b1694a7892862defbb",
+          "localSha256": "68309bc8b003de717bd8f9eccb4abfff759325b798ffdf84f6386078f9f6fb90",
+          "classification": "platform-overlay",
+          "reason": "Mac 身份映射：配置命名空间 simpleSftp.→simpleSftpMac.、扩展标识 simple-local.simple-sftp→simple-local.simple-sftp-mac、发现变量 SIMPLE_SFTP_API_FILE→SIMPLE_SFTP_MAC_API_FILE、发现目录 SimpleSFTPMac；业务断言与阈值未改。"
         },
         {
           "path": "transfer-capacity.js",
@@ -2730,5 +4222,5 @@
     }
   ],
   "sourceGaps": [],
-  "validation": "All recorded frozen raw sources available. Complete paired acceptance inventory: 483 unique files; final execution and archive review pending. No prior-version result substitutes for this candidate."
+  "validation": "双向指纹校验由 scripts/check-windows-alignment.js 在本机 Windows 宿主执行：核对 678 个源文件指纹（Experiment 554 / SimpleSFTP 124），并确认没有待同步缺口；清单自身不收录自己的指纹（自引用无法核验）。宿主校验只能证明本仓库 Windows 端源码与冻结的 Windows 权威一致，且类型检查、面板构建与宿侧回归通过；POSIX/macOS 专属分支（系统 OpenSSH 隧道、libproc 句柄证明、Launch Services、macOS 真机行为）在本宿主不可执行，在 M5 真机回归通过前一律记为未验证，不宣称任何真机通过。"
 }

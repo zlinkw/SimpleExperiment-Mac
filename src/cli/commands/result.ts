@@ -12,6 +12,8 @@ import {
   buildResultLeaderboard,
   builtInResultPresets,
   exportPaperTable,
+  filterByInclusionPolicy,
+  finalResultInclusionPolicy,
   leaderboardToCsv,
   parseResultFile,
 } from "../../features/Results";
@@ -20,7 +22,60 @@ export async function resultCommand(action: string, rest: string[], flags: CliFl
   if (action === "list") return resultList(flags);
   if (action === "show") return resultShow(requirePositional(rest, 0, "result id"), flags);
   if (action === "export") return resultExport(requirePositional(rest, 0, "result id"), flags);
+  if (action === "parse") return resultParse(flags);
+  if (action === "paper-table") return resultPaperTable(flags);
   throw usageError(`unknown result action: ${action || "(missing)"}`);
+}
+
+/** First-class local result parsing (replaces the revoked `simpleex results parse`). */
+export function resultParse(flags: CliFlags): number {
+  if (!flags.file) throw usageError("result parse needs --file <result file>");
+  if (!fs.existsSync(flags.file)) throw businessError(`result file not found: ${flags.file}`);
+  const preset = builtInResultPresets.find((item) => item.id === flags.preset) || builtInResultPresets[0];
+  const records = parseResultFile(fs.readFileSync(flags.file, "utf8"), { path: flags.file, type: flags.file.endsWith(".json") ? "json" : "csv", endpoint: "local" }, preset);
+  writeJson(records, flags.compactJson);
+  return 0;
+}
+
+function finalPaperTableRecords(input: unknown): ExperimentResultRecord[] {
+  if (Array.isArray(input)) return filterByInclusionPolicy(input as ExperimentResultRecord[], [], finalResultInclusionPolicy);
+  const record = input && typeof input === "object" ? input as Record<string, unknown> : {};
+  if (Array.isArray(record.finalResults)) return filterByInclusionPolicy(record.finalResults as ExperimentResultRecord[], [], finalResultInclusionPolicy);
+  if (Array.isArray(record.records)) {
+    const rows = record.records as ExperimentResultRecord[];
+    if (String(record.inclusionPolicy || "").includes("archived") || String(record.path || "").includes("result_registry")) {
+      const archivedRows = rows.map((row) => ({ ...row, finalEvidenceState: row.finalEvidenceState || "archived", eligibleForFinalAnalysis: row.eligibleForFinalAnalysis ?? true }));
+      return filterByInclusionPolicy(archivedRows, [], finalResultInclusionPolicy);
+    }
+    return filterByInclusionPolicy(rows, [], finalResultInclusionPolicy);
+  }
+  return [];
+}
+
+/** First-class local paper table (replaces the revoked `simpleex results paper-table`). */
+export function resultPaperTable(flags: CliFlags): number {
+  if (!flags.file) throw usageError("result paper-table needs --file <registry.json>");
+  if (!fs.existsSync(flags.file)) throw businessError(`registry file not found: ${flags.file}`);
+  const records = finalPaperTableRecords(JSON.parse(fs.readFileSync(flags.file, "utf8")));
+  const metrics = (flags.metrics || "AUC,accuracy,F1,AUPRC").split(",").filter(Boolean);
+  const config = {
+    id: "cli",
+    name: "CLI",
+    filter: { includeWarnings: true },
+    groupBy: ["suite", "dataset"],
+    metrics: metrics.map((key) => ({ key, higherIsBetter: !["ASD", "HD95", "loss"].includes(key), decimals: 4 })),
+    aggregate: "mean_std" as const,
+    primarySortMetric: metrics[0],
+  };
+  const rows = buildResultLeaderboard(records, config, []);
+  if (flags.json) {
+    if (flags.format === "csv" || flags.format === "latex") throw usageError("result paper-table --json cannot be combined with --format csv|latex; drop --format for JSON rows");
+    writeJson({ config: { metrics, groupBy: config.groupBy, aggregate: config.aggregate }, rows }, flags.compactJson);
+    return 0;
+  }
+  if (flags.format === "csv") writeText(leaderboardToCsv(rows, config));
+  else writeText(exportPaperTable(rows, config, { id: "cli", title: "Results", leaderboardId: "cli", rowDimension: "suite", metrics, boldBest: true, showMeanStd: true, decimals: {}, metricDisplayNames: {} }, flags.format === "latex" ? "latex_booktabs" : "markdown"));
+  return 0;
 }
 
 export async function resultList(flags: CliFlags): Promise<number> {

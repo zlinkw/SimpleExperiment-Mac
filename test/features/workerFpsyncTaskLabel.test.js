@@ -27,6 +27,8 @@ function loadMethod(startMarker, endMarker, signature, renamed) {
     NativeResultManifest_1: require("../../dist/results/NativeResultManifest"),
     PlanOutputRetention: retention,
     PlanRunFreshness: freshness,
+    // r6：专用链 generation 改用共享纯函数后，dist 抽取方法按命名空间引用它。
+    JobArtifactSyncIdentity_1: require("../../dist/features/JobArtifactSyncIdentity.js"),
   };
   vm.createContext(context);
   vm.runInContext(`this.call = ({${legacyMethod(compiled, startMarker)}}).${startMarker.match(/(?:async\s+)?(\w+)\(/)[1]};`, context);

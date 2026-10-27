@@ -40,6 +40,8 @@ def classify(entry):
         return None
     doc_markdown_skipped = {".md"} if norm in POLICY["markdown_runtime_allow_files"] else set()
     for rule in POLICY["forbidden_ordered"]:
+        if rule.get("paths") and any(norm == normalize(candidate) for candidate in rule["paths"]):
+            return rule["category"]
         if rule.get("basename_contains") and rule["basename_contains"] in base:
             return rule["category"]
         if rule.get("path_segments") and any(seg in norm.split("/") for seg in rule["path_segments"]):

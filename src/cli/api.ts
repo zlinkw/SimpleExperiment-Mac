@@ -1,10 +1,16 @@
-import { apiRequest, readApiDiscovery } from "../cli.legacy";
-import { asCliError, envError, networkError } from "./errors";
+import { asCliError, businessError, envError, networkError } from "./errors";
+import { callPluginRpc, pluginDiscoveryPath } from "./LocalApiClient";
+import * as fs from "node:fs";
+
+// CLI --instance wins over SIMPLE_CLI_INSTANCE_ID; set once by runSimpleCli before any dispatch.
+let cliInstancePin = "";
+export function setInstancePin(value: string): void {
+  cliInstancePin = String(value || "").trim();
+}
 
 export function hasApiDiscovery(): boolean {
   try {
-    readApiDiscovery();
-    return true;
+    return fs.existsSync(pluginDiscoveryPath("experiment"));
   } catch {
     return false;
   }
@@ -12,30 +18,33 @@ export function hasApiDiscovery(): boolean {
 
 export function discoveryOrNull(): Record<string, unknown> | null {
   try {
-    return readApiDiscovery();
+    const file = pluginDiscoveryPath("experiment");
+    return fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
+/**
+ * Every SimpleExperiment-domain call runs through the unified transport: plugin-slot binding,
+ * live instance handshake, retired/undeclared method refusal, and bounded or proven-unbounded
+ * timeouts. No A-domain path bypasses it any more.
+ */
 export async function callApi(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
-  let discovery: Record<string, unknown>;
   try {
-    discovery = readApiDiscovery();
+    return await callPluginRpc("experiment", method, params, cliInstancePin || undefined);
   } catch (error) {
-    throw asCliError(error, 2);
-  }
-  try {
-    const result = await apiRequest(discovery, method, params) as { error?: { code?: unknown; message?: unknown; data?: unknown }; result?: unknown };
-    if (result.error) {
-      const message = String(result.error.message || "API error");
-      const detail = JSON.stringify(result.error.data ?? result.error);
-      if (Number(result.error.code) === 2001) throw envError(message, detail);
-      throw asCliError(new Error(message), 3);
+    const rpc = error as { apiCode?: number; apiData?: unknown; message?: string };
+    if (Number(rpc.apiCode) === 2001) throw envError(String(rpc.message || "CONFIRM_REQUIRED"), JSON.stringify(rpc.apiData ?? {}));
+    if (Number(rpc.apiCode) === -32001 || Number(rpc.apiCode) === -32601) {
+      // Keep the JSON-RPC code attached so optional callers can tell "not declared here" (-32601)
+      // from a retired refusal (-32001, always fatal); the public exit stays BUSINESS(3).
+      const refusal = businessError(String(rpc.message || "API refusal"), rpc.apiData === null || rpc.apiData === undefined ? "" : JSON.stringify(rpc.apiData));
+      (refusal as { apiCode?: number }).apiCode = Number(rpc.apiCode);
+      throw refusal;
     }
-    return result.result;
-  } catch (error) {
     if ((error as { exitCode?: number }).exitCode) throw error;
+    if (Number.isFinite(Number(rpc.apiCode))) throw businessError(String(rpc.message || "API error"), rpc.apiData === null || rpc.apiData === undefined ? "" : JSON.stringify(rpc.apiData));
     throw asCliError(error, 4);
   }
 }
@@ -45,6 +54,9 @@ export async function optionalApi(method: string, params: Record<string, unknown
   try {
     return await callApi(method, params);
   } catch (error) {
+    // A method this live instance never declared is an absent optional enrichment, like being
+    // offline: the merged local view stands. Retired methods and business refusals still throw.
+    if (Number((error as { apiCode?: number }).apiCode) === -32601) return null;
     const mapped = asCliError(error, 4);
     if (mapped.exitCode === 4) return null;
     if (mapped.exitCode === 2) return null;

@@ -27,7 +27,7 @@ function runCli(args, extra = {}) {
     const child = spawn(process.execPath, [cli, ...args], {
       cwd: extra.cwd || root,
       windowsHide: true,
-      env: { ...process.env, SIMPLE_EXPERIMENT_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
+      env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
     });
     let stdout = "";
     let stderr = "";

@@ -1,5 +1,6 @@
 import * as crypto from "node:crypto";
 import * as path from "node:path";
+import { projectStateFile } from "./ProjectStatePaths";
 
 export type PlanSyncEntry = {
   cleanupOperationId?: string;
@@ -21,12 +22,18 @@ function projectStorageId(projectRoot: string): string {
   return crypto.createHash("sha256").update(process.platform === "win32" ? resolved.toLowerCase() : resolved).digest("hex");
 }
 
+/** r17-A: ledger + mirror state live inside the CONSUMED project (per projectRoot).
+ * storageRoot keeps only the known legacy locations for one-time migration reads. */
 export function planSyncLedgerStoragePath(storageRoot: string, projectRoot: string): string {
+  return projectStateFile(projectRoot, "simple-experiment", "plan-sync-ledgers", `${projectStorageId(projectRoot)}.json`);
+}
+
+export function legacyPlanSyncLedgerStoragePath(storageRoot: string, projectRoot: string): string {
   return path.join(storageRoot, "plan-sync-ledgers", `${projectStorageId(projectRoot)}.json`);
 }
 
 export function projectMirrorStateStoragePath(storageRoot: string, projectRoot: string): string {
-  return path.join(storageRoot, "plan-sync-ledgers", `${projectStorageId(projectRoot)}.mirror.json`);
+  return projectStateFile(projectRoot, "simple-experiment", "plan-sync-ledgers", `${projectStorageId(projectRoot)}.mirror.json`);
 }
 
 function canonicalPlan(value: string): string { return String(value || "").replace(/\\/g, "/").replace(/^\.\//, "").toLowerCase(); }

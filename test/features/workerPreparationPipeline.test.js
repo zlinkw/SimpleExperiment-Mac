@@ -134,6 +134,8 @@ test('real enqueue rechecks H20 after background probe loss but still rejects an
     XshellTunnelPortProbe_1:{probeWorkerTelemetryTunnel:async()=>reply},
     WorkflowBinding:{bindWorkflowWorkspace:()=>({}),assertPlanSeedContract(){},assertWorkflowWorkspace(){}},planValidationFromResult:r=>r};
   host.submissionWorkerProbes=method('submissionWorkerProbes',globals);
+  // 块C：真实 enqueue 落盘窄溯源——提取纯法身而非 stub（this 绑定由 .call(host) 承担）。
+  Object.assign(host,{queueGitProvenance:method('queueGitProvenance',globals),stripGitUrlCredentials:method('stripGitUrlCredentials',globals)});
   const enqueue=method('enqueueDistributedPlan',globals);
   await assert.rejects(enqueue.call(host,{},{}),/Agent 校验未返回逐 job 清单/);
   host.lastWorkerProbes.h20={status:'timeout'};
@@ -143,6 +145,7 @@ test('real enqueue rechecks H20 after background probe loss but still rejects an
 
 test('stopping or replacing the queue during a capability recheck cannot send a task', async () => {
   const host={taskLifecycleProtocol:2,client:{},distributedQueueGeneration:1,
+    unifiedDomainState:()=>({active:false,blocked:""}), // 块B：夹具根未登记 → 既有单机发送路径
     submissionWorkerProbes:async()=>{host.distributedQueueGeneration++;return {};}};
   const send=method('sendDistributedJob',{workspaceRoot:()=> 'project'});
   await assert.rejects(send.call(host,{resultPathPolicy:'declared'},{outputDir:'work/job'},'h20','0','original'),/派发上下文已变化.*未发送/);

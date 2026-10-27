@@ -94,8 +94,10 @@ test("remote result inspection accepts only lightweight project files", () => {
   for (const file of ["/etc/passwd", "../metrics.csv", "work_dirs/model.pt", "reports/id_rsa.txt", "logs/key.pem", "tmp/plan/draft.yaml", "tmp/cache/metrics.csv", "tmp/result/../metrics.csv"]) {
     assert.equal(helpers.normalizeRemoteResultInspectionPath(file), "");
   }
-  const local = helpers.remoteResultInspectionLocalRelativePath("work_dirs/smoke/metrics_summary.csv", "experiments/plans/smoke.yaml", "2026-07-17T12:34:56.000Z");
-  assert.match(local, /^simple_cluster\/downloads\/result_inspection\/experiments_plans_smoke\.yaml\/metrics_summary__[a-f0-9]{10}__20260717123456\.csv$/);
+  const local = helpers.remoteResultInspectionLocalRelativePath("work_dirs/smoke/metrics_summary.csv", "experiments/plans/smoke.yaml");
+  // View copies use a deterministic contained name: same remote source overwrites one slot, no timestamp pile-up.
+  assert.match(local, /^simple_cluster\/tmp\/downloads\/result_inspection\/experiments_plans_smoke\.yaml\/metrics_summary__[a-f0-9]{10}\.csv$/);
+  assert.equal(helpers.remoteResultInspectionLocalRelativePath("work_dirs/smoke/metrics_summary.csv", "experiments/plans/smoke.yaml"), local);
 });
 
 test("result buttons sync to project results directory with stable Plan and Worker names", () => {
@@ -362,6 +364,7 @@ test("confirmed temporary reads bind the selected enabled Worker and never borro
   const context={workspaceRoot:()=>'/fixture',stringField:(value,key)=>String(value?.[key]||''),
     normalizeRemoteResultInspectionPath:helpers.normalizeRemoteResultInspectionPath,
     remoteResultInspectionLocalRelativePath:helpers.remoteResultInspectionLocalRelativePath,
+    safeWorkspaceChildPath:(root,relative)=>root+'/'+relative,
     remoteResultInspectionCandidates:helpers.remoteResultInspectionCandidates,
     UiCommandCancelled:class extends Error{},vscode:{window:{showWarningMessage:async()=> '临时读取并查看',showTextDocument:async doc=>opened.push(doc)},
       workspace:{openTextDocument:async doc=>doc}}};

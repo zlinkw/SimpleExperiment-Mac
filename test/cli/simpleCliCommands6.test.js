@@ -27,7 +27,7 @@ function runCli(args, extra = {}) {
     const child = spawn(process.execPath, [cli, ...args], {
       cwd: extra.cwd || root,
       windowsHide: true,
-      env: { ...process.env, SIMPLE_EXPERIMENT_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
+      env: { ...process.env, SIMPLE_EXPERIMENT_MAC_API_FILE: extra.apiFile || path.join(os.tmpdir(), "missing-simple-experiment-api.json"), ...extra.env },
     });
     let stdout = "";
     let stderr = "";
@@ -227,8 +227,9 @@ test("agent commands expose status, tree, logs, control, results, and json", asy
   const stopped = await runCli(["experiment", "stop", "run-plan-1", "--json"], { cwd: dir });
   assert.notEqual(stopped.code, 0);
   assert.match(stopped.stdout, /stopExperiment|Local API/);
-  const paused = JSON.parse((await runCli(["experiment", "pause", "run-plan-1", "--json"], { cwd: dir })).stdout);
-  assert.equal(paused.status, "unsupported");
+  const paused = await runCli(["experiment", "pause", "run-plan-1", "--json"], { cwd: dir });
+  assert.equal(paused.code, 3);
+  assert.match(JSON.parse(paused.stdout).error.message, /EXPERIMENT_PAUSE_UNSUPPORTED/);
   const resumed = JSON.parse((await runCli(["experiment", "resume", "run-plan-1", "--json"], { cwd: dir })).stdout);
   assert.equal(resumed.submitPath, "features/Lifecycle.retryExperiment");
   const retried = JSON.parse((await runCli(["experiment", "retry", "run-plan-1", "--json"], { cwd: dir })).stdout);

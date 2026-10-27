@@ -6,13 +6,15 @@ import * as fs from "fs/promises";
 import * as fsNode from "fs";
 import * as path from "path";
 import { localFileIndexIdentity, projectFileIndex } from "./ProjectFileIndex";
+import { ensureProjectManagedCacheFileDirectory, projectCacheDir } from "./ProjectStatePaths";
 
 export type LocalCodeManifestEntry = { size: number; sha256: string };
 export type LocalCodeManifest = Record<string, LocalCodeManifestEntry>;
 export type LocalCodeManifestStats = { listed: number; reused: number; hashed: number; pruned: number; cacheWriteSkipped?: number; stalled?: boolean };
 
-type CacheIdentity = { dev: string; ino: string; size: number; mtimeMs: number; ctimeMs: number; birthtimeMs: number };
-type CacheRow = CacheIdentity & { sha256: string };
+// 身份元组与行形状同时供隔离账本的写前 CAS 复用（PlanIsolatedBatchLedger）；格式、键与判据不变。
+export type CacheIdentity = { dev: string; ino: string; size: number; mtimeMs: number; ctimeMs: number; birthtimeMs: number };
+export type CacheRow = CacheIdentity & { sha256: string };
 type CacheDocument = { schemaVersion: 1; files: Record<string, CacheRow> };
 
 const CACHE_SCHEMA_VERSION = 1;
@@ -28,7 +30,7 @@ function finiteTime(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
-function identityFromStat(stat: fsNode.Stats): CacheIdentity | undefined {
+export function identityFromStat(stat: fsNode.Stats): CacheIdentity | undefined {
   const dev = bigintString(stat.dev);
   const ino = bigintString(stat.ino);
   const mtimeMs = finiteTime(stat.mtimeMs);
@@ -38,7 +40,7 @@ function identityFromStat(stat: fsNode.Stats): CacheIdentity | undefined {
   return { dev, ino, size: stat.size, mtimeMs, ctimeMs, birthtimeMs };
 }
 
-function sameIdentity(row: CacheRow | undefined, identity: CacheIdentity | undefined): row is CacheRow {
+export function sameIdentity(row: CacheRow | undefined, identity: CacheIdentity | undefined): row is CacheRow {
   return Boolean(row && identity
     && row.dev === identity.dev
     && row.ino === identity.ino
@@ -49,10 +51,14 @@ function sameIdentity(row: CacheRow | undefined, identity: CacheIdentity | undef
     && /^[a-f0-9]{64}$/i.test(String(row.sha256 || "")));
 }
 
-export function localCodeManifestCachePath(storageRoot: string, projectRoot: string): string {
+/** r18#5: the recomputable code-manifest cache belongs to the CONSUMED project
+ * (simple_cluster/cache/simple-experiment/code-manifest-cache). Same identity formula, same
+ * rows/schema/reuse semantics; only the owner moved. Old globalStorage caches stay in place —
+ * never migrated, scanned, or deleted; a missing cache only forces a rehash. */
+export function localCodeManifestCachePath(projectRoot: string): string {
   const resolved = path.resolve(projectRoot);
   const id = crypto.createHash("sha256").update(process.platform === "win32" ? resolved.toLowerCase() : resolved).digest("hex");
-  return path.join(storageRoot, "code-manifest-cache", `${id}.json`);
+  return path.join(projectCacheDir(projectRoot, "simple-experiment"), "code-manifest-cache", `${id}.json`);
 }
 
 async function readCache(file: string): Promise<CacheDocument> {
@@ -160,6 +166,7 @@ export async function hashLocalCodeFiles(
     }
     else {
       try {
+        await ensureProjectManagedCacheFileDirectory(root, cacheFile); // 受管树内缓存写入前逐层守卫（symlink 即拒）
         await writeCache(cacheFile, { schemaVersion: CACHE_SCHEMA_VERSION, files: nextFiles });
       }
       catch (error) {

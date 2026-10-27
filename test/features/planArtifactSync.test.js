@@ -4,14 +4,19 @@ const path = require("node:path");
 const sync = require("../../dist/features/PlanArtifactSync.js");
 const transfer = require("../../dist/features/PlanArtifactTransfer.js");
 
-test("Plan sync ledger lives in plugin storage and is keyed by project root", () => {
+// r17-A：台账/镜像状态随被消费项目锚定（每 projectRoot 各自 simple_cluster），旧 globalStorage
+// 精确位置只作为一次性只读迁移源保留——键控、路径规范化与镜像同目录性质全部保留。
+test("Plan sync ledger lives in the consumed project and is keyed by project root", () => {
   const storage = path.resolve("plugin-storage");
-  const a = sync.planSyncLedgerStoragePath(storage, path.resolve("project-a"));
+  const rootA = path.resolve("project-a");
+  const a = sync.planSyncLedgerStoragePath(storage, rootA);
   const b = sync.planSyncLedgerStoragePath(storage, path.resolve("project-b"));
-  assert.equal(path.dirname(a), path.join(storage, "plan-sync-ledgers"));
+  assert.equal(path.dirname(a), path.join(rootA, "simple_cluster", "state", "simple-experiment", "plan-sync-ledgers"));
   assert.notEqual(a, b);
+  assert.notEqual(path.dirname(b), path.dirname(a));
   assert.equal(a, sync.planSyncLedgerStoragePath(storage, path.resolve("project-a", ".")));
-  assert.equal(path.dirname(sync.projectMirrorStateStoragePath(storage, path.resolve("project-a"))), path.dirname(a));
+  assert.equal(path.dirname(sync.projectMirrorStateStoragePath(storage, rootA)), path.dirname(a));
+  assert.equal(path.dirname(sync.legacyPlanSyncLedgerStoragePath(storage, rootA)), path.join(storage, "plan-sync-ledgers"), "旧精确位置保留为只读迁移源，形状一字不改");
 });
 
 test("Plan artifact scope includes its output directory and declared result files only", () => {

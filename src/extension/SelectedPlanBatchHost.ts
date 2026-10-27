@@ -53,8 +53,10 @@ async function runPlanBatch(host: any, params: any, allPlans: boolean) {
     if (unsupported.length) throw Error("以下 PLAN 不支持自动排队；整批未提交，请检查运行协议与项目配置：" + unsupported.join("、"));
     // 每条 PLAN 的提交 operation 在入口一次性预生成（operationId=plan-submit-<clientActionId>，与 legacy 同法推导），
     // 冻结与真实提交共用同一 id——之后新增 PLAN/别批记录不可能混入本批初始集合。
+    // parentClientActionId routes every per-plan stage into the batch's single
+    // VS Code Notification (task ui-plan-gpu-progress-20261024 item 5).
     const planMessages = new Map<string, any>(files.map(file => [file, { command: "runPlan", planFile: file, planId: file, selectedPlanId: file,
-      debugMode: false, clientActionId: "selected-plan-" + randomUUID() }]));
+      debugMode: false, clientActionId: "selected-plan-" + randomUUID(), parentClientActionId: params.parentClientActionId || params.clientActionId || "" }]));
     const ledgerFile = typeof host.isolatedReplacementLedgerFileLocal === "function" ? String(host.isolatedReplacementLedgerFileLocal() || "") : "";
     // 入口冻结完整初始 PLAN 集合（含稍后无隔离/隔离前失败的 PLAN）；账本损坏/被锁 → 保留原字节、审核入口关闭，
     // 但不阻断正常提交流程（失败关闭只作用于隔离区删除审核）。

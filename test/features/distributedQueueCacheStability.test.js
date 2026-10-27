@@ -105,17 +105,34 @@ const sandbox = {
   path,
   process,
   crypto,
-  workspaceRoot: () => "C:/project",
+  workspaceRoot: () => root, // r17：与 :131 resolve 后的项目根同一身份（serverPlanProgress 按 workspaceRoot===distributedQueueRoot 判定）
   errorMessage: (error) => String(error?.message || error),
   compactSensitiveText: (value) => String(value || "").slice(0, 240),
   workerTaskSnapshotPayload: (snapshot) => snapshot,
   UiCommandRemotePending: class extends Error {},
+  // r49 迁类：scheduleDistributedPostprocess 的取消类型改由 core 共享模块经 UiCommandCancelled_1
+  // 命名空间引用；夹具与生产同一构造语义（name/code 一致），不依赖测试装载时序。
+  UiCommandCancelled_1: { UiCommandCancelled: class UiCommandCancelled extends Error {
+    constructor(message = "操作已取消。", code = "USER_CANCELLED") { super(message); this.name = "UiCommandCancelled"; this.code = code; } } },
   StateStore_1: stateModule.exports,
+  // r17：loadDistributedQueue 锚点经项目内快照迁移助手；夹具的全部字节都在 memoryFs 虚拟盘上，
+  // 故按生产同一语义（legacy 缺→absent；目标缺→字节复制 migrated；否则 present）在内存上实现，
+  // 迁移本身由 projectStatePaths 契约套件对真实文件系统覆盖。
+  ProjectStatePaths_1: {
+    ensureProjectSnapshotMigrated: async (_root, legacyFile, targetFile) => {
+      let bytes = null;
+      try { bytes = await memoryFs.readFile(legacyFile, "utf8"); } catch (error) { if (error?.code !== "ENOENT") throw error; }
+      if (bytes === null) return "absent";
+      const hasTarget = await memoryFs.readFile(targetFile, "utf8").then(() => true, error => error?.code === "ENOENT" ? false : Promise.reject(error));
+      if (!hasTarget) await memoryFs.writeFile(targetFile, bytes);
+      return hasTarget ? "present" : "migrated";
+    },
+  },
 };
 vm.createContext(sandbox);
 vm.runInContext(`this.methods = { ${methodSource} };`, sandbox);
 
-const root = "C:/project";
+const root = path.resolve("C:/project"); // r17：与 planStopClear 夹具同策——resolve 后平台各自为已解析绝对路径，身份哈希稳定
 const file = queueApi.distributedQueuePath("C:/storage", root);
 const projectId = queueApi.canonicalProjectId(root);
 

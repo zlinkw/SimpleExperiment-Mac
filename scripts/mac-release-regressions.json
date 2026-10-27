@@ -9,6 +9,10 @@
   },
   {
     "component": "experiment",
+    "file": "test/agent/cacheRetentionBatch.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/agent/codeSyncInspectRuntime.test.js"
   },
   {
@@ -201,7 +205,15 @@
   },
   {
     "component": "experiment",
+    "file": "test/cli/simpleCliActionsCatalog.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/cli/simpleCliActiveSnapshot.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliAgentsLifecycle.test.js"
   },
   {
     "component": "experiment",
@@ -269,6 +281,14 @@
   },
   {
     "component": "experiment",
+    "file": "test/cli/simpleCliControl.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliDraft.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/cli/simpleCliFailureAlerts.test.js"
   },
   {
@@ -285,11 +305,31 @@
   },
   {
     "component": "experiment",
+    "file": "test/cli/simpleCliLegacyRemoval.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/cli/simpleCliLifecycleCommands.test.js"
   },
   {
     "component": "experiment",
+    "file": "test/cli/simpleCliNamedActions.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/cli/simpleCliPersistedHistory.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliPlanCleanup.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliPreflight.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliProjectOps.test.js"
   },
   {
     "component": "experiment",
@@ -305,11 +345,39 @@
   },
   {
     "component": "experiment",
+    "file": "test/cli/simpleCliSftpCleanupAgents.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliSftpCleanupEngine.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliSftpSync.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliSftpTransfer.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliSftpTransferMapped.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliSftpTransferServer.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/cli/simpleCliTerminalIdentity.test.js"
   },
   {
     "component": "experiment",
     "file": "test/cli/simpleCliTrainingProgress.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/cli/simpleCliUnifiedEntry.test.js"
   },
   {
     "component": "experiment",
@@ -393,6 +461,14 @@
   },
   {
     "component": "experiment",
+    "file": "test/features/completedJobArtifactRootBinding.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/completedJobForeignSourceClassify.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/features/completedJobLatestSync.test.js"
   },
   {
@@ -465,15 +541,27 @@
   },
   {
     "component": "experiment",
-    "file": "test/features/hublessResultsRefresh.test.js"
-  },
-  {
-    "component": "experiment",
     "file": "test/features/hubWorkerStatusSummaryCache.test.js"
   },
   {
     "component": "experiment",
+    "file": "test/features/hublessResultsRefresh.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/features/idleGpuDurableDispatch.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/jobArtifactStagedSlotIdentity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/jobArtifactSyncIdentity.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/latestResultExportDarwinLock.test.js"
   },
   {
     "component": "experiment",
@@ -526,6 +614,14 @@
   {
     "component": "experiment",
     "file": "test/features/packageContentPolicy.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/pairedUpdateLegacyLease.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/pairedUpdateRateLimit.test.js"
   },
   {
     "component": "experiment",
@@ -601,6 +697,10 @@
   },
   {
     "component": "experiment",
+    "file": "test/features/planOperationNoticeLifecycle.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/features/planOutputReplacementHost.test.js"
   },
   {
@@ -622,6 +722,10 @@
   {
     "component": "experiment",
     "file": "test/features/planRunRerunIntent.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/planRunSharedSubmission.test.js"
   },
   {
     "component": "experiment",
@@ -649,6 +753,10 @@
   },
   {
     "component": "experiment",
+    "file": "test/features/planSubmissionStateGuard.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/features/planTerminalStatusRecovery.test.js"
   },
   {
@@ -658,6 +766,14 @@
   {
     "component": "experiment",
     "file": "test/features/planWorkerAndTmuxRouting.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/pluginLogRetention.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/pluginLogRetentionProcesses.test.js"
   },
   {
     "component": "experiment",
@@ -706,6 +822,10 @@
   {
     "component": "experiment",
     "file": "test/features/projectServerReadinessWorkflow.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/features/projectStatePaths.test.js"
   },
   {
     "component": "experiment",
@@ -889,6 +1009,10 @@
   },
   {
     "component": "experiment",
+    "file": "test/project/unifiedDispatchAdmission.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/scripts/macRuntimeTemplate.test.js"
   },
   {
@@ -1001,11 +1125,19 @@
   },
   {
     "component": "experiment",
+    "file": "test/ui/executionPlanListProgressLagRepro.test.js"
+  },
+  {
+    "component": "experiment",
     "file": "test/ui/fixedUiLookupSets.test.js"
   },
   {
     "component": "experiment",
     "file": "test/ui/gpuHistoryChart.test.js"
+  },
+  {
+    "component": "experiment",
+    "file": "test/ui/gpuHistoryMixedGranularityScatterRepro.test.js"
   },
   {
     "component": "experiment",
@@ -1117,6 +1249,10 @@
   },
   {
     "component": "sftp",
+    "file": "test/cleanupConsumerRoot.test.js"
+  },
+  {
+    "component": "sftp",
     "file": "test/cleanupObserveBatch.test.js"
   },
   {
@@ -1141,6 +1277,10 @@
   },
   {
     "component": "sftp",
+    "file": "test/handoffMarkerPlacement.test.js"
+  },
+  {
+    "component": "sftp",
     "file": "test/hashCacheBenchmark.test.js"
   },
   {
@@ -1150,6 +1290,10 @@
   {
     "component": "sftp",
     "file": "test/isolateBusyFailClosedGate.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/localStagingContainment.test.js"
   },
   {
     "component": "sftp",
@@ -1166,6 +1310,10 @@
   {
     "component": "sftp",
     "file": "test/planIsolateWindow.test.js"
+  },
+  {
+    "component": "sftp",
+    "file": "test/stagedSlotLifecycle.test.js"
   },
   {
     "component": "sftp",

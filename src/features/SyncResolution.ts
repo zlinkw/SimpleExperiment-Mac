@@ -6,6 +6,7 @@ import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { atomicWriteText } from "../state/StateStore";
 import { assertDarwinCleanupHandles } from "../platform/CleanupHandles";
+import { ensureProjectSnapshotMigrated, projectStateFile, projectStateId } from "./ProjectStatePaths";
 
 export type SyncHold = { endpointId: string; deletedAt: string; directory: boolean; codeOwned?: boolean; status?: "pending" | "resolved"; sha256?: string; fileHashes?: Record<string, string> };
 export type SyncHolds = Record<string, SyncHold>;
@@ -33,18 +34,31 @@ export function filterHeldFiles<T>(files: Record<string, T>, holds: SyncHolds): 
   return Object.fromEntries(Object.entries(files).filter(([relative]) => !isSyncHeld(relative, holds)));
 }
 
+/** r17-A: holds live inside the CONSUMED project; storageRoot only locates the known legacy
+ * snapshot for one read-only migration. A corrupt legacy file keeps its original error
+ * semantics via "invalid-legacy" — it is never silently replaced by an empty holds set. */
 export function syncHoldsStoragePath(storageRoot: string, projectRoot: string): string {
+  return projectStateFile(projectRoot, "simple-experiment", "sync-holds", `${projectStateId(projectRoot)}.json`);
+}
+
+export function legacySyncHoldsStoragePath(storageRoot: string, projectRoot: string): string {
   const resolved = path.resolve(projectRoot);
   const id = crypto.createHash("sha256").update(process.platform === "win32" ? resolved.toLowerCase() : resolved).digest("hex");
   return path.join(storageRoot, "sync-holds", `${id}.json`);
 }
 
+function validSyncHoldsShape(value: unknown): boolean {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
 export async function loadSyncHolds(storageRoot: string, projectRoot: string): Promise<SyncHolds> {
   const file = syncHoldsStoragePath(storageRoot, projectRoot);
+  const migration = await ensureProjectSnapshotMigrated(projectRoot, legacySyncHoldsStoragePath(storageRoot, projectRoot), file, validSyncHoldsShape);
   const content = await fs.readFile(file, "utf8").catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return "{}";
+    if (error.code === "ENOENT") return migration === "invalid-legacy" ? undefined : "{}";
     throw error;
   });
+  if (content === undefined) throw new Error("同步暂停记录格式无效。");
   const value = JSON.parse(content);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("同步暂停记录格式无效。");
   for (const [relative, row] of Object.entries(value)) {

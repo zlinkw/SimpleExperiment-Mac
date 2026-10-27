@@ -356,7 +356,9 @@ test('cache review exposes the Plan history entry independently of temporary-fil
   }) } };
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(require.resolve('../../dist/extension/CacheCleanupPanel'), 'utf8'), {
-    require: id => id === 'vscode' ? vscode : require(id), module, exports: module.exports, Buffer, process, console, AbortController,
+    require: id => id === 'vscode' ? vscode
+      : id.startsWith('.') ? require(require('node:path').resolve(__dirname, '../../dist/extension', id))
+      : require(id), module, exports: module.exports, Buffer, process, console, AbortController,
   });
   module.exports.openCacheCleanupPanel(() => ({ generation: 1, endpoints: [],
     client: { postWorkerAction: async action => actions.push(action) }, reviewPlanOutputs: async () => reviews++ }));

@@ -103,6 +103,7 @@ function createHost(overrides = {}) {
     performance: [],
     interests: [],
     lifecycleFailures: [],
+    branchProjects: [],
   };
   const host = {
     view: { webview: { postMessage(payload) { calls.statuses.push(payload); return Promise.resolve(true); } } },
@@ -133,6 +134,17 @@ function createHost(overrides = {}) {
     transitionPanelLifecycle(next) { this.panelLifecycleState = next; return true; },
     schedulePanelHeartbeat() { calls.heartbeats = (calls.heartbeats || 0) + 1; },
     postState(immediate = false) { calls.states.push(immediate); },
+    // r4 (task ui-plan-gpu-progress-20261024 返修): the four artifact-sync commands now open a
+    // per-operation Notification inside the real withUiCommandStatus funnel. This dispatch
+    // fixture stubs the notification surface with the same minimal contract as the other
+    // operation stubs here; the button dispatch and terminal-status assertions below are
+    // unchanged, and planOperationNoticeLifecycle covers the notification behavior itself.
+    operationNoticeKey(message) { return String((message && (message.parentClientActionId || message.clientActionId)) || ""); },
+    beginOperationProgressNotice() {},
+    reportOperationNotice() {},
+    finishOperationProgressNotice() {},
+    logOperationFact() {},
+    showNativePanelMessage(message) { (calls.nativeNotices ||= []).push(message); },
     extensionRuntimeVersionState() { return { reloadRequired: false }; },
     isCurrentPanelDocumentMessage(message, command) { return command === "webviewReady" || Number(message?.documentGeneration) === this.panelDocumentGeneration; },
     handlePanelWebviewVisibility(message) { calls.visibility.push(message); },
@@ -142,6 +154,9 @@ function createHost(overrides = {}) {
     recordPanelLifecycleDiagnostic(reason) { calls.lifecycleFailures.push(reason); },
     recordPanelIncident() {},
     refreshPptAutomationReadiness() { return Promise.resolve(); },
+    // 块A新增依赖：webviewReady 握手后真实 host 会调度“项目与分支”只读校验（内部自判域是否激活）。
+    // harness 记录调用原因；握手调用断言在 webviewReady 用例中，生产调用保持无条件、不吞异常。
+    scheduleBranchProjectsVerify(reason) { calls.branchProjects.push(String(reason)); },
     recordActionError(error) { calls.errors.push(error); },
     showPanelRecovery(message) { calls.recovery = message; },
     reloadPanelHtml() { calls.reloads += 1; },
@@ -181,6 +196,7 @@ test("webviewReady without clientActionId completes the real handshake", async (
   assert.deepEqual(host.calls.states, [true]);
   assert.deepEqual(host.calls.lease, []);
   assert.deepEqual(host.calls.statuses, []);
+  assert.deepEqual(host.calls.branchProjects, ["webview-ready"], "握手完成后必须调度一次项目与分支只读校验");
 });
 
 test("webviewVisibility without clientActionId reaches the generation-scoped host handler", async () => {
@@ -317,3 +333,16 @@ for (const command of ["syncPendingPlanArtifacts", "rebuildProjectResultTables",
     assert.match(terminal.message, /seed mismatch/);
   });
 }
+
+
+test("webview notices use the native host route only for the current panel document", async () => {
+  const host = createHost();
+  const notice = { command: "webviewNotice", documentGeneration: 4, tone: "warning", message: "隔离区删除审核账本本次不可用；隔离区保留。" };
+  await api.handleMessage.call(host, { ...notice, documentGeneration: 3 });
+  assert.deepEqual(host.calls.nativeNotices || [], []);
+  await api.handleMessage.call(host, notice);
+  assert.deepEqual(host.calls.nativeNotices, [notice]);
+  assert.deepEqual(host.calls.lease, []);
+  assert.deepEqual(host.calls.statuses, []);
+  assert.deepEqual(host.calls.errors, []);
+});

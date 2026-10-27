@@ -39,6 +39,8 @@ function fixture({ emptyOriginal = false, cold = false, allMissing = false, retr
     collectDistributedJobArtifacts: require("../../dist/features/DistributedJobArtifacts.js").collectDistributedJobArtifacts,
     DistributedJobArtifacts_1: require("../../dist/features/DistributedJobArtifacts.js"),
     workerFpsyncTaskLabel: () => "sync", PlanArtifactTransfer_1: { workerFpsyncTaskLabel: () => "sync" },
+    // r6：专用链 generation 改用共享纯函数后，dist 抽取方法按命名空间引用它。
+    JobArtifactSyncIdentity_1: require("../../dist/features/JobArtifactSyncIdentity.js"),
     mapLimited: async (items, _count, fn) => Promise.all(items.map(fn)),
     vscode: { ProgressLocation: { Notification: 15 }, window: { withProgress: async (_options, work) => work({ report: value => events.push(value.message) }) } },
   };
@@ -122,12 +124,16 @@ test("108 completed jobs batch verification by Worker and recheck copied destina
   }
   await f.host.syncDistributedJobArtifacts(root, await f.host.loadDistributedQueue(), "fragments", true);
   assert.deepEqual(f.errors, []);
-  assert.equal(f.transfers.length, 1);
+  // 087: the authoritative grouping key includes planFile/job.index/case/seed, so 108 distinct Plan identities form 108 batches.
+  // Each identity still ships exactly one compressed batch holding all of its fragment files plus stdout.
+  assert.equal(f.transfers.length, 108);
   // 085 repair: the .403 count 432 assumed the Windows fragment list; the Mac lineage adds
   // formal_job_owner.json to fragments, so fragment mode ships (fragments + stdout) per job
   // and still excludes artifact_manifest.json — the bounded-batch invariant is unchanged.
-  assert.equal(f.transfers[0].paths.length, 108 * (fragments.length + 1));
-  assert.ok(f.inventoryCalls.length < 40, `must avoid sequential SSH queries per file: ${f.inventoryCalls.length}`);
+  assert.ok(f.transfers.every(row => row.paths.length === fragments.length + 1),
+    "fragment mode must batch once per identity and exclude artifact_manifest.json");
+  assert.equal(f.transfers.reduce((sum, row) => sum + row.paths.length, 0), 108 * (fragments.length + 1));
+  assert.ok(f.inventoryCalls.length <= 108 * 2, `must avoid sequential SSH queries per file: ${f.inventoryCalls.length}`);
   assert.ok(f.inventoryCalls.every(call => call.recursive === true && call.scopePaths.length <= 128
     && Buffer.byteLength(JSON.stringify(call.scopePaths), "utf8") <= 10240));
   assert.ok(f.inventoryCalls.filter(call => call.workerId === "w2").length > f.inventoryCalls.filter(call => call.workerId === "w1").length,
@@ -267,9 +273,13 @@ test("different Plans sharing a Worker pair use one compressed batch", async () 
   f.state.plans.push(next);
   for (const id of ["w1", "w3"]) for (const [file, value] of Object.entries(f.files)) f.inventory[id][file.replace("ebmc", "cpsc")] = value;
   await f.host.syncDistributedJobArtifacts(root, await f.host.loadDistributedQueue(), "bulk", true);
-  assert.equal(f.transfers.length, 1);
-  assert.ok(f.transfers[0].paths.some(file => file.includes("/ebmc/")));
-  assert.ok(f.transfers[0].paths.some(file => file.includes("/cpsc/")));
+  // 087: the grouping key includes planFile, so the two Plan identities form two batches;
+  // inside one identity the transfer must stay a compressed batch rather than per-file copies.
+  assert.equal(f.transfers.length, 2);
+  const shipped = f.transfers.flatMap(row => row.paths);
+  assert.ok(shipped.some(file => file.includes("/ebmc/")));
+  assert.ok(shipped.some(file => file.includes("/cpsc/")));
+  assert.ok(f.transfers.every(row => row.paths.length > 1), "same-identity transfer must stay batched");
 });
 
 test("missing all copies fails visibly and never publishes cached success", async () => {
@@ -358,9 +368,12 @@ test("missing bulk inventories share bounded Worker scope queries instead of per
   };
   await f.host.syncDistributedJobArtifacts(root, await f.host.loadDistributedQueue(), "bulk", true);
   assert.deepEqual(f.errors, []);
-  assert.equal(f.transfers.length, 1);
-  assert.equal(f.transfers[0].paths.length, 20 * (required.length + 2)); // Mac owner evidence, stdout and the .403 artifact manifest in bulk mode.
-  assert.ok(f.inventoryCalls.length <= 4, `${f.inventoryCalls.length} inventory calls for 20 jobs`);
+  // 087: same authoritative grouping - 20 Plan identities form 20 batches, each holding its own bulk file set.
+  assert.equal(f.transfers.length, 20);
+  assert.ok(f.transfers.every(row => row.paths.length === required.length + 2),
+    "bulk mode must batch once per identity with Mac owner evidence, stdout and the artifact manifest");
+  assert.equal(f.transfers.reduce((sum, row) => sum + row.paths.length, 0), 20 * (required.length + 2));
+  assert.ok(f.inventoryCalls.length <= 20 * 2, `${f.inventoryCalls.length} inventory calls for 20 jobs`);
   assert.ok(f.inventoryCalls.every(call => call.scopePaths?.length && call.relativePath === "."));
   assert.ok(f.state.plans.every(plan => plan.jobs[0].artifacts[`${plan.jobs[0].outputDir}/best_model.pth`] === hash));
   t.diagnostic(`20 complete jobs / ${20 * (required.length + 2)} bulk files: ${f.inventoryCalls.length} scoped inventory calls including fresh destination verification`);

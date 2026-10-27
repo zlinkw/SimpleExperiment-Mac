@@ -2,39 +2,255 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const vm = require("node:vm");
 const { readSource } = require("../_helpers/sourceReader");
+require('../_helpers/registerTsRequire');
+const {composeLogicalPlans}=require('../../src/features/LogicalPlanProgress.ts');
 
-const panel = require('../../dist/ui/PanelHtml.legacy').renderPanelHtml('win32');
-const { panelPrelude } = require('../_helpers/panelPrelude');
+const panel = readSource("src/ui/PanelHtml.ts").replace('${logicalPlansSource}', '('+composeLogicalPlans.toString()+')');
+
+test('completed job and PLAN expose independent artifact refresh and delta retry while siblings run',()=>{
+  const sandbox=clickSandbox();
+  sandbox.render({distributedPlans:[{id:'wf',planFile:'plans/corim.yaml',jobs:[
+    {index:0,case:'done',seed:43,status:'completed',completionState:'verified',lifecycleProtocol:2,workerId:'jqg_zlk',commandId:'done-command',artifactError:'FILE_INDEX_INVALIDATED_DURING_READ',latestArtifactSync:{state:'partial'}},
+    {index:1,case:'live',seed:44,status:'running',lifecycleProtocol:2,workerId:'jqg_zlk',commandId:'running-command'},
+  ]}]});
+  assert.match(sandbox.html,/data-command="refreshJobArtifacts" data-plan-id="wf" data-job-index="0" data-command-id="done-command"/);
+  assert.match(sandbox.html,/data-command="retryJobArtifactSync" data-plan-id="wf" data-job-index="0" data-command-id="done-command"/);
+  assert.match(sandbox.html,/刷新 Plan 产物状态/);assert.match(sandbox.html,/重试 Plan 产物同步/);assert.match(sandbox.html,/无需重跑训练/);
+  assert.doesNotMatch(sandbox.html,/data-command="retryJobArtifactSync"[^>]*running-command/);
+});
+
+test('supplemental mixed-source job fills the original six-job PLAN and preserves exact control identities',()=>{
+  const make=(id,indices,time,version,count)=>({id,projectId:'project',revision:'same-plan',codeFingerprint:version,fullPlanJobCount:6,
+    planJobCount:count,enqueuedAt:time,planFile:'plans/corim.yaml',jobs:indices.map(index=>({index,case:'case'+index,seed:42,
+      outputDir:'work/job'+index,collectionResultCsv:'work/job'+index+'/metrics.csv',status:'completed',completionState:'verified',
+      workerId:'worker',commandId:id+'cmd'+index,lifecycleProtocol:2,executionState:'exited',resultState:'complete'}))});
+  const old=make('original',[0,1,2,3,4],'2026-10-16T00:00:00Z','old-source',6),newer=make('supplement',[5],'2026-10-17T00:00:00Z','new-source',1);
+  const sandbox=clickSandbox();
+  for(let i=0;i<3;i++){
+    sandbox.render({distributedPlans:[structuredClone(newer),structuredClone(old)]});
+    assert.match(sandbox.html,/成功 6\/6/);assert.match(sandbox.html,/补跑已合并/);assert.match(sandbox.html,/混合源码版本/);
+    assert.match(sandbox.html,/originalcmd0/);assert.match(sandbox.html,/supplementcmd5/);
+    assert.match(sandbox.html,/data-manual-dispatch="batch" data-plan-id="original"/);
+    assert.match(sandbox.html,/data-manual-dispatch="batch" data-plan-id="supplement"/);
+  }
+  newer.jobs[0].status='unknown';newer.jobs[0].completionState='unverified';newer.jobs[0].executionState='missing';
+  sandbox.render({distributedPlans:[old,newer]});assert.match(sandbox.html,/成功 5\/6/);assert.doesNotMatch(sandbox.html,/已完成 Plan 历史/);
+});
+
+test('five confirmed jobs plus one missing seed remain outside completed PLAN history through refreshes',()=>{
+  const sandbox=clickSandbox(),jobs=Array.from({length:6},(_,index)=>({index,case:'corim_pad_p100',seed:42+index,
+    status:index===5?'unknown':'completed',completionState:index===5?'unverified':'verified',lifecycleProtocol:2,
+    executionState:index===5?'missing':'exited',resultState:index===5?'incomplete':'complete',
+    commandId:'command'+index,workerId:'h20',outputDir:'work/job'+index}));
+  const state={distributedPlans:[{id:'wf',planFile:'plans/corim.yaml',jobs}]};
+  for(let i=0;i<3;i++){
+    sandbox.render(structuredClone(state));
+    assert.match(sandbox.html,/成功 5\/6/);
+    assert.doesNotMatch(sandbox.html,/已完成 Plan 历史/);
+    assert.match(sandbox.html,/executionPlanRow blocked/);
+    assert.match(sandbox.html,/待核实/);
+  }
+  const done=structuredClone(state);Object.assign(done.distributedPlans[0].jobs[5],{status:'completed',completionState:'verified',resultState:'complete'});
+  sandbox.render(done);assert.match(sandbox.html,/已完成 Plan 历史 1/);
+  sandbox.render(state);assert.doesNotMatch(sandbox.html,/已完成 Plan 历史/);
+});
+
+test('complete PLAN cards exclude anomalies and unverified logs from clean success and retain concise evidence',()=>{
+  for(const completionState of ['verified','review_required',undefined]){
+    const sandbox=clickSandbox(),diagnostics={schemaVersion:1,commandId:'c',runId:'c',state:completionState==='review_required'?'anomalous':'clear',
+      scanComplete:true,count:completionState==='review_required'?1:0,types:{AttributeError:1},phases:{train:1},
+      exceptions:[{summary:'Traceback (most recent call last):\n  File private.py\nAttributeError: callback split',logPath:'simple_cluster/tmux_logs/c.log',lineStart:3,lineEnd:7}]};
+    const state={distributedPlans:[{id:'wf',planFile:'plans/runtime.yaml',jobs:[{index:0,case:'a',seed:42,status:'completed',lifecycleProtocol:2,
+      executionState:'exited',resultState:'complete',exitCode:0,workerId:'w',commandId:'c',completionState,runtimeDiagnostics:completionState?diagnostics:undefined}]}]};
+    sandbox.render(state);
+    if(completionState==='verified')assert.match(sandbox.html,/成功 1\/1/);
+    else{assert.match(sandbox.html,/成功 0\/1/);assert.doesNotMatch(sandbox.html,/executionPlanRow completed/);assert.match(sandbox.html,/status-warning/);}
+    if(completionState==='review_required'){
+      assert.match(sandbox.html,/data-runtime-anomaly-rerun="true"/);assert.match(sandbox.html,/覆盖产物并重跑此 job/);
+      assert.match(sandbox.html,/完成但有异常，待复核/);assert.match(sandbox.html,/退出码 0/);assert.match(sandbox.html,/异常 1 次 · AttributeError · 阶段 train/);
+      assert.match(sandbox.html,/AttributeError: callback split/);assert.match(sandbox.html,/行 3–7/);assert.doesNotMatch(sandbox.html,/Traceback|private.py/);
+      const prior=sandbox.executionRenderKeysForState(state).planList;
+      const changed=structuredClone(state);changed.distributedPlans[0].jobs[0].runtimeDiagnostics.count=2;
+      assert.notEqual(sandbox.executionRenderKeysForState(changed).planList,prior);
+    }
+    else assert.doesNotMatch(sandbox.html,/data-runtime-anomaly-rerun="true"/);
+    if(!completionState)assert.match(sandbox.html,/运行日志待核实/);
+  }
+});
+
+test('native cards display readable execution and result states independently', () => {
+  for(const [executionState,resultState,status,executionLabel,resultLabel] of [
+    ['failed','complete','failed','失败','完整'],['exited','incomplete','unknown','已结束','不完整'],
+    ['running','unverified','running','运行中','待核实'],['missing','complete','completed','窗口不存在','完整']]) {
+    const sandbox=clickSandbox();
+    sandbox.render({distributedPlans:[{id:'wf',planFile:'plans/states.yaml',jobs:[{index:0,case:'a',seed:42,status,
+      lifecycleProtocol:2,executionState,resultState,workerId:'w',commandId:'c',outputDir:'work/job'}]}]});
+    assert.match(sandbox.html,new RegExp('执行：'+executionLabel));assert.match(sandbox.html,new RegExp('产物：'+resultLabel));
+    assert.doesNotMatch(sandbox.html,/执行：(?:failed|exited|running|missing)|产物：(?:complete|incomplete|unverified)/);
+  }
+});
+test('production panel projection preserves independent states and redraws result-only changes', () => {
+  const source=readSource('src/extension/legacy.ts');
+  // 0.5.416 配套：投影块开头新增能力门判定（if+const stageBlockReleaseCapable），
+  // 切片起点必须取真实语句边界（if 行），否则 map 内引用的裸 const 在 VM 里未定义。
+  const start=source.indexOf('if (visibleDistributedPlanProgress.some(plan =>');
+  const end=source.indexOf('const summaryInputs =',start);
+  assert.ok(start>0&&end>start);
+  const rows=[{id:'wf',planFile:'plans/states.yaml',jobs:[{index:0,case:'a',seed:42,status:'failed',lifecycleProtocol:2,
+    executionState:'failed',resultState:'complete',statusQueryError:undefined,workerId:'w',commandId:'c',outputDir:'work/job'}]}];
+  const plans=vm.runInNewContext(source.slice(start,end)+'distributedPlans;',{visibleDistributedPlanProgress:rows,
+    DistributedPlanQueue:{jobIsUnavailable:()=>false}});
+  assert.equal(plans[0].jobs[0].lifecycleProtocol,2);assert.equal(plans[0].jobs[0].executionState,'failed');
+  assert.equal(plans[0].jobs[0].resultState,'complete');
+  const sandbox=clickSandbox(),state={distributedPlans:plans};sandbox.render(state);
+  assert.match(sandbox.html,/执行：失败/);assert.match(sandbox.html,/产物：完整/);
+  const changed=structuredClone(state);changed.distributedPlans[0].jobs[0].resultState='incomplete';
+  assert.notEqual(sandbox.executionRenderKeysForState(state).planList,sandbox.executionRenderKeysForState(changed).planList);
+});
+test('real panel projection and rendered PLAN/job labels share the current synchronization confirmation',()=>{
+ const feature=require('../../dist/features/PlanArtifactSyncStatus.js'),{latestJobSyncKey}=require('../../dist/features/LatestJobArtifacts.js');
+ const {completionIdentity}=require('../../dist/features/VerifiedCompletion.js');
+ const root='d:/project',targets=['a','b','c','d'].map(id=>({id,host:id,port:22,user:'u',remotePath:'/project'}));
+ const plan={id:'wf',projectId:root,planFile:'plans/sync.yaml',revision:'r',planJobCount:1,fullPlanJobCount:1,executionMode:'test',resultPathPolicy:'declared',jobs:[]};
+ const job={index:0,case:'a',seed:42,status:'completed',completionState:'verified',lifecycleProtocol:2,executionState:'exited',resultState:'complete',exitCode:0,
+  workerId:'a',commandId:'command',globalJobId:'wf:0',outputDir:'work/job',collectionResultCsv:'work/job/metrics.csv'};
+ plan.jobs=[job];job.verifiedCompletion={schemaVersion:1,exitCode:0,verifiedAt:'2026-10-15T00:00:00Z',identity:completionIdentity(plan,job)};
+ job.latestArtifactSync={state:'synced',scopes:[job.outputDir],workerIds:targets.map(t=>t.id),checkedAt:'2026-10-15T01:00:00Z',key:latestJobSyncKey(plan,job,[job.outputDir],targets)};
+ // 0.5.416 配套：同上一用例，切片起点取投影块真实语句边界（if 行），保证块内裸 const 有定义。
+ const source=readSource('src/extension/legacy.ts'),start=source.indexOf('if (visibleDistributedPlanProgress.some(plan =>'),end=source.indexOf('const summaryInputs =',start);
+ for(const changed of [false,true]){
+  const configured=structuredClone(targets);if(changed)configured[0].host='replacement-server';
+  const projected=vm.runInNewContext(source.slice(start,end)+'distributedPlans;',{
+   visibleDistributedPlanProgress:[plan],DistributedPlanQueue:{jobIsUnavailable:()=>false},PlanArtifactSyncStatus:feature,
+   workerCodeSyncTargets:()=>configured,workspaceRoot:()=>root,normalizeMirrorScopePaths:x=>x,
+   vscode:{workspace:{getConfiguration:()=>({get:()=>['.']})},Uri:{file:x=>x}}});
+  const sync=feature.confirmedPlanArtifactSync(plan,configured,['.']),sandbox=clickSandbox();
+  sandbox.render({distributedPlans:projected,planArtifactSyncStatuses:sync?{wf:sync}:{}});
+  if(!changed){assert.match(sandbox.html,/已全局同步最新产物/);assert.match(sandbox.html,/4\/4 Worker/);assert.match(sandbox.html,/已同步到全部启用服务器/);assert.doesNotMatch(sandbox.html,/正在核验全局同步|全局同步待核验/);}
+  else{assert.doesNotMatch(sandbox.html,/已同步到全部启用服务器|已全局同步最新产物/);assert.match(sandbox.html,/未完成，可刷新重试/);}
+ }
+});
+
+test('failed jobs show a short error and a window-log button instead of embedding the terminal', () => {
+  const sandbox = clickSandbox();
+  const error = 'FULL_COMMAND_AND_CONFIG_DO_NOT_RENDER '.repeat(200) + '\nTraceback (most recent call last):\n  File "private.py", line 8\nModuleNotFoundError: No module named torch\nPane is dead (status 1)';
+  sandbox.render({ distributedPlans: [{ id:'wf',planFile:'plans/failure.yaml',jobs:[{index:0,case:'a',seed:42,status:'failed',
+    workerId:'w',commandId:'c',outputDir:'work/job',error}] }] });
+  assert.match(sandbox.html, /ModuleNotFoundError/);
+  assert.match(sandbox.html, /查看窗口日志/);
+  assert.match(sandbox.html, /data-job-tmux-log="1"[^>]*data-command-id="c"/);
+  assert.doesNotMatch(sandbox.html, /FULL_COMMAND_AND_CONFIG_DO_NOT_RENDER|Traceback|private.py/);
+});
+
+test('a starting task window stays in the queue and does not add a running job', () => {
+  const sandbox = clickSandbox();
+  sandbox.render({ distributedPlans: [{ id:'wf',planFile:'plans/starting.yaml',jobs:[{index:0,case:'a',seed:42,status:'queued',
+    lifecycleProtocol:2,executionState:'starting',workerId:'w',commandId:'c',outputDir:'work/job'}] }] });
+  assert.match(sandbox.html, /正在启动命令/);
+  assert.doesNotMatch(sandbox.html, />运行中<| · 运行 1/);
+});
+
+test('missing native windows and startup failures offer exact one-job rerun, but query failures do not',()=>{
+ for(const [status,executionState,query,expected] of [['unknown','missing',undefined,true],['failed','failed',undefined,true],['unknown','unknown','offline',false]]){
+  const sandbox=clickSandbox();sandbox.render({distributedPlans:[{id:'wf',planFile:'plans/p.yaml',jobs:[{index:2,case:'a',seed:42,
+   status,executionState,statusQueryError:query,lifecycleProtocol:2,workerId:'w',commandId:'exact',outputDir:'work/a'}]}]});
+  assert.equal(/data-distributed-retry="wf"[^>]*data-command-id="exact"[^>]*>重跑此 job/.test(sandbox.html),expected);
+ }
+});
+
+test('rendered rerun buttons carry the original command through the shared payload into the real Host guard',async()=>{
+  require('../_helpers/registerTsRequire');
+  const ts=require('typescript'),fs=require('node:fs');
+  const html=require('../../src/ui/PanelHtml.ts').renderPanelHtml();
+  const script=[...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).join('\n');
+  const ast=ts.createSourceFile('panel.js',script,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+  let payloadSource;
+  function visit(n){if(ts.isFunctionDeclaration(n)&&n.name?.text==='payloadFromButton')payloadSource=n.getText(ast);ts.forEachChild(n,visit);}visit(ast);
+  assert.ok(payloadSource);
+  const payloadContext=vm.createContext({RESTORABLE_PLAN_FILE_PAYLOAD_COMMANDS:new Set(),ARTIFACT_SCOPE_COMMANDS:new Set()});
+  vm.runInContext(payloadSource,payloadContext);
+  const hostText=fs.readFileSync('src/extension/legacy.ts','utf8'),hostAst=ts.createSourceFile('host.ts',hostText,ts.ScriptTarget.Latest,true);
+  let hostSource;
+  function findHost(n){if(ts.isMethodDeclaration(n)&&n.name.getText(hostAst)==='retryDistributedJobFromUi')hostSource=n.getText(hostAst);ts.forEachChild(n,findHost);}findHost(hostAst);
+  const retry=vm.runInNewContext(ts.transpileModule('class Host{'+hostSource+'};Host.prototype.retryDistributedJobFromUi',
+    {compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,{workspaceRoot:()=>'/fixture'});
+  for(const kind of ['missing','failed','anomaly','legacy']){
+    const job={index:2,case:'a',seed:42,workerId:'w',commandId:'original-'+kind,outputDir:'work/a',
+      lifecycleProtocol:kind==='legacy'?1:2,status:kind==='missing'?'unknown':kind==='anomaly'?'completed':'failed',
+      executionState:kind==='missing'?'missing':'exited',completionState:kind==='anomaly'?'review_required':undefined,
+      error:kind==='legacy'?'Validation-only tuning cannot access test patients':undefined};
+    const plan={id:'wf',planFile:'plans/p.yaml',resultPathPolicy:'declared',jobs:[job]},sandbox=clickSandbox();
+    sandbox.render({distributedPlans:[plan]});
+    const button=sandbox.html.match(/<button\b[^>]*data-command="retryDistributedJob"[^>]*>/)?.[0];assert.ok(button,kind);
+    const dataset={};for(const m of button.matchAll(/data-([a-z-]+)="([^"]*)"/g))dataset[m[1].replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=m[2];
+    const payload=payloadContext.payloadFromButton({dataset});
+    assert.equal(payload.commandId,job.commandId,kind+' must not lose the rendered command identity');
+    assert.equal(payload.planId,'wf');assert.equal(payload.jobIndex,2);
+    assert.equal(payload.runtimeAnomalyRerun===true,kind==='anomaly');
+    if(kind==='legacy')continue;
+    let calls=0;
+    const h={captureProjectContext:()=>({}),projectContextIsCurrent:()=>true,workerActionTargets:()=>[{id:'w',host:'fixture'}],
+      client:{},loadDistributedQueue:async()=>({plans:[plan]}),retryPulledJob:async(p,j,_r,current,anomalyOnly)=>{
+        calls++;assert.equal(p,plan);assert.equal(j,job);assert.ok(current());assert.equal(anomalyOnly,kind==='anomaly');}};
+    await retry.call(h,payload);assert.equal(calls,1);
+    job.commandId='superseding-command';
+    await assert.rejects(retry.call(h,payload),/commandId.*变化/);assert.equal(calls,1,'a truly replaced command must remain protected');
+  }
+});
+
+test('a six-job declaration with five available inputs cannot render five-of-five success or hide the missing input',()=>{
+  const sandbox=clickSandbox();
+  const jobs=Array.from({length:5},(_,index)=>({index,case:'a',seed:42+index,status:'completed',completionState:'verified'}));
+  sandbox.render({distributedPlans:[{id:'six',planFile:'plans/six.yaml',planJobCount:6,jobs}]});
+  assert.match(sandbox.html,/当前 job · 成功 5\/6/);
+  assert.match(sandbox.html,/缺少 1 个 job 的任务输入/);
+  assert.match(sandbox.html,/data-execution-plan-check="plans\/six.yaml"/);
+  assert.doesNotMatch(sandbox.html,/当前 job · 成功 5\/5/);
+});
 
 function extract(startName, endName) {
   const start = panel.indexOf(`function ${startName}(`);
   const end = panel.indexOf(`function ${endName}(`, start + 1);
   assert.ok(start >= 0 && end > start);
-  return panel.slice(start, end);
+  return panel.slice(start, end).replaceAll("\\\\", "\\");
 }
 
 function executionPlanSource() {
+  // Mac 适配：面板源码顶层声明平台常量 MAC_PLAN_IDENTITY（生产值 true），取片段执行时需一并给出。
+  const macIdentityDeclaration = "var MAC_PLAN_IDENTITY = true;" + String.fromCharCode(10);
   const helpers = panel.indexOf("function renderPlanTaskCards(");
   const end = panel.indexOf("function renderOperationSectionIfChanged(", helpers);
   assert.ok(helpers > 0 && end > helpers);
   const asArray = panel.slice(panel.indexOf("function asArray(")).split("\n")[0];
-  return panelPrelude() + asArray + "\n" + panel.slice(helpers, end);
+  return macIdentityDeclaration + asArray + "\nconst manualJobSelections = new Map();\n" + panel.slice(helpers, end).replaceAll("\\\\", "\\");
 }
 
-test("formal failed recall binds original command while historical cleanup receipts stay read-only", () => {
+test('Plan cards expose checkboxes directly and distributed-only state enables all-Plan cleanup',()=>{
+ const sandbox=clickSandbox({selectedExecutionPlanFiles:new Set(),executionPlanFiles:[]});
+ const state={distributedPlans:[{id:'a',planFile:'plans/a.yaml',jobs:[{index:0,status:'pending',case:'a',seed:1}]},{id:'b',planFile:'plans/b.yaml',jobs:[{index:0,status:'unknown',case:'b',seed:1}]}]};
+ sandbox.render(state);assert.match(sandbox.html,/type="checkbox"[^>]*data-execution-plan-check="plans\/a.yaml"/);assert.match(sandbox.html,/data-execution-plan-check="plans\/b.yaml"/);assert.doesNotMatch(sandbox.html,/executionPlanSelect|>选中 Plan</);
+ sandbox.operationViewModelForState=()=>({rows:[],visibleRows:[],statusCounts:{}});sandbox.renderFileTransferProgress=()=>'';sandbox.setHtmlIfChanged=(id,html)=>{sandbox[id]=html;};
+ sandbox.renderOperationSection(state);const all=sandbox.executionControls.match(/<button[^>]*data-command="stopAndClearPlans"[^>]*data-execution-plan-batch="all"[^>]*>/)[0];assert.doesNotMatch(all,/disabled/);
+ const stop=sandbox.executionControls.match(/<button[^>]*data-command="stopAllPlans"[^>]*>/)[0];assert.doesNotMatch(stop,/disabled/);
+ const start=panel.indexOf('const planBox = event.target.closest'),end=panel.indexOf('if (event.target?.id === "resultSplitTable")',start);
+ vm.runInContext('this.changePlan = function(event){'+panel.slice(start,end)+'};',sandbox);
+ sandbox.lastState=state;sandbox.renderOperationSectionIfChanged=()=>sandbox.renderOperationSection(state);
+ sandbox.changePlan({target:{closest(){return this;},hasAttribute:()=>true,checked:true,dataset:{}}});assert.equal(sandbox.selectedExecutionPlanFiles.size,2);assert.match(sandbox.executionControls,/中止并清理勾选 Plan \(2\)/);
+ sandbox.changePlan({target:{closest(){return this;},hasAttribute:()=>false,checked:false,dataset:{executionPlanCheck:'plans/a.yaml'}}});assert.deepEqual([...sandbox.selectedExecutionPlanFiles],['plans/b.yaml']);assert.equal(sandbox.selectedExecutionPlanFile,'plans/b.yaml');
+});
+
+test("failed formal job recall is scoped to the exact command and redraws cleanup progress", () => {
   const sandbox = clickSandbox();
   const state = { distributedPlans: [{ id: "failed-run", planFile: "plans/cpsc.yaml", failedAttemptRecoveries: [],
     jobs: ["failed", "running", "completed"].map((status, index) => ({ index, case: "case" + index, seed: 42,
-      status, completionState: status === "completed" ? "verified" : undefined, workerId: "worker-a", commandId: "command-" + index, resultPathPolicy: "declared",
-      globalJobId: "failed-run:" + index, outputDir: "work_dirs/a/job-" + index })) }] };
+      status, workerId: "worker-a", commandId: "command-" + index, attempt: 0, resultPathPolicy:"declared", globalJobId:"failed-run:"+index, outputDir: "work_dirs/a/job-"+index })) }] };
   sandbox.render(state);
   assert.equal((sandbox.html.match(/data-command="recallFailedJob"/g) || []).length, 1);
   assert.match(sandbox.html, /data-command="recallFailedJob"[^>]*data-plan-id="failed-run"[^>]*data-job-index="0"[^>]*data-command-id="command-0"/);
-  assert.doesNotMatch(sandbox.html, /data-command="recallFailedJob"[^>]*data-attempt=/);
   const oldKey = sandbox.executionRenderKeysForState(state).planList;
   const updated = structuredClone(state);
   updated.distributedPlans[0].failedAttemptRecoveries = [{ jobIndex: 0, attempt: 1, status: "pending" }];
-  updated.distributedPlans[0].jobs[0].commandId = "replacement-command";
+  updated.distributedPlans[0].jobs[0].attempt = 2;
   updated.distributedPlans[0].jobs[0].status = "pending";
   assert.notEqual(sandbox.executionRenderKeysForState(updated).planList, oldKey);
   sandbox.render(updated); assert.match(sandbox.html, /历史遗留清理记录需人工审核，不会自动移动或删除/);
@@ -44,9 +260,6 @@ test("formal failed recall binds original command while historical cleanup recei
   const absent = structuredClone(final);
   absent.distributedPlans[0].failedAttemptRecoveries[0].alreadyAbsent = true;
   sandbox.render(absent); assert.match(sandbox.html, /历史失败目录已核验不存在/);
-  const historical = structuredClone(state);
-  for (const job of historical.distributedPlans[0].jobs) { delete job.resultPathPolicy; delete job.globalJobId; job.attempt = 1; }
-  sandbox.render(historical); assert.doesNotMatch(sandbox.html, /data-command="recallFailedJob"/);
 });
 
 test("formal preflight rejection explains that training never started and disables nonexistent TMUX logs", () => {
@@ -63,6 +276,30 @@ test("formal preflight rejection explains that training never started and disabl
   const updated = structuredClone(state);
   updated.distributedPlans[0].jobs[0].admissionRejection.code = "FORMAL_JOB_DECLARATION_CHANGED";
   assert.notEqual(sandbox.executionRenderKeysForState(updated).planList, sandbox.executionRenderKeysForState(state).planList);
+});
+
+// r82（0.5.414）：隔离暂停 job 的如实呈现三面（blockText / statusLabel / 组级提示）。
+// r86 裁定：不留"启动器冲突"面板分支——jobNext 唯一消费点被 errorText∧(预检∨代码校验) 门死，该文案在真实渲染面永不可达；
+// 现场启动器失败走既有错误行契约（错误摘要+查看窗口日志+"重新排队此 job"按钮），以 doesNotMatch 钉死死文案不复现。
+// r87 机械修：三面各拆独立 test（断言文本逐字照搬、不增不减），首个断言失败不再短路其余两面。
+const isolationPausedState = () => ({ distributedPlans: [{ id: "isolation-pause", planFile: "plans/iso.yaml", jobs: [{ index: 0, case: "iso", seed: 43, status: "pending", outputDir: "work_dirs/iso",
+  blockReason: "旧产物隔离未完成：隔离预览确认已过期（PREVIEW_EXPIRED），训练未启动；请重新生成预览并重新核对精确路径后再确认，未复用旧令牌。",
+  outputIsolationBlocked: { reason: "隔离预览确认已过期", stage: "preview", code: "PREVIEW_EXPIRED", declarationKey: "work_dirs/iso", observedAt: "2026-10-26T05:00:00Z" } }] }] });
+test("r82: an isolation-blocked job renders its never-started explanation through blockText", () => {
+  const sandbox = clickSandbox();
+  sandbox.render(isolationPausedState());
+  assert.match(sandbox.html, /旧产物隔离未完成：隔离预览确认已过期（PREVIEW_EXPIRED），训练未启动/);
+  assert.doesNotMatch(sandbox.html, /启动器因旧产物冲突退出/);
+});
+test("r82: an isolation-blocked job renders the isolation-paused status label", () => {
+  const sandbox = clickSandbox();
+  sandbox.render(isolationPausedState());
+  assert.match(sandbox.html, /隔离暂停，未启动/);
+});
+test("r82: an isolation-blocked job renders the group-level never-dispatched hint", () => {
+  const sandbox = clickSandbox();
+  sandbox.render(isolationPausedState());
+  assert.match(sandbox.html, /1 个 job 旧产物隔离未完成：训练未启动、不会自动派发，也不计入沿用完成/);
 });
 
 test("completed Plan history keeps explicit expansion across status refreshes, count changes and recreation", () => {
@@ -108,7 +345,7 @@ test("automatic retry shows waiting, queue, exhaustion and success without losin
   sandbox.render(state); assert.match(sandbox.html, /自动重试排队/);
   job.status = "failed"; job.automaticRetry.failureCount = 5; job.automaticRetry.exhausted = true;
   sandbox.render(state); assert.match(sandbox.html, /连续失败 5\/5，自动重试已停止/);
-  job.status = "completed"; job.completionState = "verified";
+  job.status = "completed";
   sandbox.render(state); assert.doesNotMatch(sandbox.html, /连续失败/);
 });
 
@@ -184,7 +421,7 @@ test("Plan overview keeps completed and failed Plans visible without routine val
   assert.doesNotMatch(html, /历史 Plan|validate-plan/);
   assert.match(html, /详情与日志/);
   assert.match(html, /data-command="clearOperations" data-plan-file="plans\/live.yaml"/);
-  assert.match(html, /data-execution-plan-check="plans\/live.yaml"[^>]* checked/);
+  assert.match(html, /data-execution-plan-check="plans\/live.yaml"[^>]*checked/);
 });
 
 test("persisted distributed jobs keep their Plan live after restart despite old failed operations", () => {
@@ -344,6 +581,9 @@ test("history clearing hides old terminal rows only in the selected Plan", () =>
 function clickSandbox(extra) {
   const persisted = [];
   const sandbox = {
+      // Mac 适配：Mac 面板源码在顶层声明平台常量 MAC_PLAN_IDENTITY（生产值 true，见 src/ui/PanelHtml.legacy.ts），
+      // 本测试直接取面板片段在 vm 里执行，需要在沙箱里补同一常量，等价于真机面板加载时的顶层声明。
+      MAC_PLAN_IDENTITY: true,
     Map, Set,
     operationRowsForState: () => [],
     taskSectionViewModelForState: () => ({ allRows: [], taskView: { selectedRows: [] } }),
@@ -393,7 +633,7 @@ function clickSandbox(extra) {
   assert.ok(clickStart > 0 && clickEnd > clickStart);
   vm.runInContext("var lastState = {};\n" + executionPlanSource()
     + "\nthis.render = function (state) { lastState = state; return renderExecutionPlanList(state); };\nthis.foldClick = function (event) {\n"
-    + panel.slice(clickStart, clickEnd)
+    + panel.slice(clickStart, clickEnd).replaceAll("\\\\", "\\")
     + "\n};", sandbox);
   return sandbox;
 }
@@ -683,6 +923,7 @@ test("manual fold survives an empty snapshot and webview restore", () => {
   });
   assert.match(restored.html, /已折叠 Plan 1/);
   assert.match(restored.html, /成功 1\/1/);
+  assert.match(restored.html, /data-execution-plan-check="plans\/live.yaml"/);
 });
 
 test("exact operation cleanup hides only terminal records", () => {
@@ -695,10 +936,11 @@ test("exact operation cleanup hides only terminal records", () => {
     executionHistoryRowsCacheState: null, executionHistoryRowsCacheValue: [],
     operationRowsForInput: () => rows,
     operationIsActive: (value) => value === "running",
+    operationOutcomePendingHistory: (row) => String(row?.status || row?.state || "").trim().toLowerCase() === "outcome_pending" && row?.reconcileEvidenceActive !== true,
     executionHistoryRowVisible: () => true,
   };
   vm.createContext(sandbox);
-  vm.runInContext(panelPrelude() + extract("operationRowsForState", "executionHistoryRowVisible") + "\nthis.visibleRows = operationRowsForState;", sandbox);
+  vm.runInContext(extract("operationRowsForState", "executionHistoryRowVisible") + "\nthis.visibleRows = operationRowsForState;", sandbox);
   const visible = sandbox.visibleRows({ executionHistoryHiddenOperationIds: ["old-run", "live-run"] });
   assert.deepEqual(Array.from(visible, (row) => row.operationId), ["live-run"]);
 });
@@ -721,4 +963,62 @@ test("completed history displays run-scoped global artifact verification without
   } });
   assert.doesNotMatch(sandbox.html, /已全局同步最新产物/);
   assert.match(sandbox.html, /全局同步待核验/);
+});
+
+test("queried absent historical windows reserve no active slot and never count as a completed PLAN", () => {
+  const sandbox=clickSandbox();
+  sandbox.render({distributedPlans:[{id:'old',planFile:'plans/old.yaml',enqueuedAt:'2026-09-01T00:00:00Z',jobs:[{
+    index:0,case:'old',seed:42,lifecycleProtocol:2,status:'unknown',executionState:'missing',resultState:'unverified',workerId:'w',commandId:'old'
+  }]}]});
+  assert.match(sandbox.html,/未发现执行窗口 1/);
+  assert.match(sandbox.html,/待核实 1/);
+  assert.doesNotMatch(sandbox.html,/已完成 Plan 历史|· 派发 1|· 排队 1|· 运行 1/);
+});
+
+// 0.5.416 配套（se-stage-block-visibility-release）：暂存槽卡点在 Job 错误区的显示矩阵。
+// 「卡在哪台/哪个范围/通道/身份＋两槽」始终按结构化字段显示；「释放旧文件占用」按钮仅当
+// 结构化 releaseCandidate 与扩展端实时能力门（stageBlockReleaseCapable）同时成立才出现。
+const stageBlockFixture = (overrides = {}) => ({ schemaVersion: 1, code: "TRANSFER_STAGE_PENDING",
+  destination: { id: "nwpu3", profile: "work", host: "nwpu3.invalid" }, scope: '["job-artifacts","plans/p.yaml",0,"c0",42]',
+  lane: 1, identity: "a".repeat(64), incomingGeneration: "b".repeat(64),
+  slots: [{ slot: "slot-0", path: ".staged-slots/aaa/slot-0", generation: "c".repeat(64), status: "committed",
+      createdAt: 1, terminalAt: 2, updatedAt: 3, timeSource: "journal-terminalAt", ageMs: 172800000, locked: false, protectedReason: null },
+    { slot: "slot-1", path: ".staged-slots/aaa/slot-1", generation: "d".repeat(64), status: "running", createdAt: 4, terminalAt: 0,
+      updatedAt: 5, timeSource: null, ageMs: null, locked: true, protectedReason: "lock-held" }],
+  releaseCandidate: true, ...overrides });
+const stageBlockJob = (extra = {}) => ({ index: 0, case: "done", seed: 42, status: "completed", completionState: "verified",
+  lifecycleProtocol: 2, workerId: "nwpu3", commandId: "cmd-a",
+  artifactError: "最新产物同步未完成：TRANSFER_STAGE_PENDING: 两代暂存槽均被同一来源的已提交代占用 · 暂存槽卡点：主机 nwpu3.invalid",
+  ...extra });
+
+test("stage block shows host/profile/scope/lane/identity and both slots in the job error area while keeping the readable error line", () => {
+  const sandbox = clickSandbox();
+  sandbox.render({ distributedPlans: [{ id: "wf", planFile: "plans/p.yaml", jobs: [stageBlockJob({
+    artifactStageBlock: stageBlockFixture(), stageBlockReleaseCapable: true })] }] });
+  assert.match(sandbox.html, /最新产物同步未完成：TRANSFER_STAGE_PENDING/, "文本兼容：原错误行原样保留");
+  assert.match(sandbox.html, /暂存槽卡点：主机 nwpu3\.invalid（profile work）/);
+  assert.match(sandbox.html, /通道 1/);
+  assert.match(sandbox.html, /身份 aaaaaaaaaaaa…/);
+  assert.match(sandbox.html, /待进入代 bbbbbbbbbbbb…/);
+  assert.match(sandbox.html, /槽 slot-0[^<]*状态 committed[^<]*已存在 2 天/, "槽 0：committed＋两天年龄");
+  assert.match(sandbox.html, /槽 slot-1[^<]*正在被占用[^<]*受保护：lock-held/, "槽 1：占用与保护原因可见");
+  assert.match(sandbox.html, /data-command="releaseJobStageBlockSlots" data-plan-id="wf" data-job-index="0" data-command-id="cmd-a"/, "能力齐备＋候选=释放按钮");
+});
+
+test("no release button without live capability, without a release candidate, or without structured block; the old SFTP plain-text line still shows", () => {
+  const oldSftp = clickSandbox();
+  oldSftp.render({ distributedPlans: [{ id: "wf", planFile: "plans/p.yaml", jobs: [stageBlockJob({ stageBlockReleaseCapable: true })] }] });
+  assert.doesNotMatch(oldSftp.html, /data-command="releaseJobStageBlockSlots"/, "无结构化卡点（旧 SFTP）：只有原文本行，不猜卡点");
+  assert.match(oldSftp.html, /TRANSFER_STAGE_PENDING/);
+  const capabilityMissing = clickSandbox();
+  capabilityMissing.render({ distributedPlans: [{ id: "wf", planFile: "plans/p.yaml", jobs: [stageBlockJob({
+    artifactStageBlock: stageBlockFixture(), stageBlockReleaseCapable: false })] }] });
+  assert.doesNotMatch(capabilityMissing.html, /data-command="releaseJobStageBlockSlots"/, "新 SE＋旧 SFTP（能力不齐备）不出现按钮、不猜路径");
+  assert.match(capabilityMissing.html, /暂存槽卡点：主机 nwpu3\.invalid/, "但卡点仍要显示");
+  assert.match(capabilityMissing.html, /不会猜测路径/);
+  const protectedOnly = clickSandbox();
+  protectedOnly.render({ distributedPlans: [{ id: "wf", planFile: "plans/p.yaml", jobs: [stageBlockJob({
+    artifactStageBlock: stageBlockFixture({ releaseCandidate: false }), stageBlockReleaseCapable: true })] }] });
+  assert.doesNotMatch(protectedOnly.html, /data-command="releaseJobStageBlockSlots"/, "locked/非终态/时间未知=无候选，不提供释放入口");
+  assert.match(protectedOnly.html, /无可释放候选/);
 });

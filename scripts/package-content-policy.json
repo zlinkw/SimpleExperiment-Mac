@@ -23,6 +23,111 @@
   "markdown_runtime_allow_evidence": "No packaged project Markdown is required; tracked runtime producers supply minimal user templates and online guide links.",
   "forbidden_ordered": [
     {
+      "category": "bundled-sftp",
+      "path_prefixes": [
+        "extensions/simple-sftp/"
+      ],
+      "comment": "用户长期裁决 2026-10-24：旧嵌套 SimpleSFTP 捆绑副本未来版本一律不携带；仅点名的这一路径，其他 extensions 不受影响；独立安装的配套 SimpleSFTP 公开 Release 不属捆绑"
+    },
+    {
+      "category": "compile-metadata",
+      "suffixes": [
+        ".tsbuildinfo"
+      ],
+      "comment": "r24/r25 tsc 增量元信息"
+    },
+    {
+      "category": "workflow-cache",
+      "path_prefixes": [
+        "simple_cluster/"
+      ],
+      "comment": "r25-A 运行缓存/报告/receipt/env 沙箱"
+    },
+    {
+      "category": "linux-verification",
+      "path_prefixes": [
+        "verification/"
+      ],
+      "comment": "r9 平台归属：Linux 专属验证套件（POSIX receiver 显式注入必验），仅源码仓/任务清单保留，发行包不携带开发验证目录"
+    },
+    {
+      "category": "dev-lock",
+      "path_prefixes": [
+        ".test-workflow-batch.lock/"
+      ],
+      "comment": "r25-A 同根批开发锁（实际 VSIX 泄漏项）"
+    },
+    {
+      "category": "unused-compiled",
+      "paths": [
+        "dist/agent/AgentEvent.js",
+        "dist/agent/AgentSnapshot.js",
+        "dist/agent/AgentStateReducer.js",
+        "dist/cluster/StateMerge.js",
+        "dist/config/Migrations.js",
+        "dist/core/ClusterController.js",
+        "dist/core/CommandBus.js",
+        "dist/core/DomainTypes.js",
+        "dist/core/ErrorModel.js",
+        "dist/core/OperationQueue.js",
+        "dist/core/factories/CommandBusFactory.js",
+        "dist/core/factories/OperationQueueFactory.js",
+        "dist/diagnostics/AuditLog.js",
+        "dist/diagnostics/ConsistencyChecker.js",
+        "dist/diagnostics/OperationLedger.js",
+        "dist/diagnostics/SelfCheck.js",
+        "dist/extension/ProviderRealtime.js",
+        "dist/extension/ProviderSnapshot.js",
+        "dist/extension/ProviderState.js",
+        "dist/factories/types.js",
+        "dist/features/DatasetInspector.js",
+        "dist/features/ExperimentConfigRecovery.js",
+        "dist/features/GpuScore.js",
+        "dist/features/PlanBuilder/MatrixGenerator.js",
+        "dist/features/ResultAnomaly.js",
+        "dist/features/Results/EvidenceCollector.js",
+        "dist/features/Results/ResultParser.js",
+        "dist/features/SmallScale.js",
+        "dist/features/SmartScheduler.js",
+        "dist/features/factories/PlanBuilderFactory.js",
+        "dist/features/factories/QualityFactory.js",
+        "dist/features/factories/ResultsFactory.js",
+        "dist/limits/RateLimiter.js",
+        "dist/results/ProjectResultPublication.js",
+        "dist/results/ResultDirectoryRebuild.js",
+        "dist/services/AgentService.js",
+        "dist/services/ArtifactService.js",
+        "dist/services/GpuService.js",
+        "dist/services/LiveOutputService.js",
+        "dist/services/SchedulerService.js",
+        "dist/services/SyncService.js",
+        "dist/state/ClusterStore.js",
+        "dist/state/StateMigrations.js",
+        "dist/state/StateReducer.js",
+        "dist/state/StateSelectors.js",
+        "dist/tensorboard/ScalarViewerHtml.js",
+        "dist/tunnel/FileTransferQueue.js",
+        "dist/tunnel/HubControlApi.js",
+        "dist/tunnel/RealtimeDiagnostics.js",
+        "dist/tunnel/RemoteFileBrowser.js",
+        "dist/tunnel/TensorBoardLocalProxy.js",
+        "dist/tunnel/TmuxRemoteExecutor.js",
+        "dist/tunnel/TunnelPortPersistence.js",
+        "dist/tunnel/factories/EndpointRegistry.js",
+        "dist/tunnel/factories/TunnelClientPool.js",
+        "dist/ui/UiStateMapper.js",
+        "dist/ui/WebviewBridge.js",
+        "dist/ui/WebviewRenderState.js",
+        "dist/ui/renderState/RenderStateMapper.js",
+        "dist/ui/renderState/RenderStateStore.js",
+        "dist/ui/renderState/RenderStateTypes.js",
+        "dist/ui/sections/types.js",
+        "dist/ui/styles/base.css.js",
+        "dist/ui/styles/components.css.js",
+        "dist/ui/styles/layout.css.js"
+      ]
+    },
+    {
       "category": "forensics",
       "basename_contains": "forensics"
     },
@@ -114,5 +219,6 @@
   ],
   "markdown_runtime_allow_files": [],
   "normalize_comment": "单一规范化语义(幂等)：反斜杠→/，整体转小写，反复交替剥离 './' 与 'extension/' 前缀直到不动点；规范化后的表示唯一，checkListing→classify 重复规范化结果不变。",
-  "markdown_runtime_allow_files_note": "Only the root toolchain README and legal notices are exceptions."
+  "markdown_runtime_allow_files_note": "Only the root toolchain README and legal notices are exceptions.",
+  "unused_comment": "r21批准交集79路径：静态入口+已证动态锚全传递闭包之外，且经 TS-AST 证明无 require 别名/拼接/Worker/spawn/eval/目录枚举可命中（evidence 包范围小节，/tmp/psg-alias-scan.js、/tmp/psg-alias2.js、/tmp/psg-alias-ctx.js）；exact paths 规范化后全等匹配，不用 basename/宽泛前缀。index barrels、全部 *.legacy 运行部件、CLI/shim、Worker、生成输入 JS、24 非JS、法律/README/模板全部保留在外。磁盘 dist/src 不删，仅发行排除；.vscodeignore unused-compiled 标记块与本表一致性由 packageContentPolicy.test.js 强制。"
 }

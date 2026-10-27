@@ -1,4 +1,5 @@
 import { ReleaseComponent, verifyVsix } from "./Vsix";
+import { RateLimitedError, RetryStore } from "../updates/ReleaseClient";
 import { createHash } from "node:crypto";
 const valid = require("../vendor/semver/functions/valid");
 const compare = require("../vendor/semver/functions/compare");
@@ -78,16 +79,28 @@ export class PreviewReleaseClient {
   private inflight = new Map<string, Promise<Buffer>>();
   private checking?: Promise<PreviewPlan>;
   private retryAt = 0;
+  private retryLoaded?: Promise<void>;
   private failures = 0;
-  constructor(private fetcher: typeof fetch = fetch, private now: () => number = Date.now) {}
+  constructor(private fetcher: typeof fetch = fetch, private now: () => number = Date.now,
+    private readonly retryStore?: RetryStore) {}
+
+  /** 持久化的退避窗口来自 globalState（异步）；只装载一次，并让 request() 保持同步返回，
+   * 现有测试证明的单飞同一性（request === request）不变。 */
+  private loadRetryAt(): Promise<void> {
+    return this.retryLoaded ??= Promise.resolve().then(() => this.retryStore?.load()).then(at => {
+      if (typeof at === "number" && Number.isFinite(at) && at > this.retryAt && at > this.now() && at <= this.now() + 86400000) this.retryAt = at;
+    }, () => { /* 读不到持久化退避时，仍按本进程内存退避执行。 */ });
+  }
 
   request(url: string, maxBytes: number, force = false): Promise<Buffer> {
     const pending = this.inflight.get(url);
     if (pending) return pending;
-    const cached = this.cache.get(url);
-    if (!force && cached && cached.until > this.now()) return Promise.resolve(cached.bytes);
-    if (this.retryAt > this.now()) return Promise.reject(new Error(`GitHub 限流，${new Date(this.retryAt).toISOString()} 后重试`));
-    const promise = this.fetchBytes(url, maxBytes, cached).finally(() => this.inflight.delete(url));
+    const promise = this.loadRetryAt().then(() => {
+      const cached = this.cache.get(url);
+      if (!force && cached && cached.until > this.now()) return cached.bytes;
+      if (this.retryAt > this.now()) throw new RateLimitedError(`GitHub 限流；${new Date(this.retryAt).toISOString()} 后重试。`, this.retryAt);
+      return this.fetchBytes(url, maxBytes, cached);
+    }).finally(() => this.inflight.delete(url));
     this.inflight.set(url, promise);
     return promise;
   }
@@ -118,7 +131,12 @@ export class PreviewReleaseClient {
           const resetMs = primary && reset && /^\d+$/.test(reset) ? Number(reset) * 1000 - this.now() : 0;
           this.retryAt = this.now() + Math.min(24 * 3600000, Math.max(60000, retryMs || 0, Number.isFinite(resetMs) ? Number(resetMs) : 0,
             Math.min(1800000, 60000 * 2 ** Math.min(this.failures - 1, 5))));
-          throw new Error(`GitHub 检查失败：HTTP ${response.status}（${endpoint}），限流至 ${new Date(this.retryAt).toISOString()} 后重试`);
+          // 已确证的限流是“延后”，不是“检查失败”：与 Windows 共同实现抛同一个 RateLimitedError，
+          // 并且先等退避记录落盘，重载窗口后仍在窗口内继续等待。
+          let persisted = true;
+          if (this.retryStore) { try { await this.retryStore.save(this.retryAt); } catch { persisted = false; } }
+          throw new RateLimitedError(`GitHub HTTP ${response.status}（${endpoint}）；限流至 ${new Date(this.retryAt).toISOString()} 后重试。`
+            + (this.retryStore && !persisted ? "（退避记录保存失败：重启后可能需按下一次响应重新退避）" : ""), this.retryAt);
         }
         throw new Error(`GitHub 检查失败：HTTP ${response.status}（${endpoint}）${response.status === 403 ? "，访问被拒绝；未确认限流" : ""}`);
       }
