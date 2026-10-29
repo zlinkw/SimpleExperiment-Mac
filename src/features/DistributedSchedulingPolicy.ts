@@ -8,6 +8,12 @@ export type SchedulingMode = "local_idle" | "server_prequeue";
 // Local execution, artifact and log observations each retain their own age.
 // Log work has a separate budget and never extends these twenty seconds.
 export const PROGRESS_FRESHNESS_MS = 20_000;
+/** Confirmed completed batches do not need an endless idle-GPU inventory loop. */
+export function lowTrafficQueueNeedsObservation(queue: DistributedQueue): boolean {
+  return Boolean(queue.deferred?.some(row => row.status !== "superseded")
+    || queue.plans.some(plan => plan.jobs.length < Number(plan.planJobCount || plan.jobs.length)
+      || plan.jobs.some(job => job.stopIntent || job.recallRequested || !hasVerifiedCompletion(plan, job))));
+}
 /** Preparation restricts writers only while the current upload is in flight. */
 export function dispatchPreparationAllowsWorker(workerId: string, root: string, preparation: any, uploads: number): boolean {
   return !uploads || preparation?.root === root && preparation.preparation.ready.has(workerId);
@@ -85,7 +91,7 @@ export function allocateServerPrequeue(queue: DistributedQueue, workers: readonl
     const loads = new Map<string, number>();
     for (const job of plan.jobs) if (job.workerId)
       loads.set(job.workerId, (loads.get(job.workerId) || 0) + 1);
-    for (const job of plan.jobs.filter((job) => !job.manualDispatch && job.status === "pending" && !job.workerId && !job.commandId
+    for (const job of plan.jobs.filter((job) => !job.manualDispatch && !job.automaticWorkerId && job.status === "pending" && !job.workerId && !job.commandId
       && job.localQueueOnly !== true && job.recallRequested !== true)) {
       const target = eligible.filter((worker) => Number(weights[worker.workerId]) > 0).sort((a, b) =>
         ((loads.get(a.workerId) || 0) + 1) / weights[a.workerId]

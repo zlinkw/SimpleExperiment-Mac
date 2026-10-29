@@ -119,7 +119,7 @@ test('目录级快照迁移：目标已有值获胜、仅白名单字节复制�
   assert.ok(fs.existsSync(marker),'完成后持久 marker 即已落定事实（租约协议，journal 已移除）');
   assert.ok(!fs.existsSync(marker+'.importing'),'不再有 journal 残留协议');
   // 返修#3：终态释放（新位置文件被删）后，全新 host/第二窗口凭持久 marker 绝不重导旧值。
-  await fsp.rm(path.join(target,good),{force:true});await fsp.rm(path.join(target,broken),{force:true});
+  require("../_helpers/retainFixtureTarget.cjs")(projectRoot,path.join(target,good),"file");require("../_helpers/retainFixtureTarget.cjs")(projectRoot,path.join(target,broken),"file");
   await P.ensureProjectDirectorySnapshotsMigrated(projectRoot,legacyDir,target,/^[a-f0-9]{48}\.json$/,marker);
   assert.deepEqual((await fsp.readdir(target)).sort(),[],'已释放记录不会被重新导入（复活）');
   assert.equal(fs.readFileSync(path.join(legacyDir,good),'utf8'),'{"v":1}','旧 legacy 字节全程不动');

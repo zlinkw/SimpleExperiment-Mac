@@ -4,6 +4,8 @@ import * as fs from "node:fs";
 
 // CLI --instance wins over SIMPLE_CLI_INSTANCE_ID; set once by runSimpleCli before any dispatch.
 let cliInstancePin = "";
+let cliWorkspace = "";
+export function setApiWorkspace(value: string): void { cliWorkspace = String(value || "").trim(); }
 export function setInstancePin(value: string): void {
   cliInstancePin = String(value || "").trim();
 }
@@ -32,7 +34,7 @@ export function discoveryOrNull(): Record<string, unknown> | null {
  */
 export async function callApi(method: string, params: Record<string, unknown> = {}): Promise<unknown> {
   try {
-    return await callPluginRpc("experiment", method, params, cliInstancePin || undefined);
+    return await callPluginRpc("experiment", method, params, cliInstancePin || undefined, cliWorkspace ? { workspace: cliWorkspace } : undefined);
   } catch (error) {
     const rpc = error as { apiCode?: number; apiData?: unknown; message?: string };
     if (Number(rpc.apiCode) === 2001) throw envError(String(rpc.message || "CONFIRM_REQUIRED"), JSON.stringify(rpc.apiData ?? {}));

@@ -470,6 +470,8 @@ test("operation and task progress updates patch stable rows in place", () => {
       }[selector] || null;
     },
   };
+  const submissionStatus = leaf("提交中 · live 1");
+  submissionStatus.setAttribute("data-submission-status", "operation-a");
   const taskStatus = leaf("运行中");
   const taskProgress = leaf("epoch 1");
   const taskProgressPill = leaf("");
@@ -488,7 +490,7 @@ test("operation and task progress updates patch stable rows in place", () => {
   let operationPatchVisits = 0;
   let taskPatchVisits = 0;
   browser.element("operationList").querySelectorAll = (selector) => { if (selector === "[data-operation-render-key]") operationPatchVisits += 1; return selector === "[data-operation-render-key]" ? [operationCard] : []; };
-  browser.element("executionPlanList").querySelectorAll = (selector) => { if (selector === "[data-task-render-key]") taskPatchVisits += 1; return selector === "[data-task-render-key]" ? [taskCard] : []; };
+  browser.element("executionPlanList").querySelectorAll = (selector) => { if (selector === "[data-task-render-key]") taskPatchVisits += 1; return selector === "[data-task-render-key]" ? [taskCard] : selector === "[data-submission-status]" ? [submissionStatus] : []; };
   const script = extractScript(renderStampedPanelHtml());
   vm.runInNewContext(script, browser.context, { filename: "panel-render-health.js" });
   const onMessage = browser.windowListeners.get("message")?.values().next().value;
@@ -518,6 +520,7 @@ test("operation and task progress updates patch stable rows in place", () => {
   assert.equal(browser.element("executionPlanList").innerHTMLWrites, initialTaskWrites);
   assert.equal(operationProgress.textContent, "进度 epoch 3");
   assert.equal(operationMessage.textContent, "live 3");
+  assert.equal(submissionStatus.textContent, "提交中 · live 3");
   assert.equal(operationText.textContent, "执行中");
   assert.equal(taskProgress.textContent, "epoch 3");
 

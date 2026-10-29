@@ -5,7 +5,7 @@ export type QueueCard = { workerId: string; gpuId: string; weight: number };
 // r82：隔离暂停 job 不是"剩余可排队 job"——服务器队列只在安全准入子集上重算配额，
 // 暂停 job 保持可见 pending 且不占用任何派发身份（标记不得被派发路径清除）。
 export const remainingQueueJobs = (plan: QueuedPlan) => plan.resultPathPolicy === "declared" && !plan.executionModeBlocked && !plan.recoveryConflict
-  ? plan.jobs.filter(job => job.status === "pending" && !job.workerId && !job.commandId && !job.manualDispatch && !job.recallRequested
+  ? plan.jobs.filter(job => job.status === "pending" && !job.workerId && !job.commandId && !job.manualDispatch && !job.automaticWorkerId && !job.recallRequested
     && !job.stopIntent && !job.unavailable && !job.retainExistingOutputs && !job.outputIsolationBlocked) : [];
 
 /** Queue weights are configured per-card quotas, independent of today's free slots. */

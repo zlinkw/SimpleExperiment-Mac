@@ -96,6 +96,7 @@ const progressMethod = sourceBlock("serverPlanProgress() {", "async refreshServe
   .replace(/}\s+async /g, "}, async ").replace(/,\s*$/, "").trim();
 const methodSource = `${queueMethods},\n${progressMethod}`;
 const sandbox = {
+    DispatchHandoffGate: require("../../dist/features/DispatchHandoffGate.js"),
   DistributedPlanQueue: queueApi,
   DistributedSchedulingPolicy: schedulingPolicy,
   DistributedPlanQueue_1: queueApi,
@@ -507,4 +508,33 @@ test("generation cancellation during rename retry prevents publication", async (
     assert.equal(memoryFiles.get(file), initial);
     assert.equal(host.serverPlanProgress().length, 28);
   } finally { memoryFs.rename = rename; }
+});
+
+// r18-B 现场证据：项目队列 2.09 MB 时，空转的 500ms 观察轮次仍每轮提交同一队列——12 秒窗口内 43 次
+// 落盘、43 次字节与上一版完全相同（约 3.6 次/秒、≈7 MB/s），调度轮次因此拖长，等待原派发结束的调用方
+// （代码同步 10 秒上限）持续超时。逐字节未变即没有新事实需要持久化：只发布快照，不再产生 staging 写。
+test('an observation-only queue save whose bytes are unchanged publishes the snapshot without another staging write', async () => {
+  memoryFiles.clear();
+  // 夹具先经过生产写入器一次真实提交：磁盘上就是写入器自己的规范字节（键序与 attempt=0 等内部零值已归一），
+  // 否则第一轮只是一次规范化写入，测不到“空转轮次不再重写”。
+  memoryFiles.set(file, queueApi.serializeDistributedQueue(makeQueue(6)));
+  const host = makeHost();
+  await host.saveDistributedQueue(root, await host.loadDistributedQueue(root), { queueGeneration: host.distributedQueueGeneration });
+  const original = memoryFiles.get(file);
+  const signature = queueApi.distributedQueueDiskSignature(original);
+  const before = renameCount;
+  // 与 500ms tick 同一取数方式：先取带磁盘签名的最新可信队列再回写，不伪造已过期的 base 签名。
+  for (let round = 0; round < 3; round++) {
+    await host.saveDistributedQueue(root, await host.loadDistributedQueue(root), { queueGeneration: host.distributedQueueGeneration });
+    assert.equal(host.distributedQueueDiskSignature, signature, 'the published signature still binds the exact disk bytes');
+  }
+  assert.equal(renameCount, before, 'unchanged queue bytes must not be rewritten again');
+  assert.equal(memoryFiles.get(file), original, 'the queue file keeps its exact previous bytes');
+  assert.equal(host.distributedQueueStorageDiagnostics.status, 'ready');
+  assert.ok(host.distributedQueueCache, 'the published cache still reflects the leased disk read');
+  const changed = await host.loadDistributedQueue(root);
+  changed.plans[0].jobs[0].status = 'running';
+  await host.saveDistributedQueue(root, changed, { queueGeneration: host.distributedQueueGeneration });
+  assert.equal(renameCount, before + 1, 'a real queue change still commits exactly once');
+  assert.equal(JSON.parse(memoryFiles.get(file)).plans[0].jobs[0].status, 'running');
 });

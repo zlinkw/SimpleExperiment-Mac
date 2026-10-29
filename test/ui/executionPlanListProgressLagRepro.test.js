@@ -7,22 +7,9 @@ const { renderPanelHtml } = require("../../dist/ui/PanelHtml.js");
 // Requirement regression for task ui-plan-gpu-progress-20261024, item 4:
 // "Plan 列表状态根据运行进度已有状态及时更新，不新增服务器请求."
 //
-// Pinned production chain (PanelHtml.legacy.ts @ aa663bb1…, symbols re-verified):
-//  - renderExecutionSection L15067 → renderExecutionPlanListIfChanged L15041:
-//    full rerender ONLY when executionPlanListKey(state) changes; NO DOM patch
-//    path for plan rows (unlike renderOperationSectionIfChanged L15048 which
-//    calls patchExecutionProgressDom even on key hit — the operation rows ARE
-//    live-patched, which is why the operation card moves and the plan row does not).
-//  - executionRenderKeysForState L(?): active submission contributes
-//    { status, startedAt, ..., message: active ? "" : row.message } — stage and
-//    active message NEVER enter the planList key.
-//  - statusText L~14618: `submission ? executionSubmissionLabel(submission) : …`
-//    and executionSubmissionLabel L14453 returns a fixed "提交中"/"等待继续提交"
-//    label that never consumes row.stage/message; countText during submission is
-//    fixed "提交中 · 待生成 job". Job counts only change with data.distributedPlans
-//    (host queue/refresh state), never from the live localOperations stage.
-// Root cause = R1 (key excludes active stage) + R2 (builder ignores stage).
-// Fix must stay on the same-source projection; no new server requests allowed.
+// The rendered inline chain must project the current submission stage into both
+// expanded and folded rows, including a structural-key hit. Status/revision
+// transitions remain separate guards below. No server request is needed.
 
 function inlineFunction(name) {
   const html = renderPanelHtml();
@@ -149,19 +136,32 @@ function planListKeyOf(context, rows, extra) {
   return context.executionRenderKeysForState(state).planList;
 }
 
-test("REPRO-4A planList key must change when the displayed progress text changes (R1)", () => {
+test("REPRO-4A current progress reaches plan rows on a structural-key hit (R1)", () => {
   const context = keyContext();
   const early = planListKeyOf(context, [submissionRow({})]);
-  const later = planListKeyOf(context, [submissionRow({
+  const row = submissionRow({
     stage: "dispatch",
     message: "调度已接收，正在等待 Agent nwpu3 终态…",
     updatedAt: "2026-10-24T10:03:00.000Z",
-  })]);
-  // The plan row visibly carries progress text in the operation card; once the
-  // list is required to reflect 运行进度 已有状态, a changed displayed stage MUST
-  // trigger a list rerender. Today stage/active message are excluded → key equal.
-  assert.notEqual(early, later,
-    "planList key must not stay identical when the same active submission advances its stage/message");
+  });
+  assert.equal(early, planListKeyOf(context, [row]));
+  const nodes = Object.fromEntries(["status", "count", "note"].map(kind => [kind,
+    [0, 1].map(() => ({ textContent: "old stage", getAttribute: () => row.operationId }))]));
+  context.el = id => id === "executionPlanList" ? {
+    querySelectorAll: selector => nodes[/^\[data-submission-(status|count|note)\]$/.exec(selector)?.[1]] || [],
+  } : null;
+  context.lastExecutionPlanListKey = early;
+  context.renderExecutionPlanList = () => assert.fail("a structural-key hit uses the actual DOM patch path");
+  vm.runInNewContext([
+    inlineConst("PLAN_EXECUTION_PHASE_LABELS"),
+    ...["executionSubmissionProgressText", "executionSubmissionLabel", "executionPlanListKey",
+      "patchExecutionProgressDom", "renderExecutionPlanListIfChanged"].map(inlineFunction),
+  ].join("\n"), context);
+  context.renderExecutionPlanListIfChanged({ __rows: [row], distributedPlans: [], planArtifactSyncStatuses: {} }, false);
+  for (const leaves of Object.values(nodes)) for (const leaf of leaves) {
+    assert.match(leaf.textContent, /调度已接收/, "expanded/folded submission text must show the latest same-source message");
+    assert.notEqual(leaf.textContent, "old stage");
+  }
 });
 
 test("BASELINE 4B planList key still detects status transitions and reconcile-evidence flips", () => {

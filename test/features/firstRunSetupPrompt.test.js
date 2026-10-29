@@ -89,9 +89,6 @@ test("first activation offers the exact missing setup or SimpleSFTP action", () 
   assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects" }), check({}), "retired Hub fields cannot change Worker setup readiness");
   assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", enabled: true }] }), false);
   assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", enabled: false }] }), true);
-  // Mac 适配：Mac 端 Worker 就绪以 Termius 转发端点字段完整为准（Windows 用 savedSessionPath），
-  // 契约同为“会话/端点 + 项目父目录齐备才算完成”。
-  assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", workerHost: "10.0.0.2", workerUser: "zlk", localForwardPort: 18080, remoteAgentPort: 8080, agentProjectDir: "/srv/worker", enabled: true }] }), true);
-  // Mac 适配：Mac 端 Worker 传输缺口按 Termius 转发端点表述（Windows 为 Xshell 会话），结构断言一致。
-  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.missing({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", displayName: "GPU 服务器", enabled: true }] }))), ["GPU 服务器 Termius 转发端点", "GPU 服务器 项目父目录"]);
+  assert.equal(check({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", workerHost: "worker.example", workerUser: "research", agentProjectDir: "/srv/worker", enabled: true }] }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(sandbox.missing({ savedSessionPath: "hub.xsh", agentProjectDir: "/srv/projects", workerTunnels: [{ id: "w1", displayName: "GPU 服务器", enabled: true }] }))), ["GPU 服务器 服务器地址", "GPU 服务器 登录用户名", "GPU 服务器 项目父目录"]);
 });

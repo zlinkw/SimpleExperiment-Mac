@@ -107,7 +107,7 @@ test("renderCommandPhaseLine keeps plan commands out of the card phase lines (no
 
 test("automatic tmux refresh stays out of command progress and releases a lost reply", async () => {
   const html = renderPanelHtml();
-  const from = html.indexOf("async function refreshTmuxList()");
+  const from = html.indexOf("async function refreshTmuxList(");
   const to = html.indexOf("function tmuxResolveCaptureTarget", from);
   const sent = [];
   const timers = new Map();
@@ -119,6 +119,8 @@ test("automatic tmux refresh stays out of command progress and releases a lost r
     tmuxInitialRetryCount: 0,
     tmuxSelectedWorkerId: "configured-worker", pendingActionsById: {}, pendingActionTimeouts: {},
     el: () => ({ textContent: "" }), createClientActionId: () => "poll-action",
+    // Normal mode: the low traffic display gate allows automatic rounds; this case is about progress noise.
+    displayAutoAllowed: () => true,
     vscode: { postMessage: (payload) => sent.push(payload) },
     setTimeout: (callback) => { timers.set(++timerId, callback); return timerId; },
     clearTimeout: (id) => timers.delete(id),

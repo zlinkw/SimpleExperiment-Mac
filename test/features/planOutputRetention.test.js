@@ -254,10 +254,11 @@ test("Host cleanup is manual with double-confirmed guarded deletion; background 
     distributedOutputHashes: async (_source, paths) => Object.fromEntries(paths.map((file) => [file, hash])),
     async assertSshTransportIdentities() {},
     async updateSyncScopeHolds(_root, fn) { fn(holds); },
-    async deleteSyncScopeRemoteCopy(id, server, relativePath, directory) {
+    async deleteSyncScopeRemoteCopy(consumerRoot, id, server, relativePath, directory) {
       assert.equal(directory, true); assert.equal(server.remotePath, root);
+      assert.equal(consumerRoot, 'C:/project', 'the local consuming project root must be carried, never the remote node root');
       assert.ok(['worker-a','worker-b'].includes(id)); assert.ok(relativePath.startsWith('work_dirs/'));
-      apiCalls.push({id, server, relativePath, directory}); removed.add(id + ':' + relativePath);
+      apiCalls.push({consumerRoot, id, server, relativePath, directory}); removed.add(id + ':' + relativePath);
     },
     async simpleSftpApiCall() { assert.fail('retention must delegate to the guarded cleanup API, never call legacy sync.deletePath'); },
     recordActionError(value) { errors.push(value); }, postState() {},
@@ -269,7 +270,7 @@ test("Host cleanup is manual with double-confirmed guarded deletion; background 
   assert.deepEqual(errors, []);
   assert.equal(reviews, 1);
   assert.equal(apiCalls.length, 12);
-  assert.ok(apiCalls.every(value => value.directory === true && value.server.remotePath === root));
+  assert.ok(apiCalls.every(value => value.directory === true && value.server.remotePath === root && value.consumerRoot === 'C:/project'));
   assert.equal(Object.keys(holds).length, 6);
   assert.ok(state.plans[0].jobs.every((job) => job.outputRetiredAt && !job.artifacts));
   assert.ok(state.plans[1].jobs.every((job) => !job.outputRetiredAt && job.artifacts));

@@ -28,7 +28,7 @@ test("worker-only server setup does not require Hub session or project root", ()
   const sandbox = { require: (id) => id === "../platform/Terminal" ? require("../../dist/platform/Terminal.js") : require(id) };
   vm.createContext(sandbox);
   vm.runInContext(`${extractFunction("serverSetupMissingItems")}\nthis.check = serverSetupMissingItems;`, sandbox);
-  const missing = sandbox.check({ savedSessionPath: "", agentProjectDir: "", workerTunnels: [{ id: "w1", workerHost: "10.0.0.2", workerUser: "zlk", localForwardPort: 18080, remoteAgentPort: 8080, agentProjectDir: "/srv/project" }] }, false);
+  const missing = sandbox.check({ savedSessionPath: "", agentProjectDir: "", workerTunnels: [{ id: "w1", workerHost: "worker.example", workerUser: "research", agentProjectDir: "/srv/project" }] }, false);
   assert.equal(missing.length, 0);
 });
 

@@ -20,6 +20,50 @@ function loadSourceRenderer() {
 
 const renderPanelHtml = loadSourceRenderer();
 
+test("low traffic tmux buttons request one manual list/capture round with the selected identity", async () => {
+  const html=renderPanelHtml(),script=extractScripts(html).join("\n"),ast=ts.createSourceFile('tmux-buttons.js',script,ts.ScriptTarget.ES2022,true,ts.ScriptKind.JS);
+  const names=new Set(['refreshTmuxList','refreshTmuxCapture','displayAutoAllowed']),functions=[];let click;
+  function visit(node){
+    if(ts.isFunctionDeclaration(node)&&names.has(node.name?.text))functions.push(node.getText(ast));
+    if(ts.isCallExpression(node)&&node.expression.getText(ast)==='document.addEventListener'&&node.arguments[0]?.text==='click'&&node.arguments[1]?.getText(ast).includes('data-distributed-retry'))click=node.arguments[1].getText(ast);
+    ts.forEachChild(node,visit);
+  }
+  visit(ast);assert.equal(functions.length,names.size);assert.ok(click);
+  for(const kind of ['list','capture'])assert.match(html,new RegExp('data-tmux-refresh="'+kind+'"'));
+  const posted=[],elements=new Map(),el=id=>{if(!elements.has(id))elements.set(id,{textContent:'',dataset:{}});return elements.get(id);};
+  const sandbox={document:{hidden:false},el,clearTimeout(){},setTimeout:()=>1,vscode:{postMessage:m=>posted.push(m)},
+    tmuxListBusy:false,tmuxListRequestId:0,tmuxListPendingWorkers:new Set(),tmuxListOrigin:'auto',tmuxListTimeout:0,
+    tmuxSelectedWorkerId:'worker-a',tmuxCaptureOrigin:'auto',tmuxCaptureBusy:new Set(),tmuxLastCaptureTarget:'',
+    tmuxResolveCaptureTarget:()=> 'session:1.0',lowTrafficModeFromState:()=>({displayAutoRefresh:false}),lastState:{}};
+  vm.createContext(sandbox);vm.runInContext(functions.join('\n')+'\nthis.list=refreshTmuxList;this.capture=refreshTmuxCapture;this.click='+click+';',sandbox);
+  await sandbox.list();await sandbox.capture();assert.equal(posted.length,0);
+  for(const kind of ['list','capture'])sandbox.click({preventDefault(){},stopPropagation(){},target:{closest:s=>s==='button[data-tmux-refresh]'?{dataset:{tmuxRefresh:kind}}:null}});
+  assert.deepEqual(posted.map(m=>m.command),['fetchTmuxList','fetchTmuxCapture']);
+  assert.ok(posted.every(m=>m.origin==='user'&&m.workerId==='worker-a'));assert.equal(posted[0].requestId,1);assert.equal(posted[1].window,'session:1.0');
+});
+
+test("manual Xshell button survives the rendered command guard and forwards its click", () => {
+  const html=renderPanelHtml(),script=extractScripts(html).join("\n");
+  const parsed=ts.createSourceFile("xshell-click.js",script,ts.ScriptTarget.ES2022,true,ts.ScriptKind.JS);
+  let commands,capabilities,guard,click;
+  function visit(node){
+    if(ts.isVariableStatement(node)&&node.declarationList.declarations.some(d=>d.name.getText(parsed)==='webviewHandledCommands'))commands=node.getText(parsed);
+    if(ts.isVariableStatement(node)&&node.declarationList.declarations.some(d=>d.name.getText(parsed)==='uiCapabilityMap'))capabilities=node.getText(parsed);
+    if(ts.isFunctionDeclaration(node)&&node.name?.text==='disableUnsupportedCommandButtons')guard=node.getText(parsed);
+    if(ts.isCallExpression(node)&&node.expression.getText(parsed)==='document.addEventListener'&&node.arguments[0]?.text==='click'&&node.arguments[1]?.getText(parsed).includes('data-distributed-retry'))click=node.arguments[1].getText(parsed);
+    ts.forEachChild(node,visit);
+  }
+  visit(parsed);assert.ok(commands&&guard&&click);
+  assert.match(html,/data-command="openXshell"[^>]*>打开终端指引/);
+  const button={dataset:{command:'openXshell'},disabled:false,textContent:'打开终端指引',closest:()=>null,getAttribute:()=>null,setAttribute(){}};
+  const sent=[],sandbox={document:{querySelectorAll:()=>[button]},setNativeTitle(){},hidePinContextMenu(){},payloadFromButton:()=>({}),
+    pendingKeyForButton:()=> 'openXshell',pendingButtonKeys:new Set(),retryableTransferCommand:()=>false,commandNeedsLoading:()=>false,vscode:{postMessage:value=>sent.push(value)}};
+  vm.createContext(sandbox);vm.runInContext(capabilities+'\n'+commands+'\n'+guard+'\nthis.guard=disableUnsupportedCommandButtons;this.click='+click+';',sandbox);
+  sandbox.guard();assert.equal(button.disabled,false,'configured Xshell button must not be disabled as an unsupported client command');
+  sandbox.click({preventDefault(){},stopPropagation(){},target:{closest:selector=>selector==='button[data-command]'?button:null}});
+  assert.equal(sent.length,1);assert.equal(sent[0].command,'openXshell');
+});
+
 function extractScripts(html) {
   const scripts = [];
   const expression = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
@@ -160,4 +204,55 @@ test('an unassigned job renders an empty command identity all the way into the a
  const html=vm.runInNewContext(line+';manualControls',{status:'pending',job:{index:5},manualPlan:'p',manualSelection:new Map(),escAttr:esc});
  const commands=[...html.matchAll(/data-command-id="([^"]*)"/g)].map(m=>m[1]);
  assert.deepEqual(commands,['','']);
+});
+
+test('低流量开关渲染在顶栏并接回收执与状态回显',()=>{
+ const html=renderPanelHtml();
+ const script=extractScripts(renderPanelHtml()).join('\n');
+ const actions=html.indexOf('class="topbar-actions"');
+ const legend=html.indexOf('class="statusLegend"');
+ const toggle=html.indexOf('data-command="toggleLowTrafficMode"');
+ const bootstrap=html.indexOf('data-command="bootstrapProject"');
+ assert.ok(actions>=0&&legend>=0&&toggle>=0&&bootstrap>=0,'topbar actions, status legend, toggle and bootstrap must all render');
+ assert.ok(legend<actions&&actions<toggle&&toggle<bootstrap,'the toggle must live inside the topbar actions, before the first existing action button');
+ assert.equal([...html.matchAll(/data-command="toggleLowTrafficMode"/g)].length,1,'exactly one low traffic toggle');
+ assert.match(html,/id="lowTrafficModeButton"/,'the toggle needs a stable id for the state writer');
+ assert.match(html,/data-command="toggleLowTrafficMode"[^>]*aria-pressed="false"/,'the toggle starts with an explicit pressed state');
+ assert.match(html,/data-command="toggleLowTrafficMode"[^>]*disabled/,'the toggle stays disabled until the host reports the real value');
+ assert.match(html,/低流量：读取中/,'the button must not claim a value before the first authoritative state');
+ assert.match(html,/低流量模式（全局偏好/,'the button must explain that the preference is global');
+ assert.match(html,/\.lowTrafficToggle\[aria-pressed="true"\]/,'the pressed state needs its own visible style');
+ assert.match(script,/command === "toggleLowTrafficMode"/,'clicking must submit the dedicated command');
+ assert.match(script,/payload\.requestId\s*=\s*"ltm-/,'each submission carries its own request id');
+ assert.match(script,/payload\.documentGeneration\s*=\s*panelDocumentGeneration/,'the submission must be bound to the current panel document');
+ assert.match(script,/"lowTrafficModeUpdated"/,'the panel must consume the dedicated receipt');
+ assert.match(script,/function applyLowTrafficModeState\(state\)/,'state must drive the button, not the click handler');
+ assert.match(script,/const mode\s*=\s*lowTrafficModeFromState\(state\)/,'the button reads the host echo instead of a local copy');
+ assert.match(script,/未收到回执/,'a lost receipt must be reported instead of silently guessing');
+ assert.match(script,/设置失败/,'a refused change must surface the host reason');
+});
+
+test('低流量下展示区自动请求为0且手动刷新有独立入口与采样时间提示',()=>{
+ const html=renderPanelHtml();
+ const script=extractScripts(renderPanelHtml()).join('\n');
+ assert.match(html,/id="tmuxAutoNotice"/,'the tmux list area needs a persistent auto refresh notice');
+ assert.match(html,/id="tmuxCaptureNotice"/,'the capture area needs its own notice');
+ assert.match(script,/function displayAutoAllowed\(origin\)/,'one gate decides whether an automatic display read may run');
+ assert.match(script,/if \(origin === "user"\) return true;/,'only an explicit click may bypass the gate');
+ assert.match(script,/if \(!displayAutoAllowed\(origin\)\) return;/,'both tmux readers go through the gate');
+ assert.match(script,/refreshTmuxList\("user"\)/,'the 列出 sessions button is a real manual entry');
+ assert.match(script,/refreshTmuxCapture\("user"\)/,'the 刷新 capture button is a real manual entry');
+ assert.match(script,/btn\.addEventListener\("click", function\(\)\{ refreshTmuxCapture\("user"\); \}\)/,'the button handler passes the user origin, not the click event');
+ assert.match(script,/listBtn\.addEventListener\("click", function\(\)\{ refreshTmuxList\("user"\); \}\)/,'the list button handler passes the user origin, not the click event');
+ assert.match(script,/if \(!\(Number\(tmuxPollIntervalMs\) > 0\)\) return;/,'a zero display cadence must not start a timer at all');
+ assert.match(script,/低流量：自动刷新已关闭；尚未手动刷新/,'an area without any successful manual read says 尚未手动刷新');
+ assert.match(script,/本模式尚未手动刷新/,'cached normal-mode data is shown with its sample time, never as fresh');
+ assert.match(script,/上次手动刷新 /,'a successful manual read shows its timestamp');
+ assert.match(script,/recordDisplaySample\("tmuxList", item\.fetchedAt, tmuxListOrigin === "user"\)/,'only a user round rewrites the manual timestamp');
+ assert.match(script,/recordDisplaySample\("tmuxCapture:/,'capture keeps its own per-window sample record');
+ // Selection, worker switch, visibility recovery and the initial timers are automatic: none of them
+ // may pass the user origin, otherwise low traffic mode would fetch display data without a click.
+ const automatic = script.split('\n').filter(line => /refreshTmuxList\(\);|refreshTmuxCapture\(\);/.test(line));
+ assert.ok(automatic.length >= 4, 'the automatic call sites (poll, selection, visibility, retry) must still exist');
+ for (const line of automatic) assert.doesNotMatch(line, /"user"/, 'automatic display call site must not be marked user: ' + line.trim());
 });

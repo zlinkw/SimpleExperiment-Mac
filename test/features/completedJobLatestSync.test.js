@@ -3,6 +3,69 @@ require('../_helpers/registerTsRequire');
 const {CompletedJobSyncHost}=require('../../src/extension/CompletedJobSyncHost.ts'),{canonicalProjectId}=require('../../src/features/DistributedPlanQueue.ts');
 const {buildScopeStatuses,scopeInventoryPathAllowed}=require('../../src/features/SyncScopeStatus.ts');
 const {planLatestWorkerMerge}=require('../../src/features/SyncLatestMerge.ts'),{runSyncScopeBatch}=require('../../src/features/SyncScopeBatch.ts');
+test('one enabled Worker skips artifact synchronization before joining any old run or reading queue state',async()=>{
+ const h={workerCodeSyncTargets:()=>[{id:'current'}],completedJobSyncRuns:new Map([['/fixture',{key:'old',promise:Promise.resolve({synced:99,errors:['old']})}]]),
+  loadDistributedQueue:()=>assert.fail('single-Worker mode must not inspect the artifact synchronization queue')};
+ const report=await new CompletedJobSyncHost(h,'/fixture',()=>true).run(['.'],{force:true,jobs:[{planId:'p',index:0,commandId:'c'}]});
+ assert.deepEqual(report,{synced:0,excluded:0,errors:[]});assert.equal(h.completedJobSyncRuns.size,1,'another active record remains untouched');
+});
+test('single-Worker host entries stop before artifact follow-up preparation, queue reads or remote observations',async()=>{
+ const text=fs.readFileSync(path.resolve(__dirname,'../../src/extension/legacy.ts'),'utf8'),tree=ts.createSourceFile('legacy.ts',text,ts.ScriptTarget.Latest,true);
+ const names=['artifactSyncFromUi','syncCompletedPlanArtifacts','refreshPlanArtifactSyncStatus','syncDistributedJobArtifacts'],methods=new Map();
+ function visit(node){if(ts.isMethodDeclaration(node)&&names.includes(node.name.getText(tree)))methods.set(node.name.getText(tree),node.getText(tree));ts.forEachChild(node,visit);}visit(tree);
+ for(const name of names){
+  const method=vm.runInNewContext(ts.transpileModule('class Host{'+methods.get(name)+'};Host.prototype.'+name,{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText);
+  const host=new Proxy({workerCodeSyncTargets:()=>[{id:'only'}]},{get(target,key){if(key in target)return target[key];assert.fail(name+' unexpectedly accessed '+String(key));}});
+  const result=await method.call(host,{});if(name==='artifactSyncFromUi')assert.equal(result.status,'completed');
+ }
+});
+test('two completed Plans use one archive per Worker pair and keep independent job results',async()=>{
+ const f=fixture();f.jobs[1].status='completed';
+ for(const file of ['work_dirs/p/job1/model.pth','work_dirs/p/job1/artifact_manifest.json','tmp/result/job1.csv'])f.inventory.a[file]={sha256:'c'.repeat(64),size:3,modifiedAtMs:1};
+ const first=f.queue.plans[0];first.jobs=[f.jobs[0]];f.queue.plans.push({...first,id:'second-plan',planFile:'plans/second.yaml',jobs:[f.jobs[1]]});
+ const report=await f.run();assert.equal(report.synced,2);assert.deepEqual(report.errors,[]);
+ assert.equal(f.transfers.length,2,'one compressed transfer for each of a→b and a→c');
+ assert.ok(f.transfers.every(row=>row.relativePaths.some(file=>file.includes('job0'))&&row.relativePaths.some(file=>file.includes('job1'))));
+ for(const job of f.jobs){assert.equal(job.latestArtifactSync.state,'synced');assert.ok(Object.keys(job.artifacts).every(file=>file.includes('job'+job.index)));}
+ assert.ok(f.transfers.every(row=>row.retentionKey.startsWith('job-artifacts-batch:')));
+ assert.equal(f.h.activeArtifactSyncScopes.size,0);
+});
+
+function completedPair(){const f=fixture();f.jobs[1].status='completed';giveJob1Source(f);return f;}
+test('combined transport retains both exact scope guards through transfer and fresh verification, with independent corruption results',async()=>{
+ const f=completedPair(),transfer=f.h.simpleSftpApiCall,inventory=f.h.verifiedSftpProjectInventory;
+ const guards=()=>assert.equal(f.h.activeArtifactSyncScopes.size,2,'both job scopes remain protected until the batch finishes');
+ f.h.simpleSftpApiCall=async(...args)=>{guards();await transfer(...args);const p=args[1];if(p.destination.id==='b')f.inventory.b['work_dirs/p/job0/model.pth'].sha256='e'.repeat(64);};
+ f.h.verifiedSftpProjectInventory=async(...args)=>{guards();return inventory(...args);};
+ await f.run();
+ assert.equal(f.jobs[0].latestArtifactSync.state,'partial');assert.match(f.jobs[0].artifactError,/文件内容与本次最新产物不符/);
+ assert.equal(f.jobs[1].latestArtifactSync.state,'synced','a sibling is not failed by another member’s corrupt output');
+ assert.equal(f.h.activeArtifactSyncScopes.size,0);assert.equal(f.jobs[0].status,'completed');
+});
+test('combined transport lost response retries only remaining deltas with the same full-member identity',async()=>{
+ const f=completedPair();f.setLost();await f.run();
+ assert.ok(f.jobs.every(job=>job.latestArtifactSync.state==='partial'));const first=f.transfers[0];
+ for(const job of f.jobs)job.latestArtifactSync.retryAfter='';
+ await f.run();assert.ok(f.jobs.every(job=>job.latestArtifactSync.state==='synced'));
+ assert.equal(f.transfers.length,2,'the already copied destination is verified, never copied again');
+ assert.equal(f.transfers[1].generation,first.generation);assert.equal(f.transfers[1].retentionKey,first.retentionKey);
+ assert.deepEqual(f.jobs.map(job=>job.commandId),['command0','command1']);assert.equal(f.h.activeArtifactSyncScopes.size,0);
+});
+test('read-only verification of multiple completed jobs never prepares roots or dispatches a combined transfer',async()=>{
+ const f=completedPair();f.h.prepareCodeSyncRootGuards=()=>assert.fail('read-only verification must not prepare roots');
+ await new CompletedJobSyncHost(f.h,f.root,()=>true).run(['.'],{force:true,verifyOnly:true});
+ assert.equal(f.transfers.length,0);assert.ok(f.jobs.every(job=>job.latestArtifactSync.state==='partial'));
+ assert.equal(f.h.activeArtifactSyncScopes.size,0);
+});
+test('conflicting batch ownership fails before transfer and releases every prepared scope',async()=>{
+ const {transferPreparedArtifacts}=require('../../src/features/ArtifactBatchTransfer.ts');let released=0;
+ const rows=['a','b'].map((id,index)=>({member:{retentionKey:id,planId:id,commandId:id,files:{'work_dirs/shared/model':id.repeat(64)}},
+  files:{'work_dirs/shared/model':id.repeat(64)},foreignOnly:[],assertCurrent:async()=>{},release:()=>released++,
+  requests:[{source:{id:'source'},destination:{id:'target'},paths:['work_dirs/shared/model'],guard:async()=>{},
+   transfer:async()=>assert.fail('conflicting ownership cannot create an archive'),inventory:async()=>assert.fail('no transfer to verify')}]}));
+ const results=await transferPreparedArtifacts(rows);assert.equal(released,2);
+ for(const result of results){assert.equal(result.completed.length,0);assert.match(result.errors.join(' '),/ARTIFACT_BATCH_PATH_CONFLICT/);}
+});
 test('completed-job result verification does not inspect unrelated panes while broad discovery stays complete',()=>{
  const {spawnSync}=require('node:child_process');
  const result=spawnSync('python',['-X','utf8',path.join(__dirname,'selectedTaskQuery.fixture.py'),path.join(__dirname,'../../src/runtime/TmuxTaskLifecycle.ts')],{encoding:'utf8',timeout:10000,windowsHide:true});

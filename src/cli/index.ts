@@ -4,7 +4,7 @@ import { businessError } from "./errors";
 import { planValidate } from "./commands/plan";
 import { actionsListCommand, agentsLifecycleCommand, artifactCommand, compareEntry, draftCommand, experimentCommand, gpuCommand, logCommand, metricCommand, planCommand, planCleanupCommand, projectOpsCommand, projectStatus, resourceCommand, resultCommand, serverCommand } from "./commands";
 import { asCliError, envError, EXIT_OK, jsonErrorBody, usageError } from "./errors";
-import { optionalApi, callApi, setInstancePin } from "./api";
+import { optionalApi, callApi, setInstancePin, setApiWorkspace } from "./api";
 import { isExperimentProjectRoot, setProjectRoot, validProjectRoot } from "./data";
 import { writeJson, writeText } from "./format";
 import { doctorCommand, sftpCommand } from "./plugins";
@@ -36,6 +36,7 @@ export async function runSimpleCli(argv: string[]): Promise<number> {
   const { positionals, flags } = parsed;
   // The explicit --instance flag outranks SIMPLE_CLI_INSTANCE_ID for every domain from here on.
   setInstancePin(flags.instance || "");
+  setApiWorkspace(flags.workspace || "");
   const [domain, action, ...rest] = positionals;
   if (!domain || domain === "help" || (flags.help && !action)) {
     writeText(domain && (SIMPLE_DOMAINS.has(domain) || domain === "doctor") ? domainHelp(domain) : SIMPLE_HELP);
@@ -115,7 +116,7 @@ export async function runSimpleCli(argv: string[]): Promise<number> {
     const jobs=String(flags.jobs||"").trim();
     if (!/^\d+(?:,\d+)*$/.test(jobs)) throw usageError("请用 --jobs 明确选择 job 索引，例如 --jobs 0,2。");
     const result=await callApi("tasks.dispatch",{workflowId:String(flags.workflow||""),indices:jobs.split(",").map(Number),
-      workerId:String(flags.worker||""),gpuId:String(flags.gpu??""),confirm:flags.confirm===true,stopRunning:flags["stop-running"]===true});
+      workerId:String(flags.worker||""),...(flags.gpu==="auto"?{gpuSelection:"automatic"}:{gpuId:String(flags.gpu??"")}),confirm:flags.confirm===true,stopRunning:flags["stop-running"]===true});
     writeJson(result);return EXIT_OK;
   }
   if (["config", "state", "flow", "tmux", "panel"].includes(domain)

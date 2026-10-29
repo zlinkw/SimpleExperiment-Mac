@@ -225,7 +225,7 @@ test("a job with an unresolved isolation block never enters the real tick dispat
   const provider = {
     distributedQueueGeneration: 0, distributedPlanStopEpoch: 0, taskLifecycleProtocol: 2,
     distributedLaunchInFlight: new Set(), recordActionError: () => {},
-    lastWorkerProbes: { nwpu3: { status: "ok", capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 } } } },
+    lastWorkerProbes: { nwpu3: { status: "ok", capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1 } } } },
     lastCodeSyncState: { fingerprint: "ec594411", workerVersions: { nwpu3: { fingerprint: "ec594411" } } },
     workerCodeSyncTargets: () => [], isRealtimeMode: () => true,
     projectTopologyAssessment: () => ({ mode: "worker_pool" }),

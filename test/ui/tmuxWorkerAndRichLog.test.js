@@ -8,7 +8,7 @@ const { readSource } = require("../_helpers/sourceReader");
 test("Rich progress redraws replace old lines in the log view", () => {
   const html = renderPanelHtml();
   const start = html.indexOf("function terminalDisplayText(raw)");
-  const end = html.indexOf("async function refreshTmuxCapture()", start);
+  const end = html.indexOf("async function refreshTmuxCapture(", start);
   assert.ok(start >= 0 && end > start);
   const display = vm.runInNewContext(html.slice(start, end) + "; terminalDisplayText;");
   const progress = "start\nTrain 1/3 0%\nVal 1/3 0%\r\x1b[2K\x1b[1A\x1b[2KTrain 1/3 50%\nVal 1/3 50%\r\x1b[2K\x1b[1A\x1b[2KTrain 1/3 100%\nVal 1/3 100%";
@@ -43,7 +43,13 @@ test("tmux overview requests and retains all Worker session lists", () => {
   assert.match(panel, /allWorkers: !jobWorker/);
   assert.match(panel, /tmuxListsByWorker\[item\.workerId\]/);
   assert.match(panel, /data-tmux-worker/);
-  assert.match(host, /Promise\.all\(workerIds\.map\(\(workerId\) => this\.fetchOneTmuxListFromUi\(workerId, _message\?\.requestId\)\)\)/);
+  // r2 C05 + r5: every configured Worker is still requested, but under the low-traffic guard one
+  // Worker key may only have one display round in flight, while each request still publishes a reply
+  // carrying its own requestId. Normal mode keeps one round per request.
+  assert.match(host, /await Promise\.all\(workerIds\.map\(\(workerId\) => this\.fetchTmuxListForCaller\(workerId, _message\?\.requestId\)\)\);/);
+  assert.match(host, /if \(!this\.displayMergeEnabled\(\)\) return this\.fetchOneTmuxListFromUi\(workerId, requestId\);/);
+  assert.match(host, /return this\.publishTmuxList\(workerId, result, requestId\);/);
+  assert.match(host, /private displayReadOnce<T>\(key: string, reader: \(\) => Promise<T>, signal\?: AbortSignal\)/);
 });
 
 test("tmux refresh releases only after every Worker replies and ignores stale replies", () => {
@@ -86,7 +92,7 @@ test("tmux refresh releases only after every Worker replies and ignores stale re
 test("Worker switch immediately replaces stale pane and capture state", () => {
   const html = renderPanelHtml();
   const start = html.indexOf("function selectTmuxWorker(workerId)");
-  const end = html.indexOf("async function refreshTmuxList()", start);
+  const end = html.indexOf("async function refreshTmuxList(", start);
   assert.ok(start >= 0 && end > start);
   const elements = {
     tmuxWorkerSelect: { value: "nwpu3" },

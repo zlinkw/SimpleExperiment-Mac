@@ -131,18 +131,30 @@ test('native anomaly rerun checks fresh evidence, honors cancelled permanent del
     rows:[{id:'r0',disposition:'delete',type:'directory',relativePath:'work/job',node:{id:'w',host:'h'}},{id:'r1',disposition:'delete',type:'file',relativePath:'work/job/m.csv',node:{id:'w',host:'h'}}]},
     targets:{r0:{state:'completed',receipt:{verifiedBy:'path_absence'}},r1:{state:'completed',receipt:{verifiedBy:'path_absence'}}}};}}),
   saveDistributedQueue:async(_r,q,options)=>{stored=options?.mutateLatest?options.mutateLatest(structuredClone({plans:[structuredClone(plan)]})):q;events.push('save');},tickDistributedQueue:async()=>events.push('tick')};
- for(const variant of ['running','clear','cancel','success','missing']){
+ for(const variant of ['running','unknown','foreign','clear','cancel','success','legacy-success','missing']){
   events.length=0;stored=undefined;executes=0;dialogs=0;deleted=false;cancel=variant==='cancel';missing=variant==='missing';
-  state={execution:variant==='running'?'running':'exited',status:variant==='missing'?'unknown':'completed',completionState:variant==='clear'?'verified':'review_required'};
-  if(['running','clear','cancel'].includes(variant))await assert.rejects(retry.call(h,plan,job,'/fixture',()=>true,true),/运行|异常|已取消/);
+  state=require('../../src/features/TaskLifecycle.ts').taskLifecycle({lifecycleProtocol:2,commandId:'c',projectId:'project',workerId:'w',observedAt:new Date().toISOString(),
+    tmux:{dead:!['running','unknown'].includes(variant),exitCode:0,phase:variant==='unknown'?'unknown':'running'},
+    result:{runId:'c',status:'completed',present:true,verified:true,artifactsComplete:true},
+    runtimeDiagnostics:{schemaVersion:1,commandId:'c',runId:'c',state:variant==='clear'?'clear':'anomalous',count:variant==='clear'?0:1,scanComplete:true}});
+  if(variant==='legacy-success')state.status='completed';
+  if(variant==='missing')state.status='unknown';
+  if(['running','unknown','clear','cancel'].includes(variant))await assert.rejects(retry.call(h,plan,job,'/fixture',()=>true,true),/运行|异常|已取消/);
+  else if(variant==='foreign'){
+   // Actual queryTask rejects foreign identity before this method's admission;
+   // exercise the production method's raw observation check as well.
+   const foreignRetry=hostMethod('retryPulledJob',{fs:{readFile:async()=> 'plan'},path,crypto,
+    PulledTaskControl:{queryTask:async()=>({state,task:{observation:{tmux:{dead:true,exitCode:0},result:{runId:'other',identityMatches:false,status:'completed'}}}})}});
+   await assert.rejects(foreignRetry.call(h,plan,job,'/fixture',()=>true,true),/终止|取消/);
+  }
   else await retry.call(h,plan,job,'/fixture',()=>true,variant!=='missing');
-  if(variant==='success'||variant==='missing'){
+  if(['success','legacy-success','missing'].includes(variant)){
    // 返修 P0 新增：删除后入队前必须由服务再走一遍逐目标预览（源被重建/新建在入队前拒绝）。
-   assert.deepEqual(events,variant==='success'?['fence','query','preview','preview','confirm1','preview','confirm2','preview','execute','preview','save','tick']:['fence','query','preview','save','tick'],
+   assert.deepEqual(events,variant!=='missing'?['fence','query','preview','preview','confirm1','preview','confirm2','preview','execute','preview','save','tick']:['fence','query','preview','save','tick'],
     '永久删除每次确认与执行前都按冻结快照复核预览（真实协议：复核不换会话，双确认/执行仍回原 token），入队前复查逐目标不存在；产物已核实缺失则零确认直接入队');
    assert.equal(stored.plans[0].jobs[0].status,'pending');
    assert.equal(stored.plans[0].jobs[0].runtimeDiagnostics,undefined);assert.deepEqual(stored.plans[0].jobs[1],other);
-   assert.equal(executes,variant==='success'?1:0);assert.equal(dialogs,variant==='success'?2:0);
+   assert.equal(executes,variant!=='missing'?1:0);assert.equal(dialogs,variant!=='missing'?2:0);
    assert.equal(stored.plans[0].jobs[0].commandId,undefined,'新执行不得复用旧 commandId');
    assert.ok(stored.plans[0].jobs[0].nextCommandId&&stored.plans[0].jobs[0].nextCommandId!=='c','新执行使用新 commandId，旧回执不能覆盖');
   }else{assert.equal(stored,undefined);assert.ok(!events.includes('tick')&&!events.includes('save')&&!events.includes('execute'),'拒绝/取消路径零入队零删除');

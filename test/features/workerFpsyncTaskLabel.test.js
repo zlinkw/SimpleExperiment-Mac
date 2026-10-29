@@ -45,7 +45,7 @@ test("job artifact copies name the plan, job, workers, artifact kind, and batch"
   const files = Array.from({ length: 5001 }, (_, index) => `runs/a/weights/part-${String(index).padStart(4, "0")}.bin`);
   files[files.length - 1] = "runs/a/artifact_manifest.json";
   const job = {
-    lifecycleProtocol: 2, actualExecutionMode: "train", index: 3, seed: 7, attempt: 1, status: "completed", workerId: "nwpu2", outputDir: "runs/a",
+    lifecycleProtocol: 2, actualExecutionMode: "train", index: 3, seed: 7, attempt: 1, status: "completed", workerId: "nwpu2", outputDir: "runs/a", commandId: "command3",
     artifacts: Object.fromEntries(files.map((file) => [file, "a".repeat(64)])),
     fragmentWorkerIds: ["nwpu2"], mirroredWorkerIds: ["nwpu2"],
   };
@@ -100,7 +100,7 @@ test("every Worker fpsync call in the orchestrator passes a concrete task label"
     if(ts.isCallExpression(node) && node.arguments.length && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text==='sync.serverToServerFpsync')calls.push(node);
     ts.forEachChild(node,visit);
   };
-  visit(ast);assert.equal(calls.length,6,'inspect actual RPC calls; string membership checks are not transfers');
+  visit(ast);assert.equal(calls.length,7,'inspect actual RPC calls, including prepared batch transport; string membership checks are not transfers');
   for(const call of calls) {
     const request=call.arguments[1];assert.ok(ts.isObjectLiteralExpression(request));
     const label=request.properties.find(p=>p.name?.getText(ast)==='taskLabel');

@@ -13,6 +13,7 @@ function fixture() {
   const host = { panelDisposed: false, resultCsvDirectory: 'experiments/results',
     hostOperationLease: { run: () => assert.fail('result publication must not use persistent operation/lease records') },
     captureProjectContext: () => ({ root }), projectContextIsCurrent: () => true, workerCodeSyncTargets: () => [worker],
+    workerActionTargets: () => [{id:worker.id,condaEnv:''}],
     currentResultPlanInputs: async () => [{ planFile, revision: resultDigest(planText), mode: 'test', seeds: [42,43], jobCount: 2 }],
     resultAdapterRules: () => ({}), parseFreshResultMetric: text => [{ dimensions: { case: 'alpha', seed: '42', dataset: 'set', method: 'demo' }, metrics: { auc: Number(text) } }],
     client: { getWorkerTasks: async (id, options) => {

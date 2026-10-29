@@ -125,13 +125,15 @@ test("Agent startup strong confirmation always shows local and remote file locat
   }];
   const prepare = helpers.agentStartupWriteConfirmationDetail(startupTargets, runtimeTargets, true);
   assert.match(prepare, /【强制确认】准备 Agent 并启动/);
-  assert.match(prepare, /hub 会话：C:\/Sessions\/hub\.xsh/);
-  assert.match(prepare, /hub 固定备份：C:\/Sessions\/hub\.xsh\.simple-backup/);
+  assert.match(prepare, /SimpleSFTP 后台部署和启动 Agent/);
+  assert.doesNotMatch(prepare, /固定备份|hub 会话：/);
   assert.match(prepare, /预期上传的远端文件位置：/);
   assert.match(prepare, /\/srv\/simple_agent\/simple_cluster\/runtime\/cluster_agent\.py/);
   assert.match(prepare, /Agent 项目工作目录：\/srv\/projects\/demo/);
 
   const writeOnly = helpers.agentStartupWriteConfirmationDetail(startupTargets, runtimeTargets, false);
+  assert.match(writeOnly, /hub 会话：C:\/Sessions\/hub\.xsh/);
+  assert.match(writeOnly, /hub 固定备份：C:\/Sessions\/hub\.xsh\.simple-backup/);
   assert.match(writeOnly, /【强制确认】写入 Agent 自启动路径/);
   assert.match(writeOnly, /本操作不上传/);
   assert.match(writeOnly, /只写入上述本地 \.xsh 及固定备份/);
@@ -146,7 +148,8 @@ test("all SimpleExperiment SFTP write paths pass through the strong confirmation
   const confirm = source.slice(source.indexOf("async confirmRemoteWriteTargets"), source.indexOf("async prepareSftpTargets"));
   const prepareSftp = source.slice(source.indexOf("async prepareSftpTargets"), source.indexOf("    sftpServerOptions"));
 
-  assert.ok(preparation.indexOf("confirmRemoteWriteTargets") < preparation.indexOf("writeXshellAgentStartupCommands"));
+  assert.ok(preparation.indexOf("confirmRemoteWriteTargets") < preparation.indexOf("deployLatestAgentRuntime"));
+  assert.doesNotMatch(preparation, /writeXshellAgentStartupCommands/);
   assert.match(preparation, /deployLatestAgentRuntime\(false, true, \[\], true(?:,|\))/);
   assert.ok(startup.indexOf("confirmRemoteWriteTargets") < startup.indexOf("updateXshellSessionLoginCommand"));
   assert.match(startup, /写入 Agent 自启动路径/);

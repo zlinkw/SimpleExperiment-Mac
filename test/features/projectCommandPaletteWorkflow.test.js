@@ -41,7 +41,8 @@ test("command palette exposes the three primary new-project entry points", () =>
 });
 
 test("connection command keeps literal semantics in package metadata", () => {
-  assert.equal(command("simpleExperimentMac.startAllXshellConnections").title, "SimpleExperiment：启动全部 Xshell 连接");
+  assert.equal(command("simpleExperimentMac.startAllXshellConnections").title, "SimpleExperiment：启动全部后台连接");
+  assert.equal(command("simpleExperimentMac.openXshellSessions").title, "SimpleExperiment：一键打开 Xshell");
   assert.doesNotMatch(JSON.stringify(packageJson), /一键启动隧道和 Agent/);
 });
 

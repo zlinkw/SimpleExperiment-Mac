@@ -183,6 +183,23 @@ async function backendFixture(options={}){
   return{root,scope,service,job,sources,registered,calls,records,maintenanceRequests,get deletePhase(){return deletePhase;},noCapability:()=>{options.noCapability=true;},allowJob:rel=>sources.set(rel,'sha-x')};
 }
 const exactOf=preview=>preview.rows.filter(row=>row.disposition===preview.action).map(row=>row.node.id+':'+row.absolutePath);
+test('background deletion binds both confirmations and prunes parents only after artifact deletion; parent failure stays unknown without replay',async()=>{
+ for(const fail of [false,true]){
+  const f=await backendFixture({backgroundDelete:true});
+  const preview=await f.service.preview({planFile:f.scope.planFile,action:'isolate',authorizationMode:'confirmed_paths',job:f.job(0)});
+  const op=await f.service.confirm({token:preview.token,digest:preview.digest,phase:1,confirm:true,exactTargets:exactOf(preview)});
+  await f.service.execute(op.id);
+  const parents=[{token:'parent-token',node:preview.rows[0].node,sourceIsolationTokens:[preview.rows[0].backendToken],confirmations:1}];
+  await assert.rejects(f.service.autoDeleteIsolated(op.id,parents),/两次确认/);assert.equal(f.maintenanceRequests.length,0);
+  parents[0].confirmations=2;let pruned=0;
+  f.service.executeEmptyParentCleanup=async actual=>{assert.deepEqual(actual,parents);assert.equal(f.maintenanceRequests.length,1);pruned++;if(fail)throw Error('EMPTY_ISOLATION_PARENT_NOT_EMPTY');return 2;};
+  const outcome=await f.service.autoDeleteIsolated(op.id,parents);
+  assert.equal(f.maintenanceRequests[0].parentCleanupToken,'parent-token');assert.equal(pruned,1);
+  assert.equal(outcome.state,fail?'unknown':'accepted');
+  if(fail)assert.match((await f.service.status(op.id)).autoDeleteError,/空目录尚未确认移除/);
+  await f.service.autoDeleteIsolated(op.id,parents);assert.equal(f.maintenanceRequests.length,1);assert.equal(pruned,1);
+ }
+});
 
 test('isolate preview on an old backend without the fast-isolate capability fails explicitly with zero mutations',async()=>{
   const f=await backendFixture({noCapability:true});

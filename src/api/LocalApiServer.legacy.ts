@@ -2,6 +2,7 @@ import * as crypto from "crypto";
 import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
+import { ResourceOperationLeaseManager } from "../core/ResourceOperationLease";
 import { atomicWriteText } from "../state/StateStore";
 import { operationOutcomeFor } from "../core/OperationOutcome";
 
@@ -55,6 +56,7 @@ interface LocalApiServerOptions {
    * multi-window routing (and the CLI/other windows) can match a workspace to a live instance.
    */
   workspace?: string;
+  getWorkspace?: () => string;
   maxEvents?: number;
   maxEventBufferBytes?: number;
   maxSseClients?: number;
@@ -187,6 +189,7 @@ export class LocalApiServer {
   readonly methods: Record<string, ApiHandler>;
   readonly discoveryPath: string;
   readonly workspace: string;
+  private readonly getWorkspace: () => string;
   readonly sseTimeoutMs: number;
   readonly maxEvents: number;
   readonly maxEventBufferBytes: number;
@@ -221,6 +224,7 @@ export class LocalApiServer {
     this.methods = options.methods && typeof options.methods === "object" ? options.methods : {};
     this.discoveryPath = options.discoveryPath || "";
     this.workspace = String(options.workspace || "");
+    this.getWorkspace = options.getWorkspace || (() => this.workspace);
     this.sseTimeoutMs = positiveNumber(options.sseTimeoutMs, DEFAULT_SSE_TIMEOUT_MS);
     this.maxEvents = Math.max(1, Math.min(1024, positiveNumber(options.maxEvents, DEFAULT_MAX_EVENTS)));
     this.maxEventBufferBytes = Math.max(1024, positiveNumber(options.maxEventBufferBytes, DEFAULT_EVENT_BUFFER_BYTES));
@@ -446,7 +450,19 @@ export class LocalApiServer {
     const onResponseClosed = () => { if (!response.writableEnded) controller.abort(); };
     response.once("close", onResponseClosed);
     try {
-      const handler = this.methods[payload.method];
+      const expectedInstance = String(request.headers["x-simple-api-instance"] || "");
+      let expectedWorkspace: string;
+      try { expectedWorkspace = decodeURIComponent(String(request.headers["x-simple-api-workspace"] || "")); }
+      catch { throw new Error("API_WORKSPACE_MISMATCH：项目窗口标识无效，未执行请求。"); }
+      const normalize = (value: string) => {
+        const clean = String(value || "").replace(/\\/g, "/").replace(/\/+$/, "");
+        return process.platform === "win32" ? clean.toLowerCase() : clean;
+      };
+      if (expectedInstance && expectedInstance !== `${process.pid}:${this.startedAt}`)
+        throw new Error("API_INSTANCE_MISMATCH：请求属于另一个窗口，未执行。");
+      if (expectedWorkspace && normalize(expectedWorkspace) !== normalize(this.getWorkspace()))
+        throw new Error("API_WORKSPACE_MISMATCH：当前项目已变化，未执行请求。");
+      const handler = Object.hasOwn(this.methods, payload.method) ? this.methods[payload.method] : undefined;
       const requested = (payload.params || {}) as Record<string, unknown>;
       if ([requested.topologyMode, requested.mode].some(value => ["hub_worker", "hub_control", "hub", "hub_available"].includes(String(value || "")))
           || requested.hub || requested.hubConfig || Array.isArray(requested.serverIds) && requested.serverIds.includes("hub")
@@ -661,13 +677,14 @@ export class LocalApiServer {
       name: this.name,
       version: this.version,
       instanceId: `${process.pid}:${this.startedAt}`,
-      ...(this.workspace ? { workspace: this.workspace } : {}),
+      workspace: this.getWorkspace(),
+      windowScope: 1,
       transport: ["http", "cli"],
       rpc: "json-rpc-2.0",
       execution: { resultPathPolicy: "declared", formalJobPathProtocol: 1, formalJobIdentityEnvProtocol: 1, formalJobStopIdentityProtocol: 2, formalJobStopUsesAttempts: false, historicalAttempts: "readOnly", draftPromotion: "retired",
         stagedJobPreflightProtocol: 1, admissionAssetValidation: "deferred_until_start", executionAssetValidation: "fresh" },
       retiredMethods: { "drafts.promote": "DRAFT_PROMOTION_RETIRED" },
-      methods: Object.keys(this.methods).sort(),
+      methods: Object.keys(this.methods).filter(method => typeof this.methods[method] === "function").sort(),
       methodOptions: {
         ...(Object.keys(this.methods).includes("agents.lifecycle") ? {
           "agents.lifecycle": { actions: ["inspect", "ensure", "stop", "restart", "migrate"], requiredParams: ["serverIds"],
@@ -694,7 +711,8 @@ export class LocalApiServer {
         } : {}),
         ...(Object.keys(this.methods).includes("plans.cleanup.preview") ? {
         "tasks.dispatch": { params: ["workflowId", "indices", "workerId", "gpuId", "confirm"], manualDispatch: 1,
-          sameGpuConcurrent: true, idleGpuRequired: false, pluginCapacityOverride: true, optionalParams: ["expectedCommands", "stopRunning", "distribution", "workflowIds", "all"], distributions: ["explicit_gpu", "quota_remaining"], defaultAutomaticDispatch: "local_idle", startsTraining: true },
+          sameGpuConcurrent: true, idleGpuRequired: false, pluginCapacityOverride: true, optionalParams: ["expectedCommands", "stopRunning", "distribution", "workflowIds", "all", "gpuSelection"], distributions: ["explicit_gpu", "quota_remaining"],
+          gpuSelection: { automatic: { gpuIdRequired: false, workerRestricted: true, localQueue: true, memoryBudgetRequired: true }, specific: { gpuIdRequired: true } }, defaultAutomaticDispatch: "local_idle", startsTraining: true },
         "tasks.list": { readOnly: true, lifecycleProtocol: 2, activeQueries: ["scheduler", "tmux", "final_manifest"],
           pushRequired: false, receiptRequired: false, executionAndResultSeparate: true, runtimeDiagnostics: 1,
           completionState: ["verified", "review_required", "unverified"], legacyCompletedIsCleanSuccess: false },
@@ -720,7 +738,7 @@ export class LocalApiServer {
   }
 
   openapi(): Record<string, unknown> {
-    const methods = Object.keys(this.methods).sort();
+    const methods = Object.keys(this.methods).filter(method => typeof this.methods[method] === "function").sort();
     return {
       openapi: "3.0.0",
       "x-simple-method-options": this.capabilities().methodOptions,
@@ -772,7 +790,8 @@ export class LocalApiServer {
       pid: process.pid,
       startedAt: this.startedAt,
       instanceId: `${process.pid}:${this.startedAt}`,
-      ...(this.workspace ? { workspace: this.workspace } : {}),
+      workspace: this.getWorkspace(),
+      windowScope: 1,
       status: this.disposed ? "stopped" : "running",
       ...(this.stoppedAt ? { stoppedAt: this.stoppedAt } : {}),
     };
@@ -791,12 +810,27 @@ export class LocalApiServer {
     return path.join(path.dirname(this.discoveryPath), "instances", `${process.pid}_${safeStamp}.json`);
   }
 
+  private readonly discoveryWriterId = `api-discovery:${crypto.randomUUID()}`;
+  async refreshWorkspace(): Promise<void> { await this.writeDiscovery(); }
+
   private async writeDiscovery(): Promise<void> {
     if (!this.discoveryPath) return;
-    const text = `${JSON.stringify(this.discovery(), null, 2)}\n`;
-    await atomicWriteText(this.discoveryPath, text);
-    const instancePath = this.instanceRecordPath();
-    if (instancePath) await atomicWriteText(instancePath, text);
+    const directory = path.resolve(path.dirname(this.discoveryPath));
+    await fs.promises.mkdir(directory, { recursive: true });
+    const manager = new ResourceOperationLeaseManager({ leasePath: path.join(directory, "discovery-publication"),
+      windowId: this.discoveryWriterId });
+    const handle = await manager.acquire({ resources: [{ server: "local", project: directory, target: path.resolve(this.discoveryPath) }],
+      pluginId: this.name, workspaceUri: directory, hostProjectPath: directory, actionType: "discovery-publication", actionLabel: "API discovery", waitForConflict: true });
+    try {
+      const text = `${JSON.stringify(this.discovery(), null, 2)}\n`;
+      const instancePath = this.instanceRecordPath();
+      if (instancePath) await atomicWriteText(instancePath, text, { beforeRename: handle.assertHeld });
+      if (this.disposed) {
+        const current = JSON.parse(await fs.promises.readFile(this.discoveryPath, "utf8"));
+        if (current.pid !== process.pid || current.startedAt !== this.startedAt) return;
+      }
+      await atomicWriteText(this.discoveryPath, text, { beforeRename: handle.assertHeld });
+    } finally { await handle.release(); }
   }
 
   async dispose(): Promise<void> {

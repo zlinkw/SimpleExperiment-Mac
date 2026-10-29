@@ -7,7 +7,7 @@ function method(name, globals = {}) {
   let found; const visit = node => { if (ts.isMethodDeclaration(node) && node.name.getText(tree) === name) found = node; else ts.forEachChild(node, visit); }; visit(tree);
   assert.ok(found, name);
   const code = ts.transpileModule('class Host {' + found.getText(tree) + '} globalThis.Host = Host;', { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-  const sandbox = { ...globals, setTimeout, clearTimeout, AbortSignal, console }; vm.runInNewContext(code, sandbox); return sandbox.Host.prototype[name];
+  const sandbox = { require: require("node:module").createRequire(path.resolve(__dirname, "../../dist/extension/legacy.js")), ...globals, setTimeout, clearTimeout, AbortSignal, console }; vm.runInNewContext(code, sandbox); return sandbox.Host.prototype[name];
 }
 const deferred = () => { let resolve; const promise = new Promise(r => resolve = r); return { promise, resolve }; };
 test('actual submission enqueues after first prepared server, while a slow server keeps preparing', async () => {
@@ -47,12 +47,11 @@ test('later failure preserves ready servers; destructive replacement still waits
 });
 test('401 during activation rereads discovery once, before any RPC; persistent failure is bounded', async () => {
   let reads = 0, gets = 0; const auth = [];
-  const globals = { path, process: { env: { APPDATA: 'fixture' } }, os: { homedir: () => '' }, URL,
-    // Mac 适配：readSimpleSftpCapabilities 发现文件经 ../platform/HostPaths.componentDirectory("sftp")，注入生产实现；fs.readFile 为路径无关 mock，计数断言强度不变。
-    require: (id) => id === '../platform/HostPaths' ? require('../../dist/platform/HostPaths.js') : require(id),
-    fs: { readFile: async () => JSON.stringify({ baseUrl: 'http://127.0.0.1:3456', token: String(++reads) }) },
+  const globals = { path, process, os: { homedir: () => '' }, URL, vscode:{extensions:{}},workspaceRoot:()=> 'C:/fixture',
+    ...require('../../src/core/SimpleSftpWindow.ts'),
+    fs: { readFile: async () => JSON.stringify({ pid:process.pid,startedAt:'fixture',version:'fixture',baseUrl: 'http://127.0.0.1:3456', token: String(++reads) }) },
     fetch: async (_url, options) => { auth.push(options.headers.Authorization); return ++gets === 1 ? { status: 401, ok: false }
-      : { ok: true, json: async () => ({ methods: ['files.cleanup.inspect'] }) }; } };
+      : { ok: true, json: async () => ({ name:'SimpleSFTP',version:'fixture',instanceId:process.pid+':fixture',methods: ['files.cleanup.inspect'] }) }; } };
   // 31：能力读取移入共享单槽；401 重试语义（只重读发现头部文件一次、不重放 RPC）保持不变。
   const capability = method('simpleSftpCapability', globals);
   const mk = () => ({ simpleSftpCapLaunch: 0, simpleSftpCapShared: undefined, readSimpleSftpCapabilities: method('readSimpleSftpCapabilities', globals) });
@@ -83,7 +82,7 @@ test('runtime reads overlap synchronization but readiness waits for both; worksp
 
 test('both cleanup paths forward the configured prefix without changing target authorization or caller input', async () => {
   const calls=[];
-  const run=method('simpleSftpApiCall',{assertRetryRequestCurrent(){},
+  const run=method('simpleSftpApiCall',{assertRetryRequestCurrent(){},workspaceRoot:()=> 'C:/fixture',
     sftpFileIndexQuery:require('../../src/features/ProjectFileIndex.ts').sftpFileIndexQuery,
     fileOperationIndexPaths:require('../../src/features/ProjectFileIndex.ts').fileOperationIndexPaths,
     vscode:{workspace:{getConfiguration:()=>({get:()=> 'global'})}},

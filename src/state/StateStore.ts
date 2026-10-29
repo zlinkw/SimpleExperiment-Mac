@@ -1,7 +1,9 @@
 import * as fs from "fs/promises";
+import { randomUUID } from "node:crypto";
 import * as path from "path";
 import * as fsNode from "fs";
 
+const writerIdentity = `${process.pid}-${randomUUID()}`;
 const atomicWriteQueues = new Map<string, Promise<void>>();
 
 export type StateReadResult<T> =
@@ -33,7 +35,7 @@ async function writeFixedSlot(file: string, text: string, options: AtomicWriteOp
   if (budget != null && (!Number.isFinite(budget) || budget < 0 || budget > 5000)) throw new Error("状态重命名重试预算无效");
   const parent = path.dirname(file);
   await fs.mkdir(parent, { recursive: true });
-  const staging = `${file}.writing`;
+  const staging = `${file}.${writerIdentity}.writing`;
   let existing: Awaited<ReturnType<typeof fs.lstat>> | undefined;
   try {
     existing = await fs.lstat(staging);

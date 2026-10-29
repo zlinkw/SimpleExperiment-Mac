@@ -18,36 +18,21 @@ export function renderPanelHtml(platform: string = process.platform): string {
   <title>SimpleExperiment</title>
   <style>
     :root {
-      --surface-bg: var(--vscode-editorWidget-background, var(--app-bg));
-      --mine: var(--vscode-charts-purple, var(--vscode-textLink-foreground, #6b2eb4));
-      --danger-button-bg: #b91c1c;
-      --danger-button-fg: #ffffff;
-      --success-bg: color-mix(in srgb, var(--app-bg) 94%, var(--success) 6%);
-      --info-bg: color-mix(in srgb, var(--app-bg) 94%, var(--info) 6%);
-      --warning-bg: color-mix(in srgb, var(--app-bg) 94%, var(--warning) 6%);
-      --danger-bg: color-mix(in srgb, var(--app-bg) 94%, var(--danger) 6%);
-      --mine-bg: color-mix(in srgb, var(--app-bg) 94%, var(--mine) 6%);
-      --success-border: color-mix(in srgb, var(--border) 65%, var(--success) 35%);
-      --info-border: color-mix(in srgb, var(--border) 65%, var(--info) 35%);
-      --warning-border: color-mix(in srgb, var(--border) 65%, var(--warning) 35%);
-      --danger-border: color-mix(in srgb, var(--border) 65%, var(--danger) 35%);
-      --mine-border: color-mix(in srgb, var(--border) 65%, var(--mine) 35%);
-
-      --app-bg: var(--vscode-editor-background, #ffffff);
-      --card-bg: color-mix(in srgb, var(--app-bg) 97%, var(--text) 3%);
-      --subtle-bg: color-mix(in srgb, var(--app-bg) 95%, var(--text) 5%);
-      --border: var(--vscode-panel-border, var(--vscode-input-border, #808080));
-      --text: var(--vscode-editor-foreground, var(--vscode-foreground, #333333));
-      --muted: var(--vscode-descriptionForeground, var(--text));
-      --success: var(--vscode-testing-iconPassed, #187128);
-      --info: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-textLink-foreground, #005a9e));
-      --danger: var(--vscode-errorForeground, #a1260d);
-      --warning: var(--vscode-editorWarning-foreground, #795e00);
+      --app-bg: var(--vscode-editor-background, var(--vscode-sideBar-background));
+      --card-bg: color-mix(in srgb, var(--vscode-panel-background, var(--vscode-sideBar-background)) 92%, var(--vscode-editor-foreground) 8%);
+      --subtle-bg: color-mix(in srgb, var(--vscode-input-background, var(--vscode-panel-background)) 88%, var(--vscode-editor-foreground) 12%);
+      --border: color-mix(in srgb, var(--vscode-input-border, var(--vscode-focusBorder)) 64%, transparent);
+      --text: var(--vscode-editor-foreground);
+      --muted: var(--vscode-descriptionForeground);
+      --success: var(--vscode-charts-green, #2ea043);
+      --info: #037CD5;
+      --danger: #f85149;
+      --warning: #d29922;
       --gpu-progress-track: rgba(127, 127, 127, .32);
-      --gpu-progress-free: var(--success);
-      --gpu-progress-busy: var(--info);
-      --gpu-progress-hot: var(--warning);
-      --gpu-progress-danger: var(--danger);
+      --gpu-progress-free: #2ea043;
+      --gpu-progress-busy: #037CD5;
+      --gpu-progress-hot: #d29922;
+      --gpu-progress-danger: #f85149;
       --simple-font-xs: 10px;
       --simple-font-sm: 11px;
       --simple-font-md: 12px;
@@ -60,10 +45,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
-    body { margin: 0; padding: 0; overflow: hidden; font-family: var(--vscode-font-family); font-size: var(--simple-font-md); line-height: 1.45; color: var(--text); background: var(--app-bg); }
-    #panelBootstrapStatus { position: fixed; inset: 0; z-index: 2147483646; display: grid; place-items: center; padding: 20px; background: var(--vscode-sideBar-background, var(--subtle-bg)); color: var(--vscode-foreground, #222); }
+    body { margin: 0; padding: 0; overflow: hidden; font-family: var(--vscode-font-family); font-size: var(--simple-font-md); line-height: 1.45; color: var(--text); background: #EEF2F7; }
+    #panelBootstrapStatus { position: fixed; inset: 0; z-index: 2147483646; display: grid; place-items: center; padding: 20px; background: var(--vscode-sideBar-background, #EEF2F7); color: var(--vscode-foreground, #222); }
     #panelBootstrapStatus[hidden] { display: none; }
-    .panelBootstrapCard { width: min(520px, 100%); padding: 18px; border: 1px solid var(--vscode-panel-border, #888); border-radius: 8px; background: var(--vscode-editor-background, var(--surface-bg)); }
+    .panelBootstrapCard { width: min(520px, 100%); padding: 18px; border: 1px solid var(--vscode-panel-border, #888); border-radius: 8px; background: var(--vscode-editor-background, #FFF); }
     .panelBootstrapCard h2 { margin: 0 0 8px; }
     .panelBootstrapCard p { margin: 0 0 12px; overflow-wrap: anywhere; }
     .panelBootstrapActions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -79,12 +64,12 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .value, .pathCell { overflow-wrap: anywhere; }
     .toolbar, .actionGrid, .summaryLine, .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; align-items: center; min-width: 0; }
     .toolbar > *, .actionGrid > *, .summaryLine > *, .actions > * { min-width: 0; }
-    .toolbar .toolbarSep { color: var(--info); font-weight: 800; user-select: none; padding: 0 4px; font-size: 18px; line-height: 1; }
+    .toolbar .toolbarSep { color: #1F4E79; font-weight: 800; user-select: none; padding: 0 4px; font-size: 18px; line-height: 1; }
     .toolbar > .toolbarSep { width: auto !important; flex: 0 0 auto; }
-    .toolbar[data-anchor="sync-actions"] { padding: 10px; border: 1px solid var(--info-border); border-left: 4px solid var(--info); border-radius: 8px; background: var(--info-bg); flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+    .toolbar[data-anchor="sync-actions"] { padding: 10px; border: 1px solid #BFD4EA; border-left: 4px solid #1F4E79; border-radius: 8px; background: #EEF4FB; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
     .toolbar[data-anchor="sync-actions"] button { flex: 1 1 0; min-width: 0; width: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .contractQuickLinks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
-    .resultRelatedTools { display: grid; gap: 7px; margin-top: 10px; padding: 9px 11px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--vscode-editor-background); }
+    .resultRelatedTools { display: grid; gap: 7px; margin-top: 10px; padding: 9px 11px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 8px; background: var(--vscode-editor-background); }
     .resultRelatedToolsLabel { color: var(--muted); font-size: 11px; font-weight: 700; }
     .resultRelatedTools .contractQuickLinks { margin: 0; }
     .syncPublishPanel { display: grid; gap: 8px; min-width: 0; }
@@ -92,10 +77,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .summaryLink:hover, .summaryLink:focus-visible { border-color: var(--vscode-focusBorder); color: var(--vscode-textLink-foreground, var(--text)); outline: none; }
     button { max-width: 100%; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 1px solid var(--vscode-button-background); padding: 6px 10px; border-radius: var(--radius-sm); cursor: pointer; line-height: 1.25; text-align: center; white-space: normal; overflow-wrap: anywhere; }
     button.secondary { color: var(--vscode-button-secondaryForeground); background: transparent; border-color: var(--border); }
-    button.history-clear { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); font-weight: 700; }
-    button.history-clear:hover { background: var(--warning-bg); border-color: var(--warning); }
-    button.danger-filled { color: var(--danger-button-fg); background: var(--danger-button-bg); border-color: var(--danger-button-bg); font-weight: 700; }
-    button.danger-filled:hover { background: var(--danger-button-bg); border-color: var(--danger-button-bg); }
+    button.history-clear { color: #7C4A12; background: #FFF3D7; border-color: #D9A441; font-weight: 700; }
+    button.history-clear:hover { background: #FFE7B0; border-color: #B87915; }
+    button.danger-filled { color: #FFFFFF; background: #DC2626; border-color: #DC2626; font-weight: 700; }
+    button.danger-filled:hover { background: #B91C1C; border-color: #B91C1C; }
     button.danger-filled:disabled { opacity: .45; cursor: not-allowed; }
     button:disabled { opacity: .45; cursor: not-allowed; }
     button.is-loading { opacity: .72; cursor: wait; }
@@ -111,18 +96,18 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .gpuDenseTable th{ background:color-mix(in srgb, var(--vscode-editor-background) 88%, var(--vscode-foreground) 12%); color:var(--vscode-foreground); font-weight:700; user-select:none; cursor:pointer; }
     .gpuDenseTable th .colResizer{ position:absolute; right:0; top:0; width:6px; height:100%; cursor:col-resize; background:transparent; }
     .gpuDenseTable tbody tr.gpuDenseRow{ background:var(--vscode-editor-background); }
-    .gpuDenseTable tbody tr.gpuDenseRow.is-free{ background:color-mix(in srgb, var(--vscode-editor-background) 96%, var(--success) 4%); }
-    .gpuDenseTable tbody tr.gpuDenseRow.is-occupied{ background:color-mix(in srgb, var(--vscode-editor-background) 94%, var(--warning) 6%); }
-    .gpuDenseTable tbody tr.gpuDenseRow.is-mine{ background:color-mix(in srgb, var(--vscode-editor-background) 92%, var(--mine) 8%); }
-    .gpuDenseTable tbody tr.gpuDenseRow.mem-danger{ background:color-mix(in srgb, var(--vscode-editor-background) 91%, var(--danger) 9%); }
+    .gpuDenseTable tbody tr.gpuDenseRow.is-free{ background:color-mix(in srgb, var(--vscode-editor-background) 96%, #16A34A 4%); }
+    .gpuDenseTable tbody tr.gpuDenseRow.is-occupied{ background:color-mix(in srgb, var(--vscode-editor-background) 94%, #D97706 6%); }
+    .gpuDenseTable tbody tr.gpuDenseRow.is-mine{ background:color-mix(in srgb, var(--vscode-editor-background) 92%, #7C3AED 8%); }
+    .gpuDenseTable tbody tr.gpuDenseRow.mem-danger{ background:color-mix(in srgb, var(--vscode-editor-background) 91%, #DC2626 9%); }
     .gpuDenseTable tbody tr.gpuDenseRow:hover{ background:color-mix(in srgb, var(--vscode-editor-background) 86%, var(--vscode-focusBorder) 14%); }
     .gpuDenseTable tbody tr.gpuDenseRow td:first-child{ border-left:3px solid var(--gpu-server-accent, var(--vscode-focusBorder)); }
     .gpuDenseTable tbody tr.gpuDenseRow td[data-col="mem"], .gpuDenseTable tbody tr.gpuDenseRow td[data-col="util"]{ font-variant-numeric:tabular-nums; }
     .gpuDenseStatus{ display:inline-block; padding:2px 8px; border:1px solid; border-radius:999px; font-weight:700; }
-    .gpuDenseStatus.is-free{ color:var(--vscode-testing-iconPassed, var(--success)); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 88%, var(--success) 12%); }
-    .gpuDenseStatus.is-occupied{ color:var(--vscode-editorWarning-foreground, var(--warning)); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 85%, var(--warning) 15%); }
-    .gpuDenseStatus.is-mine{ color:var(--vscode-textLink-foreground, var(--mine)); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 85%, var(--mine) 15%); }
-    .gpuDenseStatus.mem-danger{ color:var(--vscode-errorForeground, var(--danger)); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 85%, var(--danger) 15%); }
+    .gpuDenseStatus.is-free{ color:var(--vscode-testing-iconPassed, #15803D); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 88%, #16A34A 12%); }
+    .gpuDenseStatus.is-occupied{ color:var(--vscode-editorWarning-foreground, #B45309); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 85%, #D97706 15%); }
+    .gpuDenseStatus.is-mine{ color:var(--vscode-textLink-foreground, #6D28D9); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 85%, #7C3AED 15%); }
+    .gpuDenseStatus.mem-danger{ color:var(--vscode-errorForeground, #B91C1C); border-color:color-mix(in srgb, currentColor 28%, transparent); background:color-mix(in srgb, var(--vscode-editor-background) 85%, #DC2626 15%); }
     .gpuDenseTable .expandRow td{ white-space:normal; padding:10px; background:var(--vscode-editor-background); }
     .gpuDenseTable .expandChartWrap canvas{ width:100%; height:160px; }
     .gpuDenseTable .processTable{ width:100%; border-collapse:collapse; font-size:12px; }
@@ -140,13 +125,15 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
     .topbar-actions { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; min-width: 0; }
     .topbar-actions button { min-height: 24px; padding: 3px 8px; font-size: 12px; }
+    .topbar-actions .lowTrafficToggle[aria-pressed="true"] { border-color: #2563EB; box-shadow: 0 0 0 2px rgba(37, 99, 235, .18); color: #1D4ED8; font-weight: 750; }
+    .topbar-actions .lowTrafficToggle:disabled { opacity: .62; }
     .topbar-actions .topbarIconButton { width: 28px; height: 28px; min-width: 28px; padding: 0; font-size: 15px; }
-    .pluginVersionChip { font-variant-numeric: tabular-nums; color: var(--text); background: var(--mine-bg); border-color: var(--mine-border); }
-    .projectOnboardingNotice { display: none; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 1px solid var(--warning-border); border-left: 4px solid var(--warning); border-radius: 8px; background: var(--warning-bg); color: var(--warning); }
+    .pluginVersionChip { font-variant-numeric: tabular-nums; color: #334155; background: #EEF2FF; border-color: #C7D2FE; }
+    .projectOnboardingNotice { display: none; min-width: 0; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 10px; border: 1px solid #F59E0B; border-left: 4px solid #D97706; border-radius: 8px; background: #FFFBEB; color: #78350F; }
     .projectOnboardingNotice.is-visible { display: flex; }
     .projectOnboardingNoticeBody { min-width: 0; display: grid; gap: 2px; }
     .projectOnboardingNoticeBody b { font-size: 12px; }
-    .projectOnboardingNoticeBody span { min-width: 0; color: var(--warning); font-size: 11px; overflow-wrap: anywhere; }
+    .projectOnboardingNoticeBody span { min-width: 0; color: #92400E; font-size: 11px; overflow-wrap: anywhere; }
     .projectOnboardingNotice button { flex: 0 0 auto; }
     .workflowActions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 2px; }
     .workflowActions button { min-width: 0; padding: 5px 8px; font-size: 12px; }
@@ -166,7 +153,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       padding: 12px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--vscode-editor-background);
+      background: color-mix(in srgb, var(--vscode-sideBar-background, var(--card-bg)) 94%, var(--vscode-focusBorder) 6%);
       box-shadow: 0 8px 22px rgba(15, 23, 42, .07);
       contain: layout paint;
     }
@@ -182,59 +169,59 @@ export function renderPanelHtml(platform: string = process.platform): string {
       padding: 12px;
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      background: var(--vscode-editor-background);
-      color: var(--text);
+      background: #FFFFFF;
+      color: #0F172A;
       box-shadow: 0 8px 22px rgba(15, 23, 42, .07);
       contain: layout paint;
     }
-    .inspectorHeader { display: grid; gap: 5px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-    .inspectorEyebrow { color: var(--muted); font-size: 11px; font-weight: 800; }
+    .inspectorHeader { display: grid; gap: 5px; padding-bottom: 10px; border-bottom: 1px solid #E2E8F0; }
+    .inspectorEyebrow { color: #64748B; font-size: 11px; font-weight: 800; }
     .inspectorTitle { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
-    .inspectorTitle b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 15px; font-weight: 850; }
-    .inspectorSummary { color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .inspectorStatus { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; color: var(--muted); background: var(--subtle-bg); font-size: 11px; font-weight: 800; white-space: nowrap; }
-    .inspectorStatus.good { border-color: var(--success-border); background: var(--success-bg); color: var(--success); }
-    .inspectorStatus.warn { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
-    .inspectorStatus.error { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger); }
-    .inspectorStatus.mine { border-color: var(--mine-border); background: var(--mine-bg); color: var(--mine); }
+    .inspectorTitle b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #111827; font-size: 15px; font-weight: 850; }
+    .inspectorSummary { color: #475569; font-size: 12px; line-height: 1.45; }
+    .inspectorStatus { border: 1px solid #CBD5E1; border-radius: 999px; padding: 2px 8px; color: #475569; background: #F8FAFC; font-size: 11px; font-weight: 800; white-space: nowrap; }
+    .inspectorStatus.good { border-color: #BBF7D0; background: #F0FDF4; color: #15803D; }
+    .inspectorStatus.warn { border-color: #FDE68A; background: #FFFBEB; color: #B45309; }
+    .inspectorStatus.error { border-color: #FCA5A5; background: #FEF2F2; color: #DC2626; }
+    .inspectorStatus.mine { border-color: #C4B5FD; background: #EDE9FE; color: #6D28D9; }
     .inspectorGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-    .inspectorFact { display: grid; gap: 2px; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--subtle-bg); }
-    .inspectorFact span { color: var(--muted); font-size: 11px; font-weight: 600; }
-    .inspectorFact b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 13px; font-weight: 850; }
+    .inspectorFact { display: grid; gap: 2px; min-width: 0; padding: 7px 8px; border: 1px solid #E2E8F0; border-radius: 7px; background: #FAFBFC; }
+    .inspectorFact span { color: #64748B; font-size: 11px; font-weight: 600; }
+    .inspectorFact b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; font-size: 13px; font-weight: 850; }
     .inspectorActions { display: grid; gap: 6px; }
     .inspectorActions .workflowActions { margin: 0; }
     .inspectorActions button { flex: 1 1 130px; justify-content: center; min-height: 30px; }
-    .inspectorReadiness { display: grid; gap: 5px; padding: 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--subtle-bg); }
+    .inspectorReadiness { display: grid; gap: 5px; padding: 8px; border: 1px solid #E2E8F0; border-radius: 8px; background: #FAFBFC; }
     .inspectorReadinessRow { display: grid; grid-template-columns: minmax(70px, .42fr) minmax(0, 1fr); gap: 6px; align-items: baseline; min-width: 0; font-size: 11px; }
-    .inspectorReadinessRow b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-    .inspectorReadinessRow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-    .inspectorReadinessRow.good span { color: var(--success); font-weight: 750; }
-    .inspectorReadinessRow.warn span { color: var(--warning); font-weight: 750; }
+    .inspectorReadinessRow b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; }
+    .inspectorReadinessRow span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #64748B; }
+    .inspectorReadinessRow.good span { color: #15803D; font-weight: 750; }
+    .inspectorReadinessRow.warn span { color: #B45309; font-weight: 750; }
     .inspectorTimeline { display: grid; gap: 7px; }
-    .inspectorEvent { display: grid; gap: 3px; padding: 8px 9px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 7px; background: var(--subtle-bg); }
-    .inspectorEvent.running, .inspectorEvent.accepted { border-left-color: var(--info); }
-    .inspectorEvent.completed { border-left-color: var(--success); }
-    .inspectorEvent.failed, .inspectorEvent.stalled { border-left-color: var(--danger); background: var(--danger-bg); }
-    .inspectorEvent b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; }
-    .inspectorEvent span { color: var(--muted); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
-    .inspectorHint { padding: 8px 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--subtle-bg); color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .inspectorEvent { display: grid; gap: 3px; padding: 8px 9px; border: 1px solid #E2E8F0; border-left: 3px solid #94A3B8; border-radius: 7px; background: #FAFBFC; }
+    .inspectorEvent.running, .inspectorEvent.accepted { border-left-color: #2563EB; }
+    .inspectorEvent.completed { border-left-color: #16A34A; }
+    .inspectorEvent.failed, .inspectorEvent.stalled { border-left-color: #DC2626; background: #FEF2F2; }
+    .inspectorEvent b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #111827; font-size: 12px; }
+    .inspectorEvent span { color: #64748B; font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+    .inspectorHint { padding: 8px 9px; border: 1px solid #E2E8F0; border-radius: 7px; background: #F8FAFC; color: #475569; font-size: 11px; line-height: 1.45; }
     .tree-head { display: grid; grid-template-columns: 5px minmax(0, 1fr); gap: 4px 8px; align-items: start; padding: 4px 4px 10px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
-    .tree-head::before { content: ""; grid-row: 1 / 3; width: 4px; min-height: 32px; align-self: stretch; border-radius: 999px; background: var(--border); box-shadow: 0 0 0 3px rgba(148, 163, 184, .10); }
-    .tree-head.good::before { background: var(--success); box-shadow-color: rgba(22, 163, 74, .12); }
-    .tree-head.info::before { background: var(--info); box-shadow-color: rgba(37, 99, 235, .12); }
-    .tree-head.warn::before { background: var(--warning); box-shadow-color: rgba(217, 119, 6, .12); }
-    .tree-head.error::before { background: var(--danger); box-shadow-color: rgba(220, 38, 38, .12); }
-    .tree-head.mine::before { background: var(--mine); box-shadow-color: rgba(124, 58, 237, .12); }
+    .tree-head::before { content: ""; grid-row: 1 / 3; width: 4px; min-height: 32px; align-self: stretch; border-radius: 999px; background: #CBD5E1; box-shadow: 0 0 0 3px rgba(148, 163, 184, .10); }
+    .tree-head.good::before { background: #16A34A; box-shadow-color: rgba(22, 163, 74, .12); }
+    .tree-head.info::before { background: #2563EB; box-shadow-color: rgba(37, 99, 235, .12); }
+    .tree-head.warn::before { background: #D97706; box-shadow-color: rgba(217, 119, 6, .12); }
+    .tree-head.error::before { background: #DC2626; box-shadow-color: rgba(220, 38, 38, .12); }
+    .tree-head.mine::before { background: #7C3AED; box-shadow-color: rgba(124, 58, 237, .12); }
     .tree-title { min-width: 0; font-size: 12px; font-weight: 800; color: var(--text); letter-spacing: 0; }
     .tree-subtitle { min-width: 0; font-size: 11px; line-height: 1.35; color: var(--muted); }
     .tree-group { display: grid; gap: 4px; margin: 8px 0 12px; }
     .tree-group-label { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; color: var(--muted); font-size: 11px; font-weight: 700; text-transform: none; }
-    .tree-group-label::before { content: ""; width: 4px; height: 13px; border-radius: 999px; background: var(--border); box-shadow: 0 0 0 3px rgba(148, 163, 184, .10); }
-    .tree-group.good .tree-group-label::before { background: var(--success); box-shadow-color: rgba(22, 163, 74, .12); }
-    .tree-group.info .tree-group-label::before { background: var(--info); box-shadow-color: rgba(37, 99, 235, .12); }
-    .tree-group.warn .tree-group-label::before { background: var(--warning); box-shadow-color: rgba(217, 119, 6, .12); }
-    .tree-group.error .tree-group-label::before { background: var(--danger); box-shadow-color: rgba(220, 38, 38, .12); }
-    .tree-group.mine .tree-group-label::before { background: var(--mine); box-shadow-color: rgba(124, 58, 237, .12); }
+    .tree-group-label::before { content: ""; width: 4px; height: 13px; border-radius: 999px; background: #CBD5E1; box-shadow: 0 0 0 3px rgba(148, 163, 184, .10); }
+    .tree-group.good .tree-group-label::before { background: #16A34A; box-shadow-color: rgba(22, 163, 74, .12); }
+    .tree-group.info .tree-group-label::before { background: #2563EB; box-shadow-color: rgba(37, 99, 235, .12); }
+    .tree-group.warn .tree-group-label::before { background: #D97706; box-shadow-color: rgba(217, 119, 6, .12); }
+    .tree-group.error .tree-group-label::before { background: #DC2626; box-shadow-color: rgba(220, 38, 38, .12); }
+    .tree-group.mine .tree-group-label::before { background: #7C3AED; box-shadow-color: rgba(124, 58, 237, .12); }
     .tree-item {
       width: 100%;
       min-height: 30px;
@@ -260,11 +247,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .tree-item.is-current { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); border-color: var(--vscode-focusBorder); box-shadow: inset 3px 0 0 var(--vscode-focusBorder); }
     .tree-item.is-current .tree-icon { color: var(--vscode-list-activeSelectionForeground); }
     .tree-icon { width: 14px; height: 14px; display: inline-grid; place-items: center; color: var(--muted); font-size: 12px; }
-    .tree-item.good .tree-icon { color: var(--success); background: var(--success-bg); }
-    .tree-item.info .tree-icon { color: var(--info); background: var(--info-bg); }
-    .tree-item.warn .tree-icon { color: var(--warning); background: var(--warning-bg); }
-    .tree-item.error .tree-icon { color: var(--danger); background: var(--danger-bg); }
-    .tree-item.mine .tree-icon { color: var(--mine); background: var(--mine-bg); }
+    .tree-item.good .tree-icon { color: #16A34A; background: #F0FDF4; }
+    .tree-item.info .tree-icon { color: #2563EB; background: #EFF6FF; }
+    .tree-item.warn .tree-icon { color: #D97706; background: #FFFBEB; }
+    .tree-item.error .tree-icon { color: #DC2626; background: #FEF2F2; }
+    .tree-item.mine .tree-icon { color: #7C3AED; background: #F5F3FF; }
     .tree-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tree-child-list { display: grid; gap: 2px; margin: 2px 0 6px 21px; padding-left: 8px; border-left: 1px solid var(--border); }
     .tree-object {
@@ -285,11 +272,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
     .tree-object:hover, .tree-object:focus-visible { background: var(--vscode-list-hoverBackground); border-color: var(--border); outline: none; }
     .tree-object.is-current { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); border-color: var(--vscode-focusBorder); box-shadow: inset 3px 0 0 var(--vscode-focusBorder); }
-    .tree-object-icon { width: 16px; height: 16px; display: inline-grid; place-items: center; border-radius: 5px; background: var(--surface-bg); color: var(--muted); font-size: 10px; font-weight: 850; }
-    .tree-object.good .tree-object-icon { color: var(--success); background: var(--success-bg); }
-    .tree-object.warn .tree-object-icon { color: var(--warning); background: var(--warning-bg); }
-    .tree-object.error .tree-object-icon { color: var(--danger); background: var(--danger-bg); }
-    .tree-object.mine .tree-object-icon { color: var(--mine); background: var(--mine-bg); }
+    .tree-object-icon { width: 16px; height: 16px; display: inline-grid; place-items: center; border-radius: 5px; background: rgba(226, 232, 240, .52); color: #64748B; font-size: 10px; font-weight: 850; }
+    .tree-object.good .tree-object-icon { color: #16A34A; background: #F0FDF4; }
+    .tree-object.warn .tree-object-icon { color: #D97706; background: #FFFBEB; }
+    .tree-object.error .tree-object-icon { color: #DC2626; background: #FEF2F2; }
+    .tree-object.mine .tree-object-icon { color: #7C3AED; background: #F5F3FF; }
     .tree-object-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tree-inspector {
       height: 34px;
@@ -341,8 +328,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .projectQuickNav { display: grid; gap: 8px; margin: 10px 0; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: color-mix(in srgb, var(--card-bg) 94%, var(--vscode-input-background) 6%); }
     .projectQuickHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
     .projectQuickHead b { font-size: 13px; }
-    .projectQuickNext { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 34px; padding: 6px 7px; border-left: 3px solid var(--info); background: var(--info-bg); color: var(--text); }
-    .projectQuickNext span { color: var(--muted); font-size: 11px; }
+    .projectQuickNext { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 34px; padding: 6px 7px; border-left: 3px solid #2563EB; background: #EFF6FF; color: #0F172A; }
+    .projectQuickNext span { color: #475569; font-size: 11px; }
     .projectQuickNext b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
     .projectQuickRows { display: grid; gap: 6px; }
     .projectQuickDetails { border-top: 1px solid var(--border); padding-top: 6px; }
@@ -370,32 +357,32 @@ export function renderPanelHtml(platform: string = process.platform): string {
     table.planCompactTable.gpuDenseTable th, table.planCompactTable.gpuDenseTable td { padding: 2px 8px; line-height: 1.25; }
     .planRunActions { padding: 6px 8px; }
     table.planCompactTable tbody tr:hover { filter: brightness(0.97); }
-    .planCompactTable tr.planRunRow td:first-child { border-left: 3px solid var(--border); }
-    .planCompactTable tr.planRunRow.good td:first-child { border-left-color: var(--success); }
-    .planCompactTable tr.planRunRow.info td:first-child { border-left-color: var(--info); }
-    .planCompactTable tr.planRunRow.warn td:first-child { border-left-color: var(--warning); }
-    .planCompactTable tr.planRunRow.error td:first-child { border-left-color: var(--danger); }
-    .planCompactTable tr.planRunRow.mine td:first-child { border-left-color: var(--mine); }
-    .projectQuickNext.firstRunActions { background: none; border-left: 3px solid var(--info); }
-    .outputGateChecklist { display: grid; gap: 7px; padding: 9px; border: 1px solid var(--border); border-left: 4px solid var(--warning); border-radius: 8px; background: var(--warning-bg); color: var(--text); }
-    .outputGateChecklist.ready { border-left-color: var(--success); background: var(--success-bg); }
+    .planCompactTable tr.planRunRow td:first-child { border-left: 3px solid #CBD5E1; }
+    .planCompactTable tr.planRunRow.good td:first-child { border-left-color: #16A34A; }
+    .planCompactTable tr.planRunRow.info td:first-child { border-left-color: #2563EB; }
+    .planCompactTable tr.planRunRow.warn td:first-child { border-left-color: #D97706; }
+    .planCompactTable tr.planRunRow.error td:first-child { border-left-color: #DC2626; }
+    .planCompactTable tr.planRunRow.mine td:first-child { border-left-color: #7C3AED; }
+    .projectQuickNext.firstRunActions { background: none; border-left: 3px solid #2563EB; }
+    .outputGateChecklist { display: grid; gap: 7px; padding: 9px; border: 1px solid #E2E8F0; border-left: 4px solid #D97706; border-radius: 8px; background: #FFFBEB; color: #0F172A; }
+    .outputGateChecklist.ready { border-left-color: #16A34A; background: #F0FDF4; }
     .outputGateHead { display: flex; justify-content: space-between; gap: 8px; align-items: center; min-width: 0; }
     .outputGateHead b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 850; }
     .outputGateHead span { font-size: 11px; font-weight: 800; white-space: nowrap; }
     .outputGateRows { display: grid; gap: 5px; }
-    .outputGateRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: baseline; min-width: 0; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-bg); font-size: 11px; }
+    .outputGateRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: baseline; min-width: 0; padding: 5px 6px; border: 1px solid #E2E8F0; border-radius: 6px; background: rgba(255,255,255,.78); font-size: 11px; }
     .outputGateRow b, .outputGateRow span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .outputGateRow b { color: var(--text); }
-    .outputGateRow span { color: var(--muted); }
-    .projectRuleEditor { display: grid; gap: 8px; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-bg); color: var(--text); }
-    .projectRuleEditor summary { cursor: pointer; font-weight: 850; color: var(--text); }
+    .outputGateRow b { color: #111827; }
+    .outputGateRow span { color: #64748B; }
+    .projectRuleEditor { display: grid; gap: 8px; padding: 9px 10px; border: 1px solid #E2E8F0; border-radius: 8px; background: #FFFFFF; color: #0F172A; }
+    .projectRuleEditor summary { cursor: pointer; font-weight: 850; color: #111827; }
     .projectRuleGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
     .projectRuleField { display: grid; gap: 4px; min-width: 0; }
-    .projectRuleField label { display: flex; gap: 5px; align-items: center; color: var(--muted); font-size: 11px; font-weight: 700; }
-    .projectRuleField input, .projectRuleField textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; background: var(--subtle-bg); color: var(--text); font-family: var(--vscode-font-family); font-size: 12px; }
+    .projectRuleField label { display: flex; gap: 5px; align-items: center; color: #64748B; font-size: 11px; font-weight: 700; }
+    .projectRuleField input, .projectRuleField textarea { width: 100%; box-sizing: border-box; border: 1px solid #CBD5E1; border-radius: 6px; padding: 6px 8px; background: #F8FAFC; color: #0F172A; font-family: var(--vscode-font-family); font-size: 12px; }
     .projectRuleField textarea { min-height: 78px; resize: vertical; font-family: Consolas, monospace; }
     .projectRuleField.wide { grid-column: 1 / -1; }
-    .projectRuleField.readonly textarea { color: var(--muted); background: var(--subtle-bg); }
+    .projectRuleField.readonly textarea { color: #475569; background: #F1F5F9; }
     .projectRuleActions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
     .layoutToolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
     .layoutToolbar .toolbar { margin: 0; }
@@ -445,7 +432,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .executionLifecycleStates { grid-column: 1 / -1; }
     .executionPlanRow > summary { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto auto; gap: 10px; align-items: center; padding: 8px 11px; cursor: pointer; list-style: none; }
     .executionPlanSelect { min-width: 66px; white-space: nowrap; }
-    .executionPlanSelect.is-active { background: var(--vscode-button-background); border-color: var(--vscode-focusBorder); color: var(--vscode-button-foreground); font-weight: 700; }
+    .executionPlanSelect.is-active { background: var(--vscode-focusBorder); border-color: var(--vscode-focusBorder); color: #FFFFFF; font-weight: 700; }
     .executionPlanRow > summary::-webkit-details-marker { display: none; }
     .executionPlanRow > summary::before { content: "▸"; color: var(--muted); }
     .executionPlanRow[open] > summary::before { content: "▾"; }
@@ -489,13 +476,13 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .operationTitle { min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 800; }
     .operationId { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; font-size: 12px; color: var(--muted); }
     .operationMessage { color: var(--muted); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; white-space:pre-wrap; word-break:break-all; max-height:240px; overflow:auto; }
-    .operationError { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; padding: 4px 7px; border-left: 3px solid var(--danger); border-radius: 4px; background: color-mix(in srgb, var(--danger) 8%, var(--vscode-editor-background)); color: var(--danger); font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+    .operationError { display: flex; align-items: baseline; gap: 6px; margin-top: 4px; padding: 4px 7px; border-left: 3px solid var(--danger); border-radius: 4px; background: color-mix(in srgb, var(--danger) 8%, var(--vscode-editor-background)); color: #7F1D1D; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
     .operationError b { flex: 0 0 auto; }
     .operationDetails { display: flex; flex-wrap: wrap; gap: 6px; }
     .operationDetailPill { display: inline-flex; gap: 4px; align-items: center; max-width: 100%; padding: 2px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--subtle-bg); font-size: 11px; color: var(--muted); }
     .operationDetailPill b { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-variant-numeric: tabular-nums; }
-    .operationDetailPill.warn { border-color: var(--warning-border); background: var(--warning-bg); color: var(--warning); }
-    .operationDetailPill.error { border-color: var(--danger-border); background: var(--danger-bg); color: var(--danger); }
+    .operationDetailPill.warn { border-color: #F59E0B; background: #FFFBEB; color: #92400E; }
+    .operationDetailPill.error { border-color: #FCA5A5; background: #FEF2F2; color: #991B1B; }
     .section-head-actions { display: flex; gap: 6px; align-items: center; }
     .sectionMergeNote { margin: 6px 0 2px; font-size: 11px; line-height: 1.5; }
     .operationLogTail { margin-top: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--subtle-bg); }
@@ -511,16 +498,16 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .operationFileReason span { color: var(--danger); font-size: 11px; }
     .operationMeta { display: flex; flex-wrap: wrap; gap: 6px; }
     .operationStatusSummary { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 5px; margin-bottom: 7px; }
-    .operationHiddenSummary { margin: 0 0 7px; padding: 5px 8px; border: 1px solid var(--border); border-left: 4px solid var(--border); border-radius: var(--radius-sm); background: var(--subtle-bg); color: var(--muted); font-size: 11px; }
-    .operationStatusCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 6px; min-height: 42px; padding: 6px 8px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 6px; background: var(--vscode-input-background); color: var(--text); text-align: left; }
+    .operationHiddenSummary { margin: 0 0 7px; padding: 5px 8px; border: 1px solid var(--border); border-left: 4px solid #CBD5E1; border-radius: var(--radius-sm); background: var(--subtle-bg); color: var(--muted); font-size: 11px; }
+    .operationStatusCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 6px; min-height: 42px; padding: 6px 8px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 6px; background: var(--vscode-input-background); color: var(--text); text-align: left; }
     .operationStatusCard:hover:not(:disabled) { border-color: var(--vscode-focusBorder); }
     .operationStatusCard.is-active { outline: 2px solid var(--vscode-focusBorder); outline-offset: -2px; }
     .operationStatusCard:disabled { opacity: .55; cursor: default; }
-    .operationStatusCard.running { border-left-color: var(--info); }
-    .operationStatusCard.completed { border-left-color: var(--success); }
-    .operationStatusCard.cancelled { border-left-color: var(--muted); }
-    .operationStatusCard.failed { border-left-color: var(--danger); background: var(--danger-bg); color: var(--text); }
-    .operationStatusCard.accepted { border-left-color: var(--warning); background: var(--warning-bg); color: var(--text); }
+    .operationStatusCard.running { border-left-color: #2563EB; }
+    .operationStatusCard.completed { border-left-color: #16A34A; }
+    .operationStatusCard.cancelled { border-left-color: #64748B; }
+    .operationStatusCard.failed { border-left-color: #DC2626; background: #FEF2F2; color: #0F172A; }
+    .operationStatusCard.accepted { border-left-color: #D97706; background: #FFFBEB; color: #0F172A; }
     .operationStatusCard span { color: var(--muted); font-size: var(--simple-font-sm); }
     .operationStatusCard b { font-size: var(--simple-font-status); font-weight: 850; font-variant-numeric: tabular-nums; }
     .tmuxFilterBar { margin: 8px 0 6px; }
@@ -530,25 +517,25 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .tmuxOtherSessions > summary { color: var(--muted); cursor: pointer; padding: 4px 0; }
     .tmuxOtherSessionGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 6px; margin-top: 6px; }
     .tmuxWindowWrap { position: relative; min-width: 0; }
-    .tmuxWindowCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 6px; min-height: 42px; width: 100%; padding: 6px 28px 6px 8px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 6px; background: var(--vscode-input-background); color: var(--text); text-align: left; position: relative; }
+    .tmuxWindowCard { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 6px; min-height: 42px; width: 100%; padding: 6px 28px 6px 8px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 6px; background: var(--vscode-input-background); color: var(--text); text-align: left; position: relative; }
     .tmuxClose { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; line-height: 16px; text-align: center; font-size: 13px; font-weight: 700; border-radius: 50%; border: 1px solid var(--border); background: var(--subtle-bg); color: var(--muted); cursor: pointer; padding: 0; }
-    .tmuxClose:hover { background: var(--danger-button-bg); border-color: var(--danger-button-bg); color: var(--danger-button-fg); }
+    .tmuxClose:hover { background: #DC2626; border-color: #DC2626; color: #FFFFFF; }
     .tmuxClose:focus-visible { outline: 2px solid var(--vscode-focusBorder); outline-offset: 1px; }
     .tmuxSessionClose { padding: 3px 8px; color: var(--vscode-errorForeground); white-space: nowrap; }
     .tmuxWindowCard:hover:not(:disabled) { border-color: var(--vscode-focusBorder); }
     .tmuxWindowCard.is-active { outline: 2px solid var(--vscode-focusBorder); outline-offset: -2px; }
     .tmuxWindowCard:disabled { opacity: .55; cursor: default; }
-    .tmuxWindowCard.gpu { border-left-color: var(--success); }
-    .tmuxWindowCard.scheduler { border-left-color: var(--info); }
-    .tmuxWindowCard.worker { border-left-color: var(--mine); background: var(--mine-bg); color: var(--text); }
-    .tmuxWindowCard.other { border-left-color: var(--muted); }
+    .tmuxWindowCard.gpu { border-left-color: #16A34A; }
+    .tmuxWindowCard.scheduler { border-left-color: #2563EB; }
+    .tmuxWindowCard.worker { border-left-color: #7C3AED; background: #F5F3FF; color: #0F172A; }
+    .tmuxWindowCard.other { border-left-color: #94A3B8; }
     .tmuxWindowCard.missing { border-style: dashed; opacity: .78; }
     .tmuxWindowCard span { color: var(--muted); font-size: var(--simple-font-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tmuxWindowCard b { font-size: var(--simple-font-status); font-weight: 850; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tmuxOverviewGrid { display: grid; gap: 6px; margin-top: 6px; }
     .tmuxOverviewItem { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--vscode-editor-background); font-size: 12px; }
-    .tmuxOverviewItem.is-active { border-color: var(--vscode-focusBorder); background: var(--mine-bg); }
-    .tmuxOverviewItem.missing { border-style: dashed; background: var(--subtle-bg); color: var(--muted); }
+    .tmuxOverviewItem.is-active { border-color: var(--vscode-focusBorder); background: #EEF2FF; }
+    .tmuxOverviewItem.missing { border-style: dashed; background: #F8FAFC; color: var(--muted); }
     .tmuxSessionGroup > summary { padding: 7px 2px; color: var(--muted); cursor: pointer; }
     .tmuxSessionGroup.foreign .tmuxOverviewItem { border-left: 3px solid #D97706; }
     .tmuxSessionGroup.services .tmuxOverviewItem { border-left: 3px solid #64748B; }
@@ -562,12 +549,12 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .tmuxServerTab { display: inline-flex; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; }
     .tmuxServerTab > button:first-child { border: 0; background: transparent; color: var(--text); padding: 5px 9px; cursor: pointer; }
     .tmuxServerTab > button:first-child:hover { background: var(--vscode-toolbar-hoverBackground); }
-    .tmuxTaskTabWrap { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 6px; overflow: hidden; background: var(--vscode-input-background); }
-    .tmuxTaskTabWrap.running { border-left-color: var(--info); }
-    .tmuxTaskTabWrap.failed { border-left-color: var(--danger); }
-    .tmuxTaskTabWrap.completed { border-left-color: var(--success); }
+    .tmuxTaskTabWrap { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 6px; overflow: hidden; background: var(--vscode-input-background); }
+    .tmuxTaskTabWrap.running { border-left-color: #2563EB; }
+    .tmuxTaskTabWrap.failed { border-left-color: #EF4444; }
+    .tmuxTaskTabWrap.completed { border-left-color: #16A34A; }
     .tmuxTaskTab { border: 0; background: transparent; color: var(--text); padding: 5px 8px; font-weight: 700; }
-    .tmuxTaskTab.is-active { background: var(--mine-bg); color: var(--info); }
+    .tmuxTaskTab.is-active { background: #EEF2FF; color: #1D4ED8; }
     .tmuxTaskTabClose { border: 0; border-left: 1px solid var(--border); border-radius: 0; padding: 3px 7px; color: var(--muted); background: transparent; }
     .tmuxPaneButton { padding: 2px 7px; border: 1px solid var(--border); border-radius: 4px; background: var(--vscode-editor-background); color: var(--vscode-foreground); font-size: 11px; cursor: pointer; }
     .tmuxPaneButton.is-active { border-color: var(--vscode-focusBorder); background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
@@ -578,18 +565,18 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .tree-inspector-action { display: none; margin-top: 4px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--vscode-focusBorder) 8%, var(--vscode-input-background) 92%); color: var(--muted); font-size: 11px; line-height: 1.4; }
     .planQuickGrid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; gap: 8px; align-items: end; }
     .planSelectorControls { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(160px, 1.6fr) minmax(130px, 1fr) minmax(130px, 1fr); gap: 8px; align-items: end; min-width: 0; }
-    .planSelectorStatus { display: flex; align-items: center; gap: 8px; min-height: 24px; margin-top: 4px; padding: 2px 7px; border-left: 4px solid var(--task-status-color, var(--muted)); color: var(--vscode-descriptionForeground); font-size: 11px; }
-    .planSelectorStatus.is-not-started { --task-status-color: var(--muted); }
-    .planSelectorStatus.is-partial { --task-status-color: var(--warning); }
+    .planSelectorStatus { display: flex; align-items: center; gap: 8px; min-height: 24px; margin-top: 4px; padding: 2px 7px; border-left: 4px solid var(--task-status-color, #64748B); color: var(--vscode-descriptionForeground); font-size: 11px; }
+    .planSelectorStatus.is-not-started { --task-status-color: #64748B; }
+    .planSelectorStatus.is-partial { --task-status-color: #D97706; }
     .planSelectorStatus.is-unknown { --task-status-color: #64748B; }
-    .planSelectorStatus.is-running { --task-status-color: var(--info); }
-    .planSelectorStatus.is-completed { --task-status-color: var(--success); }
-    .planSelectorStatus.is-failed { --task-status-color: var(--danger); }
-    #planFileInput option.planOption.is-not-started { color: var(--muted); }
-    #planFileInput option.planOption.is-partial { color: var(--warning); }
-    #planFileInput option.planOption.is-running { color: var(--info); }
-    #planFileInput option.planOption.is-completed { color: var(--success); }
-    #planFileInput option.planOption.is-failed { color: var(--danger); }
+    .planSelectorStatus.is-running { --task-status-color: #2563EB; }
+    .planSelectorStatus.is-completed { --task-status-color: #16A34A; }
+    .planSelectorStatus.is-failed { --task-status-color: #DC2626; }
+    #planFileInput option.planOption.is-not-started { color: #64748B; }
+    #planFileInput option.planOption.is-partial { color: #D97706; }
+    #planFileInput option.planOption.is-running { color: #2563EB; }
+    #planFileInput option.planOption.is-completed { color: #16A34A; }
+    #planFileInput option.planOption.is-failed { color: #DC2626; }
     #planCommandPhaseLine { width: 100%; max-width: 100%; min-width: 0; }
     .planQuickActions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
     .planQuickActions > button { justify-self: start; width: auto; flex: 0 0 auto; }
@@ -608,9 +595,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .workbench-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
     .workbench-summary .row { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--subtle-bg); padding: 8px; grid-template-columns: 92px minmax(0, 1fr); }
     .statusInfoPopover { position: relative; justify-self: end; align-self: center; }
-    .statusInfoPopover summary { list-style: none; cursor: pointer; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 999px; background: var(--subtle-bg); color: var(--muted); font-size: 11px; font-weight: 850; user-select: none; }
+    .statusInfoPopover summary { list-style: none; cursor: pointer; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #CBD5E1; border-radius: 999px; background: #F8FAFC; color: #475569; font-size: 11px; font-weight: 850; user-select: none; }
     .statusInfoPopover summary::-webkit-details-marker { display: none; }
-    .statusInfoPopoverBody { position: absolute; right: 0; z-index: 30; width: min(280px, 78vw); margin-top: 5px; padding: 8px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-bg); box-shadow: 0 18px 40px rgba(15,23,42,.16); color: var(--text); font-size: 11px; line-height: 1.45; }
+    .statusInfoPopoverBody { position: absolute; right: 0; z-index: 30; width: min(280px, 78vw); margin-top: 5px; padding: 8px 9px; border: 1px solid #CBD5E1; border-radius: 8px; background: #FFFFFF; box-shadow: 0 18px 40px rgba(15,23,42,.16); color: #334155; font-size: 11px; line-height: 1.45; }
     .overviewRiskBand { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 9px 10px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--card-bg) 92%, var(--vscode-input-background) 8%); }
 
     .overviewLegacyRows { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
@@ -638,9 +625,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .detailHeaderText h3 { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 850; }
     .detailHeaderText span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 11px; }
     .detailBadge { display: inline-flex; align-items: center; min-height: 20px; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; background: var(--subtle-bg); color: var(--muted); font-size: 11px; font-weight: 800; white-space: nowrap; }
-    .detailBadge.good { color: var(--success); background: var(--success-bg); border-color: var(--success-border); }
-    .detailBadge.warn { color: var(--warning); background: var(--warning-bg); border-color: var(--warning-border); }
-    .detailBadge.error { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
+    .detailBadge.good { color: #16A34A; background: #F0FDF4; border-color: #BBF7D0; }
+    .detailBadge.warn { color: #B45309; background: #FFFBEB; border-color: #FDE68A; }
+    .detailBadge.error { color: #DC2626; background: #FEF2F2; border-color: #FCA5A5; }
     .detailTabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
     .traceDetailPane .detailTabs { grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); }
     .detailTab { display: grid; gap: 2px; padding: 7px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--subtle-bg); }
@@ -653,13 +640,13 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .resultWorkbench { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 12px; align-items: start; }
     .traceList { display: grid; gap: 10px; }
     .traceCard { position: relative; overflow: hidden; display: grid; gap: 8px; padding: 10px 12px 10px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--vscode-editor-background); }
-    .traceCard::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--muted); }
-    .traceCard:has(.status-completed)::before { background: var(--success); }
-    .traceCard:has(.status-failed)::before { background: var(--danger); }
-    .traceCard:has(.status-warning)::before { background: var(--warning); }
-    .traceCard.status-completed::before { background: var(--success); }
-    .traceCard.status-failed::before { background: var(--danger); }
-    .traceCard.status-warning::before { background: var(--warning); }
+    .traceCard::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: #94A3B8; }
+    .traceCard:has(.status-completed)::before { background: #16A34A; }
+    .traceCard:has(.status-failed)::before { background: #DC2626; }
+    .traceCard:has(.status-warning)::before { background: #D97706; }
+    .traceCard.status-completed::before { background: #16A34A; }
+    .traceCard.status-failed::before { background: #DC2626; }
+    .traceCard.status-warning::before { background: #D97706; }
     .traceCard.selectedRow { border-color: var(--vscode-focusBorder); box-shadow: inset 0 0 0 1px var(--vscode-focusBorder); }
     .traceCardHead { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
     .traceTitle { min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-weight: 800; }
@@ -668,38 +655,38 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .traceDetailPane h3 { margin: 0; font-size: 13px; }
     .tracePath { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--subtle-bg); color: var(--muted); font-family: Consolas, monospace; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
     .traceReadinessGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
-    .traceReadinessItem { display: grid; gap: 1px; min-width: 0; padding: 5px 7px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; background: var(--subtle-bg); }
-    .traceReadinessItem.good { border-left-color: var(--success); }
-    .traceReadinessItem.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .traceReadinessItem.error { border-left-color: var(--danger); background: var(--danger-bg); }
+    .traceReadinessItem { display: grid; gap: 1px; min-width: 0; padding: 5px 7px; border: 1px solid var(--border); border-left: 3px solid #94A3B8; border-radius: 6px; background: var(--subtle-bg); }
+    .traceReadinessItem.good { border-left-color: #16A34A; }
+    .traceReadinessItem.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .traceReadinessItem.error { border-left-color: #DC2626; background: #FEF2F2; }
     .traceReadinessItem span { color: var(--muted); font-size: 11px; }
     .traceReadinessItem b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); font-size: 12px; }
     .traceTimeline { display: grid; gap: 5px; padding: 6px 0 0; border-top: 1px solid var(--border); }
     .traceTimelineItem { position: relative; display: grid; gap: 1px; padding-left: 14px; font-size: 12px; }
-    .traceTimelineItem::before { content: ""; position: absolute; left: 2px; top: 5px; width: 7px; height: 7px; border-radius: 999px; background: var(--muted); }
-    .traceTimelineItem.good::before { background: var(--success); }
-    .traceTimelineItem.warn::before { background: var(--warning); }
-    .traceTimelineItem.error::before { background: var(--danger); }
+    .traceTimelineItem::before { content: ""; position: absolute; left: 2px; top: 5px; width: 7px; height: 7px; border-radius: 999px; background: #94A3B8; }
+    .traceTimelineItem.good::before { background: #16A34A; }
+    .traceTimelineItem.warn::before { background: #D97706; }
+    .traceTimelineItem.error::before { background: #DC2626; }
     .traceTimelineItem b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); }
     .traceTimelineItem span { color: var(--muted); line-height: 1.35; }
     .resultEvidenceWorkbench { display: grid; gap: 10px; margin: 8px 0 12px; min-width: 0; }
     .resultEvidenceRows { display: grid; gap: 6px; }
-    .resultEvidenceRow { display: grid; grid-template-columns: minmax(92px, 140px) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 7px; background: var(--subtle-bg); color: var(--text); }
-    .resultEvidenceRow.good { border-left-color: var(--success); }
-    .resultEvidenceRow.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .resultEvidenceRow.info { border-left-color: var(--info); }
-    .resultEvidenceRow.mine { border-left-color: var(--mine); background: var(--mine-bg); border-color: var(--mine-border); }
-    .resultEvidenceName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 850; }
+    .resultEvidenceRow { display: grid; grid-template-columns: minmax(92px, 140px) minmax(0, 1fr) auto auto; gap: 8px; align-items: center; min-width: 0; padding: 7px 8px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 7px; background: #FAFBFC; color: #0F172A; }
+    .resultEvidenceRow.good { border-left-color: #16A34A; }
+    .resultEvidenceRow.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .resultEvidenceRow.info { border-left-color: #2563EB; }
+    .resultEvidenceRow.mine { border-left-color: #7C3AED; background: #F5F3FF; border-color: #C4B5FD; }
+    .resultEvidenceName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #111827; font-size: 12px; font-weight: 850; }
     .resultEvidenceFacts { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-    .resultEvidenceFact { display: inline-flex; gap: 4px; max-width: 100%; min-width: 0; padding: 2px 6px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-bg); font-size: 11px; align-items: baseline; }
-    .resultEvidenceFact span { color: var(--muted); }
-    .resultEvidenceFact b { min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-weight: 850; }
+    .resultEvidenceFact { display: inline-flex; gap: 4px; max-width: 100%; min-width: 0; padding: 2px 6px; border: 1px solid #E2E8F0; border-radius: 999px; background: #FFFFFF; font-size: 11px; align-items: baseline; }
+    .resultEvidenceFact span { color: #64748B; }
+    .resultEvidenceFact b { min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; font-weight: 850; }
     .resultEvidenceMore { justify-self: end; }
     .resultEvidenceMore .statusInfoPopoverBody { display: grid; gap: 6px; width: min(340px, 82vw); }
     .resultEvidenceMiniGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
-    .resultEvidenceMini { display: grid; gap: 2px; min-width: 0; padding: 5px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-bg); }
-    .resultEvidenceMini span { color: var(--muted); font-size: 11px; }
-    .resultEvidenceMini b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; }
+    .resultEvidenceMini { display: grid; gap: 2px; min-width: 0; padding: 5px 6px; border: 1px solid #E2E8F0; border-radius: 6px; background: #FFFFFF; }
+    .resultEvidenceMini span { color: #64748B; font-size: 11px; }
+    .resultEvidenceMini b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; font-size: 12px; }
     .pptPlotConfig { display: grid; gap: 8px; margin: 8px 0 10px; padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: color-mix(in srgb, var(--card-bg) 90%, var(--vscode-input-background) 10%); }
     .pptPlotConfigGrid { display: grid; grid-template-columns: minmax(180px, 1fr) 110px 130px; gap: 8px; align-items: end; }
     .pptPathInputRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
@@ -708,55 +695,55 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .pptPlotInline { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; vertical-align: middle; }
     .pptPlotInline button { padding: 3px 7px; font-size: 11px; }
     .claimEvidenceList { display: grid; gap: 6px; }
-    .claimEvidenceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 9px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; background: var(--surface-bg); color: var(--text); }
-    .claimEvidenceRow.supported { border-left-color: var(--success); }
-    .claimEvidenceRow.unsupported { border-left-color: var(--danger); background: var(--danger-bg); }
-    .claimEvidenceRow.needs { border-left-color: var(--warning); background: var(--warning-bg); }
+    .claimEvidenceRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 7px 9px; border: 1px solid #E2E8F0; border-left: 3px solid #94A3B8; border-radius: 6px; background: #FFFFFF; color: #0F172A; }
+    .claimEvidenceRow.supported { border-left-color: #16A34A; }
+    .claimEvidenceRow.unsupported { border-left-color: #DC2626; background: #FEF2F2; }
+    .claimEvidenceRow.needs { border-left-color: #D97706; background: #FFFBEB; }
     .claimEvidenceText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 650; }
-    .claimEvidenceMeta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .claimEvidenceMeta { color: #64748B; font-size: 11px; white-space: nowrap; }
     .capabilityBar { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 10px; }
-    .capabilityItem { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; padding: 4px 7px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; background: var(--surface-bg); color: var(--text); font-size: 11px; }
-    .capabilityItem.ok { border-left-color: var(--success); }
-    .capabilityItem.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .capabilityItem span { color: var(--muted); white-space: nowrap; }
+    .capabilityItem { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; padding: 4px 7px; border: 1px solid #E2E8F0; border-left: 3px solid #94A3B8; border-radius: 6px; background: #FFFFFF; color: #0F172A; font-size: 11px; }
+    .capabilityItem.ok { border-left-color: #16A34A; }
+    .capabilityItem.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .capabilityItem span { color: #64748B; white-space: nowrap; }
     .capabilityItem b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 850; }
     .featureReadiness { display: grid; gap: 8px; margin: 8px 0 12px; }
     .featureReadinessList { display: grid; gap: 4px; }
-    .featureReadinessRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; min-width: 0; padding: 4px 7px; border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 6px; background: var(--surface-bg); color: var(--text); font-size: 11px; }
-    .featureReadinessRow.good { border-left-color: var(--success); }
-    .featureReadinessRow.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .featureReadinessRow.error { border-left-color: var(--danger); background: var(--danger-bg); }
+    .featureReadinessRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto auto; gap: 8px; align-items: center; min-width: 0; padding: 4px 7px; border: 1px solid #E2E8F0; border-left: 3px solid #CBD5E1; border-radius: 6px; background: #FFFFFF; color: #0F172A; font-size: 11px; }
+    .featureReadinessRow.good { border-left-color: #16A34A; }
+    .featureReadinessRow.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .featureReadinessRow.error { border-left-color: #DC2626; background: #FEF2F2; }
     .featureReadinessName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 750; }
-    .featureReadinessStatus { color: var(--text); font-weight: 850; white-space: nowrap; }
-    .featureReadinessMetric { color: var(--muted); white-space: nowrap; }
+    .featureReadinessStatus { color: #0F172A; font-weight: 850; white-space: nowrap; }
+    .featureReadinessMetric { color: #64748B; white-space: nowrap; }
     .featureAuditBar { display: flex; flex-wrap: wrap; gap: 5px; }
-    .featureAuditPill { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; min-width: 0; padding: 4px 7px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; background: var(--surface-bg); color: var(--text); font-size: 11px; }
-    .featureAuditPill.good { border-left-color: var(--success); }
-    .featureAuditPill.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .featureAuditPill.error { border-left-color: var(--danger); background: var(--danger-bg); }
-    .featureAuditPill span { color: var(--muted); white-space: nowrap; }
+    .featureAuditPill { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; min-width: 0; padding: 4px 7px; border: 1px solid #E2E8F0; border-left: 3px solid #94A3B8; border-radius: 6px; background: #FFFFFF; color: #0F172A; font-size: 11px; }
+    .featureAuditPill.good { border-left-color: #16A34A; }
+    .featureAuditPill.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .featureAuditPill.error { border-left-color: #DC2626; background: #FEF2F2; }
+    .featureAuditPill span { color: #64748B; white-space: nowrap; }
     .featureAuditPill b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 850; }
     .targetMatrix { display: grid; gap: 4px; margin: 6px 0 10px; }
     .targetMatrixList { display: grid; gap: 4px; }
-    .targetMatrixRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; min-width: 0; padding: 4px 7px; border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 6px; background: var(--surface-bg); color: var(--text); font-size: 11px; }
-    .targetMatrixRow.done { border-left-color: var(--success); }
-    .targetMatrixRow.partial { border-left-color: var(--warning); background: var(--warning-bg); }
-    .targetMatrixRow.later { border-left-color: var(--muted); background: var(--subtle-bg); }
+    .targetMatrixRow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; min-width: 0; padding: 4px 7px; border: 1px solid #E2E8F0; border-left: 3px solid #CBD5E1; border-radius: 6px; background: #FFFFFF; color: #0F172A; font-size: 11px; }
+    .targetMatrixRow.done { border-left-color: #16A34A; }
+    .targetMatrixRow.partial { border-left-color: #D97706; background: #FFFBEB; }
+    .targetMatrixRow.later { border-left-color: #94A3B8; background: #F8FAFC; }
     .targetMatrixName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 750; }
-    .targetMatrixStatus { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; color: var(--text); font-weight: 800; }
-    .targetEvidenceCount { color: var(--muted); white-space: nowrap; }
+    .targetMatrixStatus { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px; color: #0F172A; font-weight: 800; }
+    .targetEvidenceCount { color: #64748B; white-space: nowrap; }
     .errorList { display: grid; gap: 4px; margin: 6px 0 10px; }
-    .errorRow { display: grid; grid-template-columns: minmax(90px, 150px) auto minmax(0, 1fr); gap: 8px; align-items: center; min-width: 0; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border)); border-left: 3px solid var(--danger); border-radius: 6px; background: color-mix(in srgb, var(--danger) 6%, var(--vscode-editor-background)); color: var(--text); font-size: 11px; }
+    .errorRow { display: grid; grid-template-columns: minmax(90px, 150px) auto minmax(0, 1fr); gap: 8px; align-items: center; min-width: 0; padding: 4px 7px; border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border)); border-left: 3px solid var(--danger); border-radius: 6px; background: color-mix(in srgb, var(--danger) 6%, var(--vscode-editor-background)); color: #0F172A; font-size: 11px; }
     .errorRowSuggestion { grid-column: 1 / -1; color: var(--muted); overflow-wrap: anywhere; }
     .errorRowCommand { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 850; }
-    .errorRowTime { color: var(--muted); white-space: nowrap; }
+    .errorRowTime { color: #64748B; white-space: nowrap; }
     .errorRowMessage { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .taskCardList { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
-    .taskRenderBudgetNotice { padding: 8px 10px; margin-bottom: 10px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--subtle-bg); color: var(--muted); font-size: 12px; }
+    .taskRenderBudgetNotice { padding: 8px 10px; margin-bottom: 10px; border: 1px solid #CBD5E1; border-left: 4px solid #94A3B8; border-radius: 8px; background: #F8FAFC; color: #475569; font-size: 12px; }
     .task-card {
-      --task-status-color: var(--info);
-      --task-border-color: var(--info-border);
-      --task-bg: var(--subtle-bg);
+      --task-status-color: #2563EB;
+      --task-border-color: #BFDBFE;
+      --task-bg: #FAFBFC;
       position: relative;
       display: grid;
       gap: 4px;
@@ -764,21 +751,21 @@ export function renderPanelHtml(platform: string = process.platform): string {
       border: 1.5px solid var(--task-border-color);
       border-radius: 8px;
       background: var(--task-bg);
-      color: var(--text);
+      color: #0F172A;
       overflow: hidden;
     }
     .task-card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--task-status-color); }
-    .task-card.is-queued { --task-status-color: var(--warning); --task-border-color: var(--warning-border); }
-    .task-card.is-running, .task-card.is-testing { --task-status-color: var(--info); --task-border-color: var(--info-border); }
-    .task-card.is-completed { --task-status-color: var(--success); --task-border-color: var(--success-border); }
-    .task-card.is-failed, .task-card.is-stopped { --task-status-color: var(--danger); --task-border-color: var(--danger-border); }
-    .task-card.delete-pending { --task-status-color: var(--danger); --task-border-color: var(--danger-border); --task-bg: var(--subtle-bg); }
+    .task-card.is-queued { --task-status-color: #D97706; --task-border-color: #FDE68A; }
+    .task-card.is-running, .task-card.is-testing { --task-status-color: #2563EB; --task-border-color: #BFDBFE; }
+    .task-card.is-completed { --task-status-color: #16A34A; --task-border-color: #BBF7D0; }
+    .task-card.is-failed, .task-card.is-stopped { --task-status-color: #DC2626; --task-border-color: #FCA5A5; }
+    .task-card.delete-pending { --task-status-color: #DC2626; --task-border-color: #FCA5A5; --task-bg: #FEF2F2; }
     .task-card.selectedRow { outline: 1px solid var(--vscode-focusBorder); }
     .task-card.plan-card.selectedRow { --task-status-color: var(--warning); outline: none; }
     .taskCardHead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 6px; align-items: start; }
     .taskSelectBox { position: relative; z-index: 1; flex: 0 0 16px; align-self: start; }
     .taskTitle { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-    .taskTitle b { color: var(--text); font-size: 12px; font-weight: 800; }
+    .taskTitle b { color: #111827; font-size: 12px; font-weight: 800; }
     .planCardHead { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; align-items: start; }
     .taskFacts { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: center; }
     .taskFacts .taskMetric { flex: 1 1 150px; }
@@ -787,7 +774,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .taskMetric .metric-value { text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.2; }
     .taskMetric.output-full .metric-value { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; word-break: break-all; }
     .output-full { overflow-wrap: anywhere; word-break: break-all; }
-    .taskActionPending { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--danger-border); border-radius: 999px; background: var(--danger-bg); color: var(--danger); font-size: 11px; font-weight: 800; padding: 2px 8px; }
+    .taskActionPending { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #FCA5A5; border-radius: 999px; background: #FEF2F2; color: #DC2626; font-size: 11px; font-weight: 800; padding: 2px 8px; }
     .taskActions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .taskActionButton { min-height: 30px; padding: 6px 10px; font-size: 12px; line-height: 1.2; border-radius: var(--radius-sm); }
     .taskLogRow { display: block; }
@@ -807,29 +794,29 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .progressTrack { height: 6px; background: var(--vscode-editorWidget-background); border-radius: 3px; overflow: hidden; min-width: 70px; }
     .progressBar { height: 6px; background: var(--vscode-progressBar-background); }
     .pill, .status-chip { display: inline-flex; align-items: center; gap: 5px; min-height: 20px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 7px; background: var(--subtle-bg); color: var(--muted); font-size: 12px; }
-    .pill.taskLivePill { border-color: var(--info-border); background: var(--info-bg); color: var(--info); }
+    .pill.taskLivePill { border-color: #BFD4EA; background: #EEF4FB; color: #1F4E79; }
     .taskRenderBudgetNotice .muted { margin-left: 6px; }
     .mini { padding: 3px 6px; font-size: 11px; }
     .gpuServer {
       display: grid;
       gap: 12px;
       padding: 14px;
-      border: 1px solid var(--border);
+      border: 1px solid #D9E2EC;
       border-radius: 8px;
-      background: var(--surface-bg);
-      color: var(--text);
+      background: #FFFFFF;
+      color: #0F172A;
       box-sizing: border-box;
       width: 100%;
       max-width: 100%;
       min-width: 0;
     }
     .gpuServerHead { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 0; }
-    .gpuServerTitle { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; color: var(--text); font-size: 15px; font-weight: 800; }
-    .gpuServerAlias { color: var(--muted); font-size: 13px; font-weight: 600; }
+    .gpuServerTitle { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; color: #111827; font-size: 15px; font-weight: 800; }
+    .gpuServerAlias { color: #64748B; font-size: 13px; font-weight: 600; }
     .gpuServerStatus { font-size: 13px; font-weight: 700; }
-    .gpuServerStatus.online { color: var(--success); }
-    .gpuServerStatus.stale { color: var(--warning); }
-    .gpuServerStatus.offline, .gpuServerStatus.failed { color: var(--danger); }
+    .gpuServerStatus.online { color: #16A34A; }
+    .gpuServerStatus.stale { color: #D97706; }
+    .gpuServerStatus.offline, .gpuServerStatus.failed { color: #DC2626; }
     .gpuHistoryPanel { display: grid; gap: 10px; margin-bottom: 12px; padding: 10px 0; border: 1px solid var(--border); border-radius: 6px; background: transparent; box-sizing: border-box; width: 100%; }
     .gpuHistoryPanel > summary { cursor: pointer; color: var(--vscode-foreground); font-size: 13px; font-weight: 800; padding: 0 12px; box-sizing: border-box; }
     .gpuHistoryPanelBody { display: grid; gap: 8px; min-width: 0; width: 100%; box-sizing: border-box; padding: 0; margin: 0; background: transparent; }
@@ -854,11 +841,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .gpuHistoryStatus.stale { color: var(--vscode-editorWarning-foreground); }
     .gpuList { display: grid; gap: 12px; }
     .gpu-row {
-      --gpu-status-color: var(--success);
-      --gpu-border-color: var(--success-border);
-      --gpu-progress-color: var(--success);
-      --gpu-status-text: var(--success);
-      --gpu-card-bg: var(--subtle-bg);
+      --gpu-status-color: #16A34A;
+      --gpu-border-color: #BBF7D0;
+      --gpu-progress-color: #22C55E;
+      --gpu-status-text: #15803D;
+      --gpu-card-bg: #FAFBFC;
       position: relative;
       isolation: isolate;
       overflow: hidden;
@@ -873,44 +860,44 @@ export function renderPanelHtml(platform: string = process.platform): string {
       border: 1.5px solid var(--gpu-border-color);
       border-radius: 8px;
       background: var(--gpu-card-bg);
-      color: var(--text);
+      color: #0F172A;
       transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
       box-sizing: border-box;
     }
     .gpu-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: transparent; }
     .gpu-row.is-occupied::before, .gpu-row.is-mine::before { background: var(--gpu-status-color); }
-    .gpu-row.is-free { --gpu-status-color: var(--success); --gpu-border-color: var(--success-border); --gpu-progress-color: var(--success); --gpu-status-text: var(--success); }
-    .gpu-row.is-occupied { --gpu-status-color: var(--info); --gpu-border-color: var(--info-border); --gpu-progress-color: var(--info); --gpu-status-text: var(--info); }
-    .gpu-row.is-mine { --gpu-status-color: var(--mine); --gpu-border-color: var(--mine-border); --gpu-progress-color: var(--mine); --gpu-status-text: var(--mine); --gpu-card-bg: var(--mine-bg); box-shadow: 0 0 0 1px rgba(124, 58, 237, .06); }
-    .gpu-row.mem-danger:not(.is-mine) { --gpu-status-color: var(--danger); --gpu-border-color: var(--danger-border); --gpu-progress-color: var(--danger); --gpu-status-text: var(--danger); }
+    .gpu-row.is-free { --gpu-status-color: #16A34A; --gpu-border-color: #BBF7D0; --gpu-progress-color: #22C55E; --gpu-status-text: #15803D; }
+    .gpu-row.is-occupied { --gpu-status-color: #2563EB; --gpu-border-color: #BFDBFE; --gpu-progress-color: #2563EB; --gpu-status-text: #1D4ED8; }
+    .gpu-row.is-mine { --gpu-status-color: #7C3AED; --gpu-border-color: #C4B5FD; --gpu-progress-color: #8B5CF6; --gpu-status-text: #6D28D9; --gpu-card-bg: #F5F3FF; box-shadow: 0 0 0 1px rgba(124, 58, 237, .06); }
+    .gpu-row.mem-danger:not(.is-mine) { --gpu-status-color: #DC2626; --gpu-border-color: #FCA5A5; --gpu-progress-color: #EF4444; --gpu-status-text: #DC2626; }
     .gpu-row:hover { box-shadow: 0 8px 20px rgba(15, 23, 42, .08); }
     .gpu-main { display: grid; gap: 8px; min-width: 0; width: 100%; box-sizing: border-box; }
-    .gpu-main .line { overflow-wrap: anywhere; color: var(--text); font-size: 12px; }
+    .gpu-main .line { overflow-wrap: anywhere; color: #334155; font-size: 12px; }
     .gpu-title { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; min-width: 0; }
-    .gpu-title b { color: var(--text); font-size: 14px; font-weight: 800; }
-    .gpu-model { border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; color: var(--text); background: var(--surface-bg); font-size: 12px; font-weight: 700; }
-    .gpu-id { color: var(--muted); font-size: 12px; font-weight: 600; }
-    .myTaskBadge, .gpuServerMineBadge { display: inline-flex; align-items: center; border: 1px solid var(--mine-border); border-radius: 999px; background: var(--mine-bg); color: var(--mine); font-size: 11px; font-weight: 700; padding: 2px 8px; }
+    .gpu-title b { color: #0F172A; font-size: 14px; font-weight: 800; }
+    .gpu-model { border: 1px solid #D9E2EC; border-radius: 999px; padding: 2px 8px; color: #334155; background: #FFFFFF; font-size: 12px; font-weight: 700; }
+    .gpu-id { color: #64748B; font-size: 12px; font-weight: 600; }
+    .myTaskBadge, .gpuServerMineBadge { display: inline-flex; align-items: center; border: 1px solid #C4B5FD; border-radius: 999px; background: #EDE9FE; color: #6D28D9; font-size: 11px; font-weight: 700; padding: 2px 8px; }
     .gpuServerMineBadge { margin-left: 2px; }
     .gpu-metrics { display: grid; grid-template-columns: repeat(2, max-content); gap: 10px 20px; align-items: start; justify-content: end; white-space: nowrap; }
     .metric { display: grid; gap: 3px; min-width: 66px; text-align: right; font-variant-numeric: tabular-nums; }
-    .metric-label { color: var(--muted); font-size: 12px; font-weight: 500; }
-    .metric-value { color: var(--text); font-size: 14px; font-weight: 800; }
+    .metric-label { color: #64748B; font-size: 12px; font-weight: 500; }
+    .metric-value { color: #0F172A; font-size: 14px; font-weight: 800; }
     .metric-value.statusValue { color: var(--gpu-status-text); }
-    .metric-value.statusValue.mine { color: var(--mine); font-weight: 800; }
-    .metric-value.statusValue.stale { color: var(--warning); font-style: italic; }
+    .metric-value.statusValue.mine { color: #6D28D9; font-weight: 800; }
+    .metric-value.statusValue.stale { color: #92400E; font-style: italic; }
     .gpu-row.is-stale { border-style: dashed; }
     .gpuServerStatusGroup { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-    .pill.gpuServerFreshness.stale { border-color: var(--warning); background: var(--warning-bg); color: var(--warning); }
-    .metric-value.warn { color: var(--warning); font-weight: 800; }
-    .metric-value.danger { color: var(--danger); font-weight: 800; }
+    .pill.gpuServerFreshness.stale { border-color: #E5C07B; background: #FEF6E7; color: #92400E; }
+    .metric-value.warn { color: #D97706; font-weight: 800; }
+    .metric-value.danger { color: #DC2626; font-weight: 800; }
     .progress-line { display: grid; grid-template-columns: minmax(120px, 1fr) auto; gap: 10px; align-items: center; }
     .progress-line progress { width: 100%; height: 10px; accent-color: var(--vscode-progressBar-background); }
-    .progress-bar { height: 10px; min-width: 120px; border-radius: 999px; overflow: hidden; background: var(--border); }
+    .progress-bar { height: 10px; min-width: 120px; border-radius: 999px; overflow: hidden; background: #E2E8F0; }
     .progress-fill { height: 100%; border-radius: inherit; background: var(--gpu-progress-color); }
-    .progress-fill.danger { background: var(--danger); }
-    .progressPercent { color: var(--text); font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
-    .progressPercent.danger { color: var(--danger); }
+    .progress-fill.danger { background: #EF4444; }
+    .progressPercent { color: #0F172A; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .progressPercent.danger { color: #DC2626; }
     .quickFlow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 10px 0; }
     .flowStep { padding: 10px; border: 1px solid var(--vscode-panel-border); border-radius: 4px; background: var(--vscode-editor-background); }
     .flowStep b { display: block; margin-bottom: 6px; }
@@ -922,77 +909,77 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .serverObjectSummaryItem b { color: var(--vscode-foreground); font-size: var(--simple-font-status); line-height: 1.2; }
     .serverObjectSummaryItem span { color: var(--vscode-descriptionForeground); font-size: var(--simple-font-sm); }
     .serverObjectGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
-    .serverObjectCard { position: relative; display: grid; gap: 8px; min-width: 0; padding: 10px 11px 10px 14px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--subtle-bg); color: var(--text); }
-    .serverObjectCard.hub { border-left-color: var(--border); }
-    .serverObjectCard.ok { border-left-color: var(--success); }
-    .serverObjectCard.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .serverObjectCard.error { border-left-color: var(--danger); background: var(--danger-bg); }
-    .serverObjectCard.disabled { border-left-color: var(--muted); opacity: .76; }
+    .serverObjectCard { position: relative; display: grid; gap: 8px; min-width: 0; padding: 10px 11px 10px 14px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 8px; background: #FAFBFC; color: #0F172A; }
+    .serverObjectCard.hub { border-left-color: #CBD5E1; }
+    .serverObjectCard.ok { border-left-color: #16A34A; }
+    .serverObjectCard.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .serverObjectCard.error { border-left-color: #DC2626; background: #FEF2F2; }
+    .serverObjectCard.disabled { border-left-color: #94A3B8; opacity: .76; }
     .serverObjectHead { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; min-width: 0; }
-    .serverObjectHead h4 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 800; color: var(--text); }
-    .serverObjectRole { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .serverObjectHead h4 { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 800; color: #111827; }
+    .serverObjectRole { color: #64748B; font-size: 11px; font-weight: 700; text-transform: uppercase; }
     .serverObjectMeta { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
     .serverObjectMeta .pill { flex: 0 0 auto; white-space: nowrap; overflow-wrap: normal; border-radius: 6px; }
     .serverObjectStats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-    .serverObjectStat { display: grid; gap: 2px; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-bg); }
-    .serverObjectStat span { color: var(--muted); font-size: 11px; font-weight: 600; }
-    .serverObjectStat b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; font-weight: 800; }
+    .serverObjectStat { display: grid; gap: 2px; min-width: 0; padding: 6px 8px; border: 1px solid #E2E8F0; border-radius: 6px; background: #FFFFFF; }
+    .serverObjectStat span { color: #64748B; font-size: 11px; font-weight: 600; }
+    .serverObjectStat b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; font-size: 12px; font-weight: 800; }
     .schedulerDependencyStatus { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-left: 3px solid var(--success); border-radius: 6px; background: var(--vscode-input-background); }
     .schedulerDependencyStatus.warn { border-left-color: var(--warning); }
     .schedulerDependencyStatus code { display: block; padding: 5px 7px; overflow-wrap: anywhere; white-space: normal; background: var(--vscode-textCodeBlock-background); }
     .serverRiskBand { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 2px; }
     .serverRiskBand .pill { margin: 0; }
-    .workerDense { display: grid; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--subtle-bg); font-size: 12px; }
-    .workerDenseHead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: var(--text); font-size: 12px; font-weight: 800; }
-    .workerDenseHead .sub { color: var(--muted); font-size: 12px; font-weight: 600; }
+    .workerDense { display: grid; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #F8FAFC; font-size: 12px; }
+    .workerDenseHead { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; color: #0F172A; font-size: 12px; font-weight: 800; }
+    .workerDenseHead .sub { color: #64748B; font-size: 12px; font-weight: 600; }
     .workerDenseLinks { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
-    .workerDenseLink { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; min-width: 0; padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-bg); }
-    .workerDenseLink b { color: var(--text); font-size: 12px; white-space: nowrap; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-    .workerDenseLink span { color: var(--muted); font-size: 11px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
-    .workerDenseWorker { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; overflow: hidden; padding: 4px 6px; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; background: var(--surface-bg); }
-    .workerDenseWorker.ok { border-left-color: var(--success); }
-    .workerDenseWorker.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .workerDenseWorker.error { border-left-color: var(--danger); background: var(--danger-bg); }
+    .workerDenseLink { display: flex; flex-wrap: wrap; gap: 4px; align-items: baseline; min-width: 0; padding: 4px 6px; border: 1px solid #E2E8F0; border-radius: 6px; background: #FFFFFF; }
+    .workerDenseLink b { color: #0F172A; font-size: 12px; white-space: nowrap; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    .workerDenseLink span { color: #475569; font-size: 11px; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .workerDenseWorker { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; overflow: hidden; padding: 4px 6px; border: 1px solid #E2E8F0; border-left: 3px solid #94A3B8; border-radius: 6px; background: #FFFFFF; }
+    .workerDenseWorker.ok { border-left-color: #16A34A; }
+    .workerDenseWorker.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .workerDenseWorker.error { border-left-color: #DC2626; background: #FEF2F2; }
     .workerDenseWorker.disabled { opacity: .76; }
-    .workerDenseWorker b.wname { color: var(--text); font-size: 12px; font-weight: 800; min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .workerDenseWorker .wport { color: var(--text); font-size: 12px; font-weight: 700; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+    .workerDenseWorker b.wname { color: #111827; font-size: 12px; font-weight: 800; min-width: 0; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .workerDenseWorker .wport { color: #0F172A; font-size: 12px; font-weight: 700; min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
     .workerDenseWorker code.tbUrl { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: anywhere; }
     .gpuTensorboardControls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
-    .gpuTensorboardControls button[aria-checked="true"] { border-color: var(--success); color: var(--success); }
+    .gpuTensorboardControls button[aria-checked="true"] { border-color: #16A34A; color: #15803D; }
     .workerDenseFoot { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
-    .workerDenseFoot .pill { font-size: 11px; padding: 1px 7px; background: var(--subtle-bg); color: var(--muted); }
-    .serverChainOverview { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--info-border); border-left: 4px solid var(--info); border-radius: 8px; background: var(--info-bg); color: var(--info); font-size: 12px; font-weight: 700; }
-    .serverChainOverview.ok { border-left-color: var(--success); }
-    .serverChainOverview.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .serverChainOverview.error { border-left-color: var(--danger); background: var(--danger-bg); }
-    .serverChainOverview b { color: var(--info); font-size: 12px; font-weight: 800; margin-right: 2px; }
+    .workerDenseFoot .pill { font-size: 11px; padding: 1px 7px; background: #F1F5F9; color: #475569; }
+    .serverChainOverview { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 10px; border: 1px solid #BFD4EA; border-left: 4px solid #1F4E79; border-radius: 8px; background: #EEF4FB; color: #1F4E79; font-size: 12px; font-weight: 700; }
+    .serverChainOverview.ok { border-left-color: #16A34A; }
+    .serverChainOverview.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .serverChainOverview.error { border-left-color: #DC2626; background: #FEF2F2; }
+    .serverChainOverview b { color: #1F4E79; font-size: 12px; font-weight: 800; margin-right: 2px; }
     .chainSteps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; min-width: 0; }
-    .chainStep { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 7px; border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 6px; background: var(--surface-bg); color: var(--text); font-size: 12px; font-weight: 700; }
-    .chainStep.ok { border-left-color: var(--success); }
-    .chainStep.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .chainStep.error { border-left-color: var(--danger); background: var(--danger-bg); }
-    .chainStep .chainStepText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 12px; }
-    .chainBadge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: var(--subtle-bg); color: var(--muted); white-space: nowrap; }
-    .chainBadge.ok { background: var(--success-bg); color: var(--success); }
-    .chainBadge.warn { background: var(--warning-bg); color: var(--warning); }
-    .chainBadge.error { background: var(--danger-bg); color: var(--danger); }
-    .serverTopologyMap { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--subtle-bg); }
-    .topologyHeader { display: flex; justify-content: space-between; gap: 8px; align-items: center; color: var(--text); font-size: 13px; font-weight: 850; }
-    .topologyHeader span { color: var(--muted); font-size: 11px; font-weight: 650; }
+    .chainStep { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 5px 7px; border: 1px solid #E2E8F0; border-left: 3px solid #CBD5E1; border-radius: 6px; background: #FFFFFF; color: #0F172A; font-size: 12px; font-weight: 700; }
+    .chainStep.ok { border-left-color: #16A34A; }
+    .chainStep.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .chainStep.error { border-left-color: #DC2626; background: #FEF2F2; }
+    .chainStep .chainStepText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; font-size: 12px; }
+    .chainBadge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: #F1F5F9; color: #475569; white-space: nowrap; }
+    .chainBadge.ok { background: #DCFCE7; color: #166534; }
+    .chainBadge.warn { background: #FEF3C7; color: #92400E; }
+    .chainBadge.error { background: #FEE2E2; color: #991B1B; }
+    .serverTopologyMap { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #F8FAFC; }
+    .topologyHeader { display: flex; justify-content: space-between; gap: 8px; align-items: center; color: #111827; font-size: 13px; font-weight: 850; }
+    .topologyHeader span { color: #64748B; font-size: 11px; font-weight: 650; }
     .topologyGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
-    .topologyNode { display: grid; gap: 4px; min-width: 0; padding: 9px 10px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--surface-bg); }
-    .topologyNode.local, .topologyNode.hub, .topologyNode.worker, .topologyNode.sftp { border-left-color: var(--border); background: var(--surface-bg); }
-    .topologyNode b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); font-size: 13px; }
-    .topologyNode span { color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .topologyNode { display: grid; gap: 4px; min-width: 0; padding: 9px 10px; border: 1px solid #CBD5E1; border-left: 4px solid #94A3B8; border-radius: 8px; background: #FFFFFF; }
+    .topologyNode.local, .topologyNode.hub, .topologyNode.worker, .topologyNode.sftp { border-left-color: #CBD5E1; background: #FFFFFF; }
+    .topologyNode b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #0F172A; font-size: 13px; }
+    .topologyNode span { color: #64748B; font-size: 11px; line-height: 1.4; }
     .topologyLanes { display: grid; gap: 6px; }
-    .topologyLane { display: grid; grid-template-columns: minmax(88px, 140px) minmax(0, 1fr); gap: 8px; align-items: start; padding: 7px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-bg); }
-    .topologyLane b { color: var(--text); font-size: 12px; }
-    .topologyLane span { color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .topologyLane { display: grid; grid-template-columns: minmax(88px, 140px) minmax(0, 1fr); gap: 8px; align-items: start; padding: 7px 8px; border: 1px solid #E2E8F0; border-radius: 7px; background: #FFFFFF; }
+    .topologyLane b { color: #0F172A; font-size: 12px; }
+    .topologyLane span { color: #475569; font-size: 11px; line-height: 1.45; }
     .endpointCardGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 9px; }
-    .endpointStatusCard { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: color-mix(in srgb, var(--card-bg) 90%, var(--vscode-input-background) 10%); }
-    .endpointStatusCard.ok { border-left-color: var(--success); }
-    .endpointStatusCard.warn { border-left-color: var(--warning); background: var(--warning-bg); }
-    .endpointStatusCard.error { border-left-color: var(--danger); background: var(--danger-bg); }
+    .endpointStatusCard { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 8px; background: color-mix(in srgb, var(--card-bg) 90%, var(--vscode-input-background) 10%); }
+    .endpointStatusCard.ok { border-left-color: #16A34A; }
+    .endpointStatusCard.warn { border-left-color: #D97706; background: #FFFBEB; }
+    .endpointStatusCard.error { border-left-color: #DC2626; background: #FEF2F2; }
     .endpointStatusCard.disabled { opacity: .75; }
     .diagnosticBudgetNotice { margin-top: 8px; padding: 7px 10px; border: 1px dashed var(--border); border-radius: 7px; background: var(--subtle-bg); color: var(--muted); font-size: 12px; line-height: 1.4; }
     .endpointCardHead { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; min-width: 0; }
@@ -1050,15 +1037,15 @@ export function renderPanelHtml(platform: string = process.platform): string {
     /* Final dashboard layout: macOS-like surfaces, restrained status color, draggable three columns. */
     .app-shell { width: min(100%, 1680px); height: 100vh; padding: 18px 20px 18px; gap: 10px; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; }
     .topbar { position: relative; z-index: 3; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--vscode-editor-background); max-height: 72px; overflow: auto; overscroll-behavior: contain; }
-    .statusLegend { position: relative; z-index: 3; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; flex: 1 1 auto; padding: 0; border: 0; background: transparent; backdrop-filter: none; color: var(--muted); box-shadow: none; }
+    .statusLegend { position: relative; z-index: 3; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; flex: 1 1 auto; padding: 0; border: 0; background: transparent; backdrop-filter: none; color: #475569; box-shadow: none; }
     .topbar-actions { align-items: center; }
     .legendItem { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 750; white-space: nowrap; }
-    .legendDot { width: 8px; height: 8px; border-radius: 999px; background: var(--info); box-shadow: 0 0 0 3px rgba(37, 99, 235, .10); }
-    .legendDot.good { background: var(--success); box-shadow-color: rgba(22, 163, 74, .12); }
-    .legendDot.info { background: var(--info); }
-    .legendDot.warn { background: var(--warning); box-shadow-color: rgba(217, 119, 6, .12); }
-    .legendDot.error { background: var(--danger); box-shadow-color: rgba(220, 38, 38, .12); }
-    .legendDot.mine { background: var(--mine); box-shadow-color: rgba(124, 58, 237, .12); }
+    .legendDot { width: 8px; height: 8px; border-radius: 999px; background: #2563EB; box-shadow: 0 0 0 3px rgba(37, 99, 235, .10); }
+    .legendDot.good { background: #16A34A; box-shadow-color: rgba(22, 163, 74, .12); }
+    .legendDot.info { background: #2563EB; }
+    .legendDot.warn { background: #D97706; box-shadow-color: rgba(217, 119, 6, .12); }
+    .legendDot.error { background: #DC2626; box-shadow-color: rgba(220, 38, 38, .12); }
+    .legendDot.mine { background: #7C3AED; box-shadow-color: rgba(124, 58, 237, .12); }
     /* Pinned layout expands to: grid-template-columns: var(--tree-col) 8px minmax(var(--main-min), 1fr) 8px var(--inspector-col). */
     #cardDeck { --tree-col: 280px; --inspector-col: 360px; --main-min: 420px; --tree-peek: 16px; --inspector-peek: 18px; --tree-active-col: var(--tree-peek); --inspector-active-col: var(--inspector-peek); min-height: 0; overflow: hidden; align-items: stretch; grid-template-columns: var(--tree-active-col) 8px minmax(0, 1fr) 8px var(--inspector-active-col); grid-template-rows: minmax(0, 1fr); gap: 10px; }
     body.layout-edit #cardDeck, body.resizing-layout #cardDeck, body.tree-pinned #cardDeck { --tree-active-col: var(--tree-col); }
@@ -1071,7 +1058,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .settingsBackButton { width: auto; height: 30px; min-width: 84px; padding: 0 12px; font-size: 12px; white-space: nowrap; }
     .settingsLayoutTools { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
     .settingsLayoutTools b { margin-right: auto; font-size: 12px; }
-    .resultMappingEditor { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--mine); border-radius: 8px; background: var(--vscode-editor-background); }
+    .resultMappingEditor { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid #7C3AED; border-radius: 8px; background: var(--vscode-editor-background); }
     .resultMainPane { min-width: 0; }
     .resultFinalCard { display: grid; gap: 10px; margin: 0; padding: 12px; border: 1px solid var(--border); border-left: 4px solid var(--info); border-radius: 10px; background: var(--vscode-editor-background); }
     .resultFinalHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; }
@@ -1136,14 +1123,14 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .resultPlanActionButtons { display: flex; flex-wrap: wrap; gap: 6px; }
     .resultPlanActionButtons button { font-size: 12px; }
     .resultFinalCard .pptPlotActions { margin: 0; }
-    .resultArtifactGroup { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--vscode-editor-background); }
+    .resultArtifactGroup { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 8px; background: var(--vscode-editor-background); }
     .resultArtifactGroup[data-details-key="result-split-tables"] { border-left-color: var(--info); }
-    .resultArtifactGroup[data-details-key="results-ppt-plot"] { border-left-color: var(--mine); margin-top: 10px; }
+    .resultArtifactGroup[data-details-key="results-ppt-plot"] { border-left-color: #7C3AED; margin-top: 10px; }
     .resultArtifactGroup summary { cursor: pointer; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .resultArtifactGroup[open] > summary { margin-bottom: 9px; }
     .resultArtifactGroup .muted { font-size: 11px; line-height: 1.45; }
     .resultArtifactGroup .pptPlotActions { margin: 8px 0 0; }
-    .resultEvidenceWorkbench > details[data-details-key="result-advanced"] { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--muted); border-radius: 8px; background: var(--vscode-editor-background); }
+    .resultEvidenceWorkbench > details[data-details-key="result-advanced"] { margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid #94A3B8; border-radius: 8px; background: var(--vscode-editor-background); }
     .resultEvidenceWorkbench > details[data-details-key="result-advanced"] > summary { cursor: pointer; font-size: 13px; font-weight: 700; }
     .resultTableBrowser { display: grid; gap: 10px; }
     .resultTableBrowser .resultTableRow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1173,8 +1160,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .remoteRootPolicyHeading span { color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.45; }
     .remoteRootPolicyFields { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; }
     .remoteRootPolicyField { display: grid; grid-template-rows: auto minmax(118px, 132px) auto; gap: 6px; min-width: 0; padding: 9px; border: 1px solid var(--border); border-radius: 7px; background: var(--vscode-input-background); }
-    .remoteRootPolicyField.is-denied { border-left: 3px solid var(--danger); }
-    .remoteRootPolicyField.is-allowed { border-left: 3px solid var(--success); }
+    .remoteRootPolicyField.is-denied { border-left: 3px solid #DC2626; }
+    .remoteRootPolicyField.is-allowed { border-left: 3px solid #16A34A; }
     .remoteRootPolicyFieldHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
     .remoteRootPolicyFieldHead label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); font-size: 12px; font-weight: 700; }
     .remoteRootPolicyHint { color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.4; }
@@ -1184,48 +1171,48 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .remoteRootPolicyFooter > span { flex: 1 1 220px; min-width: 0; color: var(--vscode-descriptionForeground); font-size: 11px; line-height: 1.4; }
     .remoteRootPolicyFooter button { white-space: nowrap; }
     .resourceTree { grid-column: 1; grid-row: 1; position: relative; width: var(--tree-col); max-height: none; min-height: 0; overflow: hidden; overscroll-behavior: contain; justify-self: start; padding: 10px; border-color: var(--border); border-radius: 12px; background: var(--vscode-editor-background); contain: layout paint; display: grid; grid-template-rows: auto auto minmax(0, 1fr) 34px; transform: translateX(calc(-1 * (var(--tree-col) - var(--tree-peek)))); transition: transform 120ms ease; z-index: 14; }
-    .resourceTree::after { content: "导航"; position: absolute; top: 12px; right: 0; bottom: 12px; width: var(--tree-peek); display: grid; place-items: center; padding: 8px 0; border-left: 1px solid rgba(148, 163, 184, .26); background: linear-gradient(180deg, var(--surface-bg), var(--surface-bg)); color: var(--muted); font-size: 11px; font-weight: 800; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0; opacity: 1; transition: opacity 120ms ease; pointer-events: none; }
+    .resourceTree::after { content: "导航"; position: absolute; top: 12px; right: 0; bottom: 12px; width: var(--tree-peek); display: grid; place-items: center; padding: 8px 0; border-left: 1px solid rgba(148, 163, 184, .26); background: linear-gradient(180deg, rgba(248, 250, 252, .96), rgba(226, 232, 240, .92)); color: #475569; font-size: 11px; font-weight: 800; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0; opacity: 1; transition: opacity 120ms ease; pointer-events: none; }
     .resourceTree:hover, .resourceTree:focus-within, body.layout-edit .resourceTree, body.resizing-layout .resourceTree { transform: translateX(0); }
     .resourceTree:hover::after, .resourceTree:focus-within::after, body.layout-edit .resourceTree::after, body.resizing-layout .resourceTree::after { opacity: 0; }
     .workbenchInspector { grid-column: 5; grid-row: 1; position: relative; width: var(--inspector-col); max-height: none; min-height: 0; justify-self: end; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border-color: var(--border); border-radius: 12px; background: var(--vscode-editor-background); contain: layout paint; transform: translateX(calc(var(--inspector-col) - var(--inspector-peek))); transition: transform 120ms ease; z-index: 13; }
-    .workbenchInspector::before { content: "详情"; position: absolute; top: 12px; left: 0; bottom: 12px; width: var(--inspector-peek); display: grid; place-items: center; padding: 8px 0; border-right: 1px solid rgba(148, 163, 184, .26); background: linear-gradient(180deg, var(--surface-bg), var(--surface-bg)); color: var(--muted); font-size: 11px; font-weight: 800; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0; opacity: 1; transition: opacity 120ms ease; pointer-events: none; }
+    .workbenchInspector::before { content: "详情"; position: absolute; top: 12px; left: 0; bottom: 12px; width: var(--inspector-peek); display: grid; place-items: center; padding: 8px 0; border-right: 1px solid rgba(148, 163, 184, .26); background: linear-gradient(180deg, rgba(248, 250, 252, .96), rgba(226, 232, 240, .92)); color: #475569; font-size: 11px; font-weight: 800; writing-mode: vertical-rl; text-orientation: mixed; letter-spacing: 0; opacity: 1; transition: opacity 120ms ease; pointer-events: none; }
     .workbenchInspector:hover, .workbenchInspector:focus-within, body.layout-edit .workbenchInspector, body.resizing-layout .workbenchInspector, body.inspector-menu-open .workbenchInspector { transform: translateX(0); }
     .workbenchInspector:hover::before, .workbenchInspector:focus-within::before, body.layout-edit .workbenchInspector::before, body.resizing-layout .workbenchInspector::before, body.inspector-menu-open .workbenchInspector::before { opacity: 0; }
     body.tree-pinned .resourceTree, body.inspector-pinned .workbenchInspector { transform: translateX(0); }
     body.tree-pinned .resourceTree::after, body.inspector-pinned .workbenchInspector::before { opacity: 0; }
-    .drawerPinButton { position: absolute; top: 8px; z-index: 3; width: 24px; height: 24px; min-width: 24px; padding: 0; display: grid; place-items: center; border-radius: 7px; border: 1px solid rgba(148, 163, 184, .42); background: var(--surface-bg); color: var(--muted); font-size: 13px; line-height: 1; box-shadow: 0 8px 18px rgba(15,23,42,.08); }
-    .drawerPinButton:hover, .drawerPinButton:focus-visible, .drawerPinButton.is-pinned { background: var(--mine-bg); border-color: var(--mine-border); color: var(--mine); outline: none; }
+    .drawerPinButton { position: absolute; top: 8px; z-index: 3; width: 24px; height: 24px; min-width: 24px; padding: 0; display: grid; place-items: center; border-radius: 7px; border: 1px solid rgba(148, 163, 184, .42); background: rgba(255,255,255,.92); color: #475569; font-size: 13px; line-height: 1; box-shadow: 0 8px 18px rgba(15,23,42,.08); }
+    .drawerPinButton:hover, .drawerPinButton:focus-visible, .drawerPinButton.is-pinned { background: #EEF2FF; border-color: #C7D2FE; color: #4F46E5; outline: none; }
     .resourceTree .drawerPinButton { right: 24px; }
     .workbenchInspector .drawerPinButton { right: 8px; }
     .layoutResizer { grid-row: 1; position: relative; z-index: 12; width: 8px; min-height: 0; cursor: col-resize; border-radius: 999px; background: transparent; }
     .layoutResizer::after { content: ""; position: absolute; left: 3px; top: 12px; bottom: 12px; width: 2px; border-radius: 999px; background: rgba(148, 163, 184, .34); transition: background 120ms ease, width 120ms ease, left 120ms ease; }
-    .layoutResizer:hover::after, body.resizing-layout .layoutResizer::after { left: 2px; width: 4px; background: var(--muted); }
+    .layoutResizer:hover::after, body.resizing-layout .layoutResizer::after { left: 2px; width: 4px; background: #94A3B8; }
     .layoutResizer.left { grid-column: 2; opacity: .28; pointer-events: auto; }
     body.layout-edit .layoutResizer.left, body.resizing-layout .layoutResizer.left, .layoutResizer.left:hover { opacity: 1; pointer-events: auto; }
     .layoutResizer.right { grid-column: 4; opacity: .28; pointer-events: auto; }
     body.layout-edit .layoutResizer.right, body.resizing-layout .layoutResizer.right, .layoutResizer.right:hover { opacity: 1; pointer-events: auto; }
     .tree-search { display: grid; gap: 4px; margin-top: 8px; }
-    .tree-search input { width: 100%; min-height: 28px; padding: 5px 8px; border-radius: 9px; background: var(--surface-bg); }
+    .tree-search input { width: 100%; min-height: 28px; padding: 5px 8px; border-radius: 9px; background: rgba(248, 250, 252, .94); }
     #resourceTreeBody { min-height: 0; overflow: auto; overscroll-behavior: contain; scroll-snap-type: y proximity; contain: layout paint; }
-    .tree-group { padding: 8px 0 10px; margin: 0; border-top: 1px solid var(--surface-bg); }
+    .tree-group { padding: 8px 0 10px; margin: 0; border-top: 1px solid rgba(226, 232, 240, .72); }
     .tree-group:first-child { border-top: 0; }
-    .tree-group-label { position: static; z-index: auto; margin: 0 0 5px; padding: 3px 5px; border-radius: 6px; background: var(--surface-bg); backdrop-filter: none; }
-    .tree-group-label::before { content: ""; width: 4px; height: 13px; border-radius: 999px; background: var(--border); box-shadow: 0 0 0 3px rgba(148, 163, 184, .10); }
-    .tree-group.good .tree-group-label::before { background: var(--success); box-shadow-color: rgba(22, 163, 74, .12); }
-    .tree-group.info .tree-group-label::before { background: var(--info); box-shadow-color: rgba(37, 99, 235, .12); }
-    .tree-group.warn .tree-group-label::before { background: var(--warning); box-shadow-color: rgba(217, 119, 6, .12); }
-    .tree-group.error .tree-group-label::before { background: var(--danger); box-shadow-color: rgba(220, 38, 38, .12); }
-    .tree-group.mine .tree-group-label::before { background: var(--mine); box-shadow-color: rgba(124, 58, 237, .12); }
+    .tree-group-label { position: static; z-index: auto; margin: 0 0 5px; padding: 3px 5px; border-radius: 6px; background: rgba(255, 255, 255, .72); backdrop-filter: none; }
+    .tree-group-label::before { content: ""; width: 4px; height: 13px; border-radius: 999px; background: #CBD5E1; box-shadow: 0 0 0 3px rgba(148, 163, 184, .10); }
+    .tree-group.good .tree-group-label::before { background: #16A34A; box-shadow-color: rgba(22, 163, 74, .12); }
+    .tree-group.info .tree-group-label::before { background: #2563EB; box-shadow-color: rgba(37, 99, 235, .12); }
+    .tree-group.warn .tree-group-label::before { background: #D97706; box-shadow-color: rgba(217, 119, 6, .12); }
+    .tree-group.error .tree-group-label::before { background: #DC2626; box-shadow-color: rgba(220, 38, 38, .12); }
+    .tree-group.mine .tree-group-label::before { background: #7C3AED; box-shadow-color: rgba(124, 58, 237, .12); }
     .tree-item, .tree-object { border-radius: 8px; transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
-    .tree-icon { width: 18px; height: 18px; border-radius: 6px; background: var(--surface-bg); }
-    .tree-item.good .tree-icon { color: var(--success); background: var(--success-bg); }
-    .tree-item.info .tree-icon { color: var(--info); background: var(--info-bg); }
-    .tree-item.warn .tree-icon { color: var(--warning); background: var(--warning-bg); }
-    .tree-item.error .tree-icon { color: var(--danger); background: var(--danger-bg); }
-    .tree-item.mine .tree-icon { color: var(--mine); background: var(--mine-bg); }
+    .tree-icon { width: 18px; height: 18px; border-radius: 6px; background: rgba(226, 232, 240, .58); }
+    .tree-item.good .tree-icon { color: #16A34A; background: #F0FDF4; }
+    .tree-item.info .tree-icon { color: #2563EB; background: #EFF6FF; }
+    .tree-item.warn .tree-icon { color: #D97706; background: #FFFBEB; }
+    .tree-item.error .tree-icon { color: #DC2626; background: #FEF2F2; }
+    .tree-item.mine .tree-icon { color: #7C3AED; background: #F5F3FF; }
     .tree-child-list { margin-left: 25px; padding-left: 10px; border-left-color: rgba(148, 163, 184, .34); }
-    .tree-empty { padding: 10px 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .section-card, .card, .taskProgressCard, .workflowStage, .objectTile, .planRunRow, .resultEvidenceRow, .endpointStatusCard, .serverObjectCard, .operationItem, .task-card, .traceCard { min-width: 0; background: var(--surface-bg); border-color: rgba(148, 163, 184, .30); box-shadow: 0 8px 22px rgba(15, 23, 42, .045); }
+    .tree-empty { padding: 10px 8px; color: #64748B; font-size: 12px; line-height: 1.45; }
+    .section-card, .card, .taskProgressCard, .workflowStage, .objectTile, .planRunRow, .resultEvidenceRow, .endpointStatusCard, .serverObjectCard, .operationItem, .task-card, .traceCard { min-width: 0; background: rgba(255,255,255,.88); border-color: rgba(148, 163, 184, .30); box-shadow: 0 8px 22px rgba(15, 23, 42, .045); }
     .workflowStage.good, .workflowStage.info, .workflowStage.warn, .workflowStage.error, .workflowStage.mine,
     .objectTile.good, .objectTile.info, .objectTile.warn, .objectTile.error, .objectTile.mine,
     .planRunRow.good, .planRunRow.info, .planRunRow.warn, .planRunRow.error, .planRunRow.mine,
@@ -1237,48 +1224,48 @@ export function renderPanelHtml(platform: string = process.platform): string {
     .claimEvidenceRow.unsupported, .claimEvidenceRow.needs,
     .featureReadinessRow.good, .featureReadinessRow.warn, .featureReadinessRow.error,
     .targetMatrixRow.done, .targetMatrixRow.partial,
-    .inspectorEvent.failed, .inspectorEvent.stalled { background: var(--surface-bg); }
-    .task-card.delete-pending { --task-bg: var(--subtle-bg); }
-    .workflowStageRail { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 6px; background: var(--surface-bg); }
+    .inspectorEvent.failed, .inspectorEvent.stalled { background: rgba(255,255,255,.88); }
+    .task-card.delete-pending { --task-bg: #FAFBFC; }
+    .workflowStageRail { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); padding: 6px; background: rgba(248,250,252,.78); }
     .workflowStage { min-height: 56px; padding: 8px; }
     .objectStrip { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
     .endpointCardGrid, .serverObjectGrid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 8px; }
     .endpointMiniGrid, .serverObjectStats, .traceReadinessGrid { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); }
-    .pinnedActions { position: relative; z-index: 1; flex: 0 0 auto; display: grid; gap: 7px; max-height: 126px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 9px; border: 1px solid var(--border); border-left: 4px solid var(--mine); border-radius: 10px; background: var(--surface-bg); }
+    .pinnedActions { position: relative; z-index: 1; flex: 0 0 auto; display: grid; gap: 7px; max-height: 126px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 9px; border: 1px solid #E2E8F0; border-left: 4px solid #7C3AED; border-radius: 10px; background: rgba(255,255,255,.92); }
     .pinnedActions .workflowActions { margin: 0; }
     .pinnedActions.inspectorCustomGroup { max-height: none; overflow: visible; }
     .inspectorCustomGroup .workflowActions { margin: 0; overflow: visible; }
     .inspectorCustomGroupHead { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-width: 0; }
     .inspectorCustomGroupHead[data-inspector-goto] { cursor: pointer; }
-    .inspectorCustomGroupHead[data-inspector-goto]:hover .inspectorEyebrow { color: var(--mine); text-decoration: underline; }
+    .inspectorCustomGroupHead[data-inspector-goto]:hover .inspectorEyebrow { color: #7C3AED; text-decoration: underline; }
     .inspectorCustomGroupHead .inspectorEyebrow { flex: 1 1 auto; min-width: 0; }
     .inspectorCustomGroupHead .inspectorEyebrow[data-inspector-goto] { cursor: pointer; }
     .inspectorCustomGroupHead .mini.inspectorCustomRowBtn { flex: 0 0 auto; align-self: flex-start; }
     .section-head .gpuDenseToolbar { margin-left: auto; align-self: flex-start; }
     .section-head .cardTools { align-self: flex-start; }
     .inspectorAddHost { display: contents; }
-    .inspectorCustomEmpty { color: var(--muted); font-size: 11px; }
+    .inspectorCustomEmpty { color: #64748B; font-size: 11px; }
     .inspectorCustomRowBtn { flex: 0 0 auto; min-width: 26px; padding: 5px 6px; font-size: 11px; }
-    #inspectorAddMenu, .inspectorAddMenu { position: fixed; z-index: 9999; display: none; width: 300px; max-height: 320px; overflow: auto; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-bg); box-shadow: 0 18px 40px rgba(15,23,42,.18); }
+    #inspectorAddMenu, .inspectorAddMenu { position: fixed; z-index: 9999; display: none; width: 300px; max-height: 320px; overflow: auto; padding: 10px; border: 1px solid #CBD5E1; border-radius: 10px; background: #FFFFFF; box-shadow: 0 18px 40px rgba(15,23,42,.18); }
     #inspectorAddMenu.is-open, .inspectorAddMenu.is-open { display: grid; gap: 6px; }
     .inspectorBody { min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; overflow-anchor: none; display: grid; gap: 10px; padding-right: 2px; }
     .inspectorActionRow { display: flex; align-items: stretch; gap: 6px; min-width: 0; }
     .inspectorActionRow > button[data-command] { flex: 1 1 auto; min-width: 0; }
-    .pinContextMenu { position: fixed; z-index: 10000; display: none; min-width: 164px; padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-bg); box-shadow: 0 18px 40px rgba(15,23,42,.18); }
+    .pinContextMenu { position: fixed; z-index: 10000; display: none; min-width: 164px; padding: 6px; border: 1px solid #CBD5E1; border-radius: 8px; background: rgba(255,255,255,.98); box-shadow: 0 18px 40px rgba(15,23,42,.18); }
     .pinContextMenu.is-open { display: grid; gap: 4px; }
-    .pinContextMenu button { width: 100%; justify-content: flex-start; padding: 6px 8px; color: var(--text); background: transparent; border-color: transparent; text-align: left; }
-    .pinContextMenu button:hover, .pinContextMenu button:focus-visible { background: var(--mine-bg); border-color: var(--mine-border); outline: none; }
+    .pinContextMenu button { width: 100%; justify-content: flex-start; padding: 6px 8px; color: #0F172A; background: transparent; border-color: transparent; text-align: left; }
+    .pinContextMenu button:hover, .pinContextMenu button:focus-visible { background: #EEF2FF; border-color: #C7D2FE; outline: none; }
     .statusCardCollapsed { max-height: 56px; min-height: 44px; overflow: hidden !important; cursor: context-menu; }
     .statusCardCollapsed > *:not(:first-child) { display: none !important; }
-    .statusCardCollapsed::after { content: "右键展开"; position: absolute; right: 9px; bottom: 6px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-bg); color: var(--muted); font-size: 11px; font-weight: 700; pointer-events: none; }
+    .statusCardCollapsed::after { content: "右键展开"; position: absolute; right: 9px; bottom: 6px; padding: 1px 6px; border-radius: 999px; border: 1px solid #CBD5E1; background: rgba(248,250,252,.95); color: #64748B; font-size: 11px; font-weight: 700; pointer-events: none; }
     .publishActionDeck { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 7px; align-items: stretch; margin-top: 8px; }
     .publishActionAnchor { display: grid; min-width: 0; scroll-margin-top: 12px; }
     .publishActionDeck button { width: 100%; min-width: 0; justify-content: center; }
-    .publishActionGroup { display: grid; gap: 6px; align-content: start; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-bg); min-width: 0; }
-    .publishActionGroup > .muted { font-size: 11px; font-weight: 700; color: var(--muted); }
+    .publishActionGroup { display: grid; gap: 6px; align-content: start; padding: 8px; border: 1px solid #E2E8F0; border-radius: 10px; background: rgba(248,250,252,.9); min-width: 0; }
+    .publishActionGroup > .muted { font-size: 11px; font-weight: 700; color: #64748B; }
     .publishActionButtons { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; }
     .publishActionButtons .publishActionAnchor { display: grid; min-width: 0; }
-    .actionGrid.statusOnly { color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .actionGrid.statusOnly { color: #64748B; font-size: 12px; line-height: 1.45; }
     .ops-flow.is-hidden { display: none; }
     @media (max-width: 1320px) { #cardDeck { --tree-col: 250px; --inspector-col: 330px; --main-min: 360px; } .resultWorkbench { grid-template-columns: 1fr; } .traceDetailPane { position: static; } }
     @media (max-width: 1040px) { #cardDeck { --tree-col: 240px; --inspector-col: 320px; --main-min: 0px; } .mainColumn { grid-column: 3; } .resourceTree { grid-column: 1; width: var(--tree-col); transform: translateX(calc(-1 * (var(--tree-col) - var(--tree-peek)))); } .resourceTree::after { display: grid; } .workbenchInspector { grid-column: 5; grid-row: 1; position: relative; width: var(--inspector-col); overflow: hidden; transform: translateX(calc(var(--inspector-col) - var(--inspector-peek))); } .workbenchInspector::before { display: grid; } .inspectorBody { overflow: auto; } .topbar-actions, .toolbar { justify-content: flex-start; margin-left: 0; } }
@@ -1326,7 +1313,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       padding: 8px 12px;
       border-radius: 5px;
       background: rgba(30, 30, 30, 0.95);
-      color: var(--surface-bg);
+      color: #fff;
       font-size: 12px;
       line-height: 1.6;
       white-space: pre-line;
@@ -1339,17 +1326,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     #globalTip[hidden] { display: none; }
     body.panel-low-effects *, body.panel-low-effects *::before, body.panel-low-effects *::after { animation: none !important; transition: none !important; box-shadow: none !important; text-shadow: none !important; filter: none !important; scroll-behavior: auto !important; }
     body.panel-low-effects .topbar, body.panel-low-effects .resourceTree, body.panel-low-effects .workbenchInspector { backdrop-filter: none !important; }
-
-    body.vscode-light { color-scheme: light; }
-
-    body.vscode-dark, body.vscode-high-contrast { color-scheme: dark; }
-
-    body.vscode-high-contrast, body.vscode-high-contrast-light { --border: var(--vscode-contrastBorder, var(--text)); --muted: var(--text); --success-border: var(--border); --info-border: var(--border); --warning-border: var(--border); --danger-border: var(--border); --mine-border: var(--border); }
-
-    body.vscode-high-contrast-light { color-scheme: light; }
-
-    :focus-visible { outline: 2px solid var(--vscode-focusBorder, var(--info)); outline-offset: 2px; }
-</style>
+  </style>
 </head>
 <body>
   <div id="panelBootstrapStatus" role="status" aria-live="polite">
@@ -1366,8 +1343,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
     <header class="topbar" aria-label="状态图例与全局快捷操作">
       <div class="statusLegend" aria-label="状态颜色图例"><span class="legendItem"><span class="legendDot good"></span>正常</span><span class="legendItem"><span class="legendDot info"></span>运行 / 信息</span><span class="legendItem"><span class="legendDot warn"></span>等待 / 注意</span><span class="legendItem"><span class="legendDot error"></span>异常 / 失败</span><span class="legendItem"><span class="legendDot mine"></span>我的任务 / 重点</span></div>
       <div class="topbar-actions">
+        <button data-command="toggleLowTrafficMode" type="button" class="secondary lowTrafficToggle" id="lowTrafficModeButton" aria-pressed="false" disabled title="低流量模式（全局偏好）：正在读取当前状态...">低流量：读取中</button>
         <button data-command="bootstrapProject" type="button" title="扫描工作区，识别 experiments/plans 下的实验计划与项目配置&#10;同时检查服务器与 Agent 等前置条件&#10;已有的计划与接入配置不会重复写入">识别工作区</button>
-        <span class="status-chip">Termius</span>
+        <span class="status-chip">后台 SSH</span>
         <span class="status-chip">全局配置</span>
         <span class="status-chip status-completed">仅本机端口</span>
         <button data-command="verifyAgentVersion" class="secondary" type="button" title="校验 Agent 版本&#10;对比本机与各服务器上的 Agent 版本&#10;不一致时提示升级">校验 Agent 版本</button>
@@ -1429,7 +1407,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         <div class="toolbar" data-anchor="sync-actions">
           <button type="button" data-command="prepareAgents" title="第 1 步 · 先部署&#10;上传最新版 Agent 到全部服务器并启动&#10;无需隧道在线">部署Agent</button>
           <span class="toolbarSep" aria-hidden="true">→</span>
-          <button type="button" data-command="startAll" class="secondary" title="第 1 步 · 连隧道&#10;启动全部 Termius 隧道，建立本机到服务器的端口转发">启动全部隧道</button>
+          <button type="button" data-command="startAll" class="secondary" title="第 1 步 · 连隧道&#10;后台建立本机到服务器的 SSH 端口转发">启动全部隧道</button>
+          <button type="button" data-command="openXshell" class="secondary" title="打开已启用服务器的 Xshell 会话，供手动操作">打开终端指引</button>
           <span class="toolbarSep" aria-hidden="true">→</span>
           <button type="button" data-command="publishGithub" data-confirm="true" title="第 2 步 · 传代码&#10;先提交推送到 GitHub（未配置会引导登录）&#10;再通过 SimpleSFTP 上传到所有 Worker；仅上传到启用的 Worker">发布到git并上传worker</button>
           <span class="toolbarSep" aria-hidden="true">→</span>
@@ -1491,7 +1470,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           <button type="button" data-command="runAllPlans" data-plan-batch-run="selected" class="secondary" disabled title="所选 PLAN 每批最多 4 个并发校验与入队；同版本代码统一同步，无需指定服务器；保留逐 Plan 预演与覆盖确认；失败后不启动下一批">运行所选计划</button>
           <button data-command="runAllPlans" data-confirm="true" class="secondary" title="全部 PLAN 每批最多 4 个并发校验与入队；同版本代码统一同步，无需指定服务器&#10;每批入队后自动派发，保留逐 Plan 预演与覆盖确认；失败后不启动下一批">运行全部计划</button>
           <button data-command="cleanupPlan" class="secondary" title="只读预览选中 PLAN 的本机及历史关联服务器产物，再核对精确路径">清除 PLAN 及关联产物</button>
-          <button data-command="reviewIsolatedPlanBatches" class="secondary" title="本批全部初始 PLAN 已核实启动后，独立审核已登记隔离产物；永久删除须另行两次确认">审核隔离产物永久删除</button>
+          <button data-command="reviewIsolatedPlanBatches" class="secondary" title="审核已登记隔离产物或其删除后留下的空目录；永久删除须显示完整路径并两次确认">审核隔离产物与空目录永久删除</button>
           </div>
         </div>
         <div id="planCommandPhaseLine" class="commandPhaseLine muted" role="status" aria-live="polite"></div>
@@ -1535,19 +1514,20 @@ export function renderPanelHtml(platform: string = process.platform): string {
          </div>
          <div class="cardTools">
            <select id="tmuxWorkerSelect" title="选择 tmux 所在 Worker"></select>
-           <button id="tmuxRefreshBtn" title="重新拉取 tmux 捕获面板的内容" class="secondary" type="button">刷新 capture</button>
-           <button id="tmuxListBtn" title="列出服务器上所有 tmux 会话，供 capture 面板选择" class="secondary" type="button">列出 sessions</button>
+           <button id="tmuxListBtn" title="手动刷新所有启用 Worker 的会话、窗口和窗格；低流量模式也可使用" class="secondary" type="button">刷新窗口列表</button>
+           <button id="tmuxRefreshBtn" title="手动刷新当前选中窗口的日志；低流量模式也可使用" class="secondary" type="button">刷新当前日志</button>
            <select id="tmuxWindowSelect" title="选择 tmux 目标（session:window.pane）" style="display:none"><option value="">正在列出...</option></select>
          </div>
        </div>
        <div id="tmuxListInfo" style="margin:6px 0;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--subtle-bg);font-size:12px;line-height:1.4;">
          <div id="tmuxWorkersOverview" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-         <span id="tmuxListMeta">等待列出 tmux sessions...</span>
+         <span id="tmuxListMeta">等待列出 tmux sessions...</span><span id="tmuxAutoNotice" style="margin-left:8px;color:var(--vscode-descriptionForeground);"></span>
+         <button type="button" class="mini secondary" data-tmux-refresh="list" title="低流量模式下手动更新窗口列表">刷新窗口列表</button>
          <div id="tmuxFilterBar" class="tmuxFilterBar"></div>
          <div id="tmuxOverview" class="tmuxOverviewGrid" style="margin-top:6px;display:grid;gap:4px;"></div>
        </div>
        <details open>
-         <summary>实时捕获数据（<span id="tmuxCaptureMeta">选择任务或窗口后读取日志</span>）</summary>
+         <summary>实时捕获数据（<span id="tmuxCaptureMeta">选择任务或窗口后读取日志</span><span id="tmuxCaptureNotice" style="color:var(--vscode-descriptionForeground);"></span>）<button type="button" class="mini secondary" data-tmux-refresh="capture" title="手动读取当前窗口最新日志">刷新当前日志</button></summary>
          <pre id="tmuxCapturePre" style="max-height:320px;overflow:auto;background:var(--vscode-textCodeBlock-background);padding:10px;border-radius:4px;white-space:pre-wrap;word-break:break-all;"></pre>
        </details>
       <div id="tmuxInstructions" style="display:grid;gap:6px;margin-top:8px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--subtle-bg);">
@@ -1564,6 +1544,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       <div class="section-head">
           <div class="section-title">
             <h2>运行进度</h2>
+            <button type="button" class="mini secondary" data-command="manualSchedulerSnapshot" title="手动刷新调度器和任务状态；低流量模式也可使用">刷新运行状态</button>
             <div class="section-desc">每个 Plan 一张概览卡；详情按需展开，已完成的 Plan 可手动折叠。结构、同步与 Worker 状态分别核实；项目科研校验未自动执行。</div>
           </div>
           <div class="section-head-actions">
@@ -1631,7 +1612,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       </details>
       <details class="advanced">
         <summary>高级诊断</summary>
-        <div class="toolbar" title="插件不内置 SSH；Worker 连接由 Termius 本地端口转发提供">
+        <div class="toolbar" title="Worker 隧道在后台建立；Xshell 提供服务器导入和手动终端">
           <button data-command="startWorker" type="button" title="启动 Worker&#10;在 Worker 服务器上启动 Agent&#10;接收调度任务并上报 GPU 状态">启动 Worker</button>
           <button data-command="configurePorts" class="secondary" type="button" title="配置隧道端口&#10;分配或调整 Worker 的本机转发端口">配置端口</button>
           <button data-command="repairPorts" class="secondary" type="button" title="处理端口冲突&#10;检测被占用的隧道端口并重新分配">处理端口冲突</button>
@@ -1988,6 +1969,16 @@ export function renderPanelHtml(platform: string = process.platform): string {
     const el = (id) => document.getElementById(id);
     let tmuxPollTimer = 0;
     const TMUX_POLL_MS = 5000;
+    let tmuxPollIntervalMs = TMUX_POLL_MS;
+    // A previous frame/persisted hint only prevents the pre-handshake initial pull; the host frame
+    // stays authoritative and the host itself is the last authority for any actual read. The stored
+    // flag is written and read with the SAME polarity: true means "automatic display refresh is off";
+    // an absent value (fresh webview, normal mode) keeps the original behaviour.
+    let tmuxDisplayAutoHint = true;
+    try { tmuxDisplayAutoHint = !(restoredWebviewState && restoredWebviewState.lowTrafficDisplayAutoOff === true); } catch (e) { tmuxDisplayAutoHint = true; }
+    const displayRefreshAt = new Map();
+    let tmuxListOrigin = "auto";
+    let tmuxCaptureOrigin = "auto";
     let tmuxListBusy = false;
     let tmuxListTimeout = 0;
     let tmuxInitialRetryTimer = 0;
@@ -2432,7 +2423,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       tmuxListTimeout = 0;
       tmuxListBusy = false;
       tmuxListPendingWorkers.clear();
-      refreshTmuxList();
+      refreshTmuxList("user");
     }
     function handleJobTmuxLogList(item) {
       const selected = tmuxJobLogSelection;
@@ -2443,7 +2434,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         }
         return;
       }
-      if (!tmuxListBusy && selected.requestId > tmuxListRequestId) refreshTmuxList();
+      if (!tmuxListBusy && selected.requestId > tmuxListRequestId) refreshTmuxList("user");
       const responseId = Number(item.requestId);
       if (!Number.isFinite(responseId) || responseId < selected.requestId || responseId !== tmuxListRequestId) return;
       if (Array.isArray(item.workers) && item.workers.length && !item.workers.some(function(worker) { return worker.id === selected.workerId; })) {
@@ -2485,8 +2476,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
       refreshTmuxCapture();
       refreshTmuxList();
     }
-    async function refreshTmuxList() {
+    async function refreshTmuxList(origin) {
       if (document.hidden || tmuxListBusy) return;
+      if (!displayAutoAllowed(origin)) return;
+      tmuxListOrigin = origin === "user" ? "user" : "auto";
       tmuxListBusy = true;
       tmuxListRequestId += 1;
       tmuxListPendingWorkers.clear();
@@ -2504,7 +2497,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           if (meta) meta.textContent = "会话刷新暂未收到响应，下次自动重试";
           scheduleTmuxInitialRetry();
         }, 20000);
-        vscode.postMessage({ command: "fetchTmuxList", workerId: jobWorker || tmuxSelectedWorkerId, allWorkers: !jobWorker, background: true, requestId: tmuxListRequestId });
+        vscode.postMessage({ command: "fetchTmuxList", workerId: jobWorker || tmuxSelectedWorkerId, allWorkers: !jobWorker, background: true, requestId: tmuxListRequestId, origin: tmuxListOrigin });
       } catch (e) {
         clearTimeout(tmuxListTimeout);
         tmuxListTimeout = 0;
@@ -2535,6 +2528,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
       clearTimeout(tmuxListTimeout);
       tmuxListTimeout = 0;
       tmuxListBusy = false;
+      if (item.ok !== false) {
+        recordDisplaySample("tmuxList", item.fetchedAt, tmuxListOrigin === "user");
+        try { persistWebviewState({ lowTrafficDisplayAutoOff: !displayAutoAllowed("auto") }); } catch (e) {}
+        renderDisplayAutoNotices();
+      }
       if (tmuxConfiguredWorkers.some(function(worker) { return tmuxListsByWorker[worker.id]?.ok === false; })) scheduleTmuxInitialRetry();
       else {
         tmuxInitialRetryCount = 0;
@@ -2648,11 +2646,13 @@ export function renderPanelHtml(platform: string = process.platform): string {
       }
       return lines.slice(-200).map(function(line) { return line.join(""); }).join(String.fromCharCode(10)).trimEnd();
     }
-    async function refreshTmuxCapture() {
+    async function refreshTmuxCapture(origin) {
       const pre = el("tmuxCapturePre");
       const meta = el("tmuxCaptureMeta");
       const win = tmuxResolveCaptureTarget();
       if (!pre || !meta) return;
+      if (!displayAutoAllowed(origin)) return;
+      tmuxCaptureOrigin = origin === "user" ? "user" : "auto";
       if (!win || !tmuxSelectedWorkerId) {
         pre.textContent = "";
         pre.dataset.captureTarget = "";
@@ -2669,21 +2669,180 @@ export function renderPanelHtml(platform: string = process.platform): string {
       pre.dataset.lastFetch = String(now);
       meta.textContent = "同步中 " + win + " ...";
       try {
-        vscode.postMessage({ command: "fetchTmuxCapture", workerId: tmuxSelectedWorkerId, window: win });
+        vscode.postMessage({ command: "fetchTmuxCapture", workerId: tmuxSelectedWorkerId, window: win, origin: tmuxCaptureOrigin });
       } catch (e) {
         tmuxCaptureBusy.delete(captureKey);
         meta.textContent = "同步失败 " + String(e).slice(0,60);
       }
     }
+    function displayAutoAllowed(origin) {
+      if (origin === "user") return true;
+      const mode = lowTrafficModeFromState(lastState || {});
+      if (mode) return mode.displayAutoRefresh !== false;
+      return tmuxDisplayAutoHint !== false;
+    }
+    function displaySampleNotice(key, cachedFallback) {
+      const mode = lowTrafficModeFromState(lastState || {});
+      const disabled = mode ? mode.displayAutoRefresh === false : tmuxDisplayAutoHint === false;
+      if (!disabled) return "";
+      const manual = displayRefreshAt.get(key + "|manual") || "";
+      if (manual) return "低流量：自动刷新已关闭；上次手动刷新 " + manual;
+      const cached = displayRefreshAt.get(key + "|fetch") || String(cachedFallback || "");
+      if (cached) return "低流量：自动刷新已关闭；当前缓存采样于 " + cached + "，本模式尚未手动刷新";
+      return "低流量：自动刷新已关闭；尚未手动刷新";
+    }
+    function recordDisplaySample(key, fetchedAt, manual) {
+      if (!key) return;
+      const stamp = String(fetchedAt || "") || new Date().toLocaleTimeString();
+      displayRefreshAt.set(key + "|fetch", stamp);
+      if (manual) displayRefreshAt.set(key + "|manual", stamp);
+    }
+    function renderDisplayAutoNotices() {
+      const list = el("tmuxAutoNotice");
+      if (list) { const text = displaySampleNotice("tmuxList"); if (list.textContent !== text) list.textContent = text; }
+      const capture = el("tmuxCaptureNotice");
+      if (capture) {
+        const text = displaySampleNotice("tmuxCapture:" + (tmuxSelectedWorkerId || "") + ":" + (tmuxResolveCaptureTarget() || ""));
+        if (capture.textContent !== text) capture.textContent = text;
+      }
+      // GPU history keeps one row per key (overview plus every expanded series) so each area reports
+      // its own real sample time; they are re-filled after every render because the GPU section
+      // re-creates its DOM.
+      try {
+        document.querySelectorAll(".gpuHistoryNotice").forEach(function (node) {
+          const key = String(node.dataset.gpuNoticeKey || "");
+          if (!key) return;
+          const cached = gpuHistoryMeta && gpuHistoryMeta.updatedAt ? String(gpuHistoryMeta.updatedAt) : "";
+          const text = displaySampleNotice("gpuHistory:" + key, cached);
+          if (node.textContent !== text) node.textContent = text;
+        });
+      } catch (e) {}
+    }
+    // Turning the guard on must also drop rounds an automatic entry already scheduled: no reply is
+    // expected for them any more, so their pending/timeout state must not linger and no automatic
+    // retry may be armed. A manual round keeps its own pending state and timeout.
+    function cancelPendingAutoDisplayWork() {
+      if (tmuxListOrigin === "user") return;
+      clearTimeout(tmuxListTimeout);
+      tmuxListTimeout = 0;
+      clearTimeout(tmuxInitialRetryTimer);
+      tmuxInitialRetryTimer = 0;
+      tmuxListBusy = false;
+      tmuxListPendingWorkers.clear();
+      try {
+        gpuWindowPendingByKey.forEach(function (entry) {
+          if (!entry || entry.origin === "user") return;
+          if (entry.timer) clearTimeout(entry.timer);
+          gpuWindowPending.delete(entry.id);
+          if (gpuWindowPendingByKey.get(entry.key) === entry) gpuWindowPendingByKey.delete(entry.key);
+        });
+      } catch (e) {}
+    }
     function scheduleTmuxPoll() {
       clearInterval(tmuxPollTimer);
+      tmuxPollTimer = 0;
+      if (!(Number(tmuxPollIntervalMs) > 0)) return;
       tmuxPollTimer = setInterval(function(){
         const overview = el("tmuxOverview");
         if (document.hidden || !overview || !overview.getClientRects().length) return;
         const bounds = overview.getBoundingClientRect();
         if (bounds.top > window.innerHeight || bounds.bottom < 0) return;
         refreshTmuxList(); refreshTmuxCapture();
-      }, TMUX_POLL_MS);
+      }, tmuxPollIntervalMs);
+    }
+    const LOW_TRAFFIC_RECEIPT_TIMEOUT_MS = 8000;
+    let lowTrafficToggleSeq = 0;
+    let lowTrafficTogglePending = null;
+    let lowTrafficReceiptDisplay = null;
+    let lowTrafficReceiptNotice = "";
+    let lowTrafficReceiptTimer = 0;
+    function lowTrafficModeFromState(state) {
+      const mode = (state || {}).trafficMode;
+      return mode && typeof mode === "object" ? mode : null;
+    }
+    function lowTrafficDisplayEnabled(mode) {
+      if (lowTrafficTogglePending) return lowTrafficTogglePending.target === true;
+      if (lowTrafficReceiptDisplay && Date.now() < lowTrafficReceiptDisplay.until) return lowTrafficReceiptDisplay.enabled === true;
+      return mode ? mode.enabled === true : null;
+    }
+    function lowTrafficModeLabel(mode) {
+      const enabled = lowTrafficDisplayEnabled(mode);
+      if (lowTrafficTogglePending) return "低流量：提交中";
+      if (mode === null || enabled === null) return "低流量：读取中";
+      if (!enabled) return "低流量：关";
+      if (mode.effective === true || lowTrafficDisplayEnabled(mode) !== (mode.enabled === true)) return "低流量：开";
+      const blocked = String(mode.blockedBy || "");
+      if (blocked === "paused") return "低流量：开（网络已暂停，恢复后生效）";
+      if (blocked === "manual_only") return "低流量：开（已是仅手动刷新，后台周期本已停止）";
+      if (blocked === "background_traffic_paused") return "低流量：开（后台通信已停）";
+      return "低流量：开（" + (blocked || "更强制约束") + "下暂不生效）";
+    }
+    function applyLowTrafficModeState(state) {
+      const mode = lowTrafficModeFromState(state);
+      if (mode) {
+        const intervalMs = Number((mode.intervals || {}).tmuxMs);
+        // r2: a display cadence of 0 means no timer at all, not a slow timer.
+        if (Number.isFinite(intervalMs) && intervalMs >= 0 && intervalMs !== tmuxPollIntervalMs) {
+          tmuxPollIntervalMs = intervalMs;
+          scheduleTmuxPoll();
+        }
+        tmuxDisplayAutoHint = mode.displayAutoRefresh !== false;
+        try { persistWebviewState({ lowTrafficDisplayAutoOff: mode.displayAutoRefresh === false }); } catch (e) {}
+        if (mode.displayAutoRefresh === false) cancelPendingAutoDisplayWork();
+      }
+      renderDisplayAutoNotices();
+      const button = el("lowTrafficModeButton");
+      if (!button) return;
+      const label = lowTrafficModeLabel(mode);
+      if (button.textContent !== label) button.textContent = label;
+      const enabled = lowTrafficDisplayEnabled(mode);
+      const pressed = enabled === true ? "true" : "false";
+      if (button.getAttribute("aria-pressed") !== pressed) button.setAttribute("aria-pressed", pressed);
+      let title = "低流量模式（全局偏好，保存后本窗口立即生效；其他已打开窗口需重载窗口后应用）。开启只降低无人查看的后台展示类查询频率：队列协调、计划进度、tmux 展示与快照回退变慢；你的手动刷新、提交与停止、任务协调、产物同步、结果收集、就绪与版本校验保持不变。";
+      if (lowTrafficTogglePending) title = "正在提交低流量模式设置...";
+      else if (lowTrafficReceiptNotice) title = lowTrafficReceiptNotice;
+      else if (mode && mode.error) title = "上次设置未保存：" + String(mode.error);
+      if (button.getAttribute("title") !== title) button.setAttribute("title", title);
+      button.disabled = !mode || Boolean(lowTrafficTogglePending);
+    }
+    function clearLowTrafficReceiptTimer() {
+      if (!lowTrafficReceiptTimer) return;
+      clearTimeout(lowTrafficReceiptTimer);
+      lowTrafficReceiptTimer = 0;
+    }
+    function beginLowTrafficToggle(target, requestId) {
+      lowTrafficTogglePending = { target: target === true, requestId: String(requestId || "") };
+      lowTrafficReceiptNotice = "";
+      clearLowTrafficReceiptTimer();
+      lowTrafficReceiptTimer = setTimeout(function () {
+        lowTrafficReceiptTimer = 0;
+        if (!lowTrafficTogglePending) return;
+        lowTrafficTogglePending = null;
+        lowTrafficReceiptNotice = "低流量模式提交结果未知（未收到回执），未自动重发；当前显示值可能尚未变化，可再次点击重试或重新读取面板状态。";
+        try { applyLowTrafficModeState(lastState || {}); } catch (e) {}
+      }, LOW_TRAFFIC_RECEIPT_TIMEOUT_MS);
+      try { applyLowTrafficModeState(lastState || {}); } catch (e) {}
+    }
+    function handleLowTrafficModeReceipt(item) {
+      const requestId = String((item || {}).requestId || "");
+      const pending = lowTrafficTogglePending;
+      // A receipt only means something for the request that is still outstanding. Without a live
+      // pending, or without a usable identity on both sides, it is stale, abandoned or a duplicate:
+      // the shown value, the next click target, the pending state and the timeout timer stay
+      // completely untouched, so the button keeps showing the latest confirmed preference.
+      if (!pending || !requestId || !pending.requestId || requestId !== pending.requestId) return;
+      clearLowTrafficReceiptTimer();
+      lowTrafficTogglePending = null;
+      if (item && item.ok === true) {
+        lowTrafficReceiptNotice = "";
+        // Label, aria-pressed and the NEXT click target all read this confirmed value until the
+        // matching authoritative state frame arrives.
+        lowTrafficReceiptDisplay = { requestId: requestId, enabled: item.enabled === true, until: Date.now() + 5000 };
+      } else {
+        lowTrafficReceiptDisplay = null;
+        lowTrafficReceiptNotice = "低流量模式设置失败：" + String((item && item.error) || "未知错误") + "（保持原值，可在恢复后重试）";
+      }
+      try { applyLowTrafficModeState(lastState || {}); } catch (e) {}
     }
     const DIAGNOSTIC_JSON_PREVIEW_LIMIT = 16000;
     const DIAGNOSTIC_JSON_MAX_DEPTH = 4;
@@ -3000,7 +3159,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       scalar: "单值", mapping: "对象", object: "对象", sequence: "列表", array: "列表"
     });
     const STATUS_LABELS = Object.freeze({
-      xshell_tunnel_realtime: "Termius 实时隧道", offline_import: "离线导入", unknown: "未知", local_port_closed: "本地端口未打开", agent_unreachable: "Agent 不可达", agent_ok: "Agent 正常", file_api_unavailable: "文件 API 不可用",
+      xshell_tunnel_realtime: "后台 SSH 隧道", offline_import: "离线导入", unknown: "未知", local_port_closed: "本地端口未打开", agent_unreachable: "Agent 不可达", agent_ok: "Agent 正常", file_api_unavailable: "文件 API 不可用",
       disconnected: "未连接", connecting: "连接中", connected: "已连接", reconnecting: "重连中", websocket: "WebSocket（本地转发）", sse: "SSE（本地转发）", polling: "快照备用", snapshot: "快照备用", paused: "已暂停",
       accepted: "已接收", submitted: "已提交", queued: "排队中", pending: "等待中", running: "运行中", in_progress: "运行中", testing: "检测中", completed: "已完成", completed_with_errors: "部分失败", done: "已完成",
       success: "成功", succeeded: "成功", failed: "失败", error: "错误", warning: "注意", stalled: "已卡住", stopped: "已停止", cancelled: "已取消", canceled: "已取消", skipped: "已跳过",
@@ -3331,12 +3490,12 @@ export function renderPanelHtml(platform: string = process.platform): string {
       "releaseJobStageBlockSlots",
       "analyzeRuntimeLog",
       "retryDistributedJob",
-      "recallFailedJob",
+      "recallFailedJob", "recheckOutputIsolation",
       "markJobUnavailable", "restoreJobAvailability",
       "stopAllPlans",
       "stopAndClearPlan", "stopAndClearPlans", "reloadWindow", "webviewHeartbeatAck", "webviewVisibility",
       "quickSetup", "openSetupGuide", "openAdvancedCommandsSetting", "configureSessions", "configureAgentSessions", "writeAgentCommands", "saveTopologyMode", "saveAgentDefaults", "saveSchedulerConfig", "saveWorkerConfig", "addWorkerConfig", "deleteWorkerConfig", "reassignWorkerTask", "recallPlanToLocalQueue", "prepareAgents",
-      "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure",  "startWorker", "start", "startAll", "startAgents", "startAllConnections",
+      "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure",  "startWorker", "start", "startAll", "startAgents", "startAllConnections", "openXshell",
       "test", "testAll", "showRegistry", "restart", "pauseStream", "resumeStream", "pauseAll", "resumeNetwork", "snapshot", "manualGpuSnapshot", "loadGpuHistory", "gpuWindowSamples", "manualSchedulerSnapshot", "manualTracesSnapshot",
       "selectLogRunKey", "script", "realCheck", "status", "offline", "openPlan", "savePlan", "archivePlan", "archivePlanCopy", "restoreArchivedPlan", "runAllPlans", "generatePlanGuide", "bootstrapProject", "generateOutputAdapter", "saveProjectAdapterRules", "saveResultColumnMapping", "saveRemoteRootPolicy", "checkPluginUpdates", "installPluginUpdates", "saveResultCsvDir", "chooseResultCsvDir", "savePptPlotConfig", "choosePptPath", "chooseNewPptPath", "plotResultsToPpt", "refreshPptAutomation", "startPptAutomation", "openPptAutomationGuide", "clearLegacyTasks", "saveUiLayout", "resetUiLayout",
       "cleanupPlan", "reviewIsolatedPlanBatches",
@@ -3348,6 +3507,13 @@ export function renderPanelHtml(platform: string = process.platform): string {
       ...Object.keys(uiCapabilityMap)
     ]);
     document.addEventListener("click", (event) => {
+      const tmuxRefresh = event.target.closest("button[data-tmux-refresh]");
+      if (tmuxRefresh) {
+        event.preventDefault(); event.stopPropagation();
+        if (tmuxRefresh.dataset.tmuxRefresh === "list") refreshTmuxList("user");
+        else if (tmuxRefresh.dataset.tmuxRefresh === "capture") refreshTmuxCapture("user");
+        return;
+      }
       const taskSelectionInput = event.target.closest('input[type="checkbox"][data-command="selectExperiment"]');
       if (taskSelectionInput) {
         event.stopPropagation();
@@ -3501,12 +3667,12 @@ export function renderPanelHtml(platform: string = process.platform): string {
             if (it && it.status === "running") {
               it.status = "stalled";
               try { if (typeof showToast === "function") showToast("关闭窗口卡住（stalled）：后台可能仍在继续，已自动刷新列表", "warning"); } catch (e) {}
-              try { refreshTmuxList(); refreshTmuxCapture(); } catch (e) {}
+              try { refreshTmuxList("user"); refreshTmuxCapture("user"); } catch (e) {}
             }
           }, 30000);
           vscode.postMessage({ command: "killTmuxWindow", workerId: closeWorkerId, target: closeTarget, window: closeTarget, session: closeSession, identity: closeIdentity, danger: closeDanger ? "true" : "false", clientActionId: closeClientActionId });
         } catch (e) {
-          try { refreshTmuxList(); } catch (err) {}
+          try { refreshTmuxList("user"); } catch (err) {}
         }
         return;
       }
@@ -3766,6 +3932,17 @@ export function renderPanelHtml(platform: string = process.platform): string {
           payload.splitField = String(document.querySelector("#resultSplitField")?.value || "");
           payload.splitValues = [...document.querySelectorAll("#resultSplitValues input[data-result-split-value]:checked")].map((input) => input.value);
           payload.keepColumns = [...document.querySelectorAll("#resultSplitColumns input[data-result-split-column]:checked")].map((input) => input.value);
+        }
+        if (command === "toggleLowTrafficMode") {
+          // Label, aria-pressed and the next target all come from the same confirmed value: the
+          // authoritative state, or the host's confirmed receipt while its state frame is still on the
+          // way. Reading lastState directly here would send the stale value as the next target.
+          const lowTrafficTarget = !lowTrafficDisplayEnabled(lowTrafficModeFromState(lastState || {}));
+          lowTrafficToggleSeq += 1;
+          payload.enabled = lowTrafficTarget;
+          payload.documentGeneration = panelDocumentGeneration;
+          payload.requestId = "ltm-" + String(lowTrafficToggleSeq) + "-" + String(panelDocumentBuildId || "0") + "-" + String(Date.now());
+          beginLowTrafficToggle(lowTrafficTarget, payload.requestId);
         }
         if (command === "openLocalResultTable") {
           payload.tableKey = String(button.dataset.tableKey || "");
@@ -4047,7 +4224,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         if (scope === "overview") {
           const wasOpen = gpuHistoryOverviewOpen;
           gpuHistoryOverviewOpen = historyDetails.open;
-          if (historyDetails.open && !wasOpen) requestGpuHistory({ maxPoints: 96 }, true);
+          if (historyDetails.open && !wasOpen) requestGpuHistory({ maxPoints: 96 }, true, "auto");
         } else if (scope === "gpu") {
           const serverId = historyDetails.dataset.serverId || "";
           const gpuId = historyDetails.dataset.gpuId || "";
@@ -4056,13 +4233,27 @@ export function renderPanelHtml(platform: string = process.platform): string {
           if (historyDetails.open) {
             expandedGpuHistoryKeys.add(key);
             while (expandedGpuHistoryKeys.size > GPU_HISTORY_SERIES_CACHE_LIMIT) expandedGpuHistoryKeys.delete(expandedGpuHistoryKeys.values().next().value);
-            if (!wasOpen) requestGpuHistory({ serverId, gpuId, maxPoints: 288 }, true);
+            if (!wasOpen) requestGpuHistory({ serverId, gpuId, maxPoints: 288 }, true, "auto");
           } else {
             expandedGpuHistoryKeys.delete(key);
           }
         }
         if (historyDetails.open) scheduleGpuHistoryDraw();
       }
+    }, true);
+    // The explicit GPU-history entry: one click refreshes exactly the key it belongs to (overview or
+    // that series), one round per key, and it is the only way GPU history reaches the server while the
+    // low-traffic guard is on. stopPropagation keeps the <details>/row toggle from double-firing.
+    document.addEventListener("click", function (event) {
+      const btn = event.target && event.target.closest ? event.target.closest("button[data-gpu-history-manual]") : null;
+      if (!btn) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const key = String(btn.dataset.gpuHistoryManual || "");
+      const parts = key.split("::");
+      if (!key || parts[0] === "overview") requestGpuHistory({ maxPoints: 96 }, true, "user");
+      else if (parts.length >= 2 && parts[0] && parts[1]) requestGpuHistory({ serverId: parts[0], gpuId: parts[1], maxPoints: 288 }, true, "user");
+      renderDisplayAutoNotices();
     }, true);
     document.addEventListener("focusin", (event) => {
       const input = event.target;
@@ -4268,8 +4459,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         cancelJobTmuxLogJump();
         selectTmuxWorker(button.getAttribute("data-tmux-worker"));
       }, true);
-      if (btn) btn.addEventListener("click", refreshTmuxCapture);
-      if (listBtn) listBtn.addEventListener("click", refreshTmuxList);
+      if (btn) btn.addEventListener("click", function(){ refreshTmuxCapture("user"); });
+      if (listBtn) listBtn.addEventListener("click", function(){ refreshTmuxList("user"); });
       document.addEventListener("click", (ev)=>{
         const t = ev.target.closest("[data-copy-target]");
         if(!t) return;
@@ -4436,6 +4627,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       let latestNavigationMessage = null;
       for (const item of messages) {
         if (!item) continue;
+        if (item.type === "lowTrafficModeUpdated") { try { handleLowTrafficModeReceipt(item); } catch (e) {} continue; }
         if (item.type === "uiCommandStatus") {
           if (String(item.command || "") === "stopAndClearPlan" && item.planStopClear && item.planStopClear.planFile && lastState) {
             const stopKey = String(item.planStopClear.planFile).replaceAll(String.fromCharCode(92), "/").replace(/^\\.\\//, "").toLowerCase();
@@ -4477,12 +4669,24 @@ export function renderPanelHtml(platform: string = process.platform): string {
           try { refreshTmuxCapture(); } catch (e) {}
           continue;
         }
+        if (item.type === "gpuHistoryResult") {
+          // The host answers every GPU history round with the identity it actually served; the sample
+          // times shown in low traffic come from that real result, never from the click itself.
+          const gpuKey = gpuHistorySeriesKey(String(item.serverId || "overview"), String(item.gpuId || "overview"));
+          if (item.ok !== false) recordDisplaySample("gpuHistory:" + gpuKey, item.fetchedAt, item.origin === "user");
+          renderDisplayAutoNotices();
+          continue;
+        }
         if (item.type === "tmuxCapture") {
           tmuxCaptureBusy.delete(String(item.workerId || "") + ":" + String(item.window || ""));
           if (tmuxSelectedWorkerId && item.workerId !== tmuxSelectedWorkerId) continue;
           if (String(item.window || "") !== tmuxResolveCaptureTarget()) continue;
           const pre = el("tmuxCapturePre");
           const meta = el("tmuxCaptureMeta");
+          if (item.ok !== false) {
+            recordDisplaySample("tmuxCapture:" + String(item.workerId || "") + ":" + String(item.window || ""), item.fetchedAt, tmuxCaptureOrigin === "user");
+            renderDisplayAutoNotices();
+          }
           if (pre) {
             const targetChanged = pre.dataset.captureTarget !== String(item.window || "");
             const decoded = decodeCapturedText(item.text || item.capture || "");
@@ -4569,6 +4773,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       try {
         el("renderError").textContent = "";
         if (state && state.degradedMessage) el("renderError").textContent = String(state.degradedMessage);
+        try { applyLowTrafficModeState(state); } catch (e) {}
         renderProjectOnboardingNotice(state);
         const fastConfigEdit = shouldFastPathConfigEdit();
         if (fastConfigEdit) {
@@ -4588,6 +4793,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
         renderVisibleSections(state);
         try { renderBranchProjectsCard(state); } catch (e) {}
         try { renderTmuxOverview(tmuxListCache.sessions || []); } catch (e) {}
+        // The GPU / tmux sections re-create their DOM on every render, so the low-traffic hints and the
+        // manual-refresh entries must be filled again after the render, not only on a mode frame.
+        try { renderDisplayAutoNotices(); } catch (e) {}
         applyLayoutColumns();
         schedulePostRenderMaintenance();
         restoreTransientPanelState();
@@ -6376,8 +6584,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
                 try { if (typeof showToast === "function") showToast(clearText, String(data.status || "").toLowerCase() === "completed" ? "info" : "warning"); } catch (e) {}
               }
             }
-            refreshTmuxList();
-            refreshTmuxCapture();
+            // A finished user operation verifies its own tmux target; that is not a display timer.
+            refreshTmuxList("user");
+            refreshTmuxCapture("user");
           }
         } catch (e) {}
         if (lastState && !isConfigSaveCommand(data.command)) {
@@ -7153,7 +7362,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
 
     const COMMAND_HELP_TEXT = Object.freeze({
-        startAllConnections: "打开已配置的 Termius 连接",
+        startAllConnections: "后台建立已配置 Worker 的 SSH 隧道",
+        openXshell: "打开已启用服务器的 Xshell 会话供手动操作",
         prepareAgents: "检测并复用健康 Agent；必要时部署独立服务，保留原登录行为，核实运行版本",
         testAll: "检测全部",
         snapshot: "刷新快照",
@@ -7189,8 +7399,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         deleteWorkerConfig: "删除 Worker 配置",
         configureSessions: "选择 Termius 会话",
         configureAgentSessions: "写入 Agent RemoteCommand",
-        startTunnelEndpoint: "启动 Termius 隧道",
-        startAgentEndpoint: "启动 Termius 隧道",
+        startTunnelEndpoint: "启动后台 SSH 隧道",
+        startAgentEndpoint: "后台部署并启动 Agent",
         startAgents: "启动全部隧道",
         writeAgentCommands: "写入 Agent RemoteCommand",
         test: "检测当前端点",
@@ -9421,7 +9631,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             '<div class="muted">默认由本机按逐卡配额派发；仅点击运行进度中的“剩余 job 入服务器队列”才会预排队。</div>' +
             configInput("scheduler", "gpuJobsPerCard", "每卡最大并行 job 数", scheduler.gpuJobsPerCard ?? 1, "number") +
             configInput("scheduler", "gpuMinFreeMemoryGb", "可派发最低总剩余显存（GiB）", scheduler.gpuMinFreeMemoryGb ?? 22, "number") +
-            '<div class="muted gpuMemorySummary">自动识别服务器全部显卡。每张卡未达到 job 配额，且该卡总剩余显存达到门槛时可派发。不按每个 job 预估显存，不以利用率或其他进程阻断。</div>' +
+            '<div class="muted gpuMemorySummary">自动识别服务器全部显卡。新配置先运行一个正式 job，连续观察显存 10 分钟后按峰值加余量预留预算；任务提前正常结束也可完成观察。多 PLAN 边观察边派发，保留每卡并行上限与最低总剩余显存门槛。采样未知或检测到 OOM 时暂停相应新增派发。</div>' +
             '<details class="wide" data-details-key="scheduler-advanced"' + detailsOpenAttr("scheduler-advanced", false) + ' style="grid-column:1 / -1"><summary>刷新与连接选项</summary><div class="configGrid">' +
             configInput("scheduler", "pollSeconds", "调度轮询基准(秒)", configDefault(scheduler.pollSeconds, 10), "number") +
             configInput("scheduler", "jitterSeconds", "正向随机抖动(秒)", configDefault(scheduler.jitterSeconds, 30), "number") +
@@ -9473,7 +9683,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             configPortPair(scope, "隧道端口对", "localForwardPort", "remoteTelemetryPort", worker.localForwardPort || assignment.localForwardPort || "", worker.remoteTelemetryPort || worker.remoteAgentPort || assignment.remoteServicePort || "", workerSession, "savedSessionForwardIndex", worker.savedSessionForwardIndex, tunnelHost(worker.localForwardHost || assignment.localForwardHost || setup.localForwardHost), tunnelHost(worker.remoteAgentHost || assignment.remoteBindHost || setup.remoteAgentHost)) +
             configSelect(scope, "enabled", "启用状态", worker.enabled === false ? "false" : "true", [["true", "启用"], ["false", "禁用"]]) +
           '</div>' +
-          '<div class="muted">插件的 SSH/SFTP 文件操作使用服务器地址；Termius 会话只负责隧道。文件传输路径由项目父目录和当前项目名自动计算。</div>' +
+          '<div class="muted">后台隧道与 Agent 部署使用系统 SSH 认证；Xshell 用于导入服务器和手动终端。文件传输路径由项目父目录和当前项目名自动计算。</div>' +
           renderServerDestinationPreview(workerAgent, scope) +
           renderSchedulerDependencyStatus((((state.workerProbes || {})[worker.id] || {}).schedulerDependencies), worker.displayName || worker.id) +
           '<div class="toolbar">' +
@@ -9602,7 +9812,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         '<div class="toolbar">' +
           '<button type="button" data-section-target="settings" title="跳转到设置区" data-anchor-target="settings-servers">设置</button>' +
           '<button data-command="addWorkerConfig" title="在设置区追加一块空白服务器表单&#10;填写远端路径与环境后，需再点「保存」才会生效">新增服务器</button>' +
-          '<button data-command="startAll" class="secondary" title="第 1 步 · 连隧道&#10;启动全部 Termius 隧道，建立本机到服务器的端口转发">' + esc("启动 Worker 隧道") + '</button>' +
+          '<button data-command="startAll" class="secondary" title="后台建立全部 Worker 的 SSH 端口转发">' + esc("启动 Worker 隧道") + '</button>' +
+          '<button data-command="openXshell" class="secondary" title="打开导入的 Xshell 会话供手动操作">打开终端指引</button>' +
           '<button data-command="prepareAgents" title="第 1 步 · 先部署&#10;上传最新版 Agent 到全部服务器并启动&#10;无需隧道在线">' + esc("部署 Worker Agent") + '</button>' +
           '<button data-command="testAll" class="secondary" title="第 3 步 · 检测&#10;检测全部服务器隧道、Agent 与调度依赖&#10;失败项会列出原因">' + esc("检测 Worker") + '</button>' +
         '</div>');
@@ -10101,7 +10312,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         mode: "选择调度架构：单 Worker 由一台执行服务器运行；仅多 Worker 由多台执行服务器运行；Hub 可用时由 Hub 统一调度。切换后需保存。"
       };
       const schedulerHelp = {
-        gpuJobsPerCard: "本项目每张实际显卡最多并行多少个 job。", gpuMinFreeMemoryGb: "显卡总剩余显存达到该值才可继续派发；不按每个 job 预估。",
+        gpuJobsPerCard: "本项目每张实际显卡最多并行多少个 job；实际派发还需通过显存预算检查。", gpuMinFreeMemoryGb: "派发前显卡总剩余显存须达到该值，并须覆盖已有任务未申请的预算与新任务预算。",
         gpuMemoryPerJobGb: "只需填写每个 job 按多少 G 显存计算。例如填 24，96G 显卡可同时运行 4 个 job；实际显存不足时等待。",
         dispatchMode: "默认全部由本机按逐卡配额派发；旧预排队设置不再自动生效，仅通过运行进度按钮将剩余 job 按配额放入服务器队列。",
         pollSeconds: "Worker 两次常规调度检查之间的基准间隔，单位秒；数值越小检查越频繁。",
@@ -10125,10 +10336,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         workerUser: "登录该 Worker 的 SSH 用户名；SFTP 使用同一用户。",
         condaEnv: "必填完整路径，以 / 开头，如 /path/to/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾；留空使用系统 Python；仅环境名如 <env_name> 已废弃",
         agentProjectDir: "填写服务器上的绝对父目录，例如 /srv/projects；插件自动追加当前本地项目名作为代码目录，并在该父目录下计算 Agent 路径。不要填写单个文件或再次追加项目名。",
-        savedSessionPath: "Termius 转发由用户手动启动；插件保存本机与远端主机、端口，不读取 Termius 私有会话。",
+        savedSessionPath: "导入服务器信息并保留手动打开 Xshell 的入口；后台连接使用已保存的服务器地址和端口。",
         agentSessionPath: "Agent 会话",
         localForwardPort: "本机监听隧道的端口；插件通过当前 Worker 配置的本机主机地址和此端口访问 Agent。不是 SSH 登录端口。",
-        remoteTelemetryPort: "Worker Agent 在远端配置主机地址上监听的端口；需与所选 Termius 会话的远端转发主机和端口一致。不是 SSH 登录端口。",
+        remoteTelemetryPort: "Worker Agent 在远端配置主机地址上监听的端口；需与 Agent 的实际监听配置一致。不是 SSH 登录端口。",
         enabled: "关闭后此 Worker 不参与新任务调度，也不作为当前文件传输目标；配置仍保留。",
         maxConcurrentGpus: "同时占用的 GPU 数上限；留空或 auto 使用全部可用 GPU，不限制排队任务数。",
         gpuIdleUtilThreshold: "空卡利用率阈值：利用率 < 阈值 才视为空闲（与显存双条件且关系）",
@@ -10142,10 +10353,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         remoteTmuxSessionPrefix: "远端 tmux 会话名前缀；多用户共用服务器时建议用稳定用户名，旧 zlk 会话可填 zlk",
         condaEnv: "必填完整路径，以 / 开头，如 /path/to/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾；留空使用系统 Python；仅环境名如 <env_name> 已废弃",
         agentProjectDir: "填写服务器上的绝对父目录，例如 /srv/projects；插件自动追加当前本地项目名作为代码目录，并在该父目录下计算 Agent 路径。不要填写单个文件或再次追加项目名。",
-        savedSessionPath: "Termius 转发由用户手动启动；插件保存本机与远端主机、端口，不读取 Termius 私有会话。",
+        savedSessionPath: "导入服务器信息并保留手动打开 Xshell 的入口；后台连接使用已保存的服务器地址和端口。",
         agentSessionPath: "Agent 会话",
         localForwardPort: "本机监听隧道的端口；插件通过当前 Worker 配置的本机主机地址和此端口访问 Agent。不是 SSH 登录端口。",
-        remoteAgentPort: "Worker Agent 在远端配置主机地址上监听的端口；需与所选 Termius 会话的远端转发主机和端口一致。不是 SSH 登录端口。"
+        remoteAgentPort: "Worker Agent 在远端配置主机地址上监听的端口；需与 Agent 的实际监听配置一致。不是 SSH 登录端口。"
       };
       if (scope === "topology") return topologyHelp[key] || "";
       if (scope === "scheduler") return schedulerHelp[key] || "";
@@ -10267,12 +10478,13 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const cards = visibleWorkers.map((worker) => agentSessionCard("Worker", worker.displayName || worker.id, worker, "-"));
       setHtmlIfChanged("agentSessions", '<div class="toolbar">' +
         '<button data-command="prepareAgents" title="第 1 步 · 先部署&#10;上传最新版 Agent 到全部服务器并启动&#10;无需隧道在线">准备 Agent 并启动</button>' +
-        '<button data-command="writeAgentCommands" class="secondary" title="把 Agent 启动命令写入 Termius 会话&#10;便于手动启动与排查">写入自动启动命令</button>' +
-        '<button data-command="startAllConnections" class="secondary" title="启动全部连接&#10;建立所有服务器隧道并拉起 Agent">启动连接</button>' +
+        '<button data-command="writeAgentCommands" class="secondary" title="把 Agent 启动命令写入 Xshell 会话&#10;便于手动启动与排查">写入自动启动命令</button>' +
+        '<button data-command="startAllConnections" class="secondary" title="在后台建立所有已启用 Worker 隧道">启动后台连接</button>' +
+        '<button data-command="openXshell" class="secondary" title="打开导入的 Xshell 会话供手动操作">打开终端指引</button>' +
         '</div>' +
         '<div class="endpointCardGrid">' + cards.join("") + '</div>' +
         diagnosticBudgetNotice("Worker Agent 会话", workers.length, DIAGNOSTIC_AGENT_WORKER_CARD_LIMIT, "个") +
-        '<div class="muted">RemoteCommand 仅由写入按钮修改；启动隧道只打开 .xsh；登录后进入当前项目代码目录。</div>');
+        '<div class="muted">Agent 和隧道在后台启动；Xshell 会话只在手动打开时运行，旧 RemoteCommand 写入入口仍保留。</div>');
     }
 
     function agentSessionCard(role, name, item, fallbackTmux) {
@@ -10289,8 +10501,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         '<span class="' + (cls === "ok" ? "status-completed" : "status-warning") + '">' + esc(status) + '</span></div>' +
         '<div class="endpointMiniGrid">' +
           endpointMini("tmux", item.tmuxSessionName || fallbackTmux || "-", item.tmuxSessionName || fallbackTmux || "-") +
-          endpointMini("Termius 隧道", item.sessionPath ? "已选择" : "未选择", item.sessionPath || "未选择") +
-          endpointMini("启动方式", "随隧道启动", "随隧道启动") +
+          endpointMini("Xshell 隧道", item.sessionPath ? "已选择" : "未选择", item.sessionPath || "未选择") +
+          endpointMini("启动方式", "后台受管启动", "通过 SimpleSFTP 管理指定 tmux 窗口") +
           endpointMini("端点", endpointId, "启动按钮会携带的端点 ID") +
         '</div>' +
         '<div class="toolbar">' + action + '</div>' +
@@ -11341,7 +11553,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         : "";
       var summaryHtml = servers.length
         ? '<div class="summaryLine"><span class="pill">服务器 ' + servers.length + '</span><span class="pill">GPU ' + gpuCount + '</span><span class="pill status-completed">空闲 ' + freeCount + '</span><span class="pill status-warning">占用 ' + busyCount + '</span><span class="gpuServerMineBadge">我的 ' + mineCount + '</span>' + omittedHint + '</div>'
-        : '<div class="muted">暂无 GPU 数据。请确认 Termius 隧道与 Worker Agent 可用。</div>';
+        : '<div class="muted">暂无 GPU 数据。请确认后台隧道与 Worker Agent 可用。</div>';
        setHtmlPreservingGpuCanvases("gpuHistoryOverview", renderGpuHistoryOverview(state, servers));
       setHtmlIfChanged("gpuSummary", summaryHtml);
       renderGpuTensorboardControls(state);
@@ -11507,7 +11719,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             var k = th.getAttribute("data-col-key");
             if(!k) return;
             var existing = (gpuDenseState.sorts||[]).findIndex(function(s){ return s.key===k; });
-            if(e.shiftKey || (e.ctrlKey || e.metaKey) || e.metaKey){
+            if(e.shiftKey || e.ctrlKey || e.metaKey){
               if(existing>=0){ gpuDenseState.sorts[existing].dir = gpuDenseState.sorts[existing].dir==="asc"?"desc":"asc"; }
               else { gpuDenseState.sorts.push({key:k, dir:"asc"}); }
             } else {
@@ -11530,7 +11742,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
               var tr = btn.closest("tr");
               var srv = tr ? tr.getAttribute("data-server-id") : "";
               var gid = tr ? tr.getAttribute("data-gpu-id") : "";
-              if(srv && gid) requestGpuHistory({ serverId: srv, gpuId: gid, maxPoints: 288 }, true);
+              if(srv && gid) requestGpuHistory({ serverId: srv, gpuId: gid, maxPoints: 288 }, true, "auto");
             }
             renderGpuSection(lastState || state);
             setTimeout(function(){ scheduleGpuHistoryDraw(); }, 60);
@@ -11546,7 +11758,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             else {
               gpuDenseState.expandedKey=k;
               var srv=tr.getAttribute("data-server-id"); var gid=tr.getAttribute("data-gpu-id");
-              if(srv && gid) requestGpuHistory({ serverId: srv, gpuId: gid, maxPoints: 288 }, true);
+              if(srv && gid) requestGpuHistory({ serverId: srv, gpuId: gid, maxPoints: 288 }, true, "auto");
             }
             renderGpuSection(lastState || state);
             setTimeout(function(){ scheduleGpuHistoryDraw(); }, 60);
@@ -11612,8 +11824,15 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const points = Number(maxPoints) > 0 ? Number(maxPoints) : 96;
       return Math.min(24 * 3600000, points * 60000);
     }
-    function requestGpuHistoryRemote(payload) {
-      vscode.postMessage(Object.assign({ command: "loadGpuHistory" }, payload));
+    function requestGpuHistoryRemote(payload, origin) {
+      // A05 display read: with the low-traffic guard on, only an explicit manual click reaches the
+      // server. Expansion, focus, initial retries and the ring fallback are automatic entries.
+      if (!displayAutoAllowed(origin)) {
+        renderDisplayAutoNotices();
+        return false;
+      }
+      vscode.postMessage(Object.assign({ command: "loadGpuHistory", origin: origin === "user" ? "user" : "auto" }, payload));
+      return true;
     }
     // Gap decisions are materialized per segment at that segment's OWN granularity
     // before coarse and fine runs are concatenated, so a merged fine-run median
@@ -11668,7 +11887,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (!samples.length) {
         // No host-cached fine frames for this window: honestly fall back to the
         // existing server history request; coarse buckets stay coarse.
-        requestGpuHistoryRemote(entry.payload);
+        requestGpuHistoryRemote(entry.payload, entry.origin);
         return;
       }
       const workerId = entry.workerId;
@@ -11713,9 +11932,15 @@ export function renderPanelHtml(platform: string = process.platform): string {
         scheduleGpuHistoryDraw();
       }
     }
-    function requestGpuHistory(query, force) {
+    function requestGpuHistory(query, force, origin) {
       const payload = query && typeof query === "object" ? query : {};
       const key = gpuHistorySeriesKey(payload.serverId || "overview", payload.gpuId || "overview");
+      if (!displayAutoAllowed(origin)) {
+        // A05 in low traffic: no request, no timer, no cooldown burn. The area keeps showing the
+        // cached curve together with its real sample time and the manual-refresh state.
+        renderDisplayAutoNotices();
+        return false;
+      }
       const now = Date.now();
       const lastAt = Number(gpuHistoryRequestLastAt?.get(key) || 0);
       if (!force && now - lastAt < GPU_HISTORY_REQUEST_COOLDOWN_MS) return false;
@@ -11734,11 +11959,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
           if (previous.timer) clearTimeout(previous.timer);
           gpuWindowPending.delete(previous.id);
         }
-        const entry = { id: ++gpuWindowRequestSeq, workerId: ringWorker, key: key, payload: Object.assign({}, payload), timer: 0 };
+        const entry = { id: ++gpuWindowRequestSeq, workerId: ringWorker, key: key, origin: origin === "user" ? "user" : "auto", payload: Object.assign({}, payload), timer: 0 };
         entry.timer = setTimeout(function() {
           if (gpuWindowPendingByKey.get(key) === entry) {
             gpuWindowPendingByKey.delete(key); gpuWindowPending.delete(entry.id);
-            requestGpuHistoryRemote(entry.payload);
+            requestGpuHistoryRemote(entry.payload, entry.origin);
           }
         }, 800);
         gpuWindowPending.set(entry.id, entry);
@@ -11747,7 +11972,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           start: now - gpuWindowFineWindowMs(payload.maxPoints), end: now, maxPoints: Number(payload.maxPoints) || 96 });
         return true;
       }
-      requestGpuHistoryRemote(payload);
+      requestGpuHistoryRemote(payload, origin);
       return true;
     }
     function refreshGpuHistoryAfterSnapshot() {
@@ -11826,6 +12051,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         '<summary>历史状态曲线（最近 1 天）</summary>' +
         '<div class="gpuHistoryPanelBody">' +
           '<div class="gpuHistoryStatus ' + escAttr(gpuHistoryStatusClass()) + '">' + esc(status) + '</div>' +
+          gpuLowTrafficControlsMarkup(gpuHistorySeriesKey("overview", "overview")) +
           body +
         '</div>' +
       '</details>';
@@ -11834,9 +12060,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
     function renderGpuHistoryCard(serverId, gpuId, gpuName) {
       const series = gpuHistorySeriesFor(serverId, gpuId);
       const status = gpuHistoryStatusText("gpu");
-      if (!series) return '<div class="gpuHistoryStatus ' + escAttr(gpuHistoryStatusClass()) + '">' + esc(status) + '</div>';
+      const controls = gpuLowTrafficControlsMarkup(gpuHistorySeriesKey(serverId, gpuId));
+      if (!series) return '<div class="gpuHistoryStatus ' + escAttr(gpuHistoryStatusClass()) + '">' + esc(status) + '</div>' + controls;
       return renderGpuHistoryChart("GPU " + gpuId + (gpuName && gpuName !== "-" ? " · " + gpuName : ""), "gpu", [series], "最近 24 小时 · 线性时间 · 利用率 (%) / 显存已用 (MB)") +
-        '<div class="gpuHistoryStatus ' + escAttr(gpuHistoryStatusClass()) + '">' + esc(status) + '</div>';
+        '<div class="gpuHistoryStatus ' + escAttr(gpuHistoryStatusClass()) + '">' + esc(status) + '</div>' + controls;
     }
 
     function gpuHistoryStatusText(scope) {
@@ -11855,6 +12082,14 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (gpuHistoryLastStateStatus === "error") return "error";
       if (gpuHistoryLastStateStatus === "stale") return "stale";
       return "";
+    }
+
+    // One control row per GPU history key: the low-traffic hint (real sample time, or never manually
+    // refreshed) plus the only entry that may fetch while the guard is on. Every key gets its own row,
+    // so the overview and each expanded series report their own state instead of sharing one hint.
+    function gpuLowTrafficControlsMarkup(key) {
+      return '<span class="gpuHistoryNotice" data-gpu-notice-key="' + escAttr(key) + '"></span>' +
+        '<button type="button" class="gpuHistoryManualBtn" data-gpu-history-manual="' + escAttr(key) + '">手动刷新历史</button>';
     }
 
     function gpuHistoryOverviewSeries(state, servers) {
@@ -14431,7 +14666,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             '<button type="button" data-trace-plan-scope="all" title="显示全部实验记录（含其他 Plan 的归档候选）" class="' + (!scope.scoped ? "is-active" : "") + '" aria-pressed="' + (!scope.scoped ? "true" : "false") + '">全部记录 ' + scope.totalCount + '</button>' +
           '</div><span class="muted" title="' + escAttr(scope.selectedPlanFile) + '">' + esc(compactPath(scope.selectedPlanFile)) + (scope.unscopedCount ? '；未归属 ' + scope.unscopedCount : '') + '</span></div>'
         : '<div class="taskScopeBar"><span class="muted">未选择 Plan，显示全部实验记录。</span></div>';
-      setHtmlIfChanged("traceTable", scopeBar + (rows.length ? traceNotice + '<div class="traceList">' + visibleRows.map((row) => renderTraceCard(row, selected)).join("") + '</div>' : '<div class="muted">' + (scope.scoped ? '当前 Plan 暂无实验记录；可切换“全部记录”查看历史或未归属记录。' : '暂无实验记录。') + '</div>') +
+      setHtmlIfChanged("traceTable", '<button type="button" class="mini secondary" data-command="manualTracesSnapshot" title="手动刷新实验记录；低流量模式也可使用">刷新实验记录</button>' + scopeBar + (rows.length ? traceNotice + '<div class="traceList">' + visibleRows.map((row) => renderTraceCard(row, selected)).join("") + '</div>' : '<div class="muted">' + (scope.scoped ? '当前 Plan 暂无实验记录；可切换“全部记录”查看历史或未归属记录。' : '暂无实验记录。') + '</div>') +
         (archivedPlans.length ? '<h3>已归档计划</h3>' + archivedNotice + '<div class="traceList">' + visibleArchivedPlans.map(renderArchivedPlanCard).join("") + '</div>' : ""));
       renderTraceDetailPane(selectedRow, rows.length);
     }
@@ -14746,6 +14981,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
 
     function renderExecutionPlanList(state) {
+      const artifactSyncRequired = asArray(((state || {}).setup || {}).workerTunnels).filter(worker => worker && worker.enabled !== false).length > 1;
       function distributedJobIsActive(job) {
         if (job.lifecycleProtocol === 2 && job.executionState === "missing" && !job.statusQueryError) return false;
         return ["pending", "dispatching", "queued", "running", "unknown"].includes(String(job.status || "").toLowerCase());
@@ -14841,7 +15077,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const submission = executionNewerSubmission(group);
         const deferredCurrent = !submission && !!group.deferredStatus;
         const currentJobs = submission || deferredCurrent ? [] : executionCurrentDistributedJobs(group);
-        const schedulable = (job) => distributedJobIsActive(job) && !(String(job.status || "").toLowerCase() === "pending" && fingerprintBlocked(job));
+        const schedulable = (job) => distributedJobIsActive(job) && !job.outputIsolationBlocked && !(String(job.status || "").toLowerCase() === "pending" && fingerprintBlocked(job));
         const recovery = group.distributedRecovery || { expectedJobCount: 0, missingCount: 0, conflict: false, unresolved: false };
         const distributedActive = recovery.unresolved || currentJobs.some(schedulable);
         const active = submission || deferredCurrent ? true : currentJobs.length ? distributedActive
@@ -14850,7 +15086,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
           : group.tasks.some((row) => taskFailureLikeStatus(row.status)) || (!submission && !deferredCurrent && group.operations.some((row) => operationIsFailureLike(row.status) || operationHasDeadEvidence(row)));
         const blockedCount = currentJobs.filter((job) => String(job.status || "") === "pending" && fingerprintBlocked(job)).length;
         const blockedOnly = currentJobs.length > 0 && blockedCount === currentJobs.filter((job) => String(job.status || "") === "pending" || ["dispatching", "queued", "running", "unknown"].includes(String(job.status || ""))).length && blockedCount > 0 && !currentJobs.some((job) => ["dispatching", "queued", "running", "unknown", "failed"].includes(String(job.status || "")));
-        const queued = currentJobs.filter((job) => ["pending", "queued"].includes(String(job.status || "")) && !fingerprintBlocked(job)).length;
+        const queued = currentJobs.filter((job) => ["pending", "queued"].includes(String(job.status || "")) && !job.outputIsolationBlocked && !fingerprintBlocked(job)).length;
         const missingWindows = currentJobs.filter((job) => job.lifecycleProtocol === 2 && job.executionState === "missing" && !job.statusQueryError).length;
         const unknown = currentJobs.filter((job) => String(job.status || "") === "unknown").length;
         const dispatching = currentJobs.filter((job) => String(job.status || "") === "dispatching").length;
@@ -14860,7 +15096,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const waitingSubmission = submission && submission.localSubmissionProgress === true && String(submission.status || "").toLowerCase() === "queued";
         const reviewJobs = (currentJobs.length ? currentJobs : group.tasks).filter(job => ["completed", "done"].includes(job.status) && job.completionState !== "verified").length;
         const anomalyJobs = (currentJobs.length ? currentJobs : group.tasks).filter(job => ["completed", "done"].includes(job.status) && job.completionState === "review_required").length;
-        const tone = submission ? (waitingSubmission ? "blocked" : "queued") : deferredView ? deferredView.tone : unknown || recovery.unresolved ? "blocked" : running ? "running" : queued || dispatching ? "queued" : failed ? "failed" : reviewJobs || blockedOnly ? "blocked" : active ? "blocked" : "completed";
+        const tone = submission ? (waitingSubmission ? "blocked" : "queued") : deferredView ? deferredView.tone : unknown || recovery.unresolved ? "blocked" : running ? "running" : queued || dispatching ? "queued" : failed ? "failed" : reviewJobs || blockedOnly || currentJobs.some(job=>job.outputIsolationBlocked) ? "blocked" : active ? "blocked" : "completed";
         const completed = currentJobs.length ? currentJobs.filter((job) => String(job.status || "") === "completed" && job.completionState === "verified").length
           : submission || deferredCurrent ? 0
           : group.tasks.filter((row) => TASK_TERMINAL_STATUSES?.has(taskStatusToken(row.status)) && !taskFailureLikeStatus(row.status) && row.completionState === "verified").length;
@@ -14894,7 +15130,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const taskStamps = group.tasks.map((row) => Date.parse(row.enqueuedAt || row.createdAt || row.startedAt || "")).filter(Number.isFinite);
         const stamp = Date.parse(submitted || "") || (operationStamps.length ? Math.max(...operationStamps)
           : taskStamps.length ? Math.min(...taskStamps) : Number.MAX_SAFE_INTEGER);
-        return { ...group, currentJobs, totalJobs, missingInputs: Math.max(0, recovery.expectedJobCount-currentJobs.length), tone, active, distributedActive, blockedOnly, blockedCount, queued, completed, running, submitting: !!submission, waitingSubmission, deferredCurrent, statusText, countText, failedJobs, isolationPausedJobs, unavailableJobs, label, stamp };
+        return { ...group, submissionOperationId: submission && (submission.operationId || submission.id || submission.opId), currentJobs, totalJobs, missingInputs: Math.max(0, recovery.expectedJobCount-currentJobs.length), tone, active, distributedActive, blockedOnly, blockedCount, queued, completed, running, submitting: !!submission, waitingSubmission, deferredCurrent, statusText, countText, failedJobs, isolationPausedJobs, unavailableJobs, label, stamp };
       });
       items.sort((a, b) => a.stamp - b.stamp || a.key.localeCompare(b.key));
       if (typeof executionPlanFiles !== 'undefined') executionPlanFiles = Array.from(new Set(items.map(item => item.planFile).filter(Boolean)));
@@ -14930,11 +15166,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const foldButton = '<button type="button" class="mini secondary" data-execution-plan-fold="' + escAttr(group.key) + '" title="只收起这张卡片，不停止调度、不清除历史">折叠此 Plan</button>';
         const selectBox = group.planFile ? '<input type="checkbox" class="executionPlanCheckbox" data-execution-plan-check="' + escAttr(group.planFile) + '" aria-label="勾选 ' + escAttr(group.label || group.planFile) + '"' + (isSelected ? ' checked' : '') + '>' : '';
         const dangerActions = group.planFile ? '<div class="executionPlanActions"><button class="mini history-clear" data-command="clearOperations" data-plan-file="' + escAttr(group.planFile) + '" title="仅清除这个 Plan 在本机的已结束运行历史；保留远端审计、日志和产物">清除历史</button></div>' : '';
-        const statusBadge = '<b class="' + (group.tone === "blocked" || group.tone === "queued" ? "status-warning" : statusClass(group.tone)) + '">' + esc(statusText) + '</b>';
+        const statusBadge = '<b' + (group.submissionOperationId ? ' data-submission-status="' + escAttr(group.submissionOperationId) + '"' : '') + ' class="' + (group.tone === "blocked" || group.tone === "queued" ? "status-warning" : statusClass(group.tone)) + '">' + esc(statusText) + '</b>';
         const distributedHtml = distributedRows.length ? '<h3>' + loadingPrefix(group.distributedActive) + '当前 job · 成功 ' + group.completed + '/' + group.totalJobs + '</h3>'
           + (group.missingInputs ? '<div class="executionDistributedFailure" role="status">缺少 ' + group.missingInputs + ' 个 job 的任务输入（声明 ' + group.totalJobs + '，当前 ' + distributedRows.length + '）。缺项不计入完成；选中对应 PLAN 后，可校验并选择“仅补跑未完成任务”。</div>' : '')
           + (group.failedJobs ? '<div class="executionDistributedFailure">' + group.failedJobs + ' 个当前 job 失败，未计入成功。打开对应日志查看原因。</div>' : '')
-          + (group.isolationPausedJobs ? '<div class="executionDistributedFailure" role="status">' + group.isolationPausedJobs + ' 个 job 旧产物隔离未完成：训练未启动、不会自动派发，也不计入沿用完成；请在对应 job 行通过“重新排队此 job”或手动派发重新审核产物处理。</div>' : '')
+          + (group.isolationPausedJobs ? '<div class="executionDistributedFailure" role="status">' + group.isolationPausedJobs + ' 个 job 旧产物隔离未完成：训练未启动、不会自动派发，也不计入沿用完成；传输忙结束后自动核实，安全后回到队列。其他阻塞或仍有旧文件时，请在对应行点击恢复按钮重新审核。</div>' : '')
           + (group.logicalMerged ? '<div class="muted">补跑已合并 · ' + (group.mixedVersions ? '混合源码版本；逐 job 保留原始来源' : '保留逐 job 原始来源') + '</div>' : '')
           + Array.from(new Set(distributedRows.map(job => job.planId || group.distributedPlanId))).map(id => '<button type="button" class="mini" data-manual-dispatch="batch" data-plan-id="'+escAttr(id||'')+'" title="仅处理同一原始提交内的选中 job；已有文件另行审核">停止原任务并派发所选 job</button>').join('')
           + '<div class="executionDistributedJobs">' + distributedRows.map((job) => {
@@ -14943,15 +15179,17 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const manualControls=status!=="completed"?'<input type="checkbox" aria-label="选择手动派发任务" data-manual-job="'+escAttr(String(job.index))+'" data-plan-id="'+escAttr(manualPlan)+'" data-command-id="'+(job.commandId?escAttr(job.commandId):'')+'"'+(manualSelection&&manualSelection.has(job.index)&&manualSelection.get(job.index)===(job.commandId||'')?' checked':'')+'><button type="button" class="mini" data-manual-dispatch="single" data-plan-id="'+escAttr(manualPlan)+'" data-job-index="'+escAttr(String(job.index))+'" data-command-id="'+(job.commandId?escAttr(job.commandId):'')+'">'+(['queued','running'].includes(status)?'停止后派发':'手动派发')+'</button>':'';
           const retryView = automaticJobRetryView(job);
           const blocked = status === "pending" && fingerprintBlocked(job);
-          const jobActive = ["pending", "dispatching", "queued", "running", ...(job.lifecycleProtocol === 2 ? [] : ["unknown"])].includes(status) && !blocked;
+          const jobActive = ["pending", "dispatching", "queued", "running", ...(job.lifecycleProtocol === 2 ? [] : ["unknown"])].includes(status) && !blocked && !job.outputIsolationBlocked;
           const unavailable = job.unavailable && status === "cancelled";
           const preflightRejected = Boolean(job.admissionRejection && status === "failed");
           const needsReview = status === "completed" && job.completionState !== "verified";
-          const statusLabel = needsReview ? (job.completionState === "review_required" ? "完成但有异常，待复核" : "产物完整，运行日志待核实") : job.executionState === "starting" ? "正在启动命令" : job.outputIsolationBlocked ? "隔离暂停，未启动" : job.retainExistingOutputs ? "保留已有产物" : job.lifecycleProtocol === 2 && status === "unknown" ? (job.statusQueryError ? "查询失败，状态未知" : job.executionState === "exited" ? "执行结束，结果待确认" : job.executionState === "missing" ? "远端未发现该任务" : "执行状态待核实") : unavailable ? "不可用" : blocked ? (String(job.blockReason || "").indexOf("PLAN 所需源码待核实") === 0 ? "源码待核实" : String(job.blockReason || "").indexOf("等待当前代码版本") === 0 ? "等待代码版本" : "代码版本不匹配") : retryView.label || ({ pending: "本机等待空卡", queued: "服务器排队", dispatching: "派发中", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已中止", unknown: "待核实" }[status] || status);
-          const placement = (job.workerId ? job.workerId + (preflightRejected ? " · 未启动" : job.gpuId == null || job.gpuId === "" ? "" : " · GPU " + job.gpuId) : "未派发") + (job.manualDispatch ? " · 手动指定" : "");
+          const isolationState = job.outputIsolationBlocked && job.outputIsolationBlocked.recovery && job.outputIsolationBlocked.recovery.state;
+          const isolationLabel = isolationState === "waiting_transfer" ? "等待传输，自动重查" : isolationState === "review_required" ? "旧产物待审核" : isolationState === "unknown" ? "产物待核实，自动重查" : "隔离暂停，未启动";
+          const statusLabel = needsReview ? (job.completionState === "review_required" ? "完成但有异常，待复核" : "产物完整，运行日志待核实") : job.executionState === "starting" ? "正在启动命令" : job.outputIsolationBlocked ? isolationLabel : job.retainExistingOutputs ? "保留已有产物" : job.lifecycleProtocol === 2 && status === "unknown" ? (job.statusQueryError ? "查询失败，状态未知" : job.executionState === "exited" ? "执行结束，结果待确认" : job.executionState === "missing" ? "远端未发现该任务" : "执行状态待核实") : unavailable ? "不可用" : blocked ? (String(job.blockReason || "").indexOf("PLAN 所需源码待核实") === 0 ? "源码待核实" : String(job.blockReason || "").indexOf("等待当前代码版本") === 0 ? "等待代码版本" : "代码版本不匹配") : retryView.label || ({ pending: "本机等待空卡", queued: "服务器排队", dispatching: "派发中", running: "运行中", completed: "已完成", failed: "失败", cancelled: "已中止", unknown: "待核实" }[status] || status);
+          const placement = (job.workerId ? job.workerId + (preflightRejected ? " · 未启动" : job.gpuId == null || job.gpuId === "" ? "" : " · GPU " + job.gpuId) : job.automaticWorkerId ? job.automaticWorkerId + " · 等待本服务器空卡" : "未派发") + (job.automaticWorkerId ? " · 自动选卡" : job.manualDispatch ? " · 手动指定" : "");
           const canJumpLog = Boolean(!preflightRejected && job.workerId && (job.commandId || job.outputDir));
           const logButton = '<button type="button" class="mini secondary" data-job-tmux-log="1" data-worker-id="' + escAttr(job.workerId || "") + '" data-command-id="' + escAttr(job.commandId || "") + '" data-output-dir="' + escAttr(job.outputDir || "") + '"' + (canJumpLog ? '' : ' disabled') + ' title="' + (canJumpLog ? '在 TMUX 区域选中该 Worker 的真实任务窗口标签' : '等待任务派发后定位对应的 TMUX 日志标签') + '">查看窗口日志</button>';
-          const errorText = String(job.artifactError || job.error || "").trim();
+          const errorText = String((artifactSyncRequired && job.artifactError) || job.error || "").trim();
           const nativeRerun = job.lifecycleProtocol === 2 && job.workerId && job.commandId && !job.statusQueryError
             && (status === "failed" || status === "unknown" && job.executionState === "missing");
           const trainingRecoveryButton = nativeRerun
@@ -14962,10 +15200,12 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const recallButton = status === "queued" || job.recallRequested === true
             ? '<button type="button" class="mini secondary" data-command="recallPlanToLocalQueue" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" title="只召回此排队 job；运行中、已结束或状态不明的任务保持原 Worker。">' + (job.recallRequested ? "重试召回" : "召回到本机") + '</button>' : "";
           const recallNote = job.recallRequested ? "召回待确认，仍固定在原 Worker" : "";
-          const failedRecallButton = status === "failed" && job.resultPathPolicy === "declared" && job.workerId && job.commandId
+          const isolationRecoveryButton = job.outputIsolationBlocked && status === "pending" && !job.workerId && !job.commandId
+            ? '<button type="button" class="mini secondary" data-command="recheckOutputIsolation" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '">' + (isolationState === "review_required" ? "审核旧产物" : "重新核实/审核旧产物") + '</button>' : "";
+          const failedRecallButton = isolationRecoveryButton || status === "failed" && job.resultPathPolicy === "declared" && job.workerId && job.commandId
             && job.globalJobId === String(job.planId || group.distributedPlanId || "") + ":" + String(job.index)
             && !job.unavailable && !job.recoveryConflict && !group.distributedRecovery?.conflict
-            ? '<button type="button" class="mini secondary" data-command="recallFailedJob" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="核对原作业身份、已停止状态及空输出；若有遗留文件，打开仅针对该 job 的人工审核预览。不会自动移动或覆盖产物。">重新排队此 job</button>' : "";
+            ? isolationRecoveryButton || '<button type="button" class="mini secondary" data-command="recallFailedJob" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || "") + '" data-plan-file="' + escAttr(group.planFile || "") + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="核对原作业身份、已停止状态及空输出；若有遗留文件，打开仅针对该 job 的人工审核预览。不会自动移动或覆盖产物。">重新排队此 job</button>' : "";
           const failedCleanup = asArray(group.failedAttemptRecoveries).filter(row => Number(row.jobIndex) === Number(job.index)).at(-1);
           const canMarkUnavailable = !job.unavailable && !job.recoveryConflict && !group.distributedRecovery?.conflict
             && (["failed", "cancelled"].includes(status) || status === "pending" && !job.workerId && !job.commandId);
@@ -14982,14 +15222,14 @@ export function renderPanelHtml(platform: string = process.platform): string {
           const diagnosticSummary = firstException ? '<div class="muted">' + esc(String(firstException.summary || '').split(String.fromCharCode(10)).filter(Boolean).slice(-1)[0] || firstException.type).slice(0, 240) + ' · ' + esc(firstException.logPath || diagnostic.logPath || '') + ' · 行 ' + esc(String(firstException.lineStart || '?')) + '–' + esc(String(firstException.lineEnd || '?')) + '</div>' : '';
           const lifecycleStates = '<div class="muted executionLifecycleStates"><span>执行：' + esc(executionLabel) + (job.exitCode == null ? '' : ' · 退出码 ' + esc(String(job.exitCode))) + '</span> · <span>产物：' + esc(resultLabel) + '</span> · <span>' + esc(diagnosticLabel) + '</span></div>';
           const analyzeButton = job.commandId && job.workerId ? '<button type="button" class="mini secondary" data-command="analyzeRuntimeLog" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '">重新分析运行日志</button>' : '';
-          const artifactButtons = status === "completed" && job.lifecycleProtocol === 2 && job.workerId && job.commandId && !unavailable
+          const artifactButtons = artifactSyncRequired && status === "completed" && job.lifecycleProtocol === 2 && job.workerId && job.commandId && !unavailable
             ? ['refreshJobArtifacts', 'retryJobArtifactSync'].map((command, index) => '<button type="button" class="mini secondary" data-command="' + command + '" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="只核对或增量同步此 job 当前勾选范围的产物，保留训练完成状态。">' + (index ? '重试产物同步' : '刷新产物状态') + '</button>').join('') : '';
           // 暂存槽卡点（SimpleSFTP 0.2.113 结构化证据）：显示「卡在哪台/哪个范围/通道/身份＋两槽」。
           // 释放按钮仅当结构化候选 releaseCandidate 且 SE 实时能力门成立（stageBlockReleaseCapable，由扩展端
           // 读 capabilities 得出，绝不按版本号推断）才出现；显示可缩写代/身份，后台释放只绑定持久化完整值。
           const stageSlotAge = (ms) => Number.isInteger(ms) && ms >= 0
             ? (ms >= 86400000 ? Math.floor(ms / 86400000) + ' 天' : Math.max(1, Math.floor(ms / 3600000)) + ' 小时') : '未知';
-          const stageBlock = job.artifactStageBlock && job.artifactStageBlock.schemaVersion === 1 && job.artifactStageBlock.code === 'TRANSFER_STAGE_PENDING'
+          const stageBlock = artifactSyncRequired && job.artifactStageBlock && job.artifactStageBlock.schemaVersion === 1 && job.artifactStageBlock.code === 'TRANSFER_STAGE_PENDING'
             ? job.artifactStageBlock : null;
           const stageBlockHtml = !stageBlock ? '' : '<div class="executionDistributedJobError">暂存槽卡点：主机 '
             + esc(String(stageBlock.destination && stageBlock.destination.host || '未知'))
@@ -15003,7 +15243,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
               ? '<button type="button" class="mini secondary" data-command="releaseJobStageBlockSlots" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="实时复核后展示精确绝对/相对路径，经一次确认隔离并登记删除这条最旧 committed 暂存槽；不改变训练完成状态，只自动重试这条同步。">释放旧文件占用</button>'
               : '<div class="muted">' + (stageBlock.releaseCandidate === true ? '配套 SimpleSFTP 未提供受控释放能力或实时能力未确认；仅显示卡点，不会猜测路径。' : '该卡点当前无可释放候选（被占用、非终态或时间不明），不会提供释放入口。') + '</div>')
             + '</div>';
-          const anomalyRerunButton = status === "completed" && job.completionState === "review_required" && job.lifecycleProtocol === 2 && job.workerId && job.commandId
+          const anomalyRerunButton = ["completed", "failed"].includes(status) && job.completionState === "review_required" && job.lifecycleProtocol === 2 && job.workerId && job.commandId
             ? '<button type="button" class="mini secondary" data-command="retryDistributedJob" data-runtime-anomaly-rerun="true" data-plan-id="' + escAttr(job.planId || group.distributedPlanId || '') + '" data-job-index="' + escAttr(String(job.index)) + '" data-command-id="' + escAttr(job.commandId) + '" title="仅重跑此 job；已有产物沿用完整路径双确认，保留其他任务。">覆盖产物并重跑此 job</button>' : '';
           const blockText = job.lifecycleProtocol === 2 ? String(job.statusQueryError || job.blockReason || "") : job.outputIsolationBlocked || blocked ? String(job.blockReason || "") : "";
           const blockAdvice = blocked ? (blockText.indexOf("PLAN 所需源码待核实") === 0 ? "仅核实本 PLAN 的入口、配置与依赖；产物和缓存不参与。按具体路径处理源码变化，协议较旧时更新 Agent/Scheduler 后刷新即可，无需重新提交已在队列的 job。" : blockText.indexOf("等待当前代码版本") === 0 ? "这个已提交 job 保留排队；其他 Worker 可运行匹配版本。被占用的 Worker 收到旧任务结束回执后自动释放版本锁，无需再次提交。" : "下一步：空闲 GPU 不能运行这份旧代码。到实验准备的 Plan 列表手动选中，再点“校验并提交运行”；或恢复提交前的代码并重新同步 Worker。") : "";
@@ -15014,6 +15254,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
             ? '<div class="muted">启动前预检已拒绝此 job，训练未开始，不会自动重派。请核对上面的输出与结果路径；保留已有权重和结果，显式处理冲突或修改正式 job 声明后再提交。</div>'
             : codeProofBlocked
             ? '<div class="muted">启动前代码校验阻塞，训练尚未开始。部署并重启该 Worker 的 Agent 后刷新状态；原 job 保留排队，无需重新提交 Plan。校验仍未通过时，请核对 Worker 的对应代码版本。</div><button type="button" class="mini secondary" data-command="snapshot">刷新状态</button>'
+            : isolationRecoveryButton ? '<div class="muted">自动重查只核实精确路径。仍有旧产物时，通过审核按钮确认处理；已完成的 job 和产物保留。</div>'
             : failedRecallButton ? '<div class="muted">仅重新排队这个正式失败 job。若有遗留文件，先打开精确 job 的人工审核预览；确认清理完成后再重排。PLAN、源配置和其他 job 保留。</div>'
             : errorText && !retryView.note && !unavailable
             ? '<div class="muted">下一步：点本行“跳转到日志”查看对应 TMUX 任务窗口。这是已提交 job 的失败，不会自动清理。确认需要停止后，再点本 Plan 的“终止并清除该 Plan”（两次确认）。</div><span class="errorRowLinks" style="display:flex;gap:6px;flex-wrap:wrap;"><button type="button" class="mini secondary" data-section-target="execution" data-anchor-target="execution-operations" title="跳到运行进度，查看本 Plan 的状态">运行进度</button><button type="button" class="mini secondary" data-command="snapshot" title="重新拉取调度状态与操作记录">刷新状态</button></span>'
@@ -15034,7 +15275,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const taskHtml = taskRows.length ? '<h3>任务与日志</h3>' + renderPlanTaskCards(state, sortedTasks, selected, group.key) : "";
         const more = sortedOps.length > opRows.length ? '<div class="muted">其余操作在下方“高级：完整操作记录”。</div>' : "";
         const phaseNote = group.submitting
-          ? '<div class="muted">' + esc(group.statusText) + '，当前还没有新 job。旧运行的成功数不计入这一阶段。</div>'
+          ? '<div class="muted" data-submission-note="' + escAttr(group.submissionOperationId || '') + '">' + esc(group.statusText) + '，当前还没有新 job。旧运行的成功数不计入这一阶段。</div>'
           : group.deferredCurrent
             ? '<div class="muted">' + esc(group.countText) + '。折叠只隐藏卡片，不改变调度。</div>' + (group.deferredNote ? '<div class="muted">' + esc(group.deferredNote) + '</div>' : '')
             : "";
@@ -15045,9 +15286,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const recallPlanIds = Array.from(new Set(currentJobs.map((job) => String(job.planId || "")).filter(Boolean)));
         const recallPlanButton = recallPlanIds.length === 1 && currentJobs.some((job) => String(job.status || "") === "queued" || job.recallRequested === true)
           ? '<button type="button" class="mini secondary" data-command="recallPlanToLocalQueue" data-plan-id="' + escAttr(recallPlanIds[0]) + '" data-plan-file="' + escAttr(group.planFile || "") + '" title="召回此 Plan 当前所有服务器排队任务到本机空闲 GPU；运行中和已结束任务保持原状态。">召回 Plan 到本机</button>' : '';
-        const queuePlanButton = recallPlanIds.length === 1 && currentJobs.some(job => job.status === "pending" && !job.workerId && !job.commandId && !job.manualDispatch)
+        const queuePlanButton = recallPlanIds.length === 1 && currentJobs.some(job => job.status === "pending" && !job.workerId && !job.commandId && !job.manualDispatch && !job.automaticWorkerId)
           ? '<button type="button" class="mini secondary" data-command="queueRemainingJobs" data-plan-id="' + escAttr(recallPlanIds[0]) + '" title="仅将此 Plan 尚未派发的 job 按各卡配置的 job 配额比例放入服务器队列；运行中和已排队任务保持原状">剩余 job 入服务器队列</button>' : '';
-        const artifactPlanIds = Array.from(new Set(currentJobs.filter(job => job.status === 'completed' && job.lifecycleProtocol === 2 && job.workerId && job.commandId && !job.unavailable).map(job => String(job.planId || group.distributedPlanId || '')).filter(Boolean)));
+        const artifactPlanIds = artifactSyncRequired ? Array.from(new Set(currentJobs.filter(job => job.status === 'completed' && job.lifecycleProtocol === 2 && job.workerId && job.commandId && !job.unavailable).map(job => String(job.planId || group.distributedPlanId || '')).filter(Boolean))) : [];
         const planArtifactButtons = artifactPlanIds.length ? ['refreshJobArtifacts', 'retryJobArtifactSync'].map((command, index) => '<button type="button" class="mini secondary" data-command="' + command + '" data-plan-ids="' + escAttr(JSON.stringify(artifactPlanIds)) + '" title="仅处理此 PLAN 已完成 job；运行中任务保持原状。">' + (index ? '重试 Plan 产物同步' : '刷新 Plan 产物状态') + '</button>').join('') : '';
         const actions = '<div class="executionPlanActions">' + resumeButton + queuePlanButton + recallPlanButton + planArtifactButtons + stopButton + foldButton + '</div>';
         const detailsBody = stopClearDetail + phaseNote + dangerActions + distributedHtml + opHtml + taskHtml + more;
@@ -15056,10 +15297,10 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const syncLabel = syncState.runId === group.distributedPlanId
           ? ({ checking: "正在核验全局同步", synced: "已全局同步最新产物", partial: "尚未全局同步", unknown: "全局同步待核验" }[syncState.status] || "全局同步待核验")
           : "全局同步待核验";
-        const syncBadge = group.tone === "completed" ? '<div class="executionPlanSyncStatus" title="' + escAttr([syncState.detail || "启动后连接就绪、Plan 完成及同步/下载结束时自动只读核验。", syncState.checkedAt || ""].join(" · ")) + '"><span class="pill ' + (syncState.status === "synced" ? "status-completed" : "status-warning") + '">' + esc(syncLabel) + (Number(syncState.targetCount) > 0 ? ' · ' + Number(syncState.syncedCount || 0) + '/' + Number(syncState.targetCount) + ' Worker' : '') + '</span></div>' : '';
+        const syncBadge = artifactSyncRequired && group.tone === "completed" ? '<div class="executionPlanSyncStatus" title="' + escAttr([syncState.detail || "启动后连接就绪、Plan 完成及同步/下载结束时自动只读核验。", syncState.checkedAt || ""].join(" · ")) + '"><span class="pill ' + (syncState.status === "synced" ? "status-completed" : "status-warning") + '">' + esc(syncLabel) + (Number(syncState.targetCount) > 0 ? ' · ' + Number(syncState.syncedCount || 0) + '/' + Number(syncState.targetCount) + ' Worker' : '') + '</span></div>' : '';
         return '<article class="executionPlanCard executionPlanRow ' + group.tone + (isSelected ? ' is-selected' : '') + '" data-execution-plan-key="' + escAttr(group.key) + '">' +
           '<div class="executionPlanHead" title="' + escAttr(group.planFile || group.label) + '"><label class="executionPlanName">' + selectBox + loadingPrefix((group.active && !group.waitingSubmission && !group.deferredCurrent) || group.distributedActive) + esc(group.label) + '</label>' + statusBadge + '</div>' +
-          '<div class="executionPlanMeta"><span class="executionPlanCount">' + esc(count) + '</span><span title="' + escAttr(group.planFile || group.label) + '">' + esc(group.planFile || "未关联 Plan") + '</span></div>' +
+          '<div class="executionPlanMeta"><span class="executionPlanCount"' + (group.submissionOperationId ? ' data-submission-count="' + escAttr(group.submissionOperationId) + '"' : '') + '>' + esc(count) + '</span><span title="' + escAttr(group.planFile || group.label) + '">' + esc(group.planFile || "未关联 Plan") + '</span></div>' +
           syncBadge +
           stopClearSummary +
           actions +
@@ -15085,7 +15326,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         const foldClearLabel = foldOutcome === "failed" ? "清理失败" : foldOutcome === "partial" ? "清理未完成" : foldOutcome === "running" ? "正在清理" : foldOutcome === "cancelled" ? "清理已取消" : "";
         const checked = typeof selectedExecutionPlanFiles !== 'undefined' ? selectedExecutionPlanFiles.has(group.planFile) : samePlanSelection(group.planFile, selectedExecutionPlanFile);
         const selectBox = group.planFile ? '<input type="checkbox" class="executionPlanCheckbox" data-execution-plan-check="' + escAttr(group.planFile) + '" aria-label="勾选 ' + escAttr(group.label || group.planFile) + '"' + (checked ? ' checked' : '') + '>' : '';
-        return '<div class="executionPlanFoldRow ' + group.tone + '"><label class="executionPlanName">' + selectBox + esc(group.label) + '</label><span class="executionPlanCount">' + esc(count) + '</span><b class="' + (group.tone === "blocked" || group.tone === "queued" ? "status-warning" : statusClass(group.tone)) + '">' + esc(statusText) + '</b>' + (foldClearLabel ? '<b class="status-warning" data-plan-stop-fold="' + escAttr(foldOutcome) + '">' + esc(foldClearLabel) + '</b>' : '') + '<button type="button" class="mini secondary" data-execution-plan-fold="' + escAttr(group.key) + '" title="把这张 Plan 放回主视图。不改变调度。">恢复监控</button></div>';
+        return '<div class="executionPlanFoldRow ' + group.tone + '"><label class="executionPlanName">' + selectBox + esc(group.label) + '</label><span class="executionPlanCount"' + (group.submissionOperationId ? ' data-submission-count="' + escAttr(group.submissionOperationId) + '"' : '') + '>' + esc(count) + '</span><b' + (group.submissionOperationId ? ' data-submission-status="' + escAttr(group.submissionOperationId) + '"' : '') + ' class="' + (group.tone === "blocked" || group.tone === "queued" ? "status-warning" : statusClass(group.tone)) + '">' + esc(statusText) + '</b>' + (foldClearLabel ? '<b class="status-warning" data-plan-stop-fold="' + escAttr(foldOutcome) + '">' + esc(foldClearLabel) + '</b>' : '') + '<button type="button" class="mini secondary" data-execution-plan-fold="' + escAttr(group.key) + '" title="把这张 Plan 放回主视图。不改变调度。">恢复监控</button></div>';
       };
       const foldHtml = folded.length
         ? '<details class="executionPlanFold" data-details-key="execution-plan-fold" open><summary>已折叠 Plan ' + folded.length + '</summary>' + folded.map(foldRow).join("") + '</details>'
@@ -15224,15 +15465,13 @@ export function renderPanelHtml(platform: string = process.platform): string {
           localSubmissionProgress: row.localSubmissionProgress,
           workflowId: executionOperationWorkflowId(row),
           error: row.error,
-          // The group label now displays an ACTIVE submission's stage/message
-          // (same-source progress), so the key must carry exactly that displayed
-          // text; timestamps stay excluded to avoid per-frame rerenders.
-          message: active ? String(row.message || "") : row.message,
-          stage: active ? String(row.stage || "") : "",
+          // Active stage/message text is patched through stable operation identities.
+          message: active ? undefined : row.message,
           reconcileEvidenceActive: row.reconcileEvidenceActive,
         };
       });
       const planList = stableSectionSignature({
+        artifactSyncRequired: asArray((data.setup || {}).workerTunnels).filter(worker => worker && worker.enabled !== false).length > 1,
         planArtifactSyncStatuses: data.planArtifactSyncStatuses,
         operations: planOperations,
         tasks: compactTaskRowsForRenderStructureSignature(view.allRows, view.allRows.length),
@@ -15261,6 +15500,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
             gpuId: job.gpuId,
             commandId: job.commandId,
             blockReason: job.blockReason,
+            outputIsolationBlocked: job.outputIsolationBlocked,
+            automaticWorkerId: job.automaticWorkerId, manualDispatch: job.manualDispatch, manualDispatchNotice: job.manualDispatchNotice,
             admissionRejection: job.admissionRejection,
             outputDir: job.outputDir,
             collectionResultCsv: job.collectionResultCsv,
@@ -15327,7 +15568,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function renderExecutionPlanListIfChanged(state, force) {
       const key = executionPlanListKey(state);
-      if (!force && key === lastExecutionPlanListKey) return;
+      if (!force && key === lastExecutionPlanListKey) { patchExecutionProgressDom(state); return; }
       renderExecutionPlanList(state);
       lastExecutionPlanListKey = key;
     }
@@ -15394,6 +15635,16 @@ export function renderPanelHtml(platform: string = process.platform): string {
       }
       const taskRoot = el("executionPlanList");
       if (taskRoot && typeof taskRoot.querySelectorAll === "function") {
+        const submissions = new Map(operationRowsForState(data).map(row => [String(row.operationId || row.id || row.opId || ""), row]));
+        ["status", "count", "note"].forEach(kind => {
+          taskRoot.querySelectorAll("[data-submission-" + kind + "]").forEach(node => {
+            const row = submissions.get(String(node.getAttribute("data-submission-" + kind) || ""));
+            if (!row) return;
+            const label = executionSubmissionLabel(row);
+            const text = kind === "count" ? label + " · 待生成 job" : kind === "note" ? label + "，当前还没有新 job。旧运行的成功数不计入这一阶段。" : label;
+            node.textContent = typeof redactUiText === "function" ? redactUiText(text) : text;
+          });
+        });
         const taskRows = taskSectionViewModelForState(data).allRows || [];
         const taskByKey = new Map(taskRows.map((row) => [String(row.uiKey || taskTargetKey(row) || row.experimentId || row.experimentName || ""), row]));
         taskRoot.querySelectorAll("[data-task-render-key]").forEach((node) => {
@@ -17674,10 +17925,9 @@ export function renderPanelHtml(platform: string = process.platform): string {
         else if (isLenient) { pushSoft("tunnel", "tunnel 未连接"); }
         else { return "tunnel 未连接"; }
       }
-      if (command === "startAll" && !hasAnyTunnelSession(state)) return "请先配置 Worker 的 Termius 隧道会话";
-      if (command === "startAgents" && !hasAnyTunnelSession(state)) return "请先配置 Worker 的 Termius 隧道会话";
-      if (command === "startAllConnections" && !hasAnyTunnelSession(state)) return "请先配置 Termius 隧道会话";
-      if (command === "prepareAgents" && !serverSetupReadiness(state).ready) return "请先配置 Worker 的 Termius 会话和项目父目录";
+      if ((command === "startAll" || command === "startAgents" || command === "startAllConnections") && !hasAnyTunnelSession(state)) return "请先配置并启用 Worker 的服务器地址和登录用户名";
+      if (command === "openXshell" && !MAC_PLAN_IDENTITY && !asArray((state.setup || {}).workerTunnels).some((worker) => worker.enabled !== false && worker.savedSessionPath)) return "请先导入 Worker 的 Xshell 会话";
+      if (command === "prepareAgents" && !serverSetupReadiness(state).ready) return "请先配置 Worker 的服务器地址、用户名和项目父目录";
       if (command === "prepareAgents") {
         const preparationBlockers = agentPreparationBlockersFromState(state);
         if (preparationBlockers.length) return preparationBlockers[0];
@@ -17733,7 +17983,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     }
     function hasAnyTunnelSession(state) {
       const setup = state.setup || {};
-      return asArray(setup.workerTunnels || []).some((worker) => worker.enabled !== false && nativeWorkerTransportConfigured(worker));
+      return asArray(setup.workerTunnels || []).some((worker) => worker.enabled !== false && String(worker.workerHost || worker.hubHost || "").trim() && String(worker.workerUser || worker.hubUser || "").trim());
     }
     function hasAnyAgentSession(state) {
       const setup = state.setup || {};
@@ -18338,7 +18588,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
       if (setup.manualProvider === "termius" && topology.valid === false) missing.push.apply(missing, asArray(topology.issues));
       workers.forEach((worker) => {
         const label = String(worker.displayName || worker.id || "Worker");
-        if (!nativeWorkerTransportConfigured(worker)) missing.push(label + " Termius 转发端点");
+        if (!meaningfulValue(worker.workerHost || worker.hubHost)) missing.push(label + " 服务器地址");
+        if (!meaningfulValue(worker.workerUser || worker.hubUser)) missing.push(label + " 登录用户名");
         if (!meaningfulValue(worker.agentProjectDir)) missing.push(label + " 项目父目录");
       });
       const workerLabel = workers.length ? "；" + workers.length + " 个 Worker" : "；尚无 Worker";

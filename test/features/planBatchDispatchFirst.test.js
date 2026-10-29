@@ -98,6 +98,7 @@ function makeWorld({secondExisting=false,busyLedger=false,externalBusyBefore=fal
       else events.push('execute-done:'+token);
       return {state:'completed',pendingNodes:[]};},
     service:{
+      prepareEmptyParentCleanup:async()=>[],confirmEmptyParentCleanup:async()=>{},
       preview:async params=>{events.push('preview:'+params.planFile);
         if(busyLedger&&blockingBusy()){events.push('preview-busy-reject:'+params.planFile);throw busyReject();}
         if(previewBarrier){previewEnteredCount+=1;events.push('preview-enter:'+params.planFile);

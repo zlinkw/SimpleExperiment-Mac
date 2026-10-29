@@ -21,7 +21,7 @@ const { UpdateGate, parseProcessStartMs, parseStartTimesOutput, parseProcessSnap
 const T0 = Date.parse('2026-09-28T17:58:56.694Z'); // 宿主非空旧根 3dda869b 的真实 mtime
 function makeWorld(testObject) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'paired-legacy-lease-'));
-  testObject.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  testObject.after(() => console.log(`[fixture retained] ${root}`));
   const leasePath = path.join(root, 'lease.json');
   return { leasePath, dir: leasePath + '.resources-v2' };
 }
@@ -423,7 +423,7 @@ test('R61(r17) secure reader 读取中真实变更：第2次stat前先真实utim
       assert.ok(statCalls >= 2, '读取前后两次stat必须都发生（变更发生在读取中）');
       assert.ok(Math.abs(fs.statSync(file).mtimeMs - (Math.round(originalMtimeMs) + 5000)) <= 1, '文件mtime必须被真实修改（容忍Date/文件系统亚毫秒精度差）');
     } finally { fsPromise.open = realOpen; }
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally { console.log(`[fixture retained] ${root}`); }
 });
 
 test('R62 v1批次锁等待期间被其他窗口接管：每轮持有证明必须拒绝，不按取消或损坏文案', async t => {
@@ -556,7 +556,7 @@ test('主+侧车双损坏：拒绝且记录原样保留', async t => {
 });
 
 test('R56 安全reader边界经gate真实断言：symlink/多硬链/超8MiB全部拒绝且不动原文件', async t => {
-  const world = makeWorld(t);
+  let world = makeWorld(t);
   const real = writeRegistry(world, legacyRoot());
   fs.renameSync(real, real + '.real');
   // R61 平台说明：无提权 Windows 禁止创建 file symlink（EPERM）。junction 只作用于目录、对文件槽
@@ -571,13 +571,13 @@ test('R56 安全reader边界经gate真实断言：symlink/多硬链/超8MiB全�
   let result = await settleWithin(new UpdateGate(world.leasePath, DEAD).wait(), 1500);
   assert.equal(result.state, 'rejected', (slotFixture === 'symlink' ? '符号链接' : '目录占位槽') + '主槽必须拒绝（无法核实）');
   assert.match(String(result.error && result.error.message), /无法核实/);
-  if (slotFixture === 'symlink') fs.rmSync(real); else fs.rmSync(real, { recursive: true });
+  world = makeWorld(t); // Keep the rejected slot intact; use a fresh world for the next independent boundary.
   writeRegistry(world, legacyRoot()); // 覆盖为普通文件后再加硬链
   const plain = fs.readdirSync(world.dir).find(n => /^[0-9a-f]{64}\.json$/.test(n));
   fs.linkSync(path.join(world.dir, plain), path.join(world.dir, 'side-not-scanned')); // 硬链对侧名不被扫描，主槽 nlink=2 必须被拒
   result = await settleWithin(new UpdateGate(world.leasePath, DEAD).wait(), 1500);
   assert.equal(result.state, 'rejected', 'nlink>1 记录必须拒绝');
-  fs.rmSync(path.join(world.dir, 'side-not-scanned'));
+  world = makeWorld(t); // Retain the hardlink pair; the oversized-file case owns a separate world.
   const big = registryFile(world, legacyRoot());
   const row = JSON.stringify(legacyRoot());
   fs.writeFileSync(big, row + ' '.repeat(8 * 1024 * 1024 - Buffer.byteLength(row) + 16), 'utf8'); // 前缀合法但超8MiB

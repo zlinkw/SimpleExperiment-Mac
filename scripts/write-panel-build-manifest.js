@@ -8,7 +8,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), 
 const entrypoints = [packageJson.main, ...Object.values(packageJson.bin || {})]
   .filter(Boolean)
   .map((entry) => String(entry).replace(/^\.\//, "").replace(/\\/g, "/"));
-const spawnCandidates = ["scripts/check-static.js"].filter((file) => fs.existsSync(path.join(root, file)));
+const spawnCandidates = ["scripts/check-static.js", "dist/cli.js"].filter((file) => fs.existsSync(path.join(root, file)));
 const closure = collectLocalRuntimeClosure(root, entrypoints, spawnCandidates);
 const requiredFiles = [
   "dist/extension.js",

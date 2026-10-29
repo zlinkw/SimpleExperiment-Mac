@@ -16,7 +16,7 @@ const ast=ts.createSourceFile('host.ts',legacySource,ts.ScriptTarget.Latest,true
 function hostMethods(names,globals={}){let cls;function visit(n){if(ts.isClassDeclaration(n)&&n.name?.text==='RealtimeTunnelPanelProvider')cls=n;ts.forEachChild(n,visit)}visit(ast);
   const members=cls.members.filter(n=>names.includes(n.name?.getText(ast)));assert.equal(members.length,names.length,names.join(','));
   return vm.runInNewContext(ts.transpileModule('class Host{'+members.map(n=>n.getText(ast)).join('\n')+'};Host',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
-    {AbortController,workspaceRoot:()=>'project',errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),
+    {AbortController,DispatchHandoffGate:require("../../dist/features/DispatchHandoffGate.js"),workspaceRoot:()=>'project',errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),
      require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
      UiCommandCancelled:require('../../src/core/UiCommandCancelled.ts').UiCommandCancelled, // r50：忠实绑定生产取消类，schedule 失败回调 instanceof 用，不造假类型
      DistributedPlanQueue:Q,fs:fsPromises,path,atomicWriteText,...globals});}

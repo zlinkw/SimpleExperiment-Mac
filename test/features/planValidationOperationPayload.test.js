@@ -123,6 +123,7 @@ function hostFor(operation, accepted = true, outputChoice) {
     distributedPlanEligible: () => true,
     workerActionTargets: () => [{id:"nwpu3"}],
     planCleanupHost: () => ({service:{
+      prepareEmptyParentCleanup: async () => [], confirmEmptyParentCleanup: async () => {},
       preview: async request => {
         const job=request.job.manifest.declarations[0];
         const exists=host.queue.plans.some(p=>p.jobs.some(j=>j.outputDir===job.output_dir)) || (operation.payload?.validation?.existing || []).some(j=>j.index===job.index);

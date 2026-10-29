@@ -79,10 +79,9 @@ test("configured single-project workspaces keep onboarding visible until explici
     // Mac 适配：Worker 就绪走 Termius 转发端点字段（等价 Windows savedSessionPath 语义）。
     workerTunnels: [{
       id: "worker-a",
-      workerHost: "10.0.0.2",
-      workerUser: "zlk",
-      localForwardPort: 18080,
-      remoteAgentPort: 8080,
+      workerHost: "worker.example",
+      workerUser: "research",
+      savedSessionPath: "C:/Sessions/worker-a.xsh",
       agentProjectDir: "/srv/projects",
       enabled: true,
     }],

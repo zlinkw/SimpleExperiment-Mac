@@ -129,6 +129,29 @@ const {fixture, planText}=require('../_helpers/freshResultHost');
 const {ResultCollectionHost}=require('../../src/extension/ResultCollectionHost.ts');
 const {resultDigest}=require('../../src/results/FreshResults.ts');
 
+
+
+test('single Worker result discovery uses the selected execution environment when sync destinations have no Conda field',async()=>{
+  const f=fixture();f.host.workerActionTargets=()=>[{id:'a',conda_env:'chosen-research-env'}];
+  const original=f.host.client.getWorkerTasks;
+  f.host.client.getWorkerTasks=async(id,options)=>{
+    if(options.discovery)assert.equal(options.discovery.condaEnv,'chosen-research-env');
+    return original(id,options);
+  };
+  const report=await __syncPendingResultMetricsForTest(f.host);
+  assert.equal(report.current,true,JSON.stringify(report.skipped));assert.equal(report.completed,1);
+  assert.ok(f.calls.some(row=>row[0]==='tasks'&&row[2].discovery?.condaEnv==='chosen-research-env'));
+});
+
+test('a task environment change during result discovery cancels publication and preserves the previous export',async()=>{
+  const f=fixture();let env='first';f.host.workerActionTargets=()=>[{id:'a',condaEnv:env}];
+  await __syncPendingResultMetricsForTest(f.host);
+  const table=path.join(f.root,'experiments/results/set/final/final.csv'),before=fs.readFileSync(table,'utf8');
+  const original=f.host.client.getWorkerTasks;
+  f.host.client.getWorkerTasks=async(id,options)=>{const value=await original(id,options);if(options.discovery)env='changed';return value;};
+  await assert.rejects(__syncPendingResultMetricsForTest(f.host),/配置已变化/);
+  assert.equal(fs.readFileSync(table,'utf8'),before);
+});
 test("actual UI entry reads native manifests and alias metrics into memory without a result registry", async()=>{
   const f=fixture();f.raw['work_dirs/alpha42/metrics.csv']=csvFor([{seed:42,metric:'AUC',value:.4},{seed:42,metric:'roc_auc',value:.4},{seed:42,metric:'ECE',value:.1}]);
   f.host.parseFreshResultMetric=RealtimeTunnelPanelProvider.prototype.parseFreshResultMetric;
@@ -292,7 +315,7 @@ test("late local lock ACK is fenced before the captured Worker client can send",
     host.distributedQueueGeneration = 7;
     let manifestBuilds = 0;
     host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("code manifest must not be prepared before the fence"); };
-    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 } } } };
+    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1 } } } };
     host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => {
       host.distributedQueueGeneration += 1;
       return callback();
@@ -325,7 +348,7 @@ test("a granted local lock ACK with unchanged context still sends the durable jo
     let manifestBuilds = 0;
     host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("a durable proof worker must not rebuild the local manifest"); };
     const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
-    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 }, actionEndpoints: { "register-code-sync-proof": true } } } };
+    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1 }, actionEndpoints: { "register-code-sync-proof": true } } } };
     host.lastCodeSyncState = { workerVersions: { 'worker-a': { codeSyncProofId: "proof-9", manifestDigest: emptyManifestFingerprint, fingerprint: emptyManifestFingerprint } } };
     host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => callback();
     const receipt = await host.sendDistributedJob(
@@ -360,7 +383,7 @@ test("a normal send without a resolvable local project root fails explicitly bef
     host.distributedQueueGeneration = 7;
     let manifestBuilds = 0;
     host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("manifest preparation must be blocked by the explicit root guard"); };
-    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 } } } };
+    host.lastWorkerProbes = { 'worker-a': { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1 } } } };
     host.withRemoteActionResource = async (_workerId, _resource, _request, callback) => callback();
     const emptyManifestFingerprint = crypto.createHash("sha256").update("[]").digest("hex");
     await assert.rejects(() => host.sendDistributedJob(
@@ -420,7 +443,7 @@ function raceFixture(mode, flip) {
   provider.localCodeManifestCacheFile = () => path.join(workspace, "manifest-cache.json");
   const host = Object.assign(Object.create(RealtimeTunnelPanelProvider.prototype), provider);
   host.distributedQueueGeneration = 7;
-  host.lastWorkerProbes = { 'worker-a': { status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, planCodeScope: 1 } } } };
+  host.lastWorkerProbes = { 'worker-a': { status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1, planCodeScope: 1 } } } };
   let manifestBuilds = 0;
   host.buildDistributedJobCodeManifest = async () => { manifestBuilds += 1; throw new Error("source-branch preparation must not build a manifest"); };
   scopeHostModule.supportsPlanCodeScope = () => true;

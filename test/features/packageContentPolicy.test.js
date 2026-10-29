@@ -57,6 +57,23 @@ const CASES = [
   // r25-A 实际泄漏路径回归：开发锁/运行缓存/receipt/tsc 增量元信息必拒，必要资源不误排
   [".test-workflow-batch.lock/owner.json", "dev-lock"],
   ["extension/.test-workflow-batch.lock/owner.json", "dev-lock"],
+  // 2026-10-28 实际泄漏路径回归：本机清理暂存区必拒（vsix 前缀/大小写/深层/./ 反复都要拦住，
+  // clean_dir 里既有清理登记也含 legacy.ts「将草稿移入 clean_dir」的用户草稿）。
+  ["clean_dir/MANIFEST.md", "local-cleanup-staging"],
+  ["extension/clean_dir/MANIFEST.md", "local-cleanup-staging"],
+  ["Clean_Dir/DRAFT.bin", "local-cleanup-staging"],
+  ["././clean_dir/job-abcdef/work/p0/x.bin", "local-cleanup-staging"],
+  ["extension\\clean_dir\\work\\p0\\x.bin", "local-cleanup-staging"],
+  // 目录级锚点：同名前缀的文件/目录与别的目录里的同名文件不得被误伤
+  ["clean_dirz/owner.json", undefined],
+  ["dist/clean_dir_note.md", "doc-markdown"],
+  // 本轮 runner 批锁长在 simple_cluster/locks/... 下，仍属运行缓存类，不得漏排
+  ["simple_cluster/locks/simple-experiment/test-workflow/batch.lock/owner.json", "workflow-cache"],
+  ["extension/simple_cluster/locks/simple-experiment/test-workflow/batch.lock", "workflow-cache"],
+  // 先前仅 .vscodeignore 排除的本地状态目录，本轮补齐清单门禁同防
+  ["zlk_cluster/state.json", "local-state"],
+  ["extension/.audit/audit.json", "local-state"],
+  [".tmp/scratch-file", "local-state"],
   ["simple_cluster/cache/tsc/linux-x64-abcd/state.json", "workflow-cache"],
   ["simple_cluster/reports/test-workflow/batch/run.json", "workflow-cache"],
   ["simple_cluster/cache/npm/_cacache/index-v5/x", "workflow-cache"],
@@ -183,7 +200,7 @@ test("zip-level regression: compliant final archive passes the policy CLI (exit 
     assert.equal(result.status, 0, `expected pass, stderr=${result.stderr}`);
   }
   finally {
-    console.log("Retained policy fixture: " + dir);
+    console.log(`[fixture retained] ${dir}`);
   }
 });
 
@@ -212,7 +229,7 @@ test("zip-level regression: docs/nested README/tests/backup/pycache entries fail
     assert.ok(!output.includes(FIXTURE_SENTINEL), "diagnostics must never echo file contents");
   }
   finally {
-    console.log("Retained policy fixture: " + dir);
+    console.log(`[fixture retained] ${dir}`);
   }
 });
 
@@ -307,4 +324,124 @@ test("排除表与保留闭包不相交：required/动态锚/legacy 运行部件
   const manifestPath = path.join(__dirname, "..", "..", "dist", "panel-build-manifest.json");
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   for (const row of manifest.files) assert.ok(!set.has(policy.normalizePath(row.path)), `panel-build-manifest 运行文件 ${row.path} 不得被排除`);
+});
+
+// ── 2026-10-28 本地状态目录（清理暂存区等）：.vscodeignore 与清单门禁两处同防 ────────────────
+// 背景：0.5.422 实际包里出现过 extension/clean_dir/MANIFEST.md（清理暂存登记，含本机绝对路径、
+// pid、指纹）。vsce 的收录判定只看 .vscodeignore，清单门禁只看 package-content-policy.json，
+// 任一侧缺项就漏；下面两组用例把同一批目录在两侧同时钉住，删任一边都必失败。
+const LOCAL_STATE_GUARDS = [
+  { dir: "clean_dir", ignoreGlob: "clean_dir/**", category: "local-cleanup-staging", sample: "clean_dir/MANIFEST.md", nested: "clean_dir/job-abc123/work/p0/draft.bin" },
+  { dir: "simple_cluster", ignoreGlob: "simple_cluster/**", category: "workflow-cache", sample: "simple_cluster/locks/simple-experiment/test-workflow/batch.lock/owner.json", nested: "simple_cluster/reports/test-workflow/run.json" },
+  { dir: "zlk_cluster", ignoreGlob: "zlk_cluster/**", category: "local-state", sample: "zlk_cluster/state.json", nested: "zlk_cluster/cache/x.json" },
+  { dir: ".audit", ignoreGlob: ".audit/**", category: "local-state", sample: ".audit/audit.json", nested: ".audit/2026-10-28/entry.json" },
+  { dir: ".tmp", ignoreGlob: ".tmp/**", category: "local-state", sample: ".tmp/scratch-file", nested: ".tmp/a/b.bin" },
+  { dir: ".test-workflow-batch.lock", ignoreGlob: ".test-workflow-batch.lock/**", category: "dev-lock", sample: ".test-workflow-batch.lock/owner.json", nested: ".test-workflow-batch.lock/sub/owner.json" },
+];
+
+// 必留发行闭包：任何“排除本地状态”的规则都不得把它们带出去（照现有 VSIX 顶层目录取代表项）。
+const MUST_STAY_PACKAGED = [
+  "package.json", "LICENSE.txt", "dist/mac/Bootstrap.js",
+  "scripts/check-static.js", "dist/cli.js", "dist/extension.js", "dist/extension/legacy.js",
+  "dist/runtime/RuntimeManifest.json", "dist/runtime/cluster_agent.py", "dist/panel-build-manifest.json",
+];
+
+/**
+ * 复刻 vsce 对 .vscodeignore 的解释（@vscode/vsce/out/package.js collectFiles：按行 trim、丢空行与
+ * `#` 注释、不含 `*` 的目录名自动追加 `/**`，否定式 `!pattern` 后到先赢），匹配语义用 gitignore 规则：
+ *  - 不含 `/`（除尾斜杠）的模式按 basename 在任意深度匹配；含 `/` 的模式错误定根到仓库根；
+ *  - 单星号不跨目录分隔符，双星号可跨；双星号紧跟分隔符时允许零层目录；字符类 `[...]` 原样保留；
+ *  - 目录被排除时其下所有内容一并排除（因此逐个祖先前缀都参与判定）；
+ *  - 多条命取最后一条生效（`!` 否定式能拉回，如 `!scripts/check-static.js`）。
+ * 不引第三方 glob 依赖（仓内无可解析的 ignore 包），但对上述实际形态保持等价。
+ */
+function vscodeignoreMatcher(text) {
+  const raw = text.split(/[\n\r]/).map(line => line.trim()).filter(line => line.length > 0 && !/^\s*#/.test(line));
+  // vsce：不含 `*` 的条目（目录名）额外追加一份 `/**`，原条目保留。
+  const lines = [...raw, ...raw.filter(line => !/(^|\/)[^/]*\*[^/]*$/.test(line.replace(/^!/, "")))
+    .map(line => (line.startsWith("!") ? "!" : "") + (/\/$/.test(line) ? line + "**" : line + "/**"))];
+  const rules = lines.map(line => {
+    const negated = line.startsWith("!");
+    let body = negated ? line.slice(1) : line;
+    if (body.startsWith("/")) body = body.slice(1);
+    if (body.endsWith("/")) body = body.slice(0, -1);
+    const anchored = body.includes("/");
+    let source = "";
+    for (let i = 0; i < body.length; i++) {
+      const ch = body[i];
+      if (ch === "*") {
+        let j = i;
+        while (body[j] === "*") j++;
+        if (body[j] === "/") { source += "(?:[^/]+/)*"; i = j; }
+        else { source += ".*"; i = j - 1; }
+      } else if (ch === "?") source += "[^/]";
+      else if (ch === "[") {
+        const close = body.indexOf("]", i + 1);
+        if (close < 0) source += "\\[";
+        else { source += body.slice(i, close + 1); i = close; }
+      } else source += ch.replace(/[.*+?^${}()|\\]/g, "\\$&");
+    }
+    const pattern = anchored ? new RegExp("^(?:" + source + ")$") : new RegExp("(?:^|/)(?:" + source + ")$");
+    return { negated, pattern };
+  });
+  return function ignored(relPath) {
+    const target = String(relPath).replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\.\//, "");
+    const candidates = [];
+    const segments = target.split("/");
+    for (let i = segments.length; i > 0; i--) candidates.push(segments.slice(0, i).join("/"));
+    let result = false;
+    for (const rule of rules) if (candidates.some(candidate => rule.pattern.test(candidate))) result = !rule.negated;
+    return result;
+  };
+}
+
+test("本地清理暂存区与本地状态目录：.vscodeignore 条目与清单门禁类别两处同防，删任一边即失败", () => {
+  const text = fs.readFileSync(path.join(__dirname, "..", "..", ".vscodeignore"), "utf8").replace(/\r\n/g, "\n");
+  const ignoreLines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0 && !/^\s*#/.test(line));
+  const ignored = vscodeignoreMatcher(text);
+  for (const guard of LOCAL_STATE_GUARDS) {
+    assert.ok(ignoreLines.includes(guard.ignoreGlob), `.vscodeignore 必须保留 ${guard.ignoreGlob}（${guard.dir} 是机器本地状态，绝不入包）`);
+    for (const sample of [guard.sample, guard.nested, "extension/" + guard.sample]) {
+      assert.equal(policy.classify(sample), guard.category, `清单门禁必须把 ${sample} 判为 ${guard.category}`);
+      assert.ok(ignored(sample.replace(/^extension\//, "")), `vsce 忽略判定必须排除 ${sample}`);
+    }
+  }
+  for (const kept of MUST_STAY_PACKAGED) {
+    assert.equal(policy.classify(kept), undefined, `发行闭包 ${kept} 不得被任何排除规则命中`);
+    assert.equal(ignored(kept), false, `vsce 忽略判定不得排除发行闭包 ${kept}`);
+  }
+});
+
+test("自建临时工作副本里的 clean_dir 假暂存文件：忽略判定与清单 CLI 都必须判其不得入包", t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "se-cleandir-fixture-"));
+  try {
+    // 假暂存内容只写虚构 sentinel，绝不读写用户真实 clean_dir。
+    const stagingDir = path.join(dir, "clean_dir");
+    fs.mkdirSync(path.join(stagingDir, "job-fake0001", "work", "p0"), { recursive: true });
+    fs.writeFileSync(path.join(stagingDir, "MANIFEST.md"), FIXTURE_SENTINEL + "\n", "utf8");
+    fs.writeFileSync(path.join(stagingDir, "job-fake0001", "work", "p0", "draft.bin"), FIXTURE_SENTINEL, "utf8");
+    const relOnDisk = path.relative(dir, path.join(stagingDir, "MANIFEST.md")).replace(/\\/g, "/");
+    assert.equal(relOnDisk, "clean_dir/MANIFEST.md");
+
+    // (1) 忽略判定：按 .vscodeignore 实际条目复算 vsce 结论
+    const ignored = vscodeignoreMatcher(fs.readFileSync(path.join(__dirname, "..", "..", ".vscodeignore"), "utf8"));
+    assert.equal(ignored(relOnDisk), true, "造出来的 clean_dir 暂存文件必须被判定为不打包");
+    assert.equal(ignored("clean_dir/job-fake0001/work/p0/draft.bin"), true, "暂存区深层草稿同样不得打包");
+
+    // (2) 清单门禁：真实落盘文件进入最终 zip 条目后必须非零拒绝，且只报路径与类别
+    const violations = policy.checkListing([...GOOD_LISTING, relOnDisk]);
+    assert.ok(violations.some(line => line === "clean_dir/manifest.md <category:local-cleanup-staging>"),
+      `checkListing 必须点名暂存文件，实际 ${JSON.stringify(violations.slice(0, 4))}`);
+
+    const zip = path.join(dir, "leaky.vsix");
+    makeZip(zip, [...GOOD_LISTING, "extension/clean_dir/MANIFEST.md", "extension/clean_dir/job-fake0001/work/p0/draft.bin"]);
+    const result = runZipCli(zip);
+    assert.equal(result.status, 1, "含 clean_dir 条目的包必须被清单门禁拒绝");
+    const output = `${result.stdout}\n${result.stderr}`;
+    assert.ok(output.includes("<category:local-cleanup-staging>"), `必须报出 local-cleanup-staging 类别，实际 ${output.slice(0, 400)}`);
+    assert.ok(output.includes("clean_dir/manifest.md"), "必须按路径点名暂存文件");
+    assert.ok(!output.includes(FIXTURE_SENTINEL), "诊断只含路径与类别，不得回显暂存内容");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

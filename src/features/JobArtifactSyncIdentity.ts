@@ -1,4 +1,28 @@
 import { createHash } from "crypto";
+export type ArtifactTransferMember = { retentionKey: string; planId: string; commandId: string; files: Record<string, string> };
+/** Shared transport owns the complete member set, never impersonates its first job. */
+export function jobArtifactBatchIdentity(members: readonly ArtifactTransferMember[]): { retentionKey: string; generation: string } {
+  if (!members.length) throw Error("ARTIFACT_BATCH_IDENTITY_REQUIRED");
+  const paths = new Map<string, string>(), identities = new Map<string, string>();
+  const canonical = members.map(member => {
+    if (!member.retentionKey || !member.planId || !member.commandId) throw Error("ARTIFACT_BATCH_IDENTITY_REQUIRED");
+    const files = Object.keys(member.files).sort().map(file => {
+      const sha = String(member.files[file]).toLowerCase();
+      if (!/^[a-f0-9]{64}$/.test(sha)) throw Error("ARTIFACT_BATCH_HASH_REQUIRED");
+      if (paths.has(file) && paths.get(file) !== sha) throw Error("ARTIFACT_BATCH_PATH_CONFLICT: " + file);
+      paths.set(file, sha); return [file, sha];
+    });
+    const record = [member.retentionKey, member.planId, member.commandId, files];
+    const encoded = JSON.stringify(record), prior = identities.get(member.retentionKey);
+    if (prior && prior !== encoded) throw Error("ARTIFACT_BATCH_IDENTITY_CONFLICT");
+    identities.set(member.retentionKey, encoded); return record;
+  });
+  const unique = [...new Map(canonical.map(row => [String(row[0]), row])).values()].sort((a,b) => String(a[0]) < String(b[0]) ? -1 : String(a[0]) > String(b[0]) ? 1 : 0);
+  if (unique.length === 1) return { retentionKey: members[0].retentionKey,
+    generation: jobArtifactRunGeneration(members[0].planId, members[0].commandId, members[0].files) };
+  const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  return { retentionKey: "job-artifacts-batch:" + hash(unique.map(row => row[0])), generation: hash(unique) };
+}
 
 /**
  * Staging identity of one completed job's artifact sync (task ui-plan-gpu-progress-20261024 r5).

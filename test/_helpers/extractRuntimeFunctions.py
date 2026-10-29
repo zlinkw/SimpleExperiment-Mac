@@ -4,7 +4,7 @@ import sys
 import types
 from pathlib import Path
 
-def extract_runtime_functions(filename, roots, namespace=None, include_imports=True):
+def _runtime_function_nodes(filename, roots, namespace=None, include_imports=True):
     roots = set(roots)
     tree = ast.parse(Path(filename).read_text(encoding="utf-8"), filename=filename)
     definitions = {}
@@ -40,7 +40,16 @@ def extract_runtime_functions(filename, roots, namespace=None, include_imports=T
         # boundaries. This never evaluates unrelated module setup or POSIX imports.
         imports = []
     chosen = {id(definitions[name]) for name in selected}
-    body = imports + [node for node in tree.body if id(node) in chosen]
+    return imports, [node for node in tree.body if id(node) in chosen]
+
+def compile_runtime_functions(filename, roots):
+    """Prepare only the selected production functions, before a fixture's measured child starts."""
+    imports, definitions = _runtime_function_nodes(filename, roots)
+    return compile(ast.Module(body=imports + definitions, type_ignores=[]), filename, "exec")
+
+def extract_runtime_functions(filename, roots, namespace=None, include_imports=True):
+    imports, definitions = _runtime_function_nodes(filename, roots, namespace, include_imports)
+    body = imports + definitions
     module = types.ModuleType("isolated_runtime")
     module.__file__ = str(filename)
     sys.modules[module.__name__] = module
@@ -53,6 +62,6 @@ def extract_runtime_functions(filename, roots, namespace=None, include_imports=T
         injected = dict(namespace)
         exec(compile(ast.Module(body=imports, type_ignores=[]), filename, "exec"), namespace)
         namespace.update(injected)
-        exec(compile(ast.Module(body=[node for node in tree.body if id(node) in chosen], type_ignores=[]), filename, "exec"), namespace)
+        exec(compile(ast.Module(body=definitions, type_ignores=[]), filename, "exec"), namespace)
         module.__dict__.update(namespace)
     return module

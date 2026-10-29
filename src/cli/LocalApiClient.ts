@@ -33,7 +33,10 @@ export function requestLocalJson(discovery: Discovery, route: string, body?: Buf
   const url = new URL(route, String(discovery.baseUrl));
   return new Promise((resolve, reject) => {
     const req = http.request({ hostname: url.hostname === "[::1]" ? "::1" : url.hostname === "localhost" ? "127.0.0.1" : url.hostname, port: url.port, path: url.pathname,
-      method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${discovery.token}`, ...(body ? { "Content-Type": "application/json", "Content-Length": body.length } : {}) } }, res => {
+      method: body ? "POST" : "GET", headers: { Authorization: `Bearer ${discovery.token}`,
+        ...(body && discovery.pid && discovery.startedAt ? { "X-Simple-Api-Instance": `${discovery.pid}:${discovery.startedAt}` } : {}),
+        ...(body && discovery.workspace ? { "X-Simple-Api-Workspace": encodeURIComponent(String(discovery.workspace)) } : {}),
+        ...(body ? { "Content-Type": "application/json", "Content-Length": body.length } : {}) } }, res => {
       if (res.statusCode !== 200) { reject(new Error(`Local API HTTP ${res.statusCode}`)); res.destroy(); req.destroy(); return; }
       const chunks: Buffer[] = []; let size = 0;
       res.on("data", (chunk: Buffer) => { size += chunk.length; if (size > maxBytes) { reject(new Error("Local API response exceeds size limit")); res.destroy(); req.destroy(); } else chunks.push(chunk); });
@@ -368,6 +371,12 @@ export async function callPluginRpc(plugin: UnifiedPlugin, method: string, param
     preflight = await preflightPlugin(plugin);
   }
   assertInstancePin(expectedInstanceId, preflight);
+  if (!target && !expectedInstanceId && !process.env.SIMPLE_CLI_INSTANCE_ID && !process.env[PLUGIN_ENDPOINTS[plugin].env]) {
+    const workspace = String(preflight.capabilities.workspace || "");
+    const relative = workspace ? path.relative(path.resolve(workspace), process.cwd()) : "..";
+    if (!workspace || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative))
+      throw new Error("API_WORKSPACE_MISMATCH：默认 API 属于其他项目窗口；请使用 --workspace 或 --instance 明确选择，未转交请求。");
+  }
   const retired = preflight.capabilities.retiredMethods as Record<string, unknown> | undefined;
   if (retired && typeof retired[method] === "string") {
     throw rpcError(`Method retired by the live API: ${method} (${String(retired[method])})`, -32001, retired[method]);

@@ -22,12 +22,15 @@ export function completeProgressSnapshot(value: any, startedAt: string) {
 }
 /** Current-round observations only. One slow result cannot discard its siblings. */
 export async function queryWorkerProgress(client: any, workerId: string, queries: any[], execution: any,
-  options: { signal?: AbortSignal; onSnapshot?: (snapshot: any) => void; deferDiagnostics?: boolean; excludeVerified?: Set<string> } = {}) {
+  options: { signal?: AbortSignal; onSnapshot?: (snapshot: any) => void; deferDiagnostics?: boolean; excludeVerified?: Set<string>; terminalOnly?: boolean } = {}) {
   const key = (task: any) => task.projectId + ":" + task.commandId;
   const selected = new Map<string, any>();
   for (const task of [...queries, ...(execution.tasks || [])])
     if (task.commandId && task.projectId && task.workerId === workerId && task.outputDir
       && !options.excludeVerified?.has(key(task))) selected.set(key(task), { ...selected.get(key(task)), ...task });
+  // Low traffic follows live panes until exit; manual rounds retain full details.
+  if (options.terminalOnly) for (const task of execution.tasks || [])
+    if (task.observation?.tmux?.dead === false) selected.delete(key(task));
   const rows = new Map<string, any>((execution.tasks || []).map((task: any) => [key(task), task]));
   for (const [id, query] of selected) if (!rows.has(id)) rows.set(id, { ...query, observation: {
     lifecycleProtocol: 2, commandId: query.commandId, projectId: query.projectId, workerId,
@@ -49,7 +52,9 @@ export async function queryWorkerProgress(client: any, workerId: string, queries
     const partial = !entries.length || checked.size !== entries.length || errors.size > 0;
     const { executionOnly: _, ...base } = execution;
     return { ...base, workerId, fetchedAt: execution.fetchedAt || new Date().toISOString(), capabilities,
-      ...(partial ? { executionOnly: true, resultQueryError: reason || [...errors.values()].join("; ") || "部分产物仍在核实" } : {}),
+      ...(partial ? { executionOnly: true,
+        ...(!entries.length && options.terminalOnly ? { backgroundDetailsDeferred: true }
+          : { resultQueryError: reason || [...errors.values()].join("; ") || "部分产物仍在核实" }) } : {}),
       ...(controlIncomplete ? { controlIncomplete: true } : {}),
       ...(needsDiagnostics.size > diagnosticsChecked.size ? { diagnosticsPending: true,
         ...(reason ? { runtimeQueryError: reason } : {}) } : {}),

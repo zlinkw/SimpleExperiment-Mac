@@ -1,7 +1,7 @@
 import { RequestBudget, RequestBudgetConfig, RequestBudgetCoordinator, RequestBudgetSnapshot } from "./RequestBudget";
 import { ClusterSnapshot, GpuHistoryQuery, GpuHistoryResponse, TunnelAction, TunnelEndpointConfig } from "./TunnelClient";
 import { DownloadOptions, FileListResponse, FileTransferTask } from "./FileTransferTypes";
-import { defaultRealtimeRefreshPolicy, RealtimeClientDiagnostics, RealtimeRefreshPolicy, RealtimeTunnelClient, StreamStatus } from "./RealtimeTunnelClient";
+import { defaultRealtimeRefreshPolicy, DisplayClosureReason, DisplayEvidenceOrigin, DisplayFaultClass, RealtimeClientDiagnostics, RealtimeRefreshPolicy, RealtimeTunnelClient, StreamStatus } from "./RealtimeTunnelClient";
 import { compactRealtimeLogs, createRealtimeState, RealtimeState } from "./RealtimeEventReducer";
 import { mergeAuthorityRealtimeStates } from "./AuthorityMergePolicy";
 import { isWorkerTelemetryAction, workerLocalSchedulerActionNames, workerResultActionNames, WorkerLocalSchedulerAction, WorkerResultAction } from "./WorkerTelemetryApi";
@@ -28,7 +28,18 @@ export interface MultiEndpointDiagnostics {
     lastHeartbeatAt?: string;
     reconnectCount: number;
     lastError?: string;
+    displayAutoRefreshDisabled?: boolean;
+    displayAutoClosed?: boolean;
+    /** Per-endpoint attribution, never merged across endpoints (§20.6.2). */
+    displayFaultClass?: DisplayFaultClass;
+    displayFaultPending?: "none" | "transport" | "hard";
+    displayErrorOrigin?: DisplayEvidenceOrigin;
+    displayClosureReason?: DisplayClosureReason;
   }>;
+  /** True when every endpoint client has display-class automatic refresh switched off. */
+  displayAutoRefreshDisabled?: boolean;
+  /** True when every endpoint is disconnected only because the low-traffic guard closed the display channels. */
+  displayAutoClosed?: boolean;
 }
 
 export class MultiEndpointRealtimeClient {
@@ -58,7 +69,9 @@ export class MultiEndpointRealtimeClient {
       if (!sharedCoordinator) sharedCoordinator = budget.createCoordinator();
       budget.attachCoordinator(sharedCoordinator, endpoint.id);
       this.budgets.set(endpoint.id, budget);
-      this.clients.set(endpoint.id, new RealtimeTunnelClient(endpoint, budget, policy, (state) => {
+      // One policy object is commonly shared by every endpoint: hand each client its own copy so a
+      // later change on one endpoint can never be seen as an already-applied value by another.
+      this.clients.set(endpoint.id, new RealtimeTunnelClient(endpoint, budget, { ...policy }, (state) => {
         this.mergedState = mergeRealtimeStates(this.endpointStates(endpoint.id, state), this.endpoints, this.protectedLogKeys, this.endpointById);
         this.onState(this.mergedState);
       }));
@@ -80,6 +93,11 @@ export class MultiEndpointRealtimeClient {
     const clients = [...this.clients.values()].filter(client => client.diagnostics().requiresManualReconnect || ["disconnected", "paused"].includes(client.diagnostics().streamStatus));
     await mapLimitAllSettled(clients, 8, (client) => client.reconnect(reason));
     this.updateMergedState();
+  }
+
+  /** Low-traffic mode: forward the cadence change to each endpoint client without reconnecting. */
+  updateRefreshPolicy(policy?: Partial<RealtimeRefreshPolicy> | null): void {
+    for (const client of this.clients.values()) client.updateRefreshPolicy(policy);
   }
 
   async getSnapshot(): Promise<ClusterSnapshot> {
@@ -458,6 +476,12 @@ throw new Error("AVAILABILITY_PUSH_RETIRED：使用 Worker 主动查询。");
         lastHeartbeatAt: item?.lastHeartbeatAt,
         reconnectCount: item?.reconnectCount || 0,
         lastError: item?.lastError,
+        displayAutoRefreshDisabled: item?.displayAutoRefreshDisabled === true,
+        displayAutoClosed: item?.displayAutoClosed === true,
+        displayFaultClass: item?.displayFaultClass,
+        displayFaultPending: item?.displayFaultPending,
+        displayErrorOrigin: item?.displayErrorOrigin,
+        displayClosureReason: item?.displayClosureReason,
       };
     });
     const statuses = new Set(endpoints.map((endpoint) => endpoint.streamStatus));
@@ -467,6 +491,11 @@ throw new Error("AVAILABILITY_PUSH_RETIRED：使用 Worker 主动查询。");
       lastHeartbeatAt: latest(endpoints.map((endpoint) => endpoint.lastHeartbeatAt)),
       reconnectCount: endpoints.reduce((sum, endpoint) => sum + endpoint.reconnectCount, 0),
       lastError: endpoints.find((endpoint) => endpoint.lastError)?.lastError,
+      // The host distinguishes "no tunnel at all" from "the low-traffic guard closed the display
+      // channels on purpose" through these two flags; a guarded closure is not an outage.
+      displayAutoRefreshDisabled: endpoints.length > 0 && endpoints.every((endpoint) => endpoint.displayAutoRefreshDisabled === true),
+      displayAutoClosed: endpoints.length > 0
+        && endpoints.every((endpoint) => endpoint.streamStatus === "disconnected" && endpoint.displayAutoClosed === true),
       endpoints,
     };
     this.diagnosticsEndpointSources = sources;

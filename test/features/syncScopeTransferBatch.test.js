@@ -110,7 +110,7 @@ test("three confirmed files use one source inventory, one destination inventory,
       throw new Error(`unexpected ${method}`);
     },
     assertSshTransportIdentities: async () => {},
-    deleteSyncScopeRemoteCopy: async (id, server, relativePath, directory) => calls.push({ method: "confirmed-delete", params: { id, server, relativePath, directory } }),
+    deleteSyncScopeRemoteCopy: async (root, id, server, relativePath, directory) => calls.push({ method: "confirmed-delete", params: { root, id, server, relativePath, directory } }),
     sftpServerOptions: (row) => ({ id: row.id, host: `${row.id}.example`, networkHost: `net-${row.id}`, remotePath: `/proj/${row.id}`, user: "u", port: 22 }),
     updateSyncScopeHolds: async (_root, mutate) => { provider.saved = {}; mutate(provider.saved); },
   };
@@ -144,6 +144,7 @@ test("three confirmed files use one source inventory, one destination inventory,
   assert.equal(fpsync[0].params.relativePaths.includes("artifacts/outside.txt"), false);
   const deletes = calls.filter((call) => call.method === "confirmed-delete");
   assert.deepEqual(deletes.map((call) => call.params.relativePath), ["artifacts/pack"]);
+  assert.deepEqual(deletes.map((call) => call.params.root), [ROOT], 'remote deletion carries the consuming project root');
   assert.equal(provider.saved["artifacts/a.txt"].sha256, digest("artifacts/a.txt"));
   assert.equal(provider.saved["artifacts/pack"].fileHashes["artifacts/pack/c.bin"], digest("artifacts/pack/c.bin"));
   assert.equal(provider.saved["artifacts/pack"].fileHashes["artifacts/outside.txt"], undefined);

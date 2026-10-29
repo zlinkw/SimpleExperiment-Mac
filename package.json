@@ -2,7 +2,7 @@
   "name": "simple-experiment-mac",
   "displayName": "SimpleExperiment Mac",
   "description": "面向 Apple Silicon macOS 的科研实验编排面板，用户手动配置 Termius 本地隧道。",
-  "version": "0.5.317",
+  "version": "0.5.318",
   "publisher": "simple-local",
   "extensionKind": [
     "ui"
@@ -61,7 +61,45 @@
     "onCommand:simpleExperimentMac.removeGitBackup",
     "onCommand:simpleExperimentMac.showGitBackupStatus",
     "onCommand:simpleExperimentMac.syncToGitHub",
-    "onCommand:simpleExperimentMac.publishToGitHub"
+    "onCommand:simpleExperimentMac.publishToGitHub",
+    "onView:simpleExperiment.panel",
+    "onCommand:simpleExperiment.openPanel",
+    "onCommand:simpleExperiment.copyPanelDiagnostics",
+    "onCommand:simpleExperiment.showOperationLog",
+    "onCommand:simpleExperiment.restorePanel",
+    "onCommand:simpleExperiment.quickSetup",
+    "onCommand:simpleExperiment.bootstrapProject",
+    "onCommand:simpleExperiment.prepareAgents",
+    "onCommand:simpleExperiment.openSetupGuide",
+    "onCommand:simpleExperiment.configureXshellSavedSessions",
+    "onCommand:simpleExperiment.writeXshellAgentStartupCommands",
+    "onCommand:simpleExperiment.configureWorkerTunnels",
+    "onCommand:simpleExperiment.configureTunnelPorts",
+    "onCommand:simpleExperiment.configureXshellRealtimeTunnel",
+    "onCommand:simpleExperiment.startWorkerTunnel",
+    "onCommand:simpleExperiment.startAllXshellRealtimeTunnels",
+    "onCommand:simpleExperiment.startAllXshellConnections",
+    "onCommand:simpleExperiment.openXshellSessions",
+    "onCommand:simpleExperiment.testAllTunnels",
+    "onCommand:simpleExperiment.showTunnelEndpointRegistry",
+    "onCommand:simpleExperiment.testXshellTunnel",
+    "onCommand:simpleExperiment.restartRealtimeStream",
+    "onCommand:simpleExperiment.pauseRealtimeStream",
+    "onCommand:simpleExperiment.resumeRealtimeStream",
+    "onCommand:simpleExperiment.pauseAllNetworkActivity",
+    "onCommand:simpleExperiment.generateXshellTunnelScript",
+    "onCommand:simpleExperiment.openTunnelStatus",
+    "onCommand:simpleExperiment.runXshellRealIntegrationCheck",
+    "onCommand:simpleExperiment.manualRefresh",
+    "onCommand:simpleExperiment.importOfflineBundle",
+    "onCommand:simpleExperiment.openLastCheckStaticReport",
+    "onCommand:simpleExperiment.copyLastCheckStaticReport",
+    "onCommand:simpleExperiment.runCheckStatic",
+    "onCommand:simpleExperiment.setupGitBackup",
+    "onCommand:simpleExperiment.removeGitBackup",
+    "onCommand:simpleExperiment.showGitBackupStatus",
+    "onCommand:simpleExperiment.syncToGitHub",
+    "onCommand:simpleExperiment.publishToGitHub"
   ],
   "main": "./dist/mac/Bootstrap.js",
   "bin": {
@@ -174,12 +212,12 @@
       },
       {
         "command": "simpleExperimentMac.startAllXshellRealtimeTunnels",
-        "title": "SimpleExperiment：启动全部 Xshell 会话",
+        "title": "SimpleExperiment：启动全部后台隧道",
         "icon": "$(run-all)"
       },
       {
         "command": "simpleExperimentMac.startAllXshellConnections",
-        "title": "SimpleExperiment：启动全部 Xshell 连接",
+        "title": "SimpleExperiment：启动全部后台连接",
         "icon": "$(run-all)"
       },
       {
@@ -291,6 +329,11 @@
       {
         "command": "simpleExperimentMac.showCliEntry",
         "title": "SimpleExperiment Mac：查看 CLI 入口"
+      },
+      {
+        "command": "simpleExperimentMac.openXshellSessions",
+        "title": "SimpleExperiment：一键打开 Xshell",
+        "icon": "$(terminal)"
       }
     ],
     "menus": {

@@ -3,6 +3,12 @@ import { verifyNativeResult } from "./NativeResultManifest";
 import * as Tables from "./ProjectResultTables";
 import { runtimeEvidence, completionState, type RuntimeDiagnostics, type CompletionState } from "../features/RuntimeDiagnostics";
 
+/** Transport interruptions can retry reads, never identity/content/permission failures. */
+export function transientResultReadError(error: any): boolean {
+  const messages = [error?.message, error?.code, error?.cause?.message, error?.cause?.code].filter(Boolean).join(" ");
+  return error?.name === "TimeoutError" || /fetch failed|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|ETIMEDOUT|socket hang up|network error|UND_ERR_(?:SOCKET|CONNECT_TIMEOUT|HEADERS_TIMEOUT)|HTTP (?:502|503|504)\b/i.test(messages);
+}
+
 export type ResultDeclaration = { planFile: string; index: number; case: string; seed: number; output_dir: string; result_csv: string; mode: string };
 export type ResultPlan = { planFile: string; revision: string; mode: string; seeds: number[]; jobs: ResultDeclaration[] };
 export type ResultSource = { remotePath: string; bytes: number; sha256: string };
@@ -49,7 +55,7 @@ function batchResultReads(receive: (worker: string, files: ResultSource[]) => Pr
             for (const request of batch) request.resolve(values.filter(value => request.files.some(file => file.remotePath === value.remotePath)));
           } catch (error) {
             for (const request of batch) {
-              if (batch.length === 1 || !current()) { request.reject(error); continue; }
+              if (batch.length === 1 || !current() || transientResultReadError(error)) { request.reject(error); continue; }
               try { request.resolve(await receive(id, request.files)); } catch (isolated) { request.reject(isolated); }
             }
           }

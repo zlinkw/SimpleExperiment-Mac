@@ -6,12 +6,16 @@ import type { RuntimeDiagnostics, CompletionState } from "./RuntimeDiagnostics";
 import { freshTaskObservation } from "./WorkerProgressEvidence";
 import { hasVerifiedCompletion, nextVerifiedCompletion, verifiedCompletionProjection, trustedTerminalProofFor, type TrustedTerminalProof, type VerifiedCompletion } from "./VerifiedCompletion";
 import { projectStateFile, projectStateId } from "./ProjectStatePaths";
+import { budgetEvidence, mergeBudgetEvidence, retainPlanMemoryEstimates, type PlanGpuMemoryEstimates, type GpuBudgetEvidence, type GpuBudgetReservation } from "./GpuMemoryBudget";
 
 export type JobState = "pending" | "dispatching" | "queued" | "running" | "completed" | "failed" | "cancelled" | "unknown";
 export type JobFailureClass = "deterministic" | "resource" | "transient" | "unknown";
 export type AutomaticJobRetry = { failureCount: number; failedAttempt: number; retryAt?: string; exhausted?: boolean; lastError?: string;
   failureClass?: JobFailureClass; blockedReason?: string };
 export type QueuedJob = {
+  gpuMemoryProfile?: GpuBudgetEvidence;
+  gpuMemoryReservation?: GpuBudgetReservation;
+  gpuMemoryWaitReason?: string;
   index: number;
   case: string;
   seed: number;
@@ -24,16 +28,20 @@ export type QueuedJob = {
   attempt: number;
   status: JobState;
   lifecycleProtocol?: 2;
-  manualDispatch?: { workerId: string; gpuId: string; stage: "preparing" | "ready" | "sent"; origin?: "server_queue"; batchId?: string };
+  manualDispatch?: { workerId: string; gpuId: string; gpuSelection?: "automatic"; stage: "preparing" | "ready" | "sent"; origin?: "server_queue"; batchId?: string };
+  /** User-selected Worker; GPU selection stays in the normal local budgeted queue. */
+  automaticWorkerId?: string;
   manualDispatchNotice?: string;
   retainExistingOutputs?: boolean;
   /** r82（0.5.414）job 级显式隔离阻断：旧产物隔离未完成或核验未知——job 保持可见 pending，
    * 但四条派发路径（自动 tick、服务器队列、手动 ready、失败恢复）一律不得派发。
    * 本字段本身不是授权凭证；缺失也不等于"已证明隔离成功"（准入只由本轮隔离结果的结构化
    * blocked 划分）。解除仅发生在用户走既有审核路径、精确声明未变且隔离完成核验通过时，
-   * 随接受事务性写回（置 undefined），任何投影/合并/重排/清理不得静默清除。 */
+   * 随接受事务性写回（置 undefined）。传输忙可由当前全节点精确路径不存在证明解除；
+   * 投影、历史回执和单纯传输空闲均不得清除。 */
   outputIsolationBlocked?: { reason: string; stage: "preview" | "execute" | "verify"; code?: string; operationId?: string;
-    declarationKey: string; observedAt: string };
+    declarationKey: string; observedAt: string; codes?: string[]; busyOnly?: boolean;
+    recovery?: { state: "waiting_transfer" | "review_required" | "unknown"; checkedAt: string; nextCheckAt: string; detail?: string } };
   executionState?: string;
   resultState?: string;
   runtimeDiagnostics?: RuntimeDiagnostics;
@@ -123,6 +131,7 @@ export type QueuedJob = {
   history?: Array<{ attempt: number; status: JobState; workerId?: string; commandId?: string; outputDir: string; logPath?: string; tmuxSession?: string; finishedAt?: string; stopReason?: string; error?: string; outputRetiredAt?: string; admissionRejection?: QueuedJob["admissionRejection"]; cleanupOperationId?: string }>;
 };
 export type QueuedPlan = {
+  gpuMemoryEstimates?: PlanGpuMemoryEstimates;
   executionSource?: { digest: string; manifest: Record<string, { size: number; sha256: string }> };
   /** 提交时的本机 Git 溯源（分支/HEAD/脏状态/时间；origin 已剥离凭证）。纯本机展示与绑定用，
    * 绝不参与 completionIdentity、job 身份或 Worker 协议。dirty 缺失=当时未知。 */
@@ -224,6 +233,7 @@ function clearNativeProjection(job: QueuedJob, plan: QueuedPlan) {
   job.status = job.unavailable || job.retainExistingOutputs ? "cancelled" : job.commandId ? "unknown" : "pending";
   for (const key of ["executionState", "resultState", "completionState", "runtimeDiagnostics", "exitCode", "statusQueryError", "verificationQueryError", "lastObservedAt", "trustedTerminalStatus", "error", "blockReason",
     "tmuxPane", "tmuxWindowId", "tmuxSession", "logPath", "finishedAt"] as const) delete job[key];
+  if (job.gpuMemoryWaitReason) job.blockReason = job.gpuMemoryWaitReason;
   // r82：隔离阻断是本机持久事实而非远端运行投影——投影可以清原生运行字段，但不得抹掉
   // outputIsolationBlocked 或它的解释；重载后必须仍能回答"为何未启动、下一步做什么"。
   if (job.outputIsolationBlocked) job.blockReason = outputIsolationNotice(job);
@@ -241,6 +251,7 @@ export function keepCurrentObservations(queue: DistributedQueue, live: Distribut
     if (job.lifecycleProtocol !== 2 || !job.commandId || !current || current.commandId !== job.commandId || current.workerId !== job.workerId
       || !current.lastObservedAt || now - Date.parse(current.lastObservedAt) > 30000 || !Number.isFinite(Date.parse(current.lastObservedAt))) continue;
     for (const key of keys) (job as any)[key] = current[key];
+    job.gpuMemoryProfile = mergeBudgetEvidence(job.gpuMemoryProfile, current.gpuMemoryProfile);
     Object.assign(job, verifiedCompletionProjection(plan, job));
   }
   return queue;
@@ -248,6 +259,7 @@ export function keepCurrentObservations(queue: DistributedQueue, live: Distribut
 
 export function serializeDistributedQueue(queue: DistributedQueue): string {
   const copy = cloneDistributedQueue(queue);
+  copy.plans = copy.plans.map(plan => retainPlanMemoryEstimates(plan));
   for (const plan of copy.plans) if (plan.resultPathPolicy === "declared") for (const job of plan.jobs) {
     if (job.lifecycleProtocol === 2) {
       clearNativeProjection(job, plan);
@@ -259,6 +271,10 @@ export function serializeDistributedQueue(queue: DistributedQueue): string {
     for (const record of job.history || []) if (record.attempt === 0) delete (record as { attempt?: number }).attempt;
   }
   return JSON.stringify(copy, null, 2) + "\n";
+}
+
+export function retainQueueMemoryEstimates(queue: DistributedQueue, prior?: DistributedQueue): DistributedQueue {
+  return { ...queue, plans: queue.plans.map(plan => retainPlanMemoryEstimates(plan, prior?.plans.find(old => old.id === plan.id))) };
 }
 
 /** Persist only compact confirmed facts into the existing queue, never raw
@@ -318,9 +334,9 @@ export function workerTaskLogBinding(plan: Pick<QueuedPlan, "id">, job: Pick<Que
   return { logPath };
 }
 
-export type WorkerSlots = { workerId: string; idleGpuIds: string[]; gpuSlots?: string[]; online: boolean; capacity?: number; codeFingerprint?: string; idleGpuAdmission?: boolean; declaredJobPaths?: boolean; compatiblePlans?: string[]; codeScopeErrors?: Record<string,string> };
-export function workerCanRunPlan(queue: DistributedQueue, worker: Pick<WorkerSlots,"workerId"|"codeFingerprint"|"compatiblePlans"|"codeScopeErrors">, plan: QueuedPlan): boolean {
-  if (worker.codeScopeErrors?.[plan.id]) return false;
+export type WorkerSlots = { workerId: string; idleGpuIds: string[]; gpuSlots?: string[]; online: boolean; capacity?: number; codeFingerprint?: string; idleGpuAdmission?: boolean; declaredJobPaths?: boolean; compatiblePlans?: string[]; codeScopeErrors?: Record<string,string>; codeScopePending?: Record<string,boolean> };
+export function workerCanRunPlan(queue: DistributedQueue, worker: Pick<WorkerSlots,"workerId"|"codeFingerprint"|"compatiblePlans"|"codeScopeErrors"|"codeScopePending">, plan: QueuedPlan): boolean {
+  if (worker.codeScopeErrors?.[plan.id] || worker.codeScopePending?.[plan.id]) return false;
   return worker.compatiblePlans?.includes(plan.id) === true || worker.codeFingerprint === plan.codeFingerprint
     && workerCodeVersionAvailable(queue, worker.workerId, plan.codeFingerprint);
 }
@@ -610,6 +626,8 @@ export function mergeDurableWorkerSnapshots(queue: DistributedQueue, snapshots: 
         recoveryConflict: undefined, trustedTerminalStatus: undefined,
         statusQueryError: observation.queryError || observation.executionQueryError, lastObservedAt: snapshot.fetchedAt || observation.observedAt,
         observationErrors: cleanNativeErrors,
+        gpuMemoryProfile: !observation.queryError && !observation.executionQueryError
+          ? mergeBudgetEvidence(job.gpuMemoryProfile, budgetEvidence(task?.gpuMemoryProfile, job.commandId || "", projectId)) : job.gpuMemoryProfile,
         nativeStartProof: job.nativeStartProof && job.nativeStartProof.commandId === job.commandId
           && job.nativeStartProof.workerId === job.workerId ? job.nativeStartProof
           : (cleanNativeErrors.length === 0 && nativeWindowSeen)
@@ -934,10 +952,13 @@ export function distributedSubmissionResult(plan: QueuedPlan | undefined, dispat
 export function outputIsolationNotice(job: Pick<QueuedJob, "outputIsolationBlocked"> | undefined): string {
   const blocked = job?.outputIsolationBlocked;
   if (!blocked) return "";
+  if (blocked.recovery?.state === "waiting_transfer") return "等待传输结束后自动核实旧产物；核实安全后回到自动队列，训练尚未启动。";
+  if (blocked.recovery?.state === "review_required") return "传输已结束，当前仍存在旧产物；请点击“审核旧产物”核对精确路径，原有确认和产物保护保留。";
+  if (blocked.recovery?.state === "unknown") return "旧产物状态本轮未核实，将自动重查；可点击“重新核实”。" + String(blocked.recovery.detail || "").slice(0,300);
   if (blocked.code === "PREVIEW_EXPIRED")
     return "旧产物隔离未完成：隔离预览确认已过期（PREVIEW_EXPIRED），训练未启动；请重新生成预览并重新核对精确路径后再确认，未复用旧令牌。";
   return "旧产物隔离未完成，训练未启动：" + String(blocked.reason || blocked.code || "隔离结果未核实").slice(0, 300)
-    + "。请通过“重新排队此 job”重新审核产物处理（覆盖须重走完整两次确认）。";
+    + "。请通过“重新核实/审核旧产物”重新审核（覆盖须重走完整两次确认）。";
 }
 
 /** r82（0.5.414）提交体→入队→派发共用的唯一事实源：划分 可执行 / 隔离暂停（可见 pending 但不得
@@ -959,6 +980,7 @@ export function planDispatchSelection(validation: { jobs?: Array<Record<string, 
     const stage = row?.stage === "preview" || row?.stage === "execute" || row?.stage === "verify" ? row.stage : "execute";
     blockedMarkers.set(index, { reason: String(row?.reason || "隔离结果未核实"), stage,
       ...(row?.code ? { code: String(row.code) } : {}), ...(row?.operationId ? { operationId: String(row.operationId) } : {}),
+      ...(Array.isArray(row?.codes) ? { codes: row.codes.map(String) } : {}), ...(typeof row?.busyOnly === "boolean" ? { busyOnly: row.busyOnly } : {}),
       declarationKey, observedAt: String(row?.observedAt || observedAt) });
   }
   const userSkipped = new Set<number>(body?.existingOutputChoice === "rerun_missing"
@@ -1145,8 +1167,11 @@ function noteFingerprintMismatch(plans: QueuedPlan[], workers: readonly WorkerSl
     const held = plan.jobs.some(jobHasLiveExecution);
     const waiting = !matched && workers.some(row => row.online && row.codeFingerprint === plan.codeFingerprint);
     for (const job of plan.jobs) {
-      if (job.status !== "pending") continue;
+      if (job.status !== "pending" || job.outputIsolationBlocked) continue;
       const scopeErrors = workers.filter(row=>row.online).map(row=>row.codeScopeErrors?.[plan.id]).filter(Boolean);
+      // Refresh-in-flight is a gate, not evidence of changed/missing source.
+      // Preserve the existing queue reason until a real outcome is available.
+      if (!matched && !scopeErrors.length && workers.some(row => row.online && row.codeScopePending?.[plan.id])) continue;
       if (!matched && scopeErrors.length) { job.blockReason = "PLAN 所需源码待核实：" + scopeErrors.slice(0,3).join("；"); continue; }
       if (waiting) job.blockReason = CODE_FINGERPRINT_WAITING;
       else if (anyOnline && !matched && !held) job.blockReason = CODE_FINGERPRINT_MISMATCH;
@@ -1156,7 +1181,8 @@ function noteFingerprintMismatch(plans: QueuedPlan[], workers: readonly WorkerSl
   }
 }
 
-export function allocateAvailable(queue: DistributedQueue, workers: readonly WorkerSlots[], options: { requireIdleGpuAdmission?: boolean; localIdleOnly?: boolean } = {}): { queue: DistributedQueue; dispatches: Dispatch[] } {
+export function allocateAvailable(queue: DistributedQueue, workers: readonly WorkerSlots[], options: { requireIdleGpuAdmission?: boolean; localIdleOnly?: boolean;
+  memoryBudget?: ReturnType<typeof import("./GpuMemoryBudget").memoryBudgetAdmission> } = {}): { queue: DistributedQueue; dispatches: Dispatch[] } {
   const versioned = workers.some((row) => row.codeFingerprint);
   const plans = queue.plans.map((plan) => ({ ...plan, jobs: plan.jobs.map((job) => ({ ...job })) }));
   const dispatches: Dispatch[] = [];
@@ -1170,7 +1196,7 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
   const slots = new Map(workers.filter((row) => row.online && (!options.requireIdleGpuAdmission || row.idleGpuAdmission === true)
     && (!versioned || Boolean(row.codeFingerprint) || Boolean(row.compatiblePlans?.length)))
     .map((row) => [row.workerId, (row.gpuSlots ?? [...new Set(row.idleGpuIds)]).slice(0, Math.max(0, row.capacity ?? row.gpuSlots?.length ?? row.idleGpuIds.length))]));
-  for (const plan of plans) {
+  for (const plan of options.memoryBudget?.sortPlans(plans) || plans) {
     if (plan.executionModeBlocked || plan.recoveryConflict) continue;
     if (plan.resultPathPolicy !== "declared") continue;
     if (options.localIdleOnly && plan.schedulingMode === "server_prequeue" && plan.localDispatchOverride !== true
@@ -1183,7 +1209,7 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
       && (!options.localIdleOnly || plan.schedulingMode !== "server_prequeue" || plan.localDispatchOverride === true || job.localQueueOnly === true));
     if (!pending.length) continue;
     const eligibleWorkerIds = new Set(workers.filter(row => row.declaredJobPaths === true
-      && !row.codeScopeErrors?.[plan.id] && (!versioned || workerCanRunPlan({ ...queue, plans }, row, plan))).map(row => row.workerId));
+      && !row.codeScopeErrors?.[plan.id] && !row.codeScopePending?.[plan.id] && (!versioned || workerCanRunPlan({ ...queue, plans }, row, plan))).map(row => row.workerId));
     const ranked = () => [...slots].filter(([id, gpuIds]) => gpuIds.length && eligibleWorkerIds.has(id))
       .sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
     const assignedWorkerIds = [...new Set(plan.jobs.filter((job) => job.workerId).map((job) => job.workerId!))];
@@ -1195,18 +1221,25 @@ export function allocateAvailable(queue: DistributedQueue, workers: readonly Wor
       const whole = ranked().find(([workerId, ids]) => workerId === primary && ids.length >= caseJobs.length)
         || ranked().find(([, ids]) => ids.length >= caseJobs.length);
       for (const job of caseJobs) {
-        const chosen = job.reassignmentWorkerId ? eligibleWorkerIds.has(job.reassignmentWorkerId)
+        const allowedWorkers = workers.filter(worker => eligibleWorkerIds.has(worker.workerId)
+          && (!job.automaticWorkerId || worker.workerId === job.automaticWorkerId));
+        const budgetChoice = options.memoryBudget?.choose(plan, job, allowedWorkers, slots);
+        const chosen = options.memoryBudget ? budgetChoice?.workerId : job.automaticWorkerId ? allowedWorkers.some(worker => worker.workerId === job.automaticWorkerId)
+          && slots.get(job.automaticWorkerId)?.length ? job.automaticWorkerId : undefined
+          : job.reassignmentWorkerId ? eligibleWorkerIds.has(job.reassignmentWorkerId)
           && slots.get(job.reassignmentWorkerId)?.length ? job.reassignmentWorkerId : undefined
           : whole?.[0] && slots.get(whole[0])?.length ? whole[0]
           : slots.get(primary)?.length ? primary : ranked()[0]?.[0];
         if (!chosen) continue;
-        const gpuId = slots.get(chosen)?.shift();
+        const gpuId = options.memoryBudget ? budgetChoice?.gpuId : slots.get(chosen)?.shift();
         if (gpuId === undefined) break;
+        if (options.memoryBudget) slots.get(chosen)!.splice(slots.get(chosen)!.indexOf(gpuId), 1);
         const commandId = durableCommandId(plan, job, chosen, gpuId);
         if (commandId !== job.commandId) Object.assign(job, { runtimeDiagnostics: undefined, completionState: undefined, exitCode: undefined });
         Object.assign(job, { status: "dispatching", workerId: chosen, gpuId, commandId, blockReason: undefined,
           ...(job.lifecycleProtocol === 2 ? { startIntent: { commandId, workerId: chosen, gpuId } } : {}),
           reassignmentWorkerId: undefined });
+        options.memoryBudget?.reserve(plan, job, chosen, gpuId);
         dispatches.push({ planId: plan.id, jobIndex: job.index, workerId: chosen, gpuId, attempt: job.attempt, commandId });
       }
     }

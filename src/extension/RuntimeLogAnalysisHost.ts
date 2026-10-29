@@ -8,7 +8,8 @@ export function runtimeLogAnalysisMessage(report: any): string {
   if (report.executionState === "failed" || report.exitCode != null && report.exitCode !== 0)
     return "日志分析完成：执行失败，" + exit + "；详见任务卡片及窗口日志。";
   if (report.completionState === "review_required")
-    return "日志分析完成：检出异常 " + evidence.count + " 次 · " + Object.keys(evidence.types || {}).join(", ")
+    return "日志分析完成：" + (report.status === "failed" || report.executionState === "exited" ? "任务失败，" : "")
+      + "检出异常 " + evidence.count + " 次 · " + Object.keys(evidence.types || {}).join(", ")
       + " · 阶段 " + Object.keys(evidence.phases || {}).join(", ") + "；" + exit + "。详见任务卡片及窗口日志。";
   if (report.completionState === "verified") return "日志分析完成：完整日志未检出异常，" + exit + "。";
   return "日志仍待核实：" + (evidence.reason || "尚未读取完整日志") + "；" + exit + "。";
@@ -41,7 +42,7 @@ export async function analyzeRuntimeLog(h: any, root: string, params: any, signa
   }
   await h.readWorkerTaskSnapshot?.(workerId, { fresh: true, signal });
   h.postState?.(true);
-  return { commandId, workerId, executionState: task.executionState, resultState: task.resultState, exitCode: task.exitCode,
+  return { commandId, workerId, status: task.status, executionState: task.executionState, resultState: task.resultState, exitCode: task.exitCode,
     completionState: completionState(task.runtimeDiagnostics, commandId), runtimeDiagnostics: runtimeEvidence(task.runtimeDiagnostics, commandId),
     readOnly: true, historyRewritten: false };
 }

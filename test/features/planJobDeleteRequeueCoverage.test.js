@@ -32,7 +32,7 @@ const ast=ts.createSourceFile('host.ts',legacySource,ts.ScriptTarget.Latest,true
 function legacyMethods(names,globals={}){let cls;function visit(n){if(ts.isClassDeclaration(n)&&n.name?.text==='RealtimeTunnelPanelProvider')cls=n;ts.forEachChild(n,visit)}visit(ast);
   const members=cls.members.filter(n=>names.includes(n.name?.getText(ast)));assert.equal(members.length,names.length,names.join(','));
   return vm.runInNewContext(ts.transpileModule('class Host{'+members.map(n=>n.getText(ast)).join('\n')+'};Host',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
-    {AbortController,errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
+    {AbortController,DispatchHandoffGate:require("../../dist/features/DispatchHandoffGate.js"),errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
      DistributedPlanQueue:Q,fs:fsPromises,path,atomicWriteText,...globals});}
 const QueueHost=legacyMethods(['saveDistributedQueue','withQueueWriteResource']);
 
@@ -58,7 +58,7 @@ function world(options={}){
   if(options.weakOwnership)scope.candidates.forEach(row=>{row.owners=[];row.evidence=[];});
   if(options.secondNode)scope.nodes.push({id:'w3',kind:'remote',root:serverRoot,host:'h3.example',port:22,user:'u'});// 合法第二节点但候选一行不给它：少一个覆盖
   if(options.emptyScope)scope.candidates=[];
-  if(options.absentFiles)fs.rmSync(path.join(serverRoot,'work_dirs'),{recursive:true,force:true});
+  if(options.absentFiles)require('../_helpers/retainFixtureTarget.cjs')(serverRoot,path.join(serverRoot,'work_dirs'),'directory');
   const sftp=async(method,params)=>{
     const abs=(nodeObj,relative)=>path.join(nodeObj.root,relative);
     const posixAbs=(nodeObj,relative)=>String(nodeObj.root).split(path.sep).join('/')+'/'+relative;
@@ -103,7 +103,7 @@ function world(options={}){
     if(method==='files.cleanup.execute'){
       assert.ok(record.confirmations,'执行前必须已有确认相位');assert.equal(record.action,'delete','本流只允许永久删除，不得 rename 隔离');
       const target=record.targets[params.index];
-      await fsPromises.rm(abs(record.node,target.relativePath),{recursive:true,force:true});stats.deletes+=1;
+      if(await statReal(abs(record.node,target.relativePath))) require('../_helpers/retainFixtureTarget.cjs')(record.node.root,abs(record.node,target.relativePath),target.type); stats.deletes+=1;
       if(options.recreateAfterDelete&&!options.recreated){options.recreated=true;
         await fsPromises.mkdir(abs(record.node,'work_dirs/a0'),{recursive:true});await fsPromises.writeFile(abs(record.node,'work_dirs/a0/out.txt'),'new');}
       return {ok:true,receipt:{source:'active_query',verifiedBy:'path_absence',contentFingerprint:target.contentFingerprint}};}

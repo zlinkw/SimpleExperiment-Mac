@@ -1,10 +1,3 @@
-import { CASE_ANALYSIS_READ_PYTHON } from "./runtime/CaseAnalysisRead";
-import { PLAN_ANALYSIS_READ_PYTHON } from "./runtime/PlanAnalysisRead";
-import { CLAIM_EVIDENCE_READ_PYTHON } from "./runtime/ClaimEvidenceRead";
-import { ARCHIVE_EVIDENCE_READ_PYTHON } from "./runtime/ArchiveEvidenceRead";
-import { PROJECT_AGGREGATE_READ_PYTHON } from "./runtime/ProjectAggregateRead";
-import { OUTPUT_CONTRACT_FILES_PYTHON } from "./runtime/OutputContractFiles";
-import { RESULT_PARSE_INPUTS_PYTHON } from "./runtime/ResultParseInputs";
 import { RESULT_LAYOUT_PYTHON } from "./results/ResultLayout";
 import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
 import { TASK_SHELL_ENVIRONMENT_PYTHON } from "./runtime/TaskShellEnvironment";
@@ -23,13 +16,6 @@ from urllib.parse import urlparse, parse_qs, unquote
 
 ${RESULT_LAYOUT_PYTHON}
 ${PLAN_EXISTING_ARTIFACTS_PYTHON}
-${OUTPUT_CONTRACT_FILES_PYTHON}
-${RESULT_PARSE_INPUTS_PYTHON}
-${ARCHIVE_EVIDENCE_READ_PYTHON}
-${PROJECT_AGGREGATE_READ_PYTHON}
-${CASE_ANALYSIS_READ_PYTHON}
-${PLAN_ANALYSIS_READ_PYTHON}
-${CLAIM_EVIDENCE_READ_PYTHON}
 ${SYNC_SCOPE_INDEX_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
@@ -2755,65 +2741,6 @@ DURABLE_PLAN_IDENTITY_FIELDS = (
     "commandId", "workerId",
 )
 
-def durable_plan_path(value, label):
-    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
-            or value.startswith("/") or ":" in value or chr(92) in value
-            or any(ord(char) < 32 or ord(char) == 127 for char in value)
-            or any(part in ("", ".", "..") for part in value.split("/"))):
-        raise ValueError(label + " 必须是保留真实拼写的项目内规范相对 POSIX 路径")
-    return value
-
-
-def worker_path_value(command, options, keys, default=""):
-    values = [record[key] for record in (command, options) for key in keys
-              if key in record and record[key] is not None and record[key] != ""]
-    if not values:
-        return default
-    if any(not isinstance(value, str) for value in values) or any(value != values[0] for value in values):
-        raise ValueError(keys[0] + " 路径类型无效或别名不一致")
-    return values[0]
-
-
-def worker_plan_project_path(root, value, require_file=False, directory=False):
-    worker_plan_path(value, "Worker Plan 路径", allow_absolute=True)
-    root_abs = os.path.abspath(root)
-    real_root = os.path.realpath(root_abs)
-    if not stat.S_ISDIR(os.stat(root_abs).st_mode):
-        raise ValueError("Worker 项目根目录不是现有目录")
-    full = os.path.abspath(os.path.join(root_abs, value))
-    relative = os.path.relpath(full, root_abs)
-    durable_plan_path(relative, "Worker 项目内路径")
-    if os.path.commonpath([real_root, os.path.realpath(full)]) != real_root:
-        raise ValueError("Worker Plan 路径越出项目")
-    current = root_abs
-    parts = relative.split(os.sep)
-    for index, part in enumerate(parts):
-        names = os.listdir(current)
-        target = os.path.join(current, part)
-        try:
-            info = os.lstat(target)
-        except FileNotFoundError:
-            if require_file:
-                raise
-            return full
-        if part not in names or stat.S_ISLNK(info.st_mode):
-            raise ValueError("Worker Plan 路径条目拼写不一致或包含符号链接")
-        want_directory = directory or index < len(parts) - 1
-        if not (stat.S_ISDIR(info.st_mode) if want_directory else stat.S_ISREG(info.st_mode)):
-            raise ValueError("Worker Plan 路径文件类型不符")
-        current = target
-    return full
-
-
-def worker_plan_path(value, label, allow_absolute=False, allow_empty=False):
-    if value == "" and allow_empty:
-        return value
-    if allow_absolute and isinstance(value, str) and value.startswith("/") and not value.startswith("//"):
-        durable_plan_path(value[1:], label)
-        return value
-    return durable_plan_path(value, label)
-
-
 def durable_plan_value(command, key):
     if key == "attempt" and command.get("resultPathPolicy") == "declared" and command.get(key) in (None, ""):
         return 0 # schema-1 compatibility only; formal jobs have no attempt version
@@ -2833,8 +2760,6 @@ def durable_plan_value(command, key):
             return int(value)
         except (TypeError, ValueError):
             return value
-    if key in ("planFile", "outputDir"):
-        return value if value is not None else ""
     return str(value).strip() if value is not None else ""
 
 def durable_plan_identity(command):
@@ -3307,9 +3232,12 @@ def accept_durable_plan_job(root, command, worker_id):
         full_count = count
     if not isinstance(full_count, int) or full_count < count:
         raise ValueError("fullPlanJobCount 不能少于本次提交任务数")
-    options = command.get("options") if isinstance(command.get("options"), dict) else {}
-    plan_file = durable_plan_path(worker_path_value(command, options, ("planFile", "plan")), "planFile")
-    output_dir = durable_plan_path(worker_path_value(command, options, ("outputDir", "output_dir")), "outputDir")
+    plan_file = str(identity["planFile"]).replace("\\", "/")
+    if plan_file.startswith("/") or any(part in ("", ".", "..") for part in plan_file.split("/")):
+        raise ValueError("planFile 必须是项目内规范相对路径")
+    output_dir = str(identity["outputDir"]).replace("\\", "/")
+    if output_dir.startswith("/") or any(part in ("", ".", "..") for part in output_dir.split("/")):
+        raise ValueError("outputDir 必须是项目内规范相对路径")
     if "attempts" in output_dir.split("/"):
         raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
     identity["planFile"] = plan_file
@@ -3689,9 +3617,6 @@ def _legacy_recall_identity_matches(expected, actual):
                     return False
             except (TypeError, ValueError):
                 return False
-        elif field in ("planFile", "outputDir"):
-            if not isinstance(left[field], str) or not isinstance(right[field], str) or left[field] != right[field]:
-                return False
         elif str(left[field]).strip() != str(right[field]).strip():
             return False
     return True
@@ -3753,8 +3678,6 @@ def worker_task_stop_identity_mismatches(command, task):
                     differences.append(field)
             except (TypeError, ValueError):
                 differences.append(field)
-        elif field in ("planFile", "outputDir") and (not isinstance(actual, str) or not isinstance(expected, str) or actual != expected):
-            differences.append(field)
         elif str(actual) != str(expected) or (formal and field != "gpuId" and not str(expected)):
             differences.append(field)
     return differences
@@ -3858,8 +3781,6 @@ def drain_durable_plan_queue_once(root, worker_id, gpu_probe=None, execute=None,
         if row.get("resultPathPolicy") != "declared" or "attempts" in str(row.get("outputDir") or "").split("/"):
             continue
         try:
-            durable_plan_path(row.get("planFile"), "planFile")
-            durable_plan_path(row.get("outputDir"), "outputDir")
             proof = resolve_durable_code_sync_proof(root, row)
             execution_mode = verified_durable_execution_mode(root, row)
         except Exception as exc:
@@ -5841,10 +5762,9 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         except Exception as exc:
             return {"commandId": command_id, "status": "failed", "durableAccepted": False, "message": str(exc)}
     options = command.get("options") if isinstance(command.get("options"), dict) else {}
-    project_dir = worker_path_value(command, options, ("projectDir",), root)
-    worker_plan_path(project_dir, "projectDir", allow_absolute=True)
+    project_dir = str(command.get("projectDir") or options.get("projectDir") or root).strip()
     scheduler_path = str(command.get("schedulerPath") or options.get("schedulerPath") or os.path.join(agent_install_dir(root), "simple_cluster", "runtime", "cluster_scheduler.py"))
-    plan = worker_path_value(command, options, ("planFile", "plan"))
+    plan = str(command.get("plan") or command.get("planFile") or options.get("plan") or options.get("planFile") or "").strip()
     if not plan:
         result = {"commandId": command_id, "status": "failed", "message": "启动或重试 Worker 任务时必须提供 plan。"}
         append_event(root, {"type": "worker_command_failed", "workerId": worker_id, "operationId": command_id, "payload": result})
@@ -5853,10 +5773,8 @@ def _execute_worker_command_unfenced(root, command, worker_id):
     gpu_id = str(command.get("gpuId") or options.get("gpuId") or "")
     case_name = str(command.get("case") or options.get("case") or "").strip()
     seed = command.get("seed") if command.get("seed") is not None else options.get("seed")
-    output_dir = worker_path_value(command, options, ('outputDir', 'output_dir'))
-    worker_plan_path(output_dir, "outputDir", allow_empty=True)
-    config_path = worker_path_value(command, options, ('configPath', 'config_path'))
-    worker_plan_path(config_path, "configPath", allow_empty=True)
+    output_dir = str(command.get("outputDir") or command.get("output_dir") or options.get("outputDir") or options.get("output_dir") or "").replace("\\", "/").strip()
+    config_path = str(command.get("configPath") or command.get("config_path") or options.get("configPath") or options.get("config_path") or "").replace("\\", "/").strip()
     debug_mode = any(action_bool(value) for value in (command.get("debugMode"), command.get("debug_mode"), options.get("debugMode"), options.get("debug_mode")))
     if debug_mode:
         result = {"commandId": command_id, "status": "failed", "message": "Debug 运行模式已移除，请使用正式 Plan 运行。"}
@@ -5864,22 +5782,12 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         return result
     debug_run_id = str(command.get("debugRunId") or command.get("debug_run_id") or options.get("debugRunId") or options.get("debug_run_id") or "").strip()
     debug_output_dir = str(command.get("debugOutputDir") or command.get("debug_output_dir") or options.get("debugOutputDir") or options.get("debug_output_dir") or "").strip()
-    default_result_csv_dir = worker_path_value(command, options, ("defaultResultCsvDir", "default_result_csv_dir"), "experiments/results")
-    durable_plan_path(default_result_csv_dir, "defaultResultCsvDir")
-    requested_log = worker_path_value(command, options, ("logPath",))
-    if requested_log:
-        worker_plan_project_path(project_dir, requested_log)
-    worker_plan_project_path(project_dir, plan, require_file=True)
-    for value in (output_dir, config_path):
-        if value:
-            worker_plan_project_path(project_dir, value)
+    default_result_csv_dir = str(command.get("defaultResultCsvDir") or command.get("default_result_csv_dir") or options.get("defaultResultCsvDir") or options.get("default_result_csv_dir") or "experiments/results").strip()
     manual_reassignment = any(action_bool(value) for value in (command.get("manualReassignment"), command.get("manual_reassignment"), options.get("manualReassignment"), options.get("manual_reassignment")))
     source_worker_id = str(command.get("sourceWorkerId") or command.get("source_worker_id") or options.get("sourceWorkerId") or options.get("source_worker_id") or "").strip()
     original_run_key = str(command.get("originalRunKey") or command.get("original_run_key") or options.get("originalRunKey") or options.get("original_run_key") or "").strip()
     reassignment_run_key = str(command.get("runKey") or options.get("reassignmentRunKey") or options.get("reassignment_run_key") or "").strip()
     mode = verified_durable_execution_mode(project_dir, command) if command.get("projectId") and command.get("planRevision") else worker_command_plan_mode(project_dir, plan, command.get("mode") or options.get("mode"))
-    # Recheck after mode/Plan verification before creating any launch directories.
-    worker_plan_project_path(project_dir, plan, require_file=True)
     # per-GPU单tmux(1C)：抽出 worker_tmux_session_name 纯函数，直传值仍经 simple_tmux_name 归一
     if command.get("checkpointTestOnly") is True:
         mode = "test"
@@ -5892,8 +5800,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
         rel_log = os.path.relpath(os.path.abspath(_raw_log), os.path.abspath(project_dir)).replace("\\", "/")
     else:
         rel_log = _raw_log.replace("\\", "/").lstrip("/")
-    log_path = worker_plan_project_path(project_dir, rel_log)
-    safe_project_path(project_dir, rel_log)  # Keep the common log-root/credential deny policy.
+    log_path = safe_project_path(project_dir, rel_log)
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     env = formal_job_command_env(command)
     if command.get("_lifecycleRunner") is True:
@@ -5907,7 +5814,7 @@ def _execute_worker_command_unfenced(root, command, worker_id):
             raise ValueError("HISTORICAL_ATTEMPT_READ_ONLY")
         if os.path.isabs(output_dir) or any(part in ("", ".", "..") for part in output_dir.split("/")):
             raise ValueError("分布式任务输出路径不安全")
-        worker_plan_project_path(project_dir, output_dir, directory=True)
+        safe_project_path(project_dir, output_dir)
         env["SIMPLE_EXPERIMENT_DISTRIBUTED_RESULTS"] = "1"
     try:
         formal = verified_formal_job_command(project_dir, command)
@@ -6231,7 +6138,7 @@ def worker_command_plan_mode(project_dir, plan, explicit=""):
     raw = str(explicit or "").strip()
     if not raw and plan:
         try:
-            text = pathlib.Path(worker_plan_project_path(project_dir, plan, require_file=True)).read_text(encoding="utf-8", errors="replace")[:262144]
+            text = pathlib.Path(safe_project_path(project_dir, plan)).read_text(encoding="utf-8", errors="replace")[:262144]
             match = re.search(r"(?m)^mode\s*:\s*([^#\r\n]+)", text)
             raw = str(match.group(1) if match else "").strip().strip("'\"")
         except Exception:
@@ -6240,15 +6147,31 @@ def worker_command_plan_mode(project_dir, plan, explicit=""):
 
 def verified_durable_execution_mode(project_dir, command):
     """Bind intended mode to the original PLAN revision, never a legacy hardcoded mode."""
-    plan_path = worker_plan_project_path(project_dir, durable_plan_value(command, "planFile"), require_file=True)
+    plan_path = safe_project_path(project_dir, durable_plan_value(command, "planFile"))
     raw = pathlib.Path(plan_path).read_bytes()
     if len(raw) > 1048576 or hashlib.sha256(raw).hexdigest() != durable_plan_value(command, "planRevision"):
         raise ValueError("Original Plan revision unavailable; execution mode cannot be recovered safely")
     scheduler = scalar_scheduler_module()
-    plan = scheduler.load_plan(plan_path)
+    if getattr(scheduler, "yaml", None) is None:
+        # The helper Agent interpreter need not carry research dependencies.
+        # Parse only this bound Plan with the same selected task environment.
+        env = formal_job_command_env(command)
+        args = [simple_runtime_python(env), "-B", "-X", "utf8", cluster_scheduler_path(project_dir),
+                "--plan-execution-mode-json", "--plan", str(plan_path), "--plan-revision", hashlib.sha256(raw).hexdigest()]
+        proc = subprocess_inactivity_run(simple_conda_wrapped_args(args, env), cwd=project_dir, env=env, progress_stream="stderr")
+        if proc.returncode:
+            raise ValueError((proc.stderr or proc.stdout or "PLAN_MODE_QUERY_FAILED")[-4000:])
+        report = json.loads(proc.stdout)
+        if report.get("ok") is not True or report.get("planRevision") != hashlib.sha256(raw).hexdigest():
+            raise ValueError("Original Plan revision disagrees with task-environment parser")
+        mode = report.get("executionMode")
+        if mode not in ("train", "test", "train_test"):
+            raise ValueError("Task-environment parser returned an invalid execution mode")
+    else:
+        plan = scheduler.load_plan(plan_path)
+        mode = scheduler.plan_execution_mode(plan)
     if pathlib.Path(plan_path).read_bytes() != raw:
         raise ValueError("Original Plan changed during execution mode verification")
-    mode = scheduler.plan_execution_mode(plan)
     # executionMode is introduced by the fixed Host. Old mode alone is not
     # evidence: affected versions always saved train_test regardless of validation.
     expected = command.get("executionMode")
@@ -6969,7 +6892,7 @@ def api_capabilities(root, token_required=False, mode="worker_telemetry"):
                 "manualDispatch": 1,
                 "gpuMemoryRatioScheduling": 1,
                 "gpuQuotaScheduling": 1,
-                "gpuCardQuotaScheduling": 1, "gpuCardLimitScheduling": 1,
+                "gpuCardQuotaScheduling": 1, "gpuCardLimitScheduling": 1, "gpuMemoryBudgetScheduling": 1,
                 "schedulerRuntimeUpdate": 1,
                 "queuedJobRecall": True,
                 "liveOutput": True,
@@ -7655,49 +7578,32 @@ def discover_result_files(root, limit=240, max_dirs=4000, max_depth=8, deadline_
                     return sorted(dict.fromkeys(out))
     return sorted(dict.fromkeys(out))
 
-def plan_suite_value(root, plan, strict_plan=False):
-    if strict_plan:
-        return output_contract_plan(root, result_io_relative_path(plan, "输出契约 Plan"))["suite"]
-    plan_norm = result_io_relative_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
+def plan_suite_value(root, plan):
+    plan_norm = normalize_result_candidate(plan) if plan else ""
     if not plan_norm:
         return ""
     try:
-        plan_path = result_io_project_path(root, plan_norm, require_file=True) if strict_plan else safe_project_path(root, plan_norm)
+        plan_path = safe_project_path(root, plan_norm)
         plan_text = open(plan_path, "r", encoding="utf-8", errors="replace").read()
         return str(yaml_scalar(uncommented_yaml_text(plan_text), "suite", "") or "").strip()
     except Exception:
         return ""
 
 
-def job_result_candidates(root, limit=240, plan=None, strict_plan=False, snapshots=None):
+def job_result_candidates(root, limit=240, plan=None):
     path = os.path.join(root, "experiments", "results", "jobs.csv")
-    if not strict_plan and not safe_small_file(path):
+    if not safe_small_file(path):
         return []
     out = []
-    plan_norm = result_io_relative_path(plan, "输出契约 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
-    plan_suite = "" if strict_plan else plan_suite_value(root, plan_norm)
+    plan_norm = normalize_result_candidate(plan) if plan else ""
+    plan_suite = plan_suite_value(root, plan_norm)
     try:
-        snapshot = output_contract_read_snapshot(root, "experiments/results/jobs.csv") if strict_plan else None
-        if snapshot and isinstance(snapshots, list):
-            snapshots.append(("experiments/results/jobs.csv", snapshot))
-        rows = read_csv_dicts(snapshot["text"] if snapshot else open(path, "r", encoding="utf-8", errors="replace").read())
-    except FileNotFoundError:
-        return []
+        rows = read_csv_dicts(open(path, "r", encoding="utf-8", errors="replace").read())
     except Exception:
-        if strict_plan:
-            raise
         return []
     for row in rows:
         if plan_norm:
-            if strict_plan:
-                try:
-                    row_plan = output_contract_request_identity(row).get("planFile") or ""
-                except ValueError:
-                    continue
-                if row_plan != plan_norm:
-                    continue
-            else:
-                row_plan = normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")
+            row_plan = normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")
             if row_plan:
                 if row_plan != plan_norm:
                     continue
@@ -7706,22 +7612,18 @@ def job_result_candidates(root, limit=240, plan=None, strict_plan=False, snapsho
             elif not plan_suite:
                 continue
         for key in ("result_csv", "resultCsv", "results_csv", "resultsCsv", "metrics_csv", "metricsCsv", "summary_csv", "summaryCsv", "output_csv", "outputCsv", "result_json", "resultJson", "metrics_json", "metricsJson", "summary_txt", "summaryTxt", "log_file", "logFile", "metrics_summary", "metricsSummary", "metrics_case", "metricsCase", "result_path", "resultPath", "output_path", "outputPath"):
-            candidate = output_contract_candidate(row.get(key)) if strict_plan else normalize_result_candidate(row.get(key))
+            candidate = normalize_result_candidate(row.get(key))
             if candidate:
                 out.append(candidate)
         for key in ("output_dir", "outputDir", "work_dir", "workDir", "result_dir", "resultDir", "results_dir", "resultsDir", "log_dir", "logDir"):
-            out.extend(default_result_candidates_for_dir(row.get(key), strict_paths=strict_plan))
+            out.extend(default_result_candidates_for_dir(row.get(key)))
         if len(out) >= limit:
             break
     return sorted(dict.fromkeys(out))
 
-def plan_scoped_discover_candidates(root, plan, limit=120, strict_plan=False, contract=None):
-    if strict_plan:
-        return output_contract_discover_candidates(root, contract or output_contract_plan(root, plan), limit)
-    declared = plan_declared_result_candidates(root, plan, limit=limit, strict_plan=strict_plan)
-    plan_suite = plan_suite_value(root, plan, strict_plan=strict_plan)
-    if not strict_plan:
-        plan_suite = plan_suite.lower()
+def plan_scoped_discover_candidates(root, plan, limit=120):
+    declared = plan_declared_result_candidates(root, plan, limit=limit)
+    plan_suite = plan_suite_value(root, plan).lower()
     dirs = []
     for item in declared:
         text = normalize_result_candidate(item)
@@ -7729,7 +7631,7 @@ def plan_scoped_discover_candidates(root, plan, limit=120, strict_plan=False, co
             continue
         if re.search(r"\.(csv|json|txt|log|out)$", text, re.I):
             parent = "/".join(text.split("/")[:-1])
-            parent_parts = [part if strict_plan else part.lower() for part in parent.split("/") if part]
+            parent_parts = [part.lower() for part in parent.split("/") if part]
             if parent and plan_suite and plan_suite in parent_parts and not any(ch in parent for ch in "*?[]"):
                 dirs.append(parent)
         elif not any(ch in text for ch in "*?[]"):
@@ -7822,7 +7724,7 @@ def record_identity(source_rel, row, index=0):
         run_key = experiment_id
     return experiment_id, run_key
 
-def make_result_record(source_rel, row, metrics, index=0, strict_identity=False):
+def make_result_record(source_rel, row, metrics, index=0):
     experiment_id, run_key = record_identity(source_rel, row, index)
     now = now_iso()
     suite = str(row_dimension_value(row, "suite") or row.get("study") or (source_rel.split("/")[1] if "/" in source_rel else "default"))
@@ -7833,7 +7735,6 @@ def make_result_record(source_rel, row, metrics, index=0, strict_identity=False)
             dimensions[key] = coerce_metric_value(value) if key in ("fold", "seed") else str(value)
     method = str(dimensions.get("method") or "")
     result_id = sha256_text(source_rel + ":" + experiment_id + ":" + run_key + ":" + str(index) + ":" + method)[:16]
-    row_plan = result_parse_row_identity(row) if strict_identity else normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")
     return {
         "schemaVersion": 1,
         "resultId": result_id,
@@ -7851,9 +7752,9 @@ def make_result_record(source_rel, row, metrics, index=0, strict_identity=False)
         "parsedAt": now,
         "createdAt": now,
         "updatedAt": now,
-        "provenance": {"artifactKey": source_rel, **({"planFile": row_plan} if row_plan else {})},
+        "provenance": {"artifactKey": source_rel, **({"planFile": normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")} if normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "") else {})},
         **({"method": method} if method else {}),
-        **({"planFile": row_plan} if row_plan else {}),
+        **({"planFile": normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "")} if normalize_result_candidate(row.get("plan_file") or row.get("planFile") or "") else {}),
     }
 
 def metric_value(value, metric, source_col, source_rel):
@@ -7865,16 +7766,15 @@ def metric_value(value, metric, source_col, source_rel):
         "sourceFile": source_rel,
     }
 
-def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
+def parse_csv_result_file(root, source_rel, policy=None):
     if str(source_rel or "").replace("\\", "/").lower() in IGNORED_RESULT_FILES or os.path.basename(str(source_rel or "")).lower() == "jobs.csv":
         return []
     if os.path.basename(str(source_rel or "")).lower() == "metrics_case.csv":
         return []
     policy = policy or read_project_metric_policy(root)
-    text = source_text if source_text is not None else open(safe_project_path(root, source_rel), "r", encoding="utf-8-sig", errors="replace").read()
+    path = safe_project_path(root, source_rel)
+    text = open(path, "r", encoding="utf-8-sig", errors="replace").read()
     rows = read_csv_dicts(text)
-    if policy.get("_strictResultIdentity"):
-        rows = [row for row in rows if result_parse_row_matches(row, policy["_strictResultPlan"], policy.get("_strictResultSuite", ""), anonymous=not policy.get("_strictResultRequireOwner"))]
     if not rows:
         return []
     headers = list(rows[0].keys())
@@ -7910,7 +7810,7 @@ def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
             item["metrics"][metric] = metric_value(value, metric, value_col, source_rel)
         for item in grouped.values():
             if item["metrics"]:
-                records.append(make_result_record(source_rel, item["row"], item["metrics"], item["index"], strict_identity=bool(policy.get("_strictResultIdentity"))))
+                records.append(make_result_record(source_rel, item["row"], item["metrics"], item["index"]))
         return records
     metric_headers = []
     mapped_dimension_headers = {column for column in dimension_columns.values() if column}
@@ -7930,7 +7830,7 @@ def parse_csv_result_file(root, source_rel, policy=None, source_text=None):
                 continue
             metrics[metric] = metric_value(row.get(h), metric, h, source_rel)
         if metrics:
-            records.append(make_result_record(source_rel, row, metrics, i, strict_identity=bool(policy.get("_strictResultIdentity"))))
+            records.append(make_result_record(source_rel, row, metrics, i))
     return records
 
 def flatten_json(prefix, value, out):
@@ -8073,10 +7973,11 @@ def json_metric_storage_key(metrics, splits, metric, split):
     splits[key] = split
     return key
 
-def parse_json_result_file(root, source_rel, policy=None, source_text=None):
+def parse_json_result_file(root, source_rel, policy=None):
     policy = policy or read_project_metric_policy(root)
     aliases = policy.get("metricAliases") or {}
-    data = json.loads(source_text) if source_text is not None else read_json(safe_project_path(root, source_rel), None)
+    path = safe_project_path(root, source_rel)
+    data = read_json(path, None)
     if data is None:
         return []
     rows = data.get("results") if isinstance(data, dict) and isinstance(data.get("results"), list) else data
@@ -8087,8 +7988,6 @@ def parse_json_result_file(root, source_rel, policy=None, source_text=None):
     records = []
     for i, row in enumerate(rows):
         if not isinstance(row, dict):
-            continue
-        if policy.get("_strictResultIdentity") and not result_parse_row_matches(row, policy["_strictResultPlan"], policy.get("_strictResultSuite", ""), anonymous=not policy.get("_strictResultRequireOwner")):
             continue
         normalized_row = normalize_json_result_row(row)
         entries, _explicit_container = json_metric_entries(normalized_row)
@@ -8109,12 +8008,13 @@ def parse_json_result_file(root, source_rel, policy=None, source_text=None):
                 metric_item["split"] = split
             metrics[storage_key] = metric_item
         if metrics:
-            records.append(make_result_record(source_rel, normalized_row, metrics, i, strict_identity=bool(policy.get("_strictResultIdentity"))))
+            records.append(make_result_record(source_rel, normalized_row, metrics, i))
     return records
 
-def parse_text_result_file(root, source_rel, policy=None, source_text=None):
+def parse_text_result_file(root, source_rel, policy=None):
     policy = policy or read_project_metric_policy(root)
-    text = source_text if source_text is not None else open(safe_project_path(root, source_rel), "r", encoding="utf-8", errors="replace").read()
+    path = safe_project_path(root, source_rel)
+    text = open(path, "r", encoding="utf-8", errors="replace").read()
     metrics = {}
     import re
     custom = str(policy.get("metricRegex") or "").strip()
@@ -8149,63 +8049,38 @@ def parse_text_result_file(root, source_rel, policy=None, source_text=None):
         return []
     return [make_result_record(source_rel, {}, metrics, 0)]
 
-def parse_result_file(root, source_rel, policy=None, strict_paths=False, snapshots=None):
-    if not strict_paths:
-        if not parseable_result_candidate(source_rel):
-            return []
-        policy = policy or read_project_metric_policy(root)
-        if source_rel.lower().endswith(".csv"):
-            return parse_csv_result_file(root, source_rel, policy)
-        if source_rel.lower().endswith(".json"):
-            return parse_json_result_file(root, source_rel, policy)
-        return parse_text_result_file(root, source_rel, policy)
-    lower = source_rel.rstrip().lower() if strict_paths else source_rel.lower()
-    if not (output_contract_candidate(source_rel) if strict_paths else parseable_result_candidate(source_rel)):
+def parse_result_file(root, source_rel, policy=None):
+    lower = source_rel.lower()
+    if not parseable_result_candidate(source_rel):
         return []
     policy = policy or read_project_metric_policy(root)
-    snapshot = output_contract_read_snapshot(root, source_rel) if strict_paths else None
-    text = snapshot["text"] if snapshot else None
-    if snapshot and isinstance(snapshots, list):
-        snapshots.append((source_rel, snapshot))
     if lower.endswith(".csv"):
-        records = parse_csv_result_file(root, source_rel, policy, source_text=text)
-    elif lower.endswith(".json"):
-        records = parse_json_result_file(root, source_rel, policy, source_text=text)
-    else:
-        records = parse_text_result_file(root, source_rel, policy, source_text=text)
-    if strict_paths:
-        source_type = "csv" if lower.endswith(".csv") else "json" if lower.endswith(".json") else "log"
-        for record in records:
-            for source in record.get("sourceFiles", []):
-                if source.get("path") == source_rel:
-                    source["type"] = source_type
-    if snapshot:
-        output_contract_verify_snapshot(root, source_rel, snapshot)
-    return records
+        return parse_csv_result_file(root, source_rel, policy)
+    if lower.endswith(".json"):
+        return parse_json_result_file(root, source_rel, policy)
+    return parse_text_result_file(root, source_rel, policy)
 
-def plan_summary_slug(plan, strict_plan=False):
-    if strict_plan:
-        return result_plan_directory_key(plan) if plan else ""
+def plan_summary_slug(plan):
     text = normalize_result_candidate(plan) if plan else ""
     if not text:
         return ""
     slug = re.sub(r"[^A-Za-z0-9._-]+", "_", text.replace("\\", "/")).strip("._-")
     return (slug or "plan")[:120]
 
-def plan_results_summary_relpath(plan, strict_plan=False):
-    slug = plan_summary_slug(plan, strict_plan=strict_plan)
+def plan_results_summary_relpath(plan):
+    slug = plan_summary_slug(plan)
     if not slug:
         return "simple_cluster/results/summary.json"
     return f"simple_cluster/results/by_plan/{slug}/summary.json"
 
-def plan_results_registry_relpath(plan, strict_plan=False):
-    slug = plan_summary_slug(plan, strict_plan=strict_plan)
+def plan_results_registry_relpath(plan):
+    slug = plan_summary_slug(plan)
     if not slug:
         return "simple_cluster/results/result_registry.json"
     return f"simple_cluster/results/by_plan/{slug}/result_registry.json"
 
-def plan_results_artifact_relpath(plan, filename, strict_plan=False):
-    slug = plan_summary_slug(plan, strict_plan=strict_plan)
+def plan_results_artifact_relpath(plan, filename):
+    slug = plan_summary_slug(plan)
     name = str(filename or "").strip().lstrip("/")
     if not name:
         raise ValueError("artifact filename required")
@@ -8261,15 +8136,7 @@ def result_seed_key(value):
 
 def result_column_mapping_preview(root, source, policy):
     try:
-        if policy.get("_strictResultIdentity"):
-            snapshot = next((snapshot for relative, snapshot in policy["_strictResultSnapshots"] if relative == source), None)
-            if snapshot is None:
-                raise ValueError("结果列映射缺少受检来源")
-            output_contract_verify_snapshot(root, source, snapshot)
-            stream = io.StringIO(snapshot["text"])
-        else:
-            stream = open(safe_project_path(root, source), "r", encoding="utf-8-sig", newline="")
-        with stream:
+        with open(safe_project_path(root, source), "r", encoding="utf-8-sig", newline="") as stream:
             reader = csv.DictReader(stream)
             headers = reader.fieldnames or []
             samples = [row for _, row in zip(range(20), reader)]
@@ -8297,45 +8164,7 @@ def result_column_mapping_preview(root, source, policy):
         sample_values[header] = values
     return {"source": source, "headers": headers[:120], "mapping": mapping, "metricColumns": metrics[:120], "configured": configured, "sampleValues": sample_values}
 
-def project_dataset_table_outputs_from_groups(root, groups, kind, before_publish=None):
-    source_field = "aggregateCsvPath" if kind == "seed" else "finalCsvPath"
-    partitions = dataset_partitions(list(groups))
-    outputs, tables = [], []
-    for partition in partitions:
-        group = groups[partition["dataset"]]
-        headers, rows = group["headers"], group["rows"]
-        base = f"simple_cluster/results/by_dataset/{partition['datasetKey']}"
-        csv_rel = base + ("/project_seed_mean_std.csv" if kind == "seed" else "/project_final.csv")
-        outputs.append(("csv", csv_rel, headers, [[row.get(header, "") for header in headers] for row in rows]))
-        table = {**partition, source_field: csv_rel, "rowCount": len(rows)}
-        if kind == "final":
-            md_rel = base + "/project_final.md"
-            markdown_headers = [header[:-5] if header.endswith("_mean") and header[:-5] + "_sd" in headers else header for header in headers if not header.endswith("_sd")]
-            markdown_rows = []
-            for row in rows:
-                cells = []
-                for header in headers:
-                    if header.endswith("_sd"):
-                        continue
-                    value = row.get(header, "")
-                    if header.endswith("_mean") and header[:-5] + "_sd" in headers:
-                        try:
-                            value = f"{float(value):.4f} ± {float(row[header[:-5] + '_sd']):.4f}" if row.get(header[:-5] + "_sd") else f"{float(value):.4f}"
-                        except (TypeError, ValueError):
-                            value = "—" if not value else str(value)
-                    cells.append(value)
-                markdown_rows.append(cells)
-            outputs.append(("text", md_rel, result_markdown_table(markdown_headers, markdown_rows, (partition["dataset"] or "Unassigned") + " project results")))
-            table["finalMarkdownPath"] = md_rel
-        tables.append(table)
-    if before_publish is not None:
-        before_publish()
-    publish_dataset_outputs(root, outputs)
-    return tables
-
 def project_dataset_table_outputs(root, current_summary, kind):
-    if isinstance(current_summary, dict) and current_summary.get("resultPathIdentity") == "posix-v1":
-        return checked_project_dataset_table_outputs(root, current_summary, kind)
     parent = safe_project_path(root, "simple_cluster/results/by_plan")
     saved_by_plan = {}
     if os.path.isdir(parent):
@@ -8386,7 +8215,37 @@ def project_dataset_table_outputs(root, current_summary, kind):
                             group["headers"].append(header)
                     group["rows"].append({**row, "plan_file": plan, "dataset": dataset})
                     total += 1
-    return project_dataset_table_outputs_from_groups(root, groups, kind)
+    partitions = dataset_partitions(list(groups))
+    outputs, tables = [], []
+    for partition in partitions:
+        group = groups[partition["dataset"]]
+        headers, rows = group["headers"], group["rows"]
+        base = f"simple_cluster/results/by_dataset/{partition['datasetKey']}"
+        csv_rel = base + ("/project_seed_mean_std.csv" if kind == "seed" else "/project_final.csv")
+        outputs.append(("csv", csv_rel, headers, [[row.get(header, "") for header in headers] for row in rows]))
+        table = {**partition, source_field: csv_rel, "rowCount": len(rows)}
+        if kind == "final":
+            md_rel = base + "/project_final.md"
+            markdown_headers = [header[:-5] if header.endswith("_mean") and header[:-5] + "_sd" in headers else header for header in headers if not header.endswith("_sd")]
+            markdown_rows = []
+            for row in rows:
+                cells = []
+                for header in headers:
+                    if header.endswith("_sd"):
+                        continue
+                    value = row.get(header, "")
+                    if header.endswith("_mean") and header[:-5] + "_sd" in headers:
+                        try:
+                            value = f"{float(value):.4f} ± {float(row[header[:-5] + '_sd']):.4f}" if row.get(header[:-5] + "_sd") else f"{float(value):.4f}"
+                        except (TypeError, ValueError):
+                            value = "—" if not value else str(value)
+                    cells.append(value)
+                markdown_rows.append(cells)
+            outputs.append(("text", md_rel, result_markdown_table(markdown_headers, markdown_rows, (partition["dataset"] or "Unassigned") + " project results")))
+            table["finalMarkdownPath"] = md_rel
+        tables.append(table)
+    publish_dataset_outputs(root, outputs)
+    return tables
 
 def write_project_seed_aggregate(root, current_summary=None):
     return project_dataset_table_outputs(root, current_summary, "seed")
@@ -8424,7 +8283,7 @@ def result_markdown_table(headers, rows, title, notes=None):
     return "\n".join(lines) + "\n"
 
 def write_plan_final_summary(root, summary, policy, group_keys, groups, metric_names, expected_seeds, dataset, outputs):
-    plan = result_summary_plan(summary)
+    plan = normalize_result_candidate(summary.get("planFile") or "")
     derived = policy.get("derivedMetric") if isinstance(policy.get("derivedMetric"), dict) else {}
     derived_metric = metric_name(derived.get("metric"), policy.get("metricAliases") or {}) if derived else ""
     left, right = str(derived.get("leftEndpoint") or "").strip(), str(derived.get("rightEndpoint") or "").strip()
@@ -8552,7 +8411,7 @@ def publish_dataset_outputs(root, outputs):
         write_atomic_text(target, content)
 
 def write_plan_seed_aggregate(root, summary, policy):
-    plan = result_summary_plan(summary)
+    plan = normalize_result_candidate(summary.get("planFile") or "")
     if not plan:
         return
     records = [row for row in (summary.get("results") or []) if isinstance(row, dict)]
@@ -8582,39 +8441,27 @@ def write_plan_seed_aggregate(root, summary, policy):
             if table.get("aggregateStatus") == "ready":
                 table["aggregateStatus"] = "batch_blocked"
         return
-    if summary.get("resultPathIdentity") == "posix-v1":
-        for relative, snapshot in policy.get("_strictResultSnapshots") or []:
-            output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     publish_dataset_outputs(root, outputs)
     if len(tables) == 1:
         for field in ("aggregateCsvPath", "finalCsvPath", "finalMarkdownPath", "finalRowCount"):
             summary[field] = tables[0][field]
     summary["aggregateIncompleteCount"] = sum(int(table.get("aggregateIncompleteCount") or 0) for table in tables)
     index_rel = f"simple_cluster/results/by_plan/{result_plan_directory_key(plan)}/dataset-index.json"
-    atomic_write(safe_project_path(root, index_rel), {"planFile": plan, "aggregateStatus": "ready", "datasetResultTables": tables,
-        **({"planRevision": summary.get("planRevision", ""), "resultPathIdentity": "posix-v1"} if summary.get("resultPathIdentity") == "posix-v1" else {})})
+    atomic_write(safe_project_path(root, index_rel), {"planFile": plan, "aggregateStatus": "ready", "datasetResultTables": tables})
 
 def _write_dataset_seed_aggregate(root, summary, policy, dataset, outputs):
-    plan = result_summary_plan(summary)
+    plan = normalize_result_candidate(summary.get("planFile") or "")
     if not plan:
         return
-    if policy.get("_strictResultIdentity"):
-        document = policy["_strictPlanContract"]["document"]
-        seeds, cases = document.get("seeds", []), document.get("cases", [])
-        expected_seeds = [str(value) for value in seeds] if isinstance(seeds, list) else []
-        expected_cases = [str(value["case"]) for value in cases if isinstance(value, dict) and "case" in value] if isinstance(cases, list) else []
-    else:
-        expected_seeds, expected_cases = plan_result_identity(root, plan)
+    expected_seeds, expected_cases = plan_result_identity(root, plan)
     expected_seeds = list(dict.fromkeys(result_seed_key(item) for item in expected_seeds))
-    declared = output_contract_expand(root, policy["_strictPlanContract"]["candidates"]) if policy.get("_strictResultIdentity") else plan_declared_result_candidates(root, plan)
-    declared = [item for item in declared if (item.rstrip() if policy.get("_strictResultIdentity") else str(item)).lower().endswith(".csv")]
+    declared = [item for item in plan_declared_result_candidates(root, plan) if str(item).lower().endswith(".csv")]
     records = [record for record in (summary.get("results") or []) if isinstance(record, dict)]
     source_records = {}
     for record in records:
         source_files = record.get("sourceFiles") or []
-        raw_source = (source_files[0] or {}).get("path") if source_files and isinstance(source_files[0], dict) else ""
-        source = output_contract_candidate(raw_source) if policy.get("_strictResultIdentity") else normalize_result_candidate(raw_source)
-        if source and (source.rstrip() if policy.get("_strictResultIdentity") else source).lower().endswith(".csv"):
+        source = normalize_result_candidate((source_files[0] or {}).get("path") if source_files and isinstance(source_files[0], dict) else "")
+        if source and source.lower().endswith(".csv"):
             source_records.setdefault(source, []).append(record)
     candidates = [source for source in declared if source in source_records]
     if not candidates:
@@ -8683,11 +8530,7 @@ def _write_dataset_seed_aggregate(root, summary, policy, dataset, outputs):
     summary["aggregateRowCount"] = len(rows)
     summary["aggregateIncompleteCount"] = sum(row[header.index("complete")] == "incomplete" for row in rows)
     summary["aggregateMessage"] = f"已生成 {len(rows)} 行；不完整 {summary['aggregateIncompleteCount']} 行。"
-    final_groups = groups
-    if summary.get("resultPathIdentity") == "posix-v1":
-        final_records = final_analysis_results(root, {**summary, "results": relevant}, snapshots=policy.get("_strictResultSnapshots"))
-        final_groups = project_result_seed_groups(final_records, group_keys)
-    write_plan_final_summary(root, summary, policy, group_keys, final_groups, metric_names, expected_seeds, dataset, outputs)
+    write_plan_final_summary(root, summary, policy, group_keys, groups, metric_names, expected_seeds, dataset, outputs)
 
 def archive_plan_copy_action(root, plan, snapshot_name=""):
     plan = normalize_result_candidate(plan)
@@ -8828,10 +8671,10 @@ def result_csv_rows(records):
             ])
     return rows
 
-def write_result_csv_views(root, summary, plan, strict_plan=False):
-    plan_norm = result_io_relative_path(plan, "结果视图 Plan") if strict_plan and plan else normalize_result_candidate(plan) if plan else ""
-    preview_rel = plan_results_artifact_relpath(plan_norm, "results_preview_all.csv", strict_plan=strict_plan)
-    effective_rel = plan_results_artifact_relpath(plan_norm, "results_effective_archived.csv", strict_plan=strict_plan)
+def write_result_csv_views(root, summary, plan):
+    plan_norm = normalize_result_candidate(plan) if plan else ""
+    preview_rel = plan_results_artifact_relpath(plan_norm, "results_preview_all.csv")
+    effective_rel = plan_results_artifact_relpath(plan_norm, "results_effective_archived.csv")
     records = [record for record in (summary.get("results") or []) if isinstance(record, dict)]
     effective = [record for record in records if str(record.get("finalEvidenceState") or "").lower() == "archived"]
     header = ["result_id", "experiment_id", "run_key", "method", "dataset", "split", "seed", "metric", "value", "source_file", "artifact_path", "final_evidence_state", "eligible_for_final_analysis"]
@@ -8846,14 +8689,13 @@ def write_result_csv_views(root, summary, plan, strict_plan=False):
     summary["previewResultCount"] = len(records)
 
 def write_results_summary_v2(root, summary):
-    plan = result_summary_plan(summary or {})
-    strict_plan = summary.get("resultPathIdentity") == "posix-v1"
-    summary_rel = plan_results_summary_relpath(plan, strict_plan=strict_plan) if plan else "simple_cluster/results/summary.json"
+    plan = normalize_result_candidate((summary or {}).get("planFile") or "")
+    summary_rel = plan_results_summary_relpath(plan) if plan else "simple_cluster/results/summary.json"
     if isinstance(summary, dict):
         summary["summaryPath"] = summary_rel
         if plan and not summary.get("planFile"):
             summary["planFile"] = plan
-        write_result_csv_views(root, summary, plan, strict_plan=strict_plan)
+        write_result_csv_views(root, summary, plan)
         if plan:
             seeds = write_project_seed_aggregate(root, summary)
             finals = write_project_final_summary(root, summary)
@@ -8874,7 +8716,7 @@ def write_results_summary_v2(root, summary):
     # Keep a project-latest copy for unscoped consumers / offline diagnostics.
     atomic_write(safe_project_path(root, "simple_cluster/results/summary.json"), summary)
     atomic_write(safe_project_path(root, "simple_cluster/results_summary.json"), summary)
-    registry = safe_project_path(root, plan_results_registry_relpath(plan, strict_plan=strict_plan) if plan else "simple_cluster/results/result_registry.json")
+    registry = safe_project_path(root, plan_results_registry_relpath(plan) if plan else "simple_cluster/results/result_registry.json")
     os.makedirs(os.path.dirname(registry), exist_ok=True)
     final_records = final_analysis_results(root, summary)
     atomic_write(registry, {"schemaVersion": 1, "records": final_records, "pendingReviewRecords": [record for record in (summary.get("results") or []) if isinstance(record, dict) and not record.get("eligibleForFinalAnalysis")], "inclusionPolicy": summary.get("inclusionPolicy") or "archived_or_manual_verified", "updatedAt": summary.get("generatedAt"), "planFile": plan or ""})
@@ -8968,35 +8810,32 @@ def result_final_evidence_decision(record, entries):
         return {"state": "manual_verified", "eligibleForFinalAnalysis": False, "reason": "人工审核不替代归档；保留为待归档候选，不进入最终统计或绘图。", "matchedKeys": []}
     return {"state": "pending_review", "eligibleForFinalAnalysis": False, "reason": "未归档或未人工审核，仅作为待审核线索。", "matchedKeys": []}
 
-def annotate_final_evidence(root, records, plan=None, plan_revision="", strict_plan=False, snapshots=None):
-    entries = read_plan_archive_evidence(root, plan, plan_revision, snapshots) if strict_plan else read_archive_entries(root, plan, plan_revision)
-    states = plan_archive_evidence_index(entries) if strict_plan else None
+def annotate_final_evidence(root, records, plan=None, plan_revision=""):
+    entries = read_archive_entries(root, plan, plan_revision)
     out = []
     for record in records or []:
         if not isinstance(record, dict):
             continue
         item = dict(record)
-        decision = plan_archive_evidence_decision(item, entries, plan, plan_revision, states) if strict_plan else result_final_evidence_decision(item, entries)
+        decision = result_final_evidence_decision(item, entries)
         item["finalEvidenceState"] = decision["state"]
         item["eligibleForFinalAnalysis"] = bool(decision["eligibleForFinalAnalysis"])
         item["finalEvidenceReason"] = decision["reason"]
-        item["finalEvidenceKeys"] = decision.get("evidenceKeys", []) if strict_plan else result_evidence_keys(item)[:12]
+        item["finalEvidenceKeys"] = result_evidence_keys(item)[:12]
         item["matchedArchiveKeys"] = decision.get("matchedKeys") or []
         out.append(item)
     return out
 
-def final_analysis_results(root, summary, snapshots=None):
+def final_analysis_results(root, summary):
     records = (summary or {}).get("results") or []
     if not records:
         return []
-    strict_plan = (summary or {}).get("resultPathIdentity") == "posix-v1"
-    if strict_plan or not all(isinstance(record, dict) and "eligibleForFinalAnalysis" in record for record in records):
-        records = annotate_final_evidence(root, records, result_summary_plan(summary) or None, (summary or {}).get('planRevision') or "", strict_plan=strict_plan, snapshots=snapshots)
+    if not all(isinstance(record, dict) and "eligibleForFinalAnalysis" in record for record in records):
+        records = annotate_final_evidence(root, records, (summary or {}).get('planFile') or None, (summary or {}).get('planRevision') or "")
     return [record for record in records if isinstance(record, dict) and str(record.get("finalEvidenceState") or "").lower() == "archived"]
 
-def apply_final_evidence_summary(root, summary, snapshots=None):
-    strict_plan = (summary or {}).get("resultPathIdentity") == "posix-v1"
-    records = annotate_final_evidence(root, (summary or {}).get("results") or [], result_summary_plan(summary) or None, (summary or {}).get("planRevision") or "", strict_plan=strict_plan, snapshots=snapshots)
+def apply_final_evidence_summary(root, summary):
+    records = annotate_final_evidence(root, (summary or {}).get("results") or [], (summary or {}).get("planFile") or None, (summary or {}).get("planRevision") or "")
     final_records = [record for record in records if str(record.get("finalEvidenceState") or "").lower() == "archived"]
     excluded_records = [record for record in records if str(record.get("finalEvidenceState") or "").lower() == "excluded"]
     summary["results"] = records
@@ -9097,12 +8936,10 @@ def claim_known_key_matches(text, catalog):
     return sorted(dict.fromkeys(matches))
 
 def evaluate_claim_evidence(root, summary=None):
-    if isinstance(summary, dict) and summary.get("resultPathIdentity") == "posix-v1":
-        return checked_claim_evidence(root, summary)
     claims_path = os.path.join(root, "paper", "claims.md")
     catalog = discover_claim_evidence_catalog(root, summary or {})
-    plan_norm = result_summary_plan(summary or {})
-    rel_target = plan_results_artifact_relpath(plan_norm, "claim_evidence.json", strict_plan=summary.get("resultPathIdentity") == "posix-v1")
+    plan_norm = normalize_result_candidate((summary or {}).get("planFile") or "")
+    rel_target = plan_results_artifact_relpath(plan_norm, "claim_evidence.json")
     target = safe_project_path(root, rel_target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
     if not os.path.isfile(claims_path):
@@ -9576,17 +9413,13 @@ def plan_result_candidate_values(value):
                 out.append(candidate)
     return unique_values(filter(None, (parseable_result_candidate(item) for item in out)))
 
-def plan_command_result_candidates(command_text, strict_paths=False):
-    if strict_paths and not isinstance(command_text, str):
-        return []
+def plan_command_result_candidates(command_text):
     text = str(command_text or "").replace("\\\n", " ").replace("\r\n", "\n").replace("\r", "\n").replace("\n", " ")
     if not text.strip():
         return []
     try:
         parts = shlex.split(text, posix=True)
     except Exception:
-        if strict_paths:
-            return []
         parts = text.split()
     flags = {
         "result-csv", "result_csv", "results-csv", "results_csv",
@@ -9622,33 +9455,29 @@ def plan_command_result_candidates(command_text, strict_paths=False):
                     value = str(parts[index + 1])
             normalized_flag = flag.replace("_", "-").lower()
             if normalized_flag in {item.replace("_", "-") for item in flags}:
-                candidate = output_contract_candidate(value) if strict_paths else normalize_result_candidate(value)
+                candidate = normalize_result_candidate(value)
                 if candidate:
                     out.append(candidate)
             elif normalized_flag in {item.replace("_", "-") for item in dir_flags}:
-                out.extend(default_result_candidates_for_dir(value, strict_paths=strict_paths))
+                out.extend(default_result_candidates_for_dir(value))
             continue
         if "=" in token:
             key, value = token.split("=", 1)
             normalized_key = key.replace("_", "-").lower()
             if normalized_key in dir_flag_aliases or re.search(r"(?:output_dir|output-dir|outputDir|out_dir|out-dir|work_dir|work-dir|workDir|workdir|save_dir|save-dir|saveDir|log_dir|log-dir|logDir|logging_dir|logging-dir|loggingDir|tensorboard_log_dir|tensorboard-log-dir|tensorboardLogDir|tb_log_dir|tb-log-dir|tbLogDir|run_dir|run-dir|runDir|rundir|result_dir|result-dir|resultDir|results_dir|results-dir|resultsDir|default_root_dir|default-root-dir|defaultRootDir|dirpath|hydra\.run\.dir|hydra\.sweep\.dir|logger\.save_dir|logger\.save-dir|trainer\.default_root_dir|trainer\.default-root-dir)$", key):
-                out.extend(default_result_candidates_for_dir(value, strict_paths=strict_paths))
-    if strict_paths:
-        return sorted(dict.fromkeys(item for item in out if output_contract_candidate(item)))
+                out.extend(default_result_candidates_for_dir(value))
     return unique_values(filter(None, (parseable_result_candidate(item) for item in out)))
 
-def default_result_candidates_for_dir(value, strict_paths=False):
-    raw = output_contract_directory(value) if strict_paths else normalize_result_candidate(value)
+def default_result_candidates_for_dir(value):
+    raw = normalize_result_candidate(value)
     if not raw or re.search(r"/?[^/]+\.[A-Za-z0-9]{1,8}$", raw):
         return []
-    prefix = raw + "/" if strict_paths else "" if raw == "." else raw.strip("/") + "/"
+    prefix = "" if raw == "." else raw.strip("/") + "/"
     # output_dir 只推导结构化指标文件；stdout/stderr 仍保留为诊断证据。
     candidates = [
         prefix + "metrics_summary.csv",
         prefix + "metrics_case.csv",
     ]
-    if strict_paths:
-        return [candidate for candidate in candidates if output_contract_candidate(candidate)]
     return [candidate for candidate in (normalize_result_candidate(item) for item in candidates) if candidate and allowed_result_candidate(candidate)]
 
 def plan_mode_command_keys(text):
@@ -9687,9 +9516,7 @@ def discover_plan_files(root, plan_dir=None, limit=500):
                 return out
     return out
 
-def plan_declared_result_candidates(root, plan=None, limit=240, strict_plan=False):
-    if strict_plan:
-        return output_contract_plan(root, result_io_relative_path(plan, "输出契约 Plan"), limit)["candidates"]
+def plan_declared_result_candidates(root, plan=None, limit=240):
     plans = []
     if plan:
         plans.append(plan)
@@ -9698,7 +9525,7 @@ def plan_declared_result_candidates(root, plan=None, limit=240, strict_plan=Fals
     out = []
     for item in plans:
         try:
-            plan_path = result_io_project_path(root, item, require_file=True) if strict_plan else safe_project_path(root, item)
+            plan_path = safe_project_path(root, item)
             text = open(plan_path, "r", encoding="utf-8", errors="replace").read()
             cleaned = uncommented_yaml_text(text)
         except Exception:
@@ -9802,7 +9629,7 @@ def plan_output_capture_evidence(root, plan):
         "message": "" if ok else ("runner.outputs 声明包含越界或不安全路径，已阻止运行。" if invalid_outputs else "未识别到可用的结果捕获规则，已阻止运行实验。请在 Plan 中声明 runner.outputs，或为需要指标的任务配置 paper.result_csv、执行命令的结果参数、expectedResults 或 stdout/stderr 捕获。"),
     }
 
-def read_project_metric_policy(root, strict_paths=False, snapshots=None):
+def read_project_metric_policy(root):
     policy = {
         "taskType": "classification",
         "primaryMetric": "AUC",
@@ -9822,19 +9649,9 @@ def read_project_metric_policy(root, strict_paths=False, snapshots=None):
         "explicitResultCandidates": [],
     }
     config = os.path.join(root, "experiments", "simple_project.yaml")
-    config_snapshot = None
-    contract = None
-    if strict_paths:
+    if os.path.isfile(config):
         try:
-            contract = output_contract_plan(root, "experiments/simple_project.yaml")
-            config_snapshot = contract["snapshot"]
-            if isinstance(snapshots, list):
-                snapshots.append(("experiments/simple_project.yaml", config_snapshot))
-        except FileNotFoundError:
-            pass
-    if config_snapshot or not strict_paths and os.path.isfile(config):
-        try:
-            text = config_snapshot["text"] if config_snapshot else open(config, "r", encoding="utf-8", errors="replace").read()
+            text = open(config, "r", encoding="utf-8", errors="replace").read()
             outputs = yaml_section_text(text, "outputs")
             policy["taskType"] = yaml_scalar(text, "taskType", policy["taskType"]) or policy["taskType"]
             policy["primaryMetric"] = metric_name(yaml_scalar(text, "primaryMetric", policy["primaryMetric"]) or policy["primaryMetric"])
@@ -9866,57 +9683,17 @@ def read_project_metric_policy(root, strict_paths=False, snapshots=None):
             for key, value in list(policy["metricAliases"].items()):
                 policy["metricAliases"][str(key).lower()] = value
         except Exception:
-            if strict_paths:
-                raise
             pass
-    if strict_paths:
-        path_keys = ("summaryCsv", "caseCsv", "candidateCsv", "candidateJson", "consoleLogs", "textLogs")
-        document = contract["document"] if contract else {}
-        outputs = document.get("outputs", {})
-        if not isinstance(outputs, dict):
-            raise ValueError("项目 outputs 必须是对象")
-        for key in path_keys:
-            value = outputs[key] if key in outputs else document.get(key, policy[key])
-            if key in ("summaryCsv", "caseCsv"):
-                if not isinstance(value, str):
-                    raise ValueError("项目结果路径必须是字符串")
-            elif not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-                raise ValueError("项目结果候选必须是字符串列表")
-            policy[key] = value
-        policy["explicitResultCandidates"] = list(dict.fromkeys([policy["summaryCsv"], policy["caseCsv"], *policy["candidateCsv"], *policy["candidateJson"], *policy["consoleLogs"], *policy["textLogs"]]))
-        try:
-            relative = "result_policy.json"
-            state_root = agent_dir(root)
-            snapshot = output_contract_read_snapshot(state_root, relative)
-            snapshot["root"] = state_root
-            if isinstance(snapshots, list):
-                snapshots.append((relative, snapshot))
-            plugin_policy = json.loads(snapshot["text"])
-            if not isinstance(plugin_policy, dict):
-                raise ValueError("插件结果策略必须是对象")
-        except FileNotFoundError:
-            plugin_policy = {}
-    else:
-        plugin_policy = read_json(path_for(root, "result_policy.json"), {})
+    plugin_policy = read_json(path_for(root, "result_policy.json"), {})
     if isinstance(plugin_policy, dict):
-        if strict_paths:
-            for key in ("summaryCsv", "caseCsv", "candidateCsv", "candidateJson", "consoleLogs", "textLogs"):
-                if key not in plugin_policy:
-                    continue
-                value = plugin_policy[key]
-                if key in ("summaryCsv", "caseCsv"):
-                    if not isinstance(value, str):
-                        raise ValueError("插件结果路径必须是字符串")
-                elif not isinstance(value, list) or any(not isinstance(item, str) for item in value):
-                    raise ValueError("插件结果候选必须是字符串列表")
         for key in ("taskType", "primaryMetric", "metricRegex", "summaryCsv", "caseCsv"):
             value = plugin_policy.get(key)
             if isinstance(value, str) and value.strip():
-                policy[key] = value if strict_paths and key in ("summaryCsv", "caseCsv") else value.strip()
+                policy[key] = value.strip()
         for key in ("secondaryMetrics", "classificationMetrics", "segmentationMetrics", "candidateCsv", "candidateJson", "consoleLogs", "textLogs"):
             values = plugin_policy.get(key)
             if isinstance(values, list):
-                policy[key] = [value if strict_paths and key in ("candidateCsv", "candidateJson", "consoleLogs", "textLogs") else value.strip() for value in values if isinstance(value, str) and value.strip()][:100]
+                policy[key] = [value.strip() for value in values if isinstance(value, str) and value.strip()][:100]
         mapping = plugin_policy.get("csvColumnMapping")
         if isinstance(mapping, dict):
             policy["csvColumnMapping"] = {key: value.strip() for key, value in mapping.items() if key in ("case", "seed", "split", "dataset", "method", "eval_protocol", "rate_percent", "train_rate", "metric", "value") and isinstance(value, str) and value.strip()}
@@ -9926,8 +9703,7 @@ def read_project_metric_policy(root, strict_paths=False, snapshots=None):
         aliases = plugin_policy.get("metricAliases")
         if isinstance(aliases, dict):
             policy["metricAliases"] = {str(key): metric_name(value) for key, value in aliases.items() if isinstance(value, str) and value.strip()}
-        all_candidates = [*(policy.get("explicitResultCandidates") or []), *(policy.get("candidateCsv") or []), *(policy.get("candidateJson") or []), *(policy.get("consoleLogs") or []), *(policy.get("textLogs") or [])]
-        policy["explicitResultCandidates"] = list(dict.fromkeys(all_candidates)) if strict_paths else unique_values(all_candidates)
+        policy["explicitResultCandidates"] = unique_values([*(policy.get("explicitResultCandidates") or []), *(policy.get("candidateCsv") or []), *(policy.get("candidateJson") or []), *(policy.get("consoleLogs") or []), *(policy.get("textLogs") or [])])
     policy["primaryMetric"] = metric_name(policy.get("primaryMetric") or "AUC")
     policy["secondaryMetrics"] = unique_metric_names(policy.get("secondaryMetrics") or [])
     policy["classificationMetrics"] = unique_metric_names([policy["primaryMetric"], *(policy.get("secondaryMetrics") or []), *(policy.get("classificationMetrics") or [])])
@@ -9971,16 +9747,10 @@ def apply_result_ownership(summary, ownership=None):
     return summary
 
 def parse_results_action(root, selected=None, plan=None, plan_revision="", ownership=None):
-    strict_plan = plan is not None and plan != ""
-    identity = output_contract_request_identity({"planFile": plan, "planRevision": plan_revision}) if strict_plan else {}
-    plan_norm = identity.get("planFile", "")
-    snapshots = []
-    policy = read_project_metric_policy(root, strict_paths=True, snapshots=snapshots) if strict_plan else read_project_metric_policy(root)
-    selected_files = [] if strict_plan else selected_result_candidates(root, selected)
+    policy = read_project_metric_policy(root)
+    selected_files = selected_result_candidates(root, selected)
     policy_only_files = set()
-    if strict_plan:
-        files, policy_only_files, plan_suite = result_parse_inputs(root, plan_norm, selected, policy, snapshots)
-    elif selected_files:
+    if selected_files:
         files = selected_files
     elif plan:
         plan_files = sorted(dict.fromkeys([
@@ -9993,19 +9763,16 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         files = sorted(dict.fromkeys([*plan_files, *policy_files]))
     else:
         files = sorted(dict.fromkeys([*expand_result_candidates(root, policy_result_candidates(policy)), *expand_result_candidates(root, plan_declared_result_candidates(root, plan)), *expand_result_candidates(root, job_result_candidates(root)), *discover_result_files(root)]))
-    files = [item for item in files if (output_contract_candidate(item) if strict_plan else structured_result_candidate(item))]
+    files = [item for item in files if structured_result_candidate(item)]
     records, failures, used_files = [], [], []
-    if not strict_plan:
-        plan_norm = normalize_result_candidate(plan) if plan else ""
-        plan_suite = plan_suite_value(root, plan_norm) if plan_norm else ""
+    plan_norm = normalize_result_candidate(plan) if plan else ""
+    plan_suite = plan_suite_value(root, plan_norm) if plan_norm else ""
     for source_rel in files:
         try:
-            if strict_plan:
-                policy["_strictResultRequireOwner"] = source_rel in policy_only_files
-            parsed = parse_result_file(root, source_rel, policy, strict_paths=True, snapshots=snapshots) if strict_plan else parse_result_file(root, source_rel, policy)
-            if source_rel in policy_only_files and plan_norm and not strict_plan:
+            parsed = parse_result_file(root, source_rel, policy)
+            if source_rel in policy_only_files and plan_norm:
                 parsed = [record for record in parsed if result_record_matches_plan(record, plan_norm, plan_suite)]
-            if parsed or not strict_plan and source_rel not in policy_only_files:
+            if parsed or source_rel not in policy_only_files:
                 used_files.append(source_rel)
             if plan_norm:
                 for record in parsed:
@@ -10040,20 +9807,14 @@ def parse_results_action(root, selected=None, plan=None, plan_revision="", owner
         "failures": failures,
         "qualityWarnings": 0,
         "planFile": plan_norm or "",
-        "planRevision": identity.get("planRevision", "") if strict_plan else str(plan_revision or "").strip(),
-        **({"resultPathIdentity": "posix-v1"} if strict_plan else {}),
+        "planRevision": str(plan_revision or "").strip(),
     }
-    for relative, snapshot in snapshots:
-        output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     apply_result_ownership(summary, ownership)
     apply_final_evidence_summary(root, summary)
-    if strict_plan:
-        for relative, snapshot in snapshots:
-            output_contract_verify_snapshot(snapshot.get("root", root), relative, snapshot)
     write_plan_seed_aggregate(root, summary, policy)
     summary["projectScientificValidation"] = {"executed": False, "responsibility": "project"}
     target = write_results_summary_v2(root, summary)
-    append_event(root, {"type": "result_parsed", "payload": {"resultCount": len(records), "parseFailed": len(failures), "summaryPath": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or "", **({"planRevision": summary["planRevision"]} if strict_plan and summary["planRevision"] else {})}})
+    append_event(root, {"type": "result_parsed", "payload": {"resultCount": len(records), "parseFailed": len(failures), "summaryPath": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or ""}})
     return summary
 
 
@@ -10075,14 +9836,12 @@ def project_primary_metric(root):
     return read_project_metric_policy(root).get("primaryMetric") or "AUC"
 
 def run_quality_gate_action(root, plan=None, plan_revision=""):
-    context = plan_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
-    summary = context["summary"] if context else read_current_results_summary(root, plan, plan_revision)
-    if not context:
-        apply_final_evidence_summary(root, summary)
-    policy = context["policy"] if context else read_project_metric_policy(root)
+    summary = read_current_results_summary(root, plan, plan_revision)
+    apply_final_evidence_summary(root, summary)
+    policy = read_project_metric_policy(root)
     primary = policy.get("primaryMetric") or "AUC"
     issues = []
-    records = context["records"] if context else final_analysis_results(root, summary)
+    records = final_analysis_results(root, summary)
     if not records:
         issues.append({"severity": "critical", "message": "没有已归档结果；请先从完整预览中选择有效记录并归档。"})
     for record in records:
@@ -10103,18 +9862,13 @@ def run_quality_gate_action(root, plan=None, plan_revision=""):
             if metric in ("loss", "HD95", "ASD", "ECE", "brier", "MAE", "MSE", "RMSE") and value < 0:
                 issues.append({"severity": "warning", "resultId": record.get("resultId"), "metric": metric, "message": f"{metric} 应为非负"})
     severity_counts = {level: len([item for item in issues if item.get("severity") == level]) for level in ("critical", "warning")}
-    plan_norm = plan if context else normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
+    plan_norm = normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
     report = {"schemaVersion": 1, "status": "failed" if severity_counts["critical"] else "warning" if issues else "passed", "taskType": policy.get("taskType"), "primaryMetric": primary, "classificationMetrics": policy.get("classificationMetrics"), "segmentationMetrics": policy.get("segmentationMetrics"), "source": "archived_only", "resultCount": len(records), "parsedResultCount": len(summary.get("results") or []), "pendingReviewCount": summary.get("pendingReviewCount", 0), "issues": issues, "checkedAt": now_iso(), "planFile": plan_norm or ""}
-    rel_target = plan_results_artifact_relpath(plan_norm, "quality_gate.json", strict_plan=bool(context))
-    target = result_io_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
-    if context:
-        report.update(planRevision=summary.get("planRevision", ""), resultPathIdentity="posix-v1", path=rel_target)
-        plan_analysis_verify(root, context)
-        plan_analysis_publish_report(root, report, "quality_gate.json")
-    else:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        atomic_write(target, report)
-        atomic_write(safe_project_path(root, "simple_cluster/results/quality_gate.json"), report)
+    rel_target = plan_results_artifact_relpath(plan_norm, "quality_gate.json")
+    target = safe_project_path(root, rel_target)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    atomic_write(target, report)
+    atomic_write(safe_project_path(root, "simple_cluster/results/quality_gate.json"), report)
     summary["qualityWarnings"] = len(issues)
     summary["qualityGateStatus"] = report["status"]
     summary["qualityGatePath"] = relpath(root, target)
@@ -10243,13 +9997,11 @@ def paired_metric_comparisons(records, primary):
         out.append(stats)
     return out
 
-def compute_statistics_action(root, plan=None, plan_revision="", _analysis=None, _publish=True):
-    context = _analysis or (plan_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None)
-    summary = context["summary"] if context else read_current_results_summary(root, plan, plan_revision)
-    if not context:
-        apply_final_evidence_summary(root, summary)
-    policy = context["policy"] if context else read_project_metric_policy(root)
-    final_records = context["records"] if context else final_analysis_results(root, summary)
+def compute_statistics_action(root, plan=None, plan_revision=""):
+    summary = read_current_results_summary(root, plan, plan_revision)
+    apply_final_evidence_summary(root, summary)
+    policy = read_project_metric_policy(root)
+    final_records = final_analysis_results(root, summary)
     if not final_records:
         raise ValueError("没有已归档结果；请先从完整预览中选择有效记录并归档。")
     rows = []
@@ -10260,11 +10012,14 @@ def compute_statistics_action(root, plan=None, plan_revision="", _analysis=None,
         rows.append({"suite": item["suite"], "group": item["group"], "groupKey": item.get("groupKey"), "method": item.get("method") or item["group"], "dataset": item.get("dataset") or "", "split": item.get("split") or "", "dimensions": item.get("dimensions") or {}, "groupBy": item.get("groupBy") or STATISTICS_GROUP_BY, "aggregateOver": item.get("aggregateOver") or STATISTICS_AGGREGATE_OVER, "metrics": metrics})
     comparisons = paired_metric_comparisons(final_records, policy.get("primaryMetric") or "AUC")
     report = {"schemaVersion": 1, "generatedAt": now_iso(), "taskType": policy.get("taskType"), "primaryMetric": policy.get("primaryMetric"), "metricPriority": policy.get("metricPriority"), "aggregationPolicy": {"source": "archived_only", "groupBy": STATISTICS_GROUP_BY, "aggregateOver": STATISTICS_AGGREGATE_OVER, "valueField": "mean", "message": "SCI 绘图只使用已归档结果的 mean/std/ci，不使用临时预览或单个 seed 原始值。"}, "rows": rows, "pairedComparisons": comparisons, "resultCount": len(final_records), "parsedResultCount": len(summary.get("results") or []), "pendingReviewCount": summary.get("pendingReviewCount", 0), "inclusionPolicy": summary.get("inclusionPolicy"), "message": "统计仅包含已归档结果，绘图默认使用 mean/std/ci。" if final_records else "没有已归档结果，统计不会使用临时预览记录。"}
-    plan_norm = plan if context else normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
+    plan_norm = normalize_result_candidate(plan) if plan else normalize_result_candidate(summary.get("planFile") or "")
     if plan_norm:
         report = {**report, "planFile": plan_norm}
-    rel_target = plan_results_artifact_relpath(plan_norm, "statistics.json", strict_plan=bool(context))
-    target = result_io_project_path(root, rel_target) if context else safe_project_path(root, rel_target)
+    rel_target = plan_results_artifact_relpath(plan_norm, "statistics.json")
+    target = safe_project_path(root, rel_target)
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    atomic_write(target, report)
+    atomic_write(safe_project_path(root, "simple_cluster/results/statistics.json"), report)
     summary["statisticsUpdatedAt"] = report["generatedAt"]
     summary["statisticsPath"] = relpath(root, target)
     summary["statisticsResultCount"] = report["resultCount"]
@@ -10273,16 +10028,6 @@ def compute_statistics_action(root, plan=None, plan_revision="", _analysis=None,
         summary["planFile"] = plan_norm
     summary["significanceStatus"] = "available" if comparisons else "需要至少两个方法和共享 seed/case"
     summary["pairedComparisons"] = comparisons[:10]
-    if context:
-        report.update(planRevision=summary.get("planRevision", ""), resultPathIdentity="posix-v1")
-        plan_analysis_verify(root, context)
-        if not _publish:
-            return report
-        plan_analysis_publish_report(root, report, "statistics.json")
-    else:
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        atomic_write(target, report)
-        atomic_write(safe_project_path(root, "simple_cluster/results/statistics.json"), report)
     write_results_summary_v2(root, summary)
     append_event(root, {"type": "statistics_updated", "payload": {"rows": len(rows), "path": relpath(root, target), "planFile": plan_norm or summary.get("planFile") or ""}})
     return report
@@ -10671,14 +10416,10 @@ def paper_dataset_output(root, stats, policy, dataset, plan):
                 "",
                 "",
             ])
-    strict_plan = stats.get("resultPathIdentity") == "posix-v1"
-    plan_norm = result_io_relative_path(plan, "论文表 Plan") if strict_plan else normalize_result_candidate(plan) if plan else ""
-    if strict_plan and archive_evidence_identity(stats)[0] != plan_norm:
-        raise ValueError("论文表统计与原始 Plan 不一致")
+    plan_norm = normalize_result_candidate(plan) if plan else ""
     slug = result_plan_directory_key(plan_norm) if plan_norm else "project"
     md = "# SimpleExperiment results\n\n" + "\n".join(lines) + "\n"
-    relative_dir = "paper/tables/" + dataset_path_key(dataset)
-    out_dir = result_io_project_path(root, relative_dir) if strict_plan else safe_project_path(root, relative_dir)
+    out_dir = safe_project_path(root, "paper/tables/" + dataset_path_key(dataset))
     md_name = f"simple_results_table__{slug}.md" if slug else "simple_results_table.md"
     csv_name = f"simple_results_table__{slug}.csv" if slug else "simple_results_table.csv"
     md_path = os.path.join(out_dir, md_name)
@@ -10688,9 +10429,8 @@ def paper_dataset_output(root, stats, policy, dataset, plan):
     return {"dataset": dataset, "datasetKey": dataset_path_key(dataset), "paperTablePath": relpath(root, md_path), "paperTableCsvPath": relpath(root, csv_path), "rowCount": len(csv_rows) - 1}, [("text", relpath(root, md_path), md), ("text", relpath(root, csv_path), csv_buffer.getvalue())]
 
 def export_paper_table_action(root, plan=None, plan_revision=""):
-    context = plan_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
-    stats = compute_statistics_action(root, plan, plan_revision, _analysis=context, _publish=not bool(context))
-    policy = context["policy"] if context else read_project_metric_policy(root)
+    stats = compute_statistics_action(root, plan, plan_revision)
+    policy = read_project_metric_policy(root)
     partitions = dataset_partitions([(row.get("dimensions") or {}).get("dataset") for row in stats.get("rows") or []])
     tables, outputs = [], []
     for partition in partitions:
@@ -10699,9 +10439,8 @@ def export_paper_table_action(root, plan=None, plan_revision=""):
         table, files = paper_dataset_output(root, child, policy, dataset, plan)
         tables.append(table)
         outputs.extend(files)
-    if not context:
-        publish_dataset_outputs(root, outputs)
-    summary = context["summary"] if context else read_current_results_summary(root, plan, plan_revision)
+    publish_dataset_outputs(root, outputs)
+    summary = read_current_results_summary(root, plan, plan_revision)
     summary["paperDatasetTables"] = tables
     for field in ("paperTablePath", "paperTableCsvPath", "exportPath"):
         summary.pop(field, None)
@@ -10711,13 +10450,6 @@ def export_paper_table_action(root, plan=None, plan_revision=""):
         summary["exportPath"] = tables[0]["paperTablePath"]
     summary["paperTableResultCount"] = stats.get("resultCount", 0)
     summary["projectScientificValidation"] = {"executed": False, "responsibility": "project"}
-    if context:
-        for _, relative, _ in outputs:
-            result_io_project_path(root, relative)
-        plan_analysis_verify(root, context)
-        plan_analysis_publish_report(root, stats, "statistics.json")
-        publish_dataset_outputs(root, outputs)
-        append_event(root, {"type": "statistics_updated", "payload": {"rows": len(stats["rows"]), "path": stats["path"], "planFile": plan}})
     write_results_summary_v2(root, summary)
     append_event(root, {"type": "paper_table_updated", "payload": {"datasetTables": tables, "planFile": plan or ""}})
     return {"schemaVersion": 1, "path": summary.get("paperTablePath", ""), "csvPath": summary.get("paperTableCsvPath", ""), "paperDatasetTables": tables, "rows": sum(table["rowCount"] for table in tables), "resultCount": stats.get("resultCount", 0), "claimEvidence": summary.get("claimEvidence")}
@@ -10785,9 +10517,7 @@ def discover_case_files(root, plan=None, limit=120):
                         return sorted(dict.fromkeys(out))
     return sorted(dict.fromkeys(out))
 
-def parse_case_level_action(root, plan=None, plan_revision=""):
-    if plan is not None and plan != "":
-        return checked_case_level_action(root, plan, plan_revision)
+def parse_case_level_action(root, plan=None):
     plan_norm = normalize_result_candidate(plan) if plan else ""
     rows = []
     failures = []
@@ -10830,12 +10560,15 @@ def parse_case_level_action(root, plan=None, plan_revision=""):
     index = {**index, "path": relpath(root, target)}
     return index
 
-def run_leakage_check_action(root, plan=None, plan_revision=""):
-    context = case_analysis_context(root, plan, plan_revision) if plan is not None and plan != "" else None
-    plan_norm = plan if context else ""
-    index = context["index"] if context else read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
-    if not context and not index.get("cases"):
-        index = parse_case_level_action(root)
+def run_leakage_check_action(root, plan=None):
+    plan_norm = normalize_result_candidate(plan) if plan else ""
+    index = {}
+    if plan_norm:
+        index = read_json(safe_project_path(root, plan_results_artifact_relpath(plan_norm, "case_level_index.json")), {})
+    if not index.get("cases"):
+        index = read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
+    if (not index.get("cases")) or (plan_norm and normalize_result_candidate(index.get("planFile") or "") != plan_norm):
+        index = parse_case_level_action(root, plan_norm or None)
     issues = []
     patients = {}
     for row in index.get("cases") or []:
@@ -10848,15 +10581,7 @@ def run_leakage_check_action(root, plan=None, plan_revision=""):
             issues.append({"severity": "critical", "type": "patient_overlap", "patientId": patient, "splits": sorted(splits), "message": "同一 patient_id 出现在多个 split"})
     if not patients and (index.get("cases") or []):
         issues.append({"severity": "warning", "type": "patient_id_missing", "message": "缺少 patient_id，无法做病人级泄漏检查"})
-    if context and not index.get("cases"):
-        issues.append({"severity": "warning", "type": "no_verified_cases", "message": "当前 Plan 没有受检样本，无法判断泄漏"})
     report = {"schemaVersion": 1, "status": "failed" if any(i["severity"] == "critical" for i in issues) else "warning" if issues else "ok", "issues": issues, "checkedAt": now_iso(), "planFile": plan_norm or ""}
-    if context:
-        report.update(planRevision=plan_revision, caseCount=index["caseCount"], sourceFiles=index["sourceFiles"])
-        case_analysis_verify(root, context)
-        plan_analysis_publish_report(root, index, "case_level_index.json")
-        plan_analysis_publish_report(root, report, "leakage_check.json")
-        return report
     rel_target = plan_results_artifact_relpath(plan_norm, "leakage_check.json")
     target = safe_project_path(root, rel_target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -10865,14 +10590,15 @@ def run_leakage_check_action(root, plan=None, plan_revision=""):
     report = {**report, "path": relpath(root, target)}
     return report
 
-def run_subgroup_analysis_action(root, plan=None, plan_revision="", _analysis=None, _publish=True):
-    context = (_analysis if _analysis is not None else case_analysis_context(root, plan, plan_revision)) if plan is not None and plan != "" else None
-    if context is not None and (not isinstance(context, dict) or context.get("index", {}).get("planFile") != plan or context.get("index", {}).get("planRevision") != plan_revision):
-        raise ValueError("样本子组输入不属于当前 Plan/revision")
-    plan_norm = plan if context else ""
-    index = context["index"] if context else read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
-    if not context and not index.get("cases"):
-        index = parse_case_level_action(root)
+def run_subgroup_analysis_action(root, plan=None):
+    plan_norm = normalize_result_candidate(plan) if plan else ""
+    index = {}
+    if plan_norm:
+        index = read_json(safe_project_path(root, plan_results_artifact_relpath(plan_norm, "case_level_index.json")), {})
+    if not index.get("cases"):
+        index = read_json(safe_project_path(root, "simple_cluster/results/case_level_index.json"), {})
+    if (not index.get("cases")) or (plan_norm and normalize_result_candidate(index.get("planFile") or "") != plan_norm):
+        index = parse_case_level_action(root, plan_norm or None)
     groups = {}
     for row in index.get("cases") or []:
         subgroup = row.get("subgroup") if isinstance(row.get("subgroup"), dict) else {}
@@ -10889,14 +10615,6 @@ def run_subgroup_analysis_action(root, plan=None, plan_revision="", _analysis=No
             metrics[metric] = {"mean": sum(values) / len(values), "n": len(values)}
         rows.append({"group": item["group"], "count": item["count"], "metrics": metrics})
     report = {"schemaVersion": 1, "generatedAt": now_iso(), "rows": rows, "planFile": plan_norm or ""}
-    if context:
-        report.update(planRevision=plan_revision, caseCount=index["caseCount"], sourceFiles=index["sourceFiles"], status="available" if rows else "empty",
-                      resultPathIdentity="posix-v1", path=plan_results_artifact_relpath(plan, "subgroup_analysis.json", strict_plan=True))
-        case_analysis_verify(root, context)
-        if _publish:
-            plan_analysis_publish_report(root, index, "case_level_index.json")
-            plan_analysis_publish_report(root, report, "subgroup_analysis.json")
-        return report
     rel_target = plan_results_artifact_relpath(plan_norm, "subgroup_analysis.json")
     target = safe_project_path(root, rel_target)
     os.makedirs(os.path.dirname(target), exist_ok=True)
@@ -10905,9 +10623,7 @@ def run_subgroup_analysis_action(root, plan=None, plan_revision="", _analysis=No
     report = {**report, "path": relpath(root, target)}
     return report
 
-def export_case_analysis_action(root, plan=None, plan_revision=""):
-    if plan is not None and plan != "":
-        return checked_case_analysis_export(root, plan, plan_revision)
+def export_case_analysis_action(root, plan=None):
     plan_norm = normalize_result_candidate(plan) if plan else ""
     subgroup = run_subgroup_analysis_action(root, plan_norm or None)
     out_dir = safe_project_path(root, "paper/tables")
@@ -11737,23 +11453,23 @@ def diagnose_result_anomaly_action(root, payload=None):
 
 OUTPUT_CONTRACT_SNAPSHOT_FILES = ("env_snapshot.json", "config_snapshot.yaml")
 
-def output_contract_result_candidate(value, strict_paths=False):
-    return output_contract_candidate(value) if strict_paths else parseable_result_candidate(value)
+def output_contract_result_candidate(value):
+    return parseable_result_candidate(value)
 
-def output_contract_search_roots(values, strict_paths=False):
+def output_contract_search_roots(values):
     roots = []
     for item in values or []:
-        text = output_contract_directory(item) if strict_paths else normalize_result_candidate(item)
+        text = normalize_result_candidate(item)
         if not text:
             continue
-        if re.search(r"\.(?:csv|json|txt|log|out)$", text.rstrip() if strict_paths else text, re.I):
+        if re.search(r"\.(?:csv|json|txt|log|out)$", text, re.I):
             parent = "/".join(text.split("/")[:-1]) or "."
         else:
             parent = text
         if any(ch in parent for ch in "*?[]"):
             continue
         roots.append(parent)
-    return list(dict.fromkeys(roots))[:32] if strict_paths else unique_values(roots)[:32]
+    return unique_values(roots)[:32]
 
 def output_contract_unparseable_error(value):
     lower = str(value or "").lower()
@@ -11764,43 +11480,32 @@ def output_contract_unparseable_error(value):
     return "未解析到数值指标；请检查 metricRegex、指标名称或文本数值格式。"
 
 def check_output_contract_action(root, plan=None):
-    plan_norm = "" if plan is None or plan == "" else result_io_relative_path(plan, "输出契约 Plan")
-    if plan_norm:
-        result_io_project_path(root, plan_norm, require_file=True)
+    plan_norm = normalize_result_candidate(plan) if plan else ""
     required = list(OUTPUT_CONTRACT_SNAPSHOT_FILES)
-    snapshots = []
-    contract = None
     if plan_norm:
-        contract = output_contract_plan(root, plan_norm)
-        snapshots.append((plan_norm, contract["snapshot"]))
-        declared = contract["candidates"]
-        jobs = job_result_candidates(root, plan=plan_norm, strict_plan=True, snapshots=snapshots)
+        declared = plan_declared_result_candidates(root, plan_norm)
+        jobs = job_result_candidates(root, plan=plan_norm)
         files = sorted(dict.fromkeys([
-            *output_contract_expand(root, declared),
-            *output_contract_expand(root, jobs, patterns=False),
-            *plan_scoped_discover_candidates(root, plan_norm, strict_plan=True, contract=contract),
+            *expand_result_candidates(root, declared),
+            *expand_result_candidates(root, jobs),
+            *expand_result_candidates(root, plan_scoped_discover_candidates(root, plan_norm)),
         ]))
-        search_roots = output_contract_search_roots([*declared, *jobs, *files], strict_paths=True)
+        search_roots = output_contract_search_roots([*declared, *jobs, *files])
     else:
         files = discover_result_files(root)
         search_roots = [".", "experiments", "work_dirs", "results", "simple_cluster"]
     present = {os.path.basename(path).lower() for path in files if os.path.basename(path).lower() in required}
     for top in search_roots:
-        try:
-            base = root if top == "." else (output_contract_path(root, top, directory=True) if plan_norm else os.path.join(root, top))
-        except FileNotFoundError:
-            continue
+        base = root if top == "." else (safe_project_path(root, top) if plan_norm else os.path.join(root, top))
         if not os.path.isdir(base):
             continue
         if plan_norm:
             for name in os.listdir(base):
+                lower_name = name.lower()
                 path = os.path.join(base, name)
-                if name in required:
-                    relative = os.path.relpath(path, root)
-                    snapshot = output_contract_read_snapshot(root, relative)
-                    snapshots.append((relative, snapshot))
-                    present.add(name)
-                    files.append(relative)
+                if lower_name in required and os.path.isfile(path):
+                    present.add(lower_name)
+                    files.append(relpath(root, path))
             if required and all(name in present for name in required):
                 break
             continue
@@ -11826,8 +11531,8 @@ def check_output_contract_action(root, plan=None):
             break
     files = sorted(dict.fromkeys(files))
     missing = [name for name in required if name not in present]
-    result_files = sorted(dict.fromkeys(filter(None, (output_contract_result_candidate(item, strict_paths=bool(plan_norm)) for item in files))))
-    metric_files = [item for item in result_files if (os.path.basename(item).strip().lower() if plan_norm else os.path.basename(str(item)).lower()) == "metrics_summary.csv"]
+    result_files = sorted(dict.fromkeys(filter(None, (output_contract_result_candidate(item) for item in files))))
+    metric_files = [item for item in result_files if os.path.basename(str(item)).lower() == "metrics_summary.csv"]
     if not result_files:
         missing.append("parseable_result_file")
     policy = read_project_metric_policy(root)
@@ -11836,7 +11541,7 @@ def check_output_contract_action(root, plan=None):
     parseable_result_count = 0
     for item in result_files:
         try:
-            parsed = parse_result_file(root, item, policy, strict_paths=True, snapshots=snapshots) if plan_norm else parse_result_file(root, item, policy)
+            parsed = parse_result_file(root, item, policy)
             if parsed:
                 parseable_files.append(item)
                 parseable_result_count += len(parsed)
@@ -11856,9 +11561,7 @@ def check_output_contract_action(root, plan=None):
     else:
         message = f"输出契约完整：已确认 {len(required)} 个快照文件，并从 {len(parseable_files)} 个结果文件解析到 {parseable_result_count} 条结果"
     report = {"schemaVersion": 1, "status": "failed" if issue_type else "ok", "issueType": issue_type, "files": files, "missing": missing, "missingCount": len(missing), "requiredSnapshots": required, "resultFiles": result_files, "metricFiles": metric_files, "parseableResultFiles": parseable_files, "parseableResultCount": parseable_result_count, "unparseable": unparseable, "unparseableFiles": unparseable_files, "unparseableCount": len(unparseable_files), "checkedAt": now_iso(), "planFile": plan_norm or "", "message": message}
-    for relative, snapshot in snapshots:
-        output_contract_verify_snapshot(root, relative, snapshot)
-    report_rel = f"simple_cluster/contracts/contract_check_reports/by_plan/{result_plan_directory_key(plan_norm)}/latest.json" if plan_norm else "simple_cluster/contracts/contract_check_reports/latest.json"
+    report_rel = f"simple_cluster/contracts/contract_check_reports/by_plan/{plan_summary_slug(plan_norm)}/latest.json" if plan_norm else "simple_cluster/contracts/contract_check_reports/latest.json"
     report["path"] = report_rel
     target = safe_project_path(root, report_rel)
     atomic_write(target, report)
@@ -12166,7 +11869,7 @@ def start_inactivity_action(root, action, payload, operation_id, op_id, worker_i
                 completed = [record_key for record_key, value in INACTIVITY_ACTIONS.items() if value.get("result")]
                 for record_key in completed[:-200]:
                     INACTIVITY_ACTIONS.pop(record_key, None)
-    append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_receipt_fields(action, payload)}})
+    append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_operation_fields(payload)}})
     threading.Thread(target=execute, name="simple-action-" + str(operation_id), daemon=True).start()
     return {"schemaVersion": SCHEMA_VERSION, "operationId": operation_id, "opId": op_id, "status": "accepted", "action": action}
 
@@ -12520,9 +12223,7 @@ def terminal_action(root, action, operation_id, op_id, status, message, extra=No
         status, message = "cancelled", "操作已取消；晚到完成回执已忽略"
     event_type = "operation_cancelled" if status == "cancelled" else "operation_completed" if status == "completed" else "operation_failed"
     body = {"action": action, "opId": op_id, "status": status, "message": message}
-    details = {**action_event_fields(extra, request), **action_receipt_fields(action, request)}
-    if isinstance(extra, dict):
-        details.update(extra)
+    details = action_event_fields(extra, request)
     body.update(details)
     append_event(root, {"type": event_type, "operationId": operation_id, "payload": body})
     return {"schemaVersion": SCHEMA_VERSION, "opId": op_id, "operationId": operation_id, "action": action, "status": status, "message": message, **details}
@@ -13913,11 +13614,10 @@ def handle_action(root, action, payload, operation_id, op_id):
         except Exception as exc:
             return terminal_action(root, action, operation_id, op_id, "failed", str(exc), request=payload)
     if action in ("refresh-results", "rescan-results", "parse-results"):
-        identity, selections = result_parse_request(payload)
-        selected = selections if identity.get("planFile") else action_values(payload, "selectedRunKeys", "selectedArchiveKeys", "selectedExperimentIds", "runKey", "archiveKey", "experimentId", "remotePath", "path") + action_task_target_values(payload)
-        operation_fields = {**action_operation_fields(payload), **identity}
-        summary = parse_results_action(root, selected, identity.get("planFile") or None, identity.get("planRevision") or "", operation_fields)
-        return terminal_action(root, action, operation_id, op_id, "completed", f"解析完成：{summary.get('resultCount', 0)} 条结果，最终纳入 {summary.get('finalResultCount', 0)} 条，待审核 {summary.get('pendingReviewCount', 0)} 条，失败 {summary.get('parseFailed', 0)} 个文件", {"summaryPath": summary.get("summaryPath") or plan_results_summary_relpath(identity.get("planFile") or summary.get("planFile") or "", strict_plan=bool(identity.get("planFile"))), "resultCount": summary.get("resultCount", 0), "finalResultCount": summary.get("finalResultCount", 0), "pendingReviewCount": summary.get("pendingReviewCount", 0), "inclusionPolicy": summary.get("inclusionPolicy"), "parseFailed": summary.get("parseFailed", 0), "planFile": identity.get("planFile") or summary.get("planFile") or ""}, request=payload)
+        selected = action_values(payload, "selectedRunKeys", "selectedArchiveKeys", "selectedExperimentIds", "runKey", "archiveKey", "experimentId", "remotePath", "path") + action_task_target_values(payload)
+        operation_fields = action_operation_fields(payload)
+        summary = parse_results_action(root, selected, action_plan_file(payload), operation_fields.get("planRevision") or "", operation_fields)
+        return terminal_action(root, action, operation_id, op_id, "completed", f"解析完成：{summary.get('resultCount', 0)} 条结果，最终纳入 {summary.get('finalResultCount', 0)} 条，待审核 {summary.get('pendingReviewCount', 0)} 条，失败 {summary.get('parseFailed', 0)} 个文件", {"summaryPath": summary.get("summaryPath") or plan_results_summary_relpath(action_plan_file(payload) or summary.get("planFile") or ""), "resultCount": summary.get("resultCount", 0), "finalResultCount": summary.get("finalResultCount", 0), "pendingReviewCount": summary.get("pendingReviewCount", 0), "inclusionPolicy": summary.get("inclusionPolicy"), "parseFailed": summary.get("parseFailed", 0), "planFile": action_plan_file(payload) or summary.get("planFile") or ""}, request=payload)
     if action == "validate-plan":
         plan = action_plan_file(payload)
         default_result_csv_dir = str(action_options(payload).get("defaultResultCsvDir") or action_options(payload).get("default_result_csv_dir") or "experiments/results")
@@ -14470,24 +14170,24 @@ def handle_action(root, action, payload, operation_id, op_id):
             return terminal_action(root, action, operation_id, op_id, "completed", "已移除对应旧活动状态", summary, request=payload)
         return terminal_action(root, action, operation_id, op_id, "completed", "Worker 操作终态已确认")
     if action == "run-quality-gate":
-        report = run_quality_gate_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision") or "")
-        return terminal_action(root, action, operation_id, op_id, "completed", f"质量门禁完成：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"qualityGate": report, "qualityGatePath": report.get("path") or report.get("qualityGatePath") or "simple_cluster/results/quality_gate.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
+        report = run_quality_gate_action(root, action_plan_file(payload), action_operation_fields(payload).get("planRevision") or "")
+        return terminal_action(root, action, operation_id, op_id, "completed", f"质量门禁完成：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"qualityGate": report, "qualityGatePath": report.get("path") or report.get("qualityGatePath") or "simple_cluster/results/quality_gate.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "run-statistics":
-        report = compute_statistics_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision") or "")
-        return terminal_action(root, action, operation_id, op_id, "completed", f"统计完成：{len(report.get('rows') or [])} 组", {"statistics": report, "statisticsPath": report.get("path") or report.get("statisticsPath") or "simple_cluster/results/statistics.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
+        report = compute_statistics_action(root, action_plan_file(payload), action_operation_fields(payload).get("planRevision") or "")
+        return terminal_action(root, action, operation_id, op_id, "completed", f"统计完成：{len(report.get('rows') or [])} 组", {"statistics": report, "statisticsPath": report.get("path") or report.get("statisticsPath") or "simple_cluster/results/statistics.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "export-paper-table":
-        report = export_paper_table_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision") or "")
+        report = export_paper_table_action(root, action_plan_file(payload), action_operation_fields(payload).get("planRevision") or "")
         return terminal_action(root, action, operation_id, op_id, "completed", f"论文表格已导出：{report.get('path')}", {"paperTable": report, "paperTablePath": report.get("path"), "exportPath": report.get("path")}, request=payload)
     if action == "check-claim-evidence":
-        plan = output_contract_request_identity(payload).get("planFile")
-        plan_revision = output_contract_request_identity(payload).get("planRevision") or ""
+        plan = action_plan_file(payload)
+        plan_revision = action_operation_fields(payload).get("planRevision") or ""
         summary = read_current_results_summary(root, plan or None, plan_revision)
         apply_final_evidence_summary(root, summary)
         report = evaluate_claim_evidence(root, summary)
         apply_claim_evidence_summary(summary, report)
         write_results_summary_v2(root, summary)
         status = "completed" if report.get("status") == "passed" else "failed"
-        return terminal_action(root, action, operation_id, op_id, status, f"论文证据检查：{report.get('status')}，unsupported {report.get('unsupportedCount', 0)}，needs experiment {report.get('needsExperimentCount', 0)}", {"claimEvidence": report, "claimEvidencePath": report.get("path") or "simple_cluster/results/claim_evidence.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
+        return terminal_action(root, action, operation_id, op_id, status, f"论文证据检查：{report.get('status')}，unsupported {report.get('unsupportedCount', 0)}，needs experiment {report.get('needsExperimentCount', 0)}", {"claimEvidence": report, "claimEvidencePath": report.get("path") or "simple_cluster/results/claim_evidence.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "create-debug-bundle":
         plan = action_plan_file(payload)
         bundle = create_debug_bundle_action(root, False, plan)
@@ -14497,20 +14197,22 @@ def handle_action(root, action, payload, operation_id, op_id):
         bundle = create_debug_bundle_action(root, True, plan)
         return terminal_action(root, action, operation_id, op_id, "completed", f"离线包已生成：{bundle.get('path')}", {"bundlePath": bundle.get("path"), "offlineBundlePath": bundle.get("path"), "path": bundle.get("path"), "latestPath": bundle.get("latestPath") or "", "bundleDir": bundle.get("bundleDir") or "", "size": bundle.get("size"), "planFile": bundle.get("planFile") or plan or "", "includeResults": True})
     if action == "check-output-contract":
-        return output_contract_receipt(root, payload, operation_id, op_id)
-    if action == "parse-case-level":
-        report = parse_case_level_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
-        return terminal_action(root, action, operation_id, op_id, "completed", f"Case-level 解析完成：{report.get('caseCount', 0)} 条", {"caseLevel": report, "caseLevelPath": report.get("path") or "simple_cluster/results/case_level_index.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
-    if action == "run-leakage-check":
-        report = run_leakage_check_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
+        report = check_output_contract_action(root, action_plan_file(payload))
         status = "failed" if report.get("status") == "failed" else "completed"
-        return terminal_action(root, action, operation_id, op_id, status, f"泄漏检查：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"leakageCheck": report, "leakageCheckPath": report.get("path") or "simple_cluster/results/leakage_check.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
+        return terminal_action(root, action, operation_id, op_id, status, report.get("message") or report.get("status"), {"contractReport": report, "contractReportPath": report.get("path") or "simple_cluster/contracts/contract_check_reports/latest.json", "contractIssueType": report.get("issueType") or "", "missingCount": len(report.get("missing") or []), "missingFiles": report.get("missing") or [], "unparseableCount": len(report.get("unparseableFiles") or []), "unparseableFiles": report.get("unparseableFiles") or [], "unparseable": report.get("unparseable") or [], "parseableResultCount": int(report.get("parseableResultCount") or 0), "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+    if action == "parse-case-level":
+        report = parse_case_level_action(root, action_plan_file(payload))
+        return terminal_action(root, action, operation_id, op_id, "completed", f"Case-level 解析完成：{report.get('caseCount', 0)} 条", {"caseLevel": report, "caseLevelPath": report.get("path") or "simple_cluster/results/case_level_index.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
+    if action == "run-leakage-check":
+        report = run_leakage_check_action(root, action_plan_file(payload))
+        status = "failed" if report.get("status") == "failed" else "completed"
+        return terminal_action(root, action, operation_id, op_id, status, f"泄漏检查：{report.get('status')}，问题 {len(report.get('issues') or [])} 个", {"leakageCheck": report, "leakageCheckPath": report.get("path") or "simple_cluster/results/leakage_check.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "run-subgroup-analysis":
-        report = run_subgroup_analysis_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
-        return terminal_action(root, action, operation_id, op_id, "completed", f"亚组分析完成：{len(report.get('rows') or [])} 组", {"subgroupAnalysis": report, "subgroupAnalysisPath": report.get("path") or "simple_cluster/results/subgroup_analysis.json", "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
+        report = run_subgroup_analysis_action(root, action_plan_file(payload))
+        return terminal_action(root, action, operation_id, op_id, "completed", f"亚组分析完成：{len(report.get('rows') or [])} 组", {"subgroupAnalysis": report, "subgroupAnalysisPath": report.get("path") or "simple_cluster/results/subgroup_analysis.json", "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "export-case-analysis":
-        report = export_case_analysis_action(root, output_contract_request_identity(payload).get("planFile"), output_contract_request_identity(payload).get("planRevision", ""))
-        return terminal_action(root, action, operation_id, op_id, "completed", f"Case 分析已导出：{report.get('path')}", {"caseAnalysis": report, "caseAnalysisPath": report.get("path"), "planFile": report.get("planFile") or output_contract_request_identity(payload).get("planFile")}, request=payload)
+        report = export_case_analysis_action(root, action_plan_file(payload))
+        return terminal_action(root, action, operation_id, op_id, "completed", f"Case 分析已导出：{report.get('path')}", {"caseAnalysis": report, "caseAnalysisPath": report.get("path"), "planFile": report.get("planFile") or action_plan_file(payload)}, request=payload)
     if action == "plan-checkpoint-retention":
         report = checkpoint_retention_action(root, payload)
         return terminal_action(root, action, operation_id, op_id, "completed", f"Checkpoint dry-run 完成：计划删除 {report.get('deleteCount', 0)}，保留 {report.get('keepCount', 0)}，跳过 {report.get('skipCount', 0)}", {"checkpointPlan": report, "planFile": report.get("planFile") or action_plan_file(payload) or "", "deletePlanPath": report.get("deletePlanPath") or "simple_cluster/checkpoints/delete_plan.json", "retentionReportPath": report.get("retentionReportPath") or "simple_cluster/checkpoints/retention_report.md"}, request=payload)
@@ -14924,36 +14626,16 @@ def read_audit_tail(root, lines=100):
     return ""
 
 def read_results_summary(root, plan=None, cached=False):
-    if plan is not None and plan != "":
-        raw_plan = result_io_relative_path(plan, "结果摘要 Plan")
-        relative = plan_results_summary_relpath(raw_plan, strict_plan=True)
-        try:
-            snapshot = output_contract_read_snapshot(root, relative)
-        except FileNotFoundError:
-            snapshot = None
-        if snapshot is not None:
-            data = json.loads(snapshot["text"])
-            if not isinstance(data, dict) or data.get("resultPathIdentity") != "posix-v1" or result_parse_row_identity(data) != raw_plan:
-                raise ValueError("结果摘要来源与原始 Plan 不一致")
-            output_contract_verify_snapshot(root, relative, snapshot)
-            return data
     read_summary = read_runtime_json_cached if cached else read_json
     plan_norm = normalize_result_candidate(plan) if plan else ""
-    if plan is not None and plan != "":
-        legacy_relative = plan_results_summary_relpath(plan_norm)
-        try:
-            snapshot = output_contract_read_snapshot(root, legacy_relative)
-            data = json.loads(snapshot["text"])
-            output_contract_verify_snapshot(root, legacy_relative, snapshot)
-        except FileNotFoundError:
-            data = None
+    if plan_norm:
+        plan_path = os.path.join(root, *plan_results_summary_relpath(plan_norm).split("/"))
+        data = read_summary(plan_path, None)
         if isinstance(data, dict):
-            try:
-                if result_parse_row_identity(data) == raw_plan:
-                    return data
-            except (ValueError, UnicodeError):
-                pass
-        return {"schemaVersion": SCHEMA_VERSION, "results": [], "planFile": raw_plan}
+            if not data.get("planFile"):
+                data = {**data, "planFile": plan_norm}
+            return data
+        return {"schemaVersion": SCHEMA_VERSION, "results": [], "planFile": plan_norm}
     candidates = [
         os.path.join(root, "simple_cluster", "results_summary.json"),
         os.path.join(root, "simple_cluster", "results", "summary.json"),
@@ -14968,15 +14650,11 @@ def read_results_summary(root, plan=None, cached=False):
 
 def read_current_results_summary(root, plan=None, plan_revision=""):
     summary = read_results_summary(root, plan)
-    strict_plan = plan is not None and plan != ""
-    plan_revision = "" if plan_revision is None else plan_revision  # None 表示“未提供修订”，与 0.5.403 宽松实现 str(plan_revision or "") 的缺省容忍一致；非 None 的无效值仍由输出契约校验拒绝。
-    identity = output_contract_request_identity({"planFile": plan, "planRevision": plan_revision}) if strict_plan else {}
-    revision = identity.get("planRevision", "") if strict_plan else str(plan_revision or "").strip()
-    summary_revision = output_contract_request_identity(summary).get("planRevision", "") if strict_plan else str(summary.get("planRevision") or summary.get("plan_revision") or "").strip() if isinstance(summary, dict) else ""
-    plan_matches = not strict_plan or result_parse_row_identity(summary) == identity["planFile"]
+    revision = str(plan_revision or "").strip()
+    summary_revision = str(summary.get("planRevision") or summary.get("plan_revision") or "").strip() if isinstance(summary, dict) else ""
+    plan_matches = not plan or normalize_result_candidate(summary.get("planFile") or "") == normalize_result_candidate(plan)
     revision_matches = not revision or summary_revision == revision
-    identity_current = not strict_plan or summary.get("resultPathIdentity") == "posix-v1"
-    if not summary.get("results") or not plan_matches or not revision_matches or not identity_current:
+    if not summary.get("results") or not plan_matches or not revision_matches:
         return parse_results_action(root, None, plan, revision)
     return summary
 
@@ -16290,9 +15968,32 @@ def serve_http(args):
 
         def send_json(self, payload, status=200):
             body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+            compressed = False
+            if self.headers.get("X-Simple-Low-Traffic") == "1" and len(body) >= 1024:
+                for encoding in str(self.headers.get("Accept-Encoding") or "").split(","):
+                    parts = encoding.strip().lower().split(";")
+                    if parts[0].strip() != "gzip":
+                        continue
+                    quality = 1.0
+                    try:
+                        for parameter in parts[1:]:
+                            name, _, value = parameter.strip().partition("=")
+                            if name == "q":
+                                quality = float(value)
+                    except ValueError:
+                        quality = 0
+                    if 0 < quality <= 1:
+                        import gzip
+                        packed = gzip.compress(body, compresslevel=1, mtime=0)
+                        if len(packed) < len(body):
+                            body, compressed = packed, True
+                    break
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            if compressed:
+                self.send_header("Content-Encoding", "gzip")
+                self.send_header("Vary", "X-Simple-Low-Traffic, Accept-Encoding")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
             self.wfile.write(body)
@@ -17297,7 +16998,7 @@ def serve_http(args):
                 worker = (selected_worker_id(payload) or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker") if mode == "worker_telemetry" and action in ("validate-plan", "dry-run-plan", "preflight-worker-task") else ""
                 return self.send_json(start_inactivity_action(root, action, payload, operation_id, op_id, worker), status=202)
             if action not in ("preview-cache-cleanup", "delete-cache-candidates"):
-                append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_receipt_fields(action, payload)}})
+                append_event(root, {"type": "operation_started", "operationId": operation_id, "payload": {"action": action, "opId": op_id, **action_operation_fields(payload)}})
             release_worker_action = None
             try:
                 if mode == "worker_telemetry" and action in ("retry-worker-task", "stop-worker-task", "delete-worker-artifacts", "archive-worker-artifacts", "validate-plan", "dry-run-plan", "run-plan", "reproduce-plan"):

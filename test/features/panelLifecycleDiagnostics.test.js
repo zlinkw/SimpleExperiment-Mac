@@ -52,6 +52,8 @@ function persistenceHarness() {
     extractFunction("compactSensitiveText"),
     extractFunction("panelLifecycleDiagnosticMessage"),
     extractFunction("compactPanelLifecycleDetails"),
+    // 交接超时证据的有界压缩属于真实压缩链路，夹具不模拟该分支。
+    extractFunction("compactDispatchHandoffEvidence"),
     extractFunction("normalizeUiActionError"),
     extractFunction("compactUiActionError"),
     extractFunction("normalizeActionErrorRow"),
@@ -163,6 +165,7 @@ test("a real heartbeat timeout creates one explicit structured failure", () => {
     extractFunction("compactSensitiveText"),
     extractFunction("normalizePanelLifecycleDiagnosticRow"),
     extractFunction("compactPanelLifecycleDetails"),
+    extractFunction("compactDispatchHandoffEvidence"),
     extractFunction("panelLifecycleDiagnosticMessage"),
     code,
     "this.Subject = Subject;",

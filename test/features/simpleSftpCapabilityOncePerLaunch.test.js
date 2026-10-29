@@ -3,6 +3,8 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
+require('../_helpers/registerTsRequire');
+const { currentWindowSftpDiscovery, sameProjectRoot } = require('../../src/core/SimpleSftpWindow.ts');
 
 // 31：同一次启动上下文内所有 SimpleSFTP helper 共享一次实际能力读取；
 // 新启动、失败与显式失效都必须重新取得，不建跨启动/跨运行代际的无限缓存。
@@ -26,7 +28,7 @@ const methodsSource = ts.transpileModule(
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 
 function fixture() {
-  const api = { baseUrl: "http://127.0.0.1:18765", token: "token-1" };
+  const api = { baseUrl: "http://127.0.0.1:18765", token: "token-1", pid: process.pid, startedAt: '2026-10-29T00:00:00.000Z', version: '0.2.fixture' };
   const reads = { discovery: 0 };
   const fetches = [];
   const rpc = [];
@@ -38,6 +40,7 @@ function fixture() {
   };
   const sandbox = {
     console,
+    currentWindowSftpDiscovery, sameProjectRoot,
     URL,
     // Mac 适配：readSimpleSftpCapabilities 的发现文件经 ../platform/HostPaths.componentDirectory("sftp")（Mac 支持目录），
     // 沙箱注入生产实现；fs.readFile 已按路径无关 mock，发现计数断言强度不变。
@@ -84,7 +87,7 @@ function fixture() {
         ok: true, status: 200,
         json: async () => ({
           methods: ["sync.projectInventory", "sync.downloadPaths", "sync.download", "files.cleanup.preview"],
-          instanceId: "instance-" + fetches.length,
+          name: 'SimpleSFTP', version: api.version, instanceId: `${api.pid}:${api.startedAt}`,
           features: { fastDelete: 1 },
           methodOptions: { "sync.projectInventory": { metadataOnly: 1 } },
         }),
@@ -113,10 +116,11 @@ test("31 same launch shares one discovery read and one capabilities request acro
   const third = await f.host.simpleSftpCapability("files.cleanup.preview");
   assert.equal(f.fetches.length, 1, "同一次启动的能力 GET 必须恰好一次");
   assert.equal(f.reads.discovery, 1, "同一次启动不得重复打开 api.json 头部文件");
-  assert.equal(first.instanceId, "instance-1");
-  assert.equal(second.instanceId, "instance-1");
-  assert.equal(third.instanceId, "instance-1");
-  assert.deepEqual(JSON.parse(JSON.stringify(first.headers)), { Authorization: "Bearer token-1" });
+  assert.equal(first.instanceId, `${f.api.pid}:${f.api.startedAt}`);
+  assert.equal(second.instanceId, `${f.api.pid}:${f.api.startedAt}`);
+  assert.equal(third.instanceId, `${f.api.pid}:${f.api.startedAt}`);
+  assert.deepEqual(JSON.parse(JSON.stringify(first.headers)), { Authorization: "Bearer token-1",
+    "X-Simple-Api-Instance": `${f.api.pid}:${f.api.startedAt}`, "X-Simple-Api-Workspace": encodeURIComponent("C:/workspace") });
   assert.deepEqual(JSON.parse(JSON.stringify(third.methodOptions)), { "sync.projectInventory": { metadataOnly: 1 } });
 });
 
@@ -147,7 +151,7 @@ test("31 new launch refetches and picks up a replaced Scheduler endpoint and tok
   f.api.token = "token-2";
   const second = await f.host.simpleSftpCapability("sync.projectInventory");
   assert.equal(f.fetches.length, 2, "新启动必须重新取得一次能力");
-  assert.equal(second.instanceId, "instance-2");
+  assert.equal(second.instanceId, `${f.api.pid}:${f.api.startedAt}`);
   assert.equal(second.headers.Authorization, "Bearer token-2");
   assert.match(String(second.endpoint), /19000/);
   await f.host.simpleSftpCapability("sync.downloadPaths");
@@ -160,7 +164,7 @@ test("31 failed read clears the single slot so the next call rediscovers", async
   await assert.rejects(() => f.host.simpleSftpCapability("sync.projectInventory"), /ECONNREFUSED/);
   assert.equal(f.host.simpleSftpCapShared, undefined, "失败后单槽必须清空，不把失败结果留给同启动后续调用");
   const ok = await f.host.simpleSftpCapability("sync.projectInventory");
-  assert.equal(ok.instanceId, "instance-2");
+  assert.equal(ok.instanceId, `${f.api.pid}:${f.api.startedAt}`);
   assert.equal(f.fetches.length, 2);
   await f.host.simpleSftpCapability("sync.downloadPaths");
   assert.equal(f.fetches.length, 2, "恢复成功后的同启动读取仍然共享");
@@ -170,7 +174,7 @@ test("31 auth-expired capability read retries discovery once like before", async
   const f = fixture();
   f.state.failStatus = 401;
   const ok = await f.host.simpleSftpCapability("sync.projectInventory");
-  assert.equal(ok.instanceId, "instance-2");
+  assert.equal(ok.instanceId, `${f.api.pid}:${f.api.startedAt}`);
   assert.equal(f.fetches.length, 2, "仅能力 GET 重试一次，不重放任何变更请求");
   assert.equal(f.reads.discovery, 2, "重试前重新读取一次发现头部文件");
 });

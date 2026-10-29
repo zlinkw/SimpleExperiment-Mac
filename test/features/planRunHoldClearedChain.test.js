@@ -32,6 +32,7 @@ function makeHarness(clearedJobsFor){
       // ports.execute 真实接线走 cleanup.execute(token)，不是 service.execute。
       execute:async()=>{calls.push('execute');return {state:'completed',pendingNodes:[]};},
       service:{
+      prepareEmptyParentCleanup:async()=>[],confirmEmptyParentCleanup:async()=>{},
       preview:async()=>{calls.push('preview');return preview;},
       confirm:async(payload)=>{calls.push('confirm:'+payload.phase);},
       preflightConfirmed:async()=>{calls.push('preflight');},

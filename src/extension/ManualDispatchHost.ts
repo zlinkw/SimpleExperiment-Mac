@@ -21,8 +21,9 @@ export class ManualDispatchHost {
       newCommandId:()=>randomUUID().replace(/-/g,""),
       prepare:async plan=>{
         h.assertExecutionWorkersReady();h.assertExecutionAgentProjectsReady({options:{workers:h.workerActionTargets()}});
-        const gpu=this.gpuSnapshot||await h.client.getGpu({userInitiated:true});
-        for(const j of plan.jobs.filter(j=>j.manualDispatch?.stage==="preparing")){
+        const specific=plan.jobs.filter(j=>j.manualDispatch?.stage==="preparing"&&j.manualDispatch.gpuSelection!=="automatic");
+        const gpu=specific.length?(this.gpuSnapshot||await h.client.getGpu({userInitiated:true})):{};
+        for(const j of specific){
           const p=j.manualDispatch!,rows=Array.isArray(gpu[p.workerId])?gpu[p.workerId]:[];
           if(!rows.some((r:any)=>String(r.index??r.gpu_id??r.gpuId??r.id)===p.gpuId))throw Error("目标 GPU 不可见："+p.workerId+" · GPU "+p.gpuId+"；未停止原任务或审核产物。");
         }
@@ -52,13 +53,13 @@ export class ManualDispatchHost {
     h.manualDispatchInFlight.add(key);
     try {
     if(h.distributedQueueTickPromise)await h.distributedQueueTickPromise;
-    let workerId=String(params.workerId||""),gpuId=params.gpuId===undefined?"":String(params.gpuId);
+    let workerId=String(params.workerId||""),gpuId=params.gpuId===undefined?"":String(params.gpuId),gpuSelection=params.gpuSelection;
     if(fromUi&&!workerId){
       const saved=await h.loadDistributedQueue(this.root),plan=saved.plans.find((p:any)=>p.id===workflowId);
       const placements=indices.map((i:number)=>plan?.jobs.find((j:any)=>j.index===i)?.manualDispatch);
       const first=placements[0];
       if(first?.stage==="preparing"&&placements.every((p:any)=>p?.workerId===first.workerId&&p?.gpuId===first.gpuId)){
-        workerId=first.workerId;gpuId=first.gpuId;
+        workerId=first.workerId;gpuId=first.gpuId;gpuSelection=first.gpuSelection;
       }
     }
     if(fromUi&&!workerId){
@@ -66,16 +67,16 @@ export class ManualDispatchHost {
       if(!picked)return {status:"cancelled"};workerId=picked.id;
     }
     if(!h.enabledWorkerConfigs().some((w:any)=>w.id===workerId))throw Error("目标 Worker 未启用或不存在："+workerId);
-    if(fromUi&&!gpuId){
+    if(fromUi&&!gpuId&&gpuSelection!=="automatic"){
       let snapshot=h.client.currentState?.().gpu||h.lastRealtimeState?.gpu||{};
       try{snapshot=await h.client.getGpu({userInitiated:true});this.gpuSnapshot=snapshot;}catch{}
       const rows=Array.isArray(snapshot[workerId])?snapshot[workerId]:[];
       const tasks=h.lastWorkerTaskSnapshots?.get(this.root+"\u0000"+workerId)?.tasks||[];
-      const picked=await vscode.window.showQuickPick<any>(rows.map((r:any)=>({label:"GPU "+String(r.index??r.gpu_id??r.gpuId??r.id),id:String(r.index??r.gpu_id??r.gpuId??r.id),
-        description:String(r.name||"")+" · 显存 "+String(r.memoryUsedMb??r.memoryUsed??r.memory_used_mb??"?")+"/"+String(r.memoryTotalMb??r.memoryTotal??r.memory_total_mb??"?")+" MB · 利用率 "+String(r.utilizationPercent??r.utilization??r.utilization_gpu??"?")+"% · 任务 "+tasks.filter((t:any)=>!['completed','failed','cancelled'].includes(t.status)&&String(t.gpuId??t.observation?.tmux?.gpuId??"")===String(r.index??r.gpu_id??r.gpuId??r.id)).length})),{title:"选择 GPU（忙卡可选；纳入管理的分支会在统一派发队列中等配额，不会无限绕过）",ignoreFocusOut:true});
-      if(!picked)return {status:"cancelled"};gpuId=picked.id;
+      const picked=await vscode.window.showQuickPick<any>([{label:"此服务器自动派发",id:"",gpuSelection:"automatic",description:"仅等待此 Worker 的可用显卡；遵守显存阈值、预算与并行上限"},...rows.map((r:any)=>({label:"GPU "+String(r.index??r.gpu_id??r.gpuId??r.id),id:String(r.index??r.gpu_id??r.gpuId??r.id),
+        description:String(r.name||"")+" · 显存 "+String(r.memoryUsedMb??r.memoryUsed??r.memory_used_mb??"?")+"/"+String(r.memoryTotalMb??r.memoryTotal??r.memory_total_mb??"?")+" MB · 利用率 "+String(r.utilizationPercent??r.utilization??r.utilization_gpu??"?")+"% · 任务 "+tasks.filter((t:any)=>!['completed','failed','cancelled'].includes(t.status)&&String(t.gpuId??t.observation?.tmux?.gpuId??"")===String(r.index??r.gpu_id??r.gpuId??r.id)).length}))],{title:"选择此服务器自动派发或指定 GPU",ignoreFocusOut:true});
+      if(!picked)return {status:"cancelled"};gpuId=picked.id;gpuSelection=picked.gpuSelection;
     }
-    return await dispatchManualJobs(this.ports(),{workflowId,indices,workerId,gpuId,expectedCommands:params.expectedCommands,stopRunning:fromUi||params.stopRunning===true} as ManualDispatchRequest);
+    return await dispatchManualJobs(this.ports(),{workflowId,indices,workerId,gpuId,gpuSelection,expectedCommands:params.expectedCommands,stopRunning:fromUi||params.stopRunning===true} as ManualDispatchRequest);
     }
     finally{h.manualDispatchInFlight.delete(key);h.postState();void h.tickDistributedQueue();}
   }
@@ -90,7 +91,7 @@ export class ManualDispatchHost {
       // 正是现场"排除又派发"的入口之一；取消仍返回 false（未移动任何文件）。
       const blocked=(body as any).runReplacement?.blocked||[];
       return {accepted:(body as any).assignedExperimentIndices||[],
-        blocked:blocked.map((row:any)=>({index:Number(row.index),reason:String(row.reason||""),stage:row.stage,code:row.code,operationId:row.operationId}))};}
+        blocked:blocked.map((row:any)=>({index:Number(row.index),reason:String(row.reason||""),stage:row.stage,code:row.code,operationId:row.operationId,codes:row.codes,busyOnly:row.busyOnly}))};}
     catch(error:any){if(error.apiData?.code==="REPLACEMENT_CANCELLED")return false;throw error;}
   }
 }

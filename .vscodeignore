@@ -164,3 +164,10 @@ dist/ui/styles/base.css.js
 dist/ui/styles/components.css.js
 dist/ui/styles/layout.css.js
 dist/workerProbeRuntime.js
+
+clean_dir/**
+.test-workflow-batch.lock/**
+
+.audit/**
+dist/mac/OpenSshTunnels.js
+dist/runtime/GpuMemoryBudget.js

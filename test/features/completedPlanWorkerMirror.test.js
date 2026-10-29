@@ -24,6 +24,7 @@ function fixture() {
     workerFpsyncTaskLabel: () => 'Plan 完成产物同步', workspaceRoot: () => root,
     // r6：方法从 TS 源码抽取，编译后保留裸标识符。
     jobArtifactRunGeneration: require('../../dist/features/JobArtifactSyncIdentity.js').jobArtifactRunGeneration,
+    jobArtifactBatchIdentity: require('../../dist/features/JobArtifactSyncIdentity.js').jobArtifactBatchIdentity,
     // 0.5.416 配套：failJob 现从错误提取结构化卡点（裸标识符，TS 源切片保留裸名），
     // 复用同一真实生产模块，不造假替身；无卡点故障不会触达能力门探测。
     artifactStageBlockFromError: require('../../dist/features/JobArtifactSyncIdentity.js').artifactStageBlockFromError,

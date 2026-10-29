@@ -78,6 +78,20 @@ test('complete PLAN cards exclude anomalies and unverified logs from clean succe
   }
 });
 
+test('runtime log errors render a failed job and Plan while retaining artifact evidence and manual review actions', () => {
+  const sandbox=clickSandbox();
+  sandbox.render({distributedPlans:[{id:'wf',projectId:'p',planFile:'plans/errors.yaml',jobs:[{
+    index:0,case:'a',seed:42,status:'failed',lifecycleProtocol:2,completionState:'review_required',
+    executionState:'exited',resultState:'complete',exitCode:0,workerId:'w',commandId:'c',outputDir:'work/job',
+    runtimeDiagnostics:{schemaVersion:1,commandId:'c',runId:'c',state:'anomalous',count:1,scanComplete:true,
+      types:{LoggedError:1},phases:{test:1},exceptions:[{summary:'Error. nthreads cannot be larger than NUMEXPR_MAX_THREADS (64)',logPath:'raw.log',lineStart:7,lineEnd:7}]}
+  }]}]});
+  assert.match(sandbox.html,/executionPlanRow failed/);assert.match(sandbox.html,/成功 0\/1/);assert.match(sandbox.html,/失败 1/);
+  assert.match(sandbox.html,/退出码 0/);assert.match(sandbox.html,/产物：完整/);assert.match(sandbox.html,/nthreads cannot be larger/);
+  assert.match(sandbox.html,/data-command="analyzeRuntimeLog"/);
+  assert.match(sandbox.html,/data-runtime-anomaly-rerun="true"/);
+});
+
 test('native cards display readable execution and result states independently', () => {
   for(const [executionState,resultState,status,executionLabel,resultLabel] of [
     ['failed','complete','failed','失败','完整'],['exited','incomplete','unknown','已结束','不完整'],
@@ -285,6 +299,22 @@ test("formal preflight rejection explains that training never started and disabl
 const isolationPausedState = () => ({ distributedPlans: [{ id: "isolation-pause", planFile: "plans/iso.yaml", jobs: [{ index: 0, case: "iso", seed: 43, status: "pending", outputDir: "work_dirs/iso",
   blockReason: "旧产物隔离未完成：隔离预览确认已过期（PREVIEW_EXPIRED），训练未启动；请重新生成预览并重新核对精确路径后再确认，未复用旧令牌。",
   outputIsolationBlocked: { reason: "隔离预览确认已过期", stage: "preview", code: "PREVIEW_EXPIRED", declarationKey: "work_dirs/iso", observedAt: "2026-10-26T05:00:00Z" } }] }] });
+
+test('transfer-isolation recovery renders a usable action for unstarted jobs and preserves completed siblings',()=>{
+ const sandbox=clickSandbox(),state=isolationPausedState(),p=state.distributedPlans[0];
+ p.jobs[0].outputIsolationBlocked.recovery={state:'review_required'};
+ p.jobs.push({index:1,case:'pad',seed:43,status:'completed',completionState:'verified',commandId:'done',workerId:'w'});
+ sandbox.render(state);assert.match(sandbox.html,/成功 1\/2/);assert.match(sandbox.html,/旧产物待审核/);
+ assert.match(sandbox.html,/data-command="recheckOutputIsolation"[^>]*data-job-index="0"[^>]*>审核旧产物/);
+ assert.doesNotMatch(sandbox.html,/data-command="recheckOutputIsolation"[^>]*data-job-index="1"/);
+ assert.doesNotMatch(sandbox.html,/排队 1/);assert.doesNotMatch(sandbox.html,/本机等待空卡/);
+ const changed=structuredClone(state);changed.distributedPlans[0].jobs[0].outputIsolationBlocked.recovery.state='waiting_transfer';
+ assert.notEqual(sandbox.executionRenderKeysForState(state).planList,sandbox.executionRenderKeysForState(changed).planList);
+ const source=readSource('src/extension/legacy.ts'),start=source.indexOf('if (visibleDistributedPlanProgress.some(plan =>'),end=source.indexOf('const summaryInputs =',start);
+ const projected=vm.runInNewContext(source.slice(start,end)+'distributedPlans;',{visibleDistributedPlanProgress:state.distributedPlans,DistributedPlanQueue:{jobIsUnavailable:()=>false}});
+ assert.equal(projected[0].jobs[0].outputIsolationBlocked.recovery.state,'review_required');
+ sandbox.render({distributedPlans:projected});assert.match(sandbox.html,/data-command="recheckOutputIsolation"/);
+});
 test("r82: an isolation-blocked job renders its never-started explanation through blockText", () => {
   const sandbox = clickSandbox();
   sandbox.render(isolationPausedState());
@@ -502,7 +532,7 @@ test("latest distributed attempt determines completed or failed Plan display", (
   assert.doesNotMatch(html, /nwpu5/);
   sandbox.render({ sessionStartedAt: "2026-09-25T12:00:00Z", distributedPlans: [completed, {
     ...failed, id: "newest", enqueuedAt: "2026-09-25T13:00:00Z",
-    jobs: [{ ...failed.jobs[0], finishedAt: "2026-09-25T13:10:00Z", artifactError: "missing dataset schema" }],
+    jobs: [{ ...failed.jobs[0], finishedAt: "2026-09-25T13:10:00Z", error: "missing dataset schema" }],
   }] });
   assert.match(html, /executionPlanRow failed/);
   assert.match(html, /成功 0\/1 · 0% · 失败 1/);
@@ -632,7 +662,7 @@ function clickSandbox(extra) {
   const clickEnd = panel.indexOf('const tracePlanScopeTarget = event.target.closest', clickStart);
   assert.ok(clickStart > 0 && clickEnd > clickStart);
   vm.runInContext("var lastState = {};\n" + executionPlanSource()
-    + "\nthis.render = function (state) { lastState = state; return renderExecutionPlanList(state); };\nthis.foldClick = function (event) {\n"
+    + "\nthis.render = function (state) { state = Object.assign({ setup: { workerTunnels: [{id:'a',enabled:true},{id:'b',enabled:true}] } }, state); lastState = state; return renderExecutionPlanList(state); };\nthis.foldClick = function (event) {\n"
     + panel.slice(clickStart, clickEnd).replaceAll("\\\\", "\\")
     + "\n};", sandbox);
   return sandbox;
@@ -978,6 +1008,15 @@ test("queried absent historical windows reserve no active slot and never count a
 // 0.5.416 配套（se-stage-block-visibility-release）：暂存槽卡点在 Job 错误区的显示矩阵。
 // 「卡在哪台/哪个范围/通道/身份＋两槽」始终按结构化字段显示；「释放旧文件占用」按钮仅当
 // 结构化 releaseCandidate 与扩展端实时能力门（stageBlockReleaseCapable）同时成立才出现。
+test('Worker-local automatic selection is visible before dispatch and invalidates the real render key',()=>{
+ const sandbox=clickSandbox(),state={distributedPlans:[{id:'wf',planFile:'plans/p.yaml',jobs:[
+  {index:0,case:'c',seed:42,status:'pending',lifecycleProtocol:2,automaticWorkerId:'selected-worker'}]}]};
+ const key=sandbox.executionRenderKeysForState(state).planList;sandbox.render(state);
+ assert.match(sandbox.html,/selected-worker · 等待本服务器空卡 · 自动选卡/);
+ assert.doesNotMatch(sandbox.html,/data-job-tmux-log="1"[^>]*data-worker-id="selected-worker"/,'waiting intent is not a running Worker identity');
+ const next=structuredClone(state);next.distributedPlans[0].jobs[0].automaticWorkerId='other-worker';
+ assert.notEqual(sandbox.executionRenderKeysForState(next).planList,key);
+});
 const stageBlockFixture = (overrides = {}) => ({ schemaVersion: 1, code: "TRANSFER_STAGE_PENDING",
   destination: { id: "nwpu3", profile: "work", host: "nwpu3.invalid" }, scope: '["job-artifacts","plans/p.yaml",0,"c0",42]',
   lane: 1, identity: "a".repeat(64), incomingGeneration: "b".repeat(64),
@@ -990,6 +1029,21 @@ const stageBlockJob = (extra = {}) => ({ index: 0, case: "done", seed: 42, statu
   lifecycleProtocol: 2, workerId: "nwpu3", commandId: "cmd-a",
   artifactError: "最新产物同步未完成：TRANSFER_STAGE_PENDING: 两代暂存槽均被同一来源的已提交代占用 · 暂存槽卡点：主机 nwpu3.invalid",
   ...extra });
+
+test('single enabled Worker hides obsolete cross-Worker artifact controls and errors while retaining real execution failures',()=>{
+ const sandbox=clickSandbox();
+ const state={setup:{workerTunnels:[{id:'current',enabled:true},{id:'history',enabled:false}]},
+  distributedPlans:[{id:'wf',planFile:'plans/p.yaml',jobs:[stageBlockJob({error:'actual command failed',
+   artifactStageBlock:stageBlockFixture(),stageBlockReleaseCapable:true})]}],
+  planArtifactSyncStatuses:{wf:{runId:'wf',status:'partial',targetCount:2}}};
+ const multi=structuredClone(state);multi.setup.workerTunnels[1].enabled=true;
+ const previous=sandbox.executionRenderKeysForState(multi).planList;
+ sandbox.render(multi);assert.match(sandbox.html,/TRANSFER_STAGE_PENDING/);
+ assert.notEqual(sandbox.executionRenderKeysForState(state).planList,previous,'changing only enabled Workers invalidates the rendered Plan key');
+ sandbox.render(state);
+ assert.match(sandbox.html,/actual command failed/);
+ assert.doesNotMatch(sandbox.html,/TRANSFER_STAGE_PENDING|暂存槽卡点|全局同步|重试产物同步|刷新产物状态|重试 Plan 产物同步|刷新 Plan 产物状态|releaseJobStageBlockSlots/);
+});
 
 test("stage block shows host/profile/scope/lane/identity and both slots in the job error area while keeping the readable error line", () => {
   const sandbox = clickSandbox();

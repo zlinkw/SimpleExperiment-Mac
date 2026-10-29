@@ -75,14 +75,14 @@ test('both batch entries overlap real per-PLAN submissions, sync once and keep e
   assert.equal(new Set(files.map(file=>JSON.parse(fs.readFileSync(path.join(dir,file),'utf8')).planFile)).size,8);
  }
 });
-test('one invalid PLAN never borrows another validation and stops the next wave while preserving accepted plans',async()=>{
+test('one invalid PLAN never borrows another validation while every independent selection continues',async()=>{
  const {h,calls}=fixture();h.badPlan='plans/1.yaml';const result=await runAllPlans(h,{});
- assert.equal(result.status,'failed');assert.deepEqual(result.remaining,['plans/4.yaml','plans/5.yaml','plans/6.yaml','plans/7.yaml']);
- assert.equal(calls.validate.length,4);assert.equal(h.queue.plans.length,3);assert.ok(!calls.enqueue.includes(h.badPlan));assert.ok(calls.ticks>=1&&calls.ticks<=3);
+ assert.equal(result.status,'failed');assert.deepEqual(result.remaining,[]);
+ assert.equal(calls.validate.length,8);assert.equal(h.queue.plans.length,7);assert.ok(!calls.enqueue.includes(h.badPlan));assert.ok(calls.ticks>=1&&calls.ticks<=7);
 });
-test('a failed shared upload fails all in-flight plans before validation and does not retry or enter the next wave',async()=>{
+test('a failed shared upload reports every selected Plan without retrying the common upload or validating',async()=>{
  const {h,calls}=fixture();h.syncError=true;const result=await runAllPlans(h,{});
- assert.equal(result.status,'failed');assert.equal(calls.sync,1);assert.equal(calls.validate.length,0);assert.equal(h.queue.plans.length,0);assert.equal(result.remaining.length,4);
+ assert.equal(result.status,'failed');assert.equal(calls.sync,1);assert.equal(calls.validate.length,0);assert.equal(h.queue.plans.length,0);assert.equal(result.remaining.length,0);assert.equal(result.rows.length,8);
 });
 test('code changes after validation prevent enqueue even though all prepared workers held the old fingerprint',async()=>{
  const {h,calls}=fixture(4);h.beforeEnqueue=async()=>{h.code='changed-code'};

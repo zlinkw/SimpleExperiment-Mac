@@ -165,6 +165,7 @@ function makeHost({ probes, tunnels, manifest, base, targetOverrides, probeImpl,
     localCodeManifestCacheFile: () => undefined,
     // Post-gate WRITE sentinels: reaching either proves the gate let the
     // endpoint through; nothing beyond them is executed.
+    checkRunCodeWithoutUploadLocal: async () => { writes.sentinel += 1; throw new Error("SENTINEL-PASSED-GUARD"); },
     safeWorkerCodeSyncTargets: async () => { writes.sentinel += 1; throw new Error("SENTINEL-PASSED-GUARD"); },
     confirmRemoteWriteTargets: async () => { writes.confirms += 1; },
   };

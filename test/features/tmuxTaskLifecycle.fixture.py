@@ -1,5 +1,5 @@
 """Only extracted lifecycle functions, real isolated tmux, stdlib CPU probes."""
-import ast, base64, datetime, hashlib, json, os, pathlib, re, shlex, subprocess, sys, tempfile, threading, time, urllib.request, urllib.parse, uuid, textwrap
+import ast, base64, datetime, hashlib, json, math, os, pathlib, re, shlex, subprocess, sys, tempfile, threading, time, urllib.request, urllib.parse, uuid, textwrap
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "_helpers"))
@@ -8,20 +8,37 @@ runtime = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
 tree = ast.parse(runtime)
 nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("task_")]
 code = ast.unparse(ast.Module(body=nodes, type_ignores=[]))
-code += '''
+code += r'''
 _modern_task_tmux = task_tmux
 def task_tmux(args, timeout=5, **kwargs):
     # Emulate the deployed older tmux protocol, while all accepted commands still
     # run against a real isolated tmux server.
     if args[:2] == ["source-file", "-"]: raise RuntimeError("TMUX_QUERY_FAILED: -: No such file or directory")
     if sum(len(str(arg).encode("utf-8")) + 1 for arg in args) > 4096: raise RuntimeError("TMUX_QUERY_FAILED: command too long")
-    return _modern_task_tmux(args, timeout=timeout, **kwargs)
+    fields = None
+    if args and args[0] == "list-panes" and "-F" in args:
+        at = args.index("-F") + 1
+        if "#{pane_dead_status}" in args[at] and "#{pane_id}" in args[at]:
+            args = list(args)
+            fields = args[at].split("\t")
+            args[at] += "\t#{pane_dead_signal}"
+    value = _modern_task_tmux(args, timeout=timeout, **kwargs)
+    if fields is not None:
+        native = globals().setdefault("_fixture_native_fields", {})
+        lines = []
+        for line in value.splitlines():
+            parts = line.split("\t")
+            row = dict(zip(fields + ["signal"], parts))
+            native[row.get("#{pane_id}", "?")] = {key: row.get(key) for key in ("#{pane_dead}", "#{pane_dead_status}", "signal")}
+            lines.append("\t".join(parts[:-1]))
+        return "\n".join(lines)
+    return value
 '''
 root = tempfile.mkdtemp(prefix="se-native-lifecycle-")
 os.environ.pop("TMUX", None)
 os.environ["TMUX_TMPDIR"] = root
 os.environ["SIMPLE_EXPERIMENT_REMOTE_TMUX_SESSION_PREFIX"] = "fixture"
-bootstrap = '''import base64, datetime, hashlib, json, os, pathlib, re, shlex, subprocess, sys, threading, time, urllib.request, uuid
+bootstrap = '''import base64, datetime, hashlib, json, math, os, pathlib, re, shlex, subprocess, sys, threading, time, urllib.request, uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 def now_iso(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
 def collect_local_gpu(): return ([{"id":"0"},{"id":"1"}], "")
@@ -65,11 +82,43 @@ metrics=pathlib.Path(root)/csv;metrics.parent.mkdir(parents=True,exist_ok=True);
 ''',encoding="utf-8")
 namespace={"__file__":str(program)}
 exec(bootstrap+code,namespace)
+def install_fixture_budget_observer(peak_mb):
+    # Device-boundary fixture result, published by the Scheduler's sole metadata writer.
+    # An external set-option races a live sampling turn and does not model this ownership.
+    observer = r'''
+_fixture_budget_update = task_budget_update
+def task_budget_update(root, rows, gpus, now=None):
+    _fixture_budget_update(root, rows, gpus, now)
+    if not pathlib.Path(root, "fixture-budget-calibrated").exists():
+        return
+    for row in rows:
+        value = task_budget_read(row)
+        if not value:
+            continue
+        value["peakMb"] = max(value.get("peakMb", 0), PEAK_MB)
+        value["oom"] = bool(value.get("oom") or pathlib.Path(root, "fixture-budget-oom").exists())
+        value["ready"] = not value["oom"]
+        value["budgetMb"] = task_budget_size(value["peakMb"])
+        task_option(row["tmuxPane"], "gpu_budget", json.dumps(value))
+        row["_gpuBudget"] = value
+'''.replace('PEAK_MB', str(int(peak_mb)))
+    source = program.read_text(encoding='utf-8')
+    assert source.count('if __name__=="__main__":') == 1
+    program.write_text(source.replace('if __name__=="__main__":', observer + '\nif __name__=="__main__":'), encoding='utf-8')
 # 失败诊断只增加可见性：5 秒截止、50ms 轮询、异常口径、返回值与全部原断言均保持不变。
-# 循环里本来就要发起的那一次观测（task_inventory 或 display-message）顺手记进 LAST_OBS，
-# 所以超时定位靠“循环内最后一次观测”，超时后最多只补一次 1 秒有界查询，
-# 不会扞大外层 python 10 秒与 node 单文件 20 秒上限。
+# 循环里本来就要发起的那一次观测（task_inventory、task_query 或 display-message）顺手记进 LAST_OBS，
+# 所以超时定位只靠“循环内最后一次观测”；到期后不再发起任何 tmux 查询（含版本查询），
+# 观察预算严格是一份 5 秒，不扞大外层 python 10 秒与 node 单文件 20 秒上限。
 LAST_OBS={"stage":"","rows":None,"raw":None,"error":"","polls":0}
+# tmux 版本在起动时取一次并缓存（不属于等待观测预算），超时诊断只读这份缓存。
+# 用函数内缩进的 try：兄弟夹具 tmuxSchedulerPrefix.fixture.py 按第一个行首 "try:" 切取本文件前缀复用，
+# 在本行之前新增行首 try: 会截断它的前缀。
+def cached_tmux_version():
+    try:
+        return subprocess.run(["tmux","-V"],capture_output=True,timeout=1).stdout.decode("utf-8","replace").strip()
+    except Exception as exc:
+        return "unavailable:"+type(exc).__name__+":"+str(exc)[:120]
+TMUX_VERSION=cached_tmux_version()
 def wait_for(check,stage="",refresh=None):
     deadline=time.monotonic()+5
     LAST_OBS["stage"]=stage
@@ -91,25 +140,20 @@ def wait_for(check,stage="",refresh=None):
     raise AssertionError("bounded native observation timed out"+(" @"+stage if stage else ""))
 def report_timeout():
     # 诊断仅进 stderr；stdout 仍只输出末尾那一行结果 JSON。不打印环境、不打印原任务正文。
-    lines=["[fixture-diagnostic] stage="+str(LAST_OBS["stage"]),"polls="+str(LAST_OBS["polls"]),"lastQueryError="+str(LAST_OBS["error"] or "none")]
+    lines=["[fixture-diagnostic] nativeFields="+json.dumps(namespace.get("_fixture_native_fields", {})),"[fixture-diagnostic] stage="+str(LAST_OBS["stage"]),"polls="+str(LAST_OBS["polls"]),"lastQueryError="+str(LAST_OBS["error"] or "none")]
     rows=LAST_OBS["rows"]
     if isinstance(rows,list):
         lines.append("[fixture-diagnostic] inventoryRows="+str(len(rows)))
         for row in rows:
             lines.append("[fixture-diagnostic] inventory commandId="+str(row.get("commandId"))+" phase="+str(row.get("phase"))
                 +" dead="+str(row.get("dead"))+" exitCode="+repr(row.get("exitCode"))+" windowId="+str(row.get("tmuxWindowId"))
-                +" paneId="+str(row.get("tmuxPane"))+" session="+str(row.get("tmuxSession")))
+                +" paneId="+str(row.get("tmuxPane"))+" session="+str(row.get("tmuxSession"))
+                +" observationTmux="+json.dumps((row.get("observation") or {}).get("tmux"),ensure_ascii=False,sort_keys=True)[:240])
     elif LAST_OBS["raw"] is not None:
         lines.append("[fixture-diagnostic] lastRawObservation="+repr(LAST_OBS["raw"])[:200])
-    try:
-        # 只查本夹具私有 TMUX_TMPDIR 上的 server（task_tmux 继承其 socket 根），单次 1 秒超时；不碰真实用户窗口。
-        text=namespace["task_tmux"](["list-panes","-a","-F","#{window_id}|#{pane_id}|#{pane_dead}|#{pane_dead_status}|#{@se_phase}"],timeout=1)
-        lines.append("[fixture-diagnostic] privateServerListPanes="+text.replace(chr(10)," ; ")[:1500])
-    except Exception as exc:lines.append("[fixture-diagnostic] listPanesError="+type(exc).__name__+":"+str(exc)[:200])
-    try:
-        version=subprocess.run(["tmux","-V"],capture_output=True,timeout=1)
-        lines.append("[fixture-diagnostic] tmuxVersion="+version.stdout.decode("utf-8","replace").strip())
-    except Exception as exc:lines.append("[fixture-diagnostic] tmuxVersionError="+type(exc).__name__+":"+str(exc)[:120])
+    # 到期只打印已收集事实：不再发 list-panes，也不再发 tmux -V，超时路径的追加查询数为 0。
+    lines.append("[fixture-diagnostic] queriesAfterDeadline=0")
+    lines.append("[fixture-diagnostic] tmuxVersion(cachedAtStartup)="+TMUX_VERSION)
     sys.stderr.write(chr(10).join(lines)+chr(10))
     sys.stderr.flush()
 def job(index,case="slow"):
@@ -117,13 +161,14 @@ def job(index,case="slow"):
         planFile="experiments/plans/中文 plan.yaml",planRevision="a"*64,codeFingerprint="b"*64,globalJobId="workflow:"+str(index),
         experimentIndex=index,case=case,seed=42,resultPathPolicy="declared",outputDir="work/job"+str(index),
         collectionResultCsv="tmp/result/job"+str(index)+".csv",planJobCount=4,mode="train_test",executionMode="train_test",maxConcurrentGpus=2)
-try:
-    # Deliberately corrupt legacy state: none of the native functions can read it.
-    for name in ("worker_task_snapshot.json","distributed_plan_queue.json","worker_start_claims.json"):
-        (pathlib.Path(root)/name).write_text("corrupt legacy state",encoding="utf-8")
+def fixture_jobs():
     a,b,c=job(0),job(1),job(2,"failure")
     a["codeManifest"] = {"source/module_" + str(i) + ".py": {"size": i, "sha256": hashlib.sha256(str(i).encode()).hexdigest()} for i in range(180)}
     a["distributedResults"] = {"label": "中文 'quoted' $literal \\ value\n" * 12}
+    return a,b,c
+
+def recovery_case():
+    a,b,c=fixture_jobs()
     namespace["task_queue_rpc"](root,"worker","accept",a,ensure=True)
     assert next(row for row in namespace["task_inventory"](root) if row["commandId"] == a["commandId"])["codeManifest"] == a["codeManifest"]
     assert next(row for row in namespace["task_inventory"](root) if row["commandId"] == a["commandId"])["distributedResults"] == a["distributedResults"]
@@ -152,12 +197,24 @@ try:
     assert namespace["task_queue_endpoint"](root,"worker")["epoch"]!=epoch
     stopped=namespace["task_stop"](root,{"targetCommandId":c["commandId"],"projectId":"project","workflowId":"workflow"},"worker")
     assert stopped["stoppedTasks"][0]["paneClosed"]
-    # tmux can expose pane_dead before publishing pane_dead_status. Observe a
-    # settled exit before asserting the result; do not race that native update.
-    wait_for(lambda: all(row["dead"] and row["exitCode"] is not None for row in (LAST_OBS["rows"] or [])),
+    # Only the pane death is awaited here: a live tmux build can leave
+    # pane_dead_status unpublished for the whole 5 second budget, and production
+    # completion for that case is defined by verified artifacts, not by a number.
+    # So completion is asserted on the real task_query observation below; a real
+    # non-zero exit code would still fail there, and none is claimed when absent.
+    wait_for(lambda: all(any(r["commandId"]==item["commandId"] and r["dead"] for r in (LAST_OBS["rows"] or [])) for item in (a,b)),
         "settled-exit-before-query",lambda: namespace["task_inventory"](root))
-    observed=namespace["task_query"](root,[a,b])
-    assert all(row["status"]=="completed" for row in observed["tasks"]),observed
+    observed=namespace["task_query"](root,[a,b])["tasks"]
+    assert observed,observed
+    completed={row["commandId"]:row for row in observed if row["commandId"] in (a["commandId"],b["commandId"])}
+    assert set(completed)=={a["commandId"],b["commandId"]},observed
+    for required in (a,b):
+        row=completed[required["commandId"]]
+        manifest=row["observation"]["result"]
+        assert manifest and manifest["identityMatches"] and manifest["verified"] and manifest["artifactsComplete"],row
+        assert row["status"]=="completed",row
+        # An observed exit code must be zero; an unobserved one is unknown, not proven zero.
+        assert row["exitCode"] in (None,0),row
     # Some live tmux builds return an empty status for retained dead panes.
     # Keep the real inventory/windows/manifests; omit only the unavailable field.
     real_tmux=namespace["task_tmux"]
@@ -167,7 +224,7 @@ try:
             lines=[]
             for line in text.splitlines():
                 fields=line.split("\t")
-                if len(fields)==9 and fields[3]=="1": fields[4]=""
+                if len(fields) in (9,10) and fields[3]=="1": fields[4]=""
                 lines.append("\t".join(fields))
             return "\n".join(lines)
         return text
@@ -207,12 +264,33 @@ try:
     except RuntimeError as exc:
         assert "TASK_ALREADY_ACCEPTED_WINDOW_CLOSED" in str(exc)
     assert namespace["task_query"](root,[a,b])["tasks"][-1]["status"]=="completed"
+    return a,b
+
+def failure_case(a=None,b=None):
+    if a is None:
+        a,b,_=fixture_jobs()
+        for item in (a,b):
+            namespace["task_queue_rpc"](root,"worker","accept",item,ensure=True)
+        wait_for(lambda:all(any(row["commandId"]==item["commandId"] and row["dead"] for row in (LAST_OBS["rows"] or [])) for item in (a,b)),
+            "failure-world-completed-fixtures",lambda:namespace["task_inventory"](root))
+    control=namespace["task_queue_session"](root,"worker")+":queue"
     failure=job(3,"failure")
     namespace["task_queue_rpc"](root,"worker","accept",failure,ensure=True)
-    wait_for(lambda: any(r["commandId"]==failure["commandId"] and r["dead"] for r in (LAST_OBS["rows"] or [])),
-        "failed-task-dead",lambda: namespace["task_inventory"](root))
-    failed=next(row for row in namespace["task_query"](root,[failure])["tasks"] if row["commandId"]==failure["commandId"])
+    # One real observation per poll, and that same observation is asserted: the
+    # pane must be dead and carry a real integer native exit code. No second query
+    # window, no fallback from the scripted case, file, phase or manifest; if the
+    # platform never yields the code, the 5 second budget expires and fails here.
+    def settled_failure():
+        for row in (LAST_OBS["rows"] or []):
+            observed=(((row or {}).get("observation") or {}).get("tmux") or {})
+            if (row.get("commandId")==failure["commandId"] and row.get("projectId")==failure["projectId"]
+                    and row.get("workerId")==failure["workerId"] and observed.get("dead") is True
+                    and isinstance(observed.get("exitCode"),int)):
+                return row
+        return None
+    failed=wait_for(settled_failure,"failed-task-settled-exit",lambda: namespace["task_query"](root,[failure])["tasks"])
     assert failed["status"]=="failed" and failed["exitCode"]==7,failed
+    assert failed["observation"]["tmux"]["exitCode"]==failed["exitCode"],failed
     declarations=[dict(index=item["experimentIndex"],case=item["case"],seed=item["seed"],mode=item["mode"],output_dir=item["outputDir"],result_csv=item["collectionResultCsv"]) for item in (a,b,failure)]
     assert [item["completed"] for item in namespace["task_declared_results"](root,declarations)]==[True,True,False]
     option = namespace["task_option"]
@@ -262,6 +340,16 @@ try:
         "rerun-dead-with-exit",lambda: namespace["task_inventory"](root))
     rerun_observed=next(row for row in namespace["task_query"](root,[rerun])["tasks"] if row["commandId"]==rerun["commandId"])
     assert rerun_observed["status"]=="completed", rerun_observed
+
+try:
+    # Deliberately corrupt legacy state: none of the native functions can read it.
+    for name in ("worker_task_snapshot.json","distributed_plan_queue.json","worker_start_claims.json"):
+        (pathlib.Path(root)/name).write_text("corrupt legacy state",encoding="utf-8")
+    scenario=sys.argv[2] if len(sys.argv)>2 else "all"
+    if scenario=="recovery": recovery_case()
+    elif scenario=="failure": failure_case()
+    elif scenario=="all": failure_case(*recovery_case())
+    else: raise ValueError("unknown private fixture scenario")
     print(json.dumps(dict(ok=True,realTmux=True,callbacks=0,stateFilesRead=0)))
 finally:
     # This is the fixture's newly created server under its private TMUX_TMPDIR only.

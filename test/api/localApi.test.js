@@ -112,6 +112,10 @@ test("SimpleExperiment local API requires bearer auth and handles invalid RPC", 
     assert.equal(health.status, 401);
     const unknown = await rpc(f.server.port, f.token, "unknown");
     assert.equal(unknown.body.error.code, -32601);
+    for (const method of ["toString", "constructor", "__defineGetter__"]) {
+      const inherited = await rpc(f.server.port, f.token, method);
+      assert.equal(inherited.body.error.code, -32601);
+    }
     const invalid = await request(f.server.port, {
       method: "POST",
       path: "/api/v1/rpc",
@@ -642,7 +646,7 @@ test("SimpleExperiment parameterized onboarding uses one structured confirmation
     assert.match(extensionSource, new RegExp(`"${method.replace(/\./g, "\\.")}": async`), `missing API method ${method}`);
   }
   assert.match(extensionSource, /enabledServers: targets\.filter\(\(target\) => target\.enabled !== false\)/);
-  assert.match(extensionSource, /xshellSessions: params\.applyXshell === false \? \[\] : targets\.map/);
+  assert.match(extensionSource, /xshellSessions: params\.applyXshell === true \? targets\.map/);
   assert.match(extensionSource, /remoteRuntime: params\.deployRuntime === false \? \[\] : targets\.map/);
   assert.match(extensionSource, /preview: \{\s*operation: "startAllConnections",\s*topology/s);
   assert.match(extensionSource, /ports,\s*remoteRoots:/);

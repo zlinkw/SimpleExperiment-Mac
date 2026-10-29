@@ -132,7 +132,8 @@ export class PlanRunHost {
     body.planFile = planFile;
     const sourcePlan = { ...plan, projectId: plan?.projectId || canonicalProjectId(this.root), planFile: body.planFile,
       revision: body.planRevision, codeFingerprint: plan?.codeFingerprint || h.lastCodeSyncState?.fingerprint };
-    const executionSource = body.executionSource || await resolvePlanExecutionSource(h, sourcePlan);
+    const sourceSignal = h.distributedSubmissionAborts?.get(body.submissionOperationIdLocal)?.signal;
+    const executionSource = body.executionSource || await resolvePlanExecutionSource(h, sourcePlan, sourceSignal);
     if (executionSource) { await verifyLocalPlanSource(this.root, executionSource, h.projectFileObservationIndex?.()); body.executionSource = executionSource; }
     const expectedFingerprint = executionSource?.digest || h.lastCodeSyncState?.fingerprint || "";
     body.runReplacement ||= {};
@@ -185,7 +186,9 @@ export class PlanRunHost {
       service: cleanup.service, execute: (id: string) => cleanup.execute(id),
       verify: (preview: any) => cleanup.service.assertIsolatedSourcesAbsent(preview),
       // r87 块4：隔离完成即派发；后台清理只在 rerun_all+回执齐备时被 fire-and-forget 触发，失败不进派发链。
-      autoDeleteIsolated: (id: string) => cleanup.autoDeleteIsolated(id),
+      prepareEmptyParents: (preview: any) => cleanup.service.prepareEmptyParentCleanup(preview),
+      confirmEmptyParents: (previews: any[], phase: number) => cleanup.service.confirmEmptyParentCleanup(previews, phase),
+      autoDeleteIsolated: (id: string, parents: any) => cleanup.autoDeleteIsolated(id, parents),
       ask: (payload: any) => h.askRunConfirmation(payload, body.submissionOperationIdLocal),
       save: () => this.save(body),
       assertCurrent,

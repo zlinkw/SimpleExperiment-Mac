@@ -20,8 +20,6 @@ test("first-run Agent preparation confirms once and preserves operation order", 
   const sync = flow.indexOf('syncXshellConfigBeforeNetwork("prepare agents for first run", { postState: false })');
   const preflight = flow.indexOf("currentAgentPreparationBlockers()");
   const confirm = flow.indexOf("确认准备并启动");
-  const write = flow.indexOf("writeXshellAgentStartupCommands(false, false)");
-  const blocked = flow.indexOf("Agent 自启动命令未就绪");
   const profiles = flow.indexOf("writeSftpManagerServerProfiles(");
   const pathConfirm = flow.indexOf("confirmRemoteWriteTargets");
   const deploy = flow.indexOf("deployLatestAgentRuntime(false, true, [], true,");
@@ -31,15 +29,14 @@ test("first-run Agent preparation confirms once and preserves operation order", 
   assert.ok(sync >= 0 && sync < preflight);
   assert.ok(preflight < confirm);
   assert.ok(preflight < pathConfirm && pathConfirm < confirm);
-  assert.ok(confirm < profiles && profiles < write);
-  assert.ok(write < blocked);
-  assert.ok(blocked < deploy);
+  assert.ok(confirm < profiles && profiles < deploy);
+  assert.doesNotMatch(flow, /writeXshellAgentStartupCommands|launchUniqueXshellSessions|launchXshellSavedSession/);
   assert.ok(deploy < launch);
   assert.ok(launch < detect);
   assert.match(flow, /withProgress\(\{ location: vscode\.ProgressLocation\.Notification, title: "准备 Agent"/);
   assert.doesNotMatch(flow, /await sleep\(3000\)|await sleep\(2000\)/);
   assert.match(extension, /const AGENT_STARTUP_BLOCKED_SKIP_REASONS = new Set\(\["non_simple_remote_command", "different_simple_agent_session"\]\)/);
-  assert.match(flow, /AGENT_STARTUP_BLOCKED_SKIP_REASONS\??\.has\(item\.skippedReason\)/);
+  assert.match(flow, /startAllXshellConnections\(false, false\)/);
   assert.doesNotMatch(flow, /\["non_simple_remote_command", "different_simple_agent_session"\]\.includes/);
   assert.match(flow, /tunnelTestCompletion\(this\.setupConfig, this\.lastProbe, this\.lastHealth, this\.lastWorkerProbes, false\)/);
   assert.match(flow, /reportStage: message => progress\.report\(\{ message \}\)/);
@@ -102,7 +99,7 @@ test("quick setup and main UI expose preparation while connection keeps literal 
   assert.match(extension, /async quickSetup\(showAgentCompletion = true\)/);
   assert.match(extension, /async writeXshellAgentStartupCommands\(showMessage = true, requireConfirm = true, serverIds = \[\]\)/);
   assert.match(extension, /async startAllXshellConnections\(requireConfirm = true, scheduleAutoTest = true, serverIds = \[\]\)/);
-  assert.equal((extension.match(/this\.schedulePostLaunchAutoTest\(\)/g) || []).length, 2);
+  assert.equal((extension.match(/this\.schedulePostLaunchAutoTest\(\)/g) || []).length, 1);
   assert.doesNotMatch(extension, /setTimeout\(\(\) => void this\.testTunnel\(true\), 2500\)/);
   assert.match(extension, /private postLaunchAutoTestTimer\?: ReturnType<typeof setTimeout>/);
   assert.match(extension, /private postLaunchAutoTestGeneration = 0/);

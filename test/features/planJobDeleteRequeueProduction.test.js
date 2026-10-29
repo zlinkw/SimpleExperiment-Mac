@@ -30,7 +30,7 @@ const ast=ts.createSourceFile('host.ts',legacySource,ts.ScriptTarget.Latest,true
 function legacyMethods(names,globals={}){let cls;function visit(n){if(ts.isClassDeclaration(n)&&n.name?.text==='RealtimeTunnelPanelProvider')cls=n;ts.forEachChild(n,visit)}visit(ast);
   const members=cls.members.filter(n=>names.includes(n.name?.getText(ast)));assert.equal(members.length,names.length,names.join(','));
   return vm.runInNewContext(ts.transpileModule('class Host{'+members.map(n=>n.getText(ast)).join('\n')+'};Host',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
-    {AbortController,errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
+    {AbortController,DispatchHandoffGate:require("../../dist/features/DispatchHandoffGate.js"),errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
      DistributedPlanQueue:Q,fs:fsPromises,path,atomicWriteText,...globals});}
 const QueueHost=legacyMethods(['saveDistributedQueue','withQueueWriteResource']);
 const hostTemplate=fs.readFileSync(path.resolve(__dirname,'../../dist/extension/PlanCleanupHost.js'),'utf8');
@@ -134,7 +134,7 @@ function world(options={}){
     if(method==='files.cleanup.execute'){
       assert.ok(record.confirmations,'执行前必须已有确认相位');assert.equal(record.action,'delete','本流只允许永久删除');
       const target=record.targets[params.index];
-      await fsPromises.rm(abs(record.node,target.relativePath),{recursive:true,force:true});
+      if(await statReal(abs(record.node,target.relativePath))) require("../_helpers/retainFixtureTarget.cjs")(record.node.root,abs(record.node,target.relativePath),target.type);
       stats.deletes+=1;stats.removes.push(record.node.id+':'+target.relativePath);
       return {ok:true,receipt:{source:'active_query',verifiedBy:'path_absence',contentFingerprint:target.contentFingerprint}};}
     throw Error('ADAPTER_REFUSES_'+method);};
@@ -257,6 +257,19 @@ test('外置 CSV 仍存在：目录缺失被核验救回，但 CSV present 必�
   assert.equal(w.stats.deletes,0);assert.deepEqual(w.dialogs,[]);
   assert.equal(w.jobRow().commandId,'cmd-old');
   assert.ok(w.existsRemote('experiments/results/a0.csv'),'外置结果文件保留待审');
+});
+
+test('automatic isolation recheck uses current windows plus all physical paths, never deleting or borrowing sibling completion',async()=>{
+ const w=await world({externalCsv:true,onRemote:false}),s=await w.build();
+ s.adapter.host.readWorkerTaskSnapshot=async()=>({queryComplete:true,capabilities:{taskLifecycle:2},tasks:[],cleanupExecutors:[]});
+ const result=await s.adapter.inspectPendingOutputTargets({outputDir:'work_dirs/a0',collectionResultCsv:'experiments/results/a0.csv'});
+ assert.equal(result.state,'present','an external result file must require explicit review');
+ assert.equal(w.stats.deletes,0);
+ s.adapter.host.readWorkerTaskSnapshot=async()=>({queryComplete:true,capabilities:{taskLifecycle:2},tasks:[],cleanupExecutors:[{relativePath:'work_dirs/a0'}]});
+ const busy=await s.adapter.inspectPendingOutputTargets({outputDir:'work_dirs/a0',collectionResultCsv:'experiments/results/a0.csv'});
+ assert.equal(busy.state,'unknown');assert.match(busy.detail,/清理执行器/);assert.equal(w.stats.deletes,0);
+ s.adapter.host.readWorkerTaskSnapshot=async()=>({queryComplete:false,tasks:[],cleanupExecutors:[]});
+ assert.equal((await s.adapter.inspectPendingOutputTargets({outputDir:'work_dirs/a0'})).state,'unknown');
 });
 test('外置 CSV 核验未知（后端应答错误）：按缺项拒绝，不得把 error 当不存在',async()=>{
   const w=await world({externalCsv:true,onRemote:false,inspectErrorFor:'w1\0experiments/results/a0.csv'});await w.build();

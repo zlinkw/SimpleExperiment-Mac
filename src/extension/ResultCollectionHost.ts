@@ -1,8 +1,9 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { collectFreshResults, freshResultTables, resultDigest, resultPath, type ResultPlan, type ResultSource } from "../results/FreshResults";
+import { collectFreshResults, freshResultTables, resultDigest, resultPath, transientResultReadError, type ResultPlan, type ResultSource } from "../results/FreshResults";
 import { publishLatestResult } from "../results/LatestResultExport";
 import { newestJobOutputs } from "../features/LatestJobArtifacts";
+import { retryRequestSignal } from "../core/SafeRequestRetry";
 
 const hosts = new WeakMap<object, ResultCollectionHost>();
 export function resultCollectionHost(host: any): ResultCollectionHost {
@@ -73,7 +74,16 @@ export class ResultCollectionHost {
   private async collect(signal?: AbortSignal) {
     const h = this.h, context = h.captureProjectContext(), root = context.root;
     if (!root) throw Error("请先打开当前实验项目。");
-    const targets = h.workerCodeSyncTargets();
+    // Sync destinations carry transport identity. The selected task environment
+    // belongs to execution targets (including the global Conda fallback).
+    const currentTargets = () => {
+      const execution = h.workerActionTargets?.() || [];
+      return h.workerCodeSyncTargets().map((worker: any) => {
+        const task = execution.find((row: any) => row.id === worker.id);
+        return {...worker,condaEnv:String(task?.condaEnv ?? task?.conda_env ?? worker.condaEnv ?? "")};
+      });
+    };
+    const targets = currentTargets();
     const projectKey = (value: string) => {
       const normalized = String(value || "").replaceAll("\\", "/");
       return process.platform === "win32" ? normalized.toLowerCase() : normalized;
@@ -84,11 +94,31 @@ export class ResultCollectionHost {
       index: job.index, case: job.case, seed: job.seed, outputDir: job.outputDir, collectionResultCsv: job.collectionResultCsv,
       commandId: job.commandId, workerId: job.workerId }));
     let owners: string | undefined;
-    const key = () => JSON.stringify(h.workerCodeSyncTargets().map((row: any) => [row.id, row.host, row.user, row.port, row.remotePath, row.condaEnv]));
+    const key = () => JSON.stringify(currentTargets().map((row: any) => [row.id, row.host, row.user, row.port, row.remotePath, row.condaEnv]));
     const binding = key();
-    const current = () => !signal?.aborted && h.projectContextIsCurrent(context) && key() === binding
+    const signals = [signal, context.signal, retryRequestSignal()].filter(Boolean) as AbortSignal[];
+    const requestSignal = signals.length ? AbortSignal.any(signals) : undefined;
+    const current = () => !requestSignal?.aborted && h.projectContextIsCurrent(context) && key() === binding
       && (owners === undefined || owners === JSON.stringify(runBindings()));
     const check = () => { if (!current()) throw Error("结果查询已取消或项目/服务器配置已变化。"); };
+    const retryRead = async <T>(read: () => Promise<T>, attempts = 3): Promise<T> => {
+      for (let attempt = 0; ; attempt++) {
+        check();
+        try { const result = await read(); check(); return result; }
+        catch (error) {
+          check();
+          if (attempt + 1 >= attempts || !transientResultReadError(error)) throw error;
+          await new Promise<void>((resolve, reject) => {
+            const cancel = () => { clearTimeout(timer); reject(requestSignal?.reason || Error("结果查询已取消")); };
+            const timer = setTimeout(() => { requestSignal?.removeEventListener("abort", cancel); resolve(); }, attempt ? 1500 : 500);
+            requestSignal?.addEventListener("abort", cancel, { once: true });
+            if (requestSignal?.aborted) cancel();
+          });
+        }
+      }
+    };
+    const readTasks = (workerId: string, options: any, budget: number, attempts = 3) => retryRead<any>(() => h.client.getWorkerTasks(workerId,
+      { ...options, signal: requestSignal ? AbortSignal.any([requestSignal, AbortSignal.timeout(budget)]) : AbortSignal.timeout(budget) }), attempts);
     const started = Date.now(), timing: Record<string, number> = {};
     const inputs = await h.currentResultPlanInputs(); check();
     timing.localPlansMs = Date.now() - started;
@@ -97,20 +127,31 @@ export class ResultCollectionHost {
     // A transport failure belongs to this refresh, not to each of its PLANs.
     // Do not quarantine declaration mismatches: another PLAN on this Worker may be valid.
     const unavailable = new Map<string, string>();
+    const discoveryReady = new Set<string>();
+    const discoveryWarmups = new Map<string, Promise<void>>();
     const discover = async (plan: any): Promise<ResultPlan | undefined> => {
       let jobs: any[] | undefined;
       for (const worker of targets) {
+        // Establish one successful read before fanning out PLAN queries on an
+        // unproven connection. Concurrent callers share its bounded recovery.
+        const warmup = discoveryWarmups.get(worker.id);
+        if (warmup) { await warmup; check(); }
         if (unavailable.has(worker.id)) continue;
         try {
           let response: any;
-          try { response = await h.client.getWorkerTasks(worker.id, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
-            discovery: { planFile: plan.planFile, condaEnv: worker.condaEnv || "", collect: true } }); }
+          let finishWarmup: (() => void) | undefined;
+          if (!discoveryReady.has(worker.id)) discoveryWarmups.set(worker.id, new Promise(resolve => { finishWarmup = resolve; }));
+          try {
+            response = await readTasks(worker.id, {
+              discovery: { planFile: plan.planFile, condaEnv: worker.condaEnv || "", collect: true } }, 15000);
+            discoveryReady.add(worker.id);
+          }
           catch (error: any) {
             const message = String(error.message || error);
-            if (error.name === "TimeoutError" || /fetch failed|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ENOTFOUND|ETIMEDOUT|socket hang up|network error/i.test(message))
+            if (transientResultReadError(error))
               unavailable.set(worker.id, message);
             throw error;
-          }
+          } finally { if (finishWarmup) { discoveryWarmups.delete(worker.id); finishWarmup(); } }
           check();
           if (response.queryComplete !== true || response.capabilities?.resultCollection !== 1) throw Error("请更新此 Worker 的 Agent/Scheduler，以支持直接结果读取");
           if (!Array.isArray(response.declaredJobs) || !response.declaredJobs.length || response.declaredJobs.some((job: any) => job.planHash !== plan.revision))
@@ -140,8 +181,8 @@ export class ResultCollectionHost {
       const values = [];
       try {
         for (let offset = 0; offset < Math.max(1, declarations.length); offset += 500) {
-          const value = await h.client.getWorkerTasks(worker.id, { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
-            queries: [], declarations: declarations.slice(offset, offset + 500) }); check();
+          const value = await readTasks(worker.id, {
+            queries: [], declarations: declarations.slice(offset, offset + 500) }, 30000, unavailable.has(worker.id) ? 1 : 3); check();
           if (value.queryComplete !== true || value.capabilities?.resultCollection !== 1) throw Error(value.error || "请更新 Agent/Scheduler：直接结果查询不可用");
           values.push(value);
         }
@@ -150,7 +191,10 @@ export class ResultCollectionHost {
     })); check();
     timing.observationsMs = Date.now() - observationStarted;
     const receiveStarted = Date.now(); let memoryRequests = 0, memoryFiles = 0;
+    const readUnavailable = new Map<string, any>();
     const receive = async (workerId: string, files: ResultSource[]) => {
+      check();
+      if (readUnavailable.has(workerId)) throw readUnavailable.get(workerId);
       const capability = await h.simpleSftpCapability("sync.downloadMappedPaths"); check();
       if (capability.methodOptions?.["sync.downloadMappedPaths"]?.memoryOnly !== true
         || capability.methodOptions?.["sync.downloadMappedPaths"]?.memoryWrapperResults !== true) throw Error("请更新 SimpleSFTP：需要内存指标读取能力");
@@ -163,10 +207,17 @@ export class ResultCollectionHost {
         else batches.push([file]);
       }
       for (const batch of batches) {
-        memoryRequests++; memoryFiles += batch.length;
-        const response = await h.simpleSftpApiCall("sync.downloadMappedPaths", { server, localPath: root,
+        let response: any;
+        try { response = await retryRead(async () => {
+          memoryRequests++; memoryFiles += batch.length;
+          return h.simpleSftpApiCall("sync.downloadMappedPaths", { server, localPath: root,
           entries: batch.map(file => ({ ...file, localRelativePath: file.remotePath })), memoryOnly: true, metricsOnly: true, wrapperResults: true,
-          maxFileBytes: 4 * 1024 * 1024, maxBatchBytes: 4 * 1024 * 1024, confirm: true, pathConfirmed: true, signal }); check();
+          maxFileBytes: 4 * 1024 * 1024, maxBatchBytes: 4 * 1024 * 1024, confirm: true, pathConfirmed: true, signal: requestSignal });
+        }); } catch (error) {
+          if (transientResultReadError(error)) readUnavailable.set(workerId, error);
+          throw error;
+        }
+        check();
         if (!response?.memoryOnly || response.ok === false || response.entries?.length !== batch.length) throw Error("RESULT_MEMORY_READ_INCOMPLETE");
         for (const entry of response.entries) {
           const file = batch.find(row => row.remotePath === entry.remotePath);
@@ -189,6 +240,9 @@ export class ResultCollectionHost {
       result.jobs.push({ planFile: plan.planFile, index: -1, case: "", seed: 0, outputDir: "", state: "unknown", error: "无法核实当前 PLAN 声明" });
     }
     if (inputs.length && !plans.length) result.querySucceeded = false;
+    // Successful metadata is not a successful result read. Preserve the last
+    // export when every job remains unknown after a failed receive.
+    if (result.jobs.length && result.jobs.every(job => job.state === "unknown")) result.querySucceeded = false;
     for (const plan of inputs) {
       if (resultDigest(await fs.readFile(path.join(root, resultPath(plan.planFile)), "utf8")) !== plan.revision) throw Error("PLAN 已变化，未发布过期结果。");
     }

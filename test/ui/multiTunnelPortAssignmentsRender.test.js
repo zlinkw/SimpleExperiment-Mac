@@ -9,5 +9,6 @@ test("panel html renders tunnel port assignment and conflict sections", () => {
   assert.match(html, /id="tunnelPortConflicts"/);
   assert.match(html, /data-command="configurePorts"/);
   assert.match(html, /data-command="repairPorts"/);
-  assert.match(html, /插件不内置 SSH/);
+  assert.match(html, /后台 SSH/);
+  assert.match(html, /data-command="openXshell"[^>]*>打开终端指引/);
 });

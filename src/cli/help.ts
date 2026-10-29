@@ -68,7 +68,7 @@ export function domainHelp(domain: string): string {
     flow: "Usage: simpleex flow get | update --file flow.json [--json]; fields: step, completed?, blocked?, appliedAt?. completed and blocked cannot both be true.",
     tmux: "Usage: simpleex tmux list --worker ID | capture <explicit-window> --worker ID [--json]; targets use the configured worker endpoint.",
     panel: "Usage: simpleex panel diagnostics [--json]",
-    task: `Usage: simpleex task dispatch --workflow ID --jobs 0,1 --worker ID --gpu 0 --confirm [--stop-running] [--json]
+    task: `Usage: simpleex task dispatch --workflow ID --jobs 0,1 --worker ID --gpu 0|auto --confirm [--stop-running] [--json]
        simpleex task dispatch --remaining (--workflow ID | --all) --confirm [--json]
        simpleex task analyze --workflow ID --index 0 [--json]
        simpleex task analyze --worker ID --command COMMAND_ID --output JOB_OUTPUT_DIR [--json]

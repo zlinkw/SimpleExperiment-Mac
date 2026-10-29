@@ -2,6 +2,18 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const { jobArtifactRetentionKey, jobArtifactRunGeneration, syncScopeStagingIdentity } = require("../../src/features/JobArtifactSyncIdentity.ts");
+test('merged artifact transport has an explicit identity for every real member, independent of member ordering',()=>{
+ const {jobArtifactBatchIdentity}=require('../../src/features/JobArtifactSyncIdentity.ts');
+ const a={retentionKey:jobArtifactRetentionKey('plans/a.yaml',0,'a',42),planId:'run-a',commandId:'command-a',files:{'work/a/model':'a'.repeat(64)}},
+  b={retentionKey:jobArtifactRetentionKey('plans/b.yaml',1,'b',43),planId:'run-b',commandId:'command-b',files:{'work/b/model':'b'.repeat(64)}};
+ assert.deepEqual(jobArtifactBatchIdentity([a]),{retentionKey:a.retentionKey,generation:jobArtifactRunGeneration(a.planId,a.commandId,a.files)});
+ const shared=jobArtifactBatchIdentity([a,b]);assert.deepEqual(shared,jobArtifactBatchIdentity([b,a]));
+ assert.notEqual(shared.retentionKey,a.retentionKey);assert.notEqual(shared.retentionKey,b.retentionKey);
+ for(const changed of [{...b,commandId:'new-command'},{...b,planId:'new-run'},{...b,files:{'work/b/model':'c'.repeat(64)}},{...b,files:{'work/b/other':'b'.repeat(64)}}])
+  assert.notEqual(shared.generation,jobArtifactBatchIdentity([a,changed]).generation);
+ assert.throws(()=>jobArtifactBatchIdentity([a,{...b,files:{'work/a/model':'b'.repeat(64)}}]),/CONFLICT/);
+ assert.throws(()=>jobArtifactBatchIdentity([{...a,files:{'work/a/model':''}}]),/HASH/);
+});
 
 test("the completed-job retentionKey is the exact five-tuple the dedicated plan chain already uses", () => {
   const planFile = "experiments/plans/comparison/qmf.yaml", index = 2, caseName = "qmf_bus_p100", seed = 43;

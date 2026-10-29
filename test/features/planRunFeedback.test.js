@@ -41,16 +41,18 @@ test("sync scope tab opens before the unsaved full-tree walk", () => {
   assert.match(scope, /function applyScopeSelected/);
 });
 
-test("github completion names the pre-transfer stages and still uploads only changed files", () => {
+test("github and Worker progress remain independent and still upload only changed files", () => {
   const publish = extension.slice(extension.indexOf("async publishToGitHub("), extension.indexOf("async overwriteFromGitHub("));
-  assert.match(publish, /GitHub 已完成，正在准备 Worker 上传…/);
+  assert.match(publish, /本机提交已确定，GitHub 推送与 Worker 上传并行进行/);
+  assert.match(publish, /Promise\.all\(\[gitBranch, workerBranch\]\)/);
+  assert.match(publish, /progressReport: text => \{ branchState\.workers = text; merged\(\); \}/);
   assert.doesNotMatch(publish, /开始上传到 Worker/);
   const upload = extension.slice(extension.indexOf("async uploadProjectToWorkers("), extension.indexOf("async distributeCodeToWorkers("));
   assert.ok(upload.indexOf("正在准备 SFTP 目标") < upload.indexOf("开始核对本地代码清单") && upload.indexOf("开始核对本地代码清单") < upload.indexOf("syncManualWorkerCode"));
   const manual = extension.slice(extension.indexOf("async syncManualWorkerCode("), extension.indexOf("async deployLatestAgentRuntime("));
   assert.match(manual, /syncCodeTargets\(this\.workerCodeSyncTargets\(\), "workers"/);
   assert.match(manual, /allowLockedWorkerSkip: true/);
-  assert.match(publish, /report\(upload\.message, 0\)/);
+  assert.match(publish, /report\(workerResult\.upload\.message, 0\)/);
   const sync = extension.slice(extension.indexOf("async syncCodeTargets("), extension.indexOf("async inspectCodeSyncTarget("));
   const localAt = sync.indexOf("正在建立本地代码清单并核对文件哈希");
   const remoteAt = sync.indexOf("正在比对");

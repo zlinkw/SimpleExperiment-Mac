@@ -127,8 +127,8 @@ export class ReleaseClient {
     if (!component.checksum) throw new Error(`${component.label} 缺少可信 SHA-256。`);
     assertUpdateUrl(component.checksum.url, component.repo);
     const text = (await this.request(component.checksum.url, 4096, true)).toString("utf8").trim();
-    const match = /^([a-f0-9]{64})(?:\s+\*?([^\r\n]+))?$/i.exec(text);
-    if (!match || match[2] && match[2] !== component.vsix?.name) throw new Error("更新 SHA-256 清单未绑定该精确资产。");
+    const match = /^([a-f0-9]{64})\s+\*?([^\r\n]+)$/i.exec(text);
+    if (!match || match[2] !== component.vsix?.name) throw new Error("更新 SHA-256 清单未绑定该精确资产。");
     return match[1].toLowerCase();
   }
 }

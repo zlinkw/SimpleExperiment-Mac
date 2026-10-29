@@ -190,6 +190,7 @@ test("plan save checks project context before and after each file operation", as
       if (name === boundary) current = false;
     };
     const context = {
+    DispatchHandoffGate: require("../../dist/features/DispatchHandoffGate.js"),
       path, workspaceRoot: () => path.resolve("workspace"),
       fs: {
         mkdir: async () => step("mkdir"),
@@ -251,7 +252,10 @@ test("batch Plan execution keeps project, SFTP root, and Agent client authority"
   assert.match(sync, /const projectContext = options\.projectContext/);
   assert.match(sync, /const root = projectContext\?\.root \|\| workspaceRoot\(\)/);
   assert.match(sync, /confirmRemoteWriteTargets\([\s\S]{0,500}projectContext\)/);
-  assert.match(sync, /if \(isUiCommandCancelled\(error\)\)\s*throw error/);
+  // 0.5.419：取消必须仍会抛出，但只在全部已发起分支收敛之后抛（不把 finally 当作写入已结束）。
+  // 取消分支必须收集取消而不是直接抛出（中间可能插入“未知写入保留”的真实处理，仍必须收敛到同一个 push）。
+  assert.match(sync, /if \(isUiCommandCancelled\(error\)\) \{[\s\S]{0,700}?cancelledBranches\.push\(error\);/);
+  assert.match(sync, /if \(cancelledBranches\.length\)\s*\n?\s*throw cancelledBranches\[0\];/);
   assert.match(sync, /markProjectOnboardingComplete\(projectContext\)/);
   assert.ok([...preflight.matchAll(/assertActionAuthorityCurrent\(authority/g)].length >= 5);
   assert.match(preflight, /waitForOperationTerminalResult\("validate-plan"[\s\S]{0,160}authority\)/);

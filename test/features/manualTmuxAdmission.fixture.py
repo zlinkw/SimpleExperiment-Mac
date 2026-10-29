@@ -26,6 +26,12 @@ try:
         ' if not pathlib.Path(root,"release-manual-probes").exists(): sys.exit(9)\n'
         'else: time.sleep(.1)')
     probe.write_text(probe_source, encoding='utf-8')
+    install_fixture_budget_observer(2048)
+    pathlib.Path(root, 'fixture-budget-calibrated').touch()
+    calibration = dict(manual_a, commandId='calibration-0', runKey='calibration-0', experimentIndex=0,
+        globalJobId=manual_a['workflowId']+':0', outputDir='work/calibration0', collectionResultCsv='tmp/result/calibration0.csv')
+    namespace['task_queue_rpc'](root, 'worker', 'accept', calibration, ensure=True)
+    wait_for(lambda: any(row['commandId'] == 'calibration-0' and row['dead'] and namespace['task_budget_read'](row).get('ready') for row in namespace['task_inventory'](root)))
     # An uncertain original request may not have reached this Scheduler at all.
     # Cancel its exact identity first: a late accept must remain fenced out.
     uncertain = job(3)

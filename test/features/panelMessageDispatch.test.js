@@ -83,7 +83,8 @@ const factory = new Function("OperationOutcome_1", `
   ${handleMessage}
   ${handleMessageCore}
   ${withUiCommandStatus}
-  return { handleMessage, handleMessageCore, withUiCommandStatus, uiCommandWatchdogMs, postUiCommandStatus };
+  return { handleMessage, handleMessageCore, withUiCommandStatus, uiCommandWatchdogMs, postUiCommandStatus,
+    getSafeCommand, commandNeedsUiStatus, hostOperationLeaseActionForUiCommand };
 `);
 const api = factory(require("../../dist/core/OperationOutcome.js"));
 
@@ -345,4 +346,40 @@ test("webview notices use the native host route only for the current panel docum
   assert.deepEqual(host.calls.lease, []);
   assert.deepEqual(host.calls.statuses, []);
   assert.deepEqual(host.calls.errors, []);
+});
+
+test("low traffic toggle is allowlisted, lease-free, status-free and document-generation gated", async () => {
+  // The command sets are sliced from the compiled production constants, so these
+  // assertions read the real allowlists instead of a copy maintained in the test.
+  assert.match(sliceBetween("const SAFE_WEBVIEW_COMMANDS = new Set([", "const API_INTERNAL_COMMANDS"), /"toggleLowTrafficMode"/,
+    "the webview must be allowed to submit the preference");
+  assert.match(sliceBetween("const COMMANDS_WITHOUT_UI_STATUS = new Set(", "const LOCAL_COMMAND_RELEASES_AFTER_TRIGGER"), /"toggleLowTrafficMode"/,
+    "a local preference write must not occupy the remote uiCommandStatus funnel");
+  assert.doesNotMatch(sliceBetween("const hostOperationUiCommands = new Set([", "function hostOperationLeaseActionForUiCommand"), /"toggleLowTrafficMode"/,
+    "the toggle must not take the single-host-operation lease");
+  assert.doesNotMatch(sliceBetween("const uiActionCommands = new Set([", "const SAFE_WEBVIEW_COMMANDS = new Set(["), /"toggleLowTrafficMode"/,
+    "the toggle is not a worker action command");
+  assert.equal(api.getSafeCommand({ command: "toggleLowTrafficMode" }), "toggleLowTrafficMode");
+  assert.equal(api.commandNeedsUiStatus("toggleLowTrafficMode"), false);
+  // The production helper returns "" (not undefined) for non-lease commands.
+  assert.equal(api.hostOperationLeaseActionForUiCommand("toggleLowTrafficMode"), "");
+
+  const host = createHost();
+  host.calls.lowTraffic = [];
+  Object.assign(host, {
+    handleLowTrafficModeToggle(message) {
+      host.calls.lowTraffic.push(message);
+      return Promise.resolve();
+    },
+  });
+  const toggle = { command: "toggleLowTrafficMode", enabled: true, requestId: "ltm-1", documentGeneration: 4 };
+  await api.handleMessage.call(host, toggle);
+  assert.deepEqual(host.calls.lowTraffic, [toggle]);
+  assert.deepEqual(host.calls.errors, [], "an allowlisted command must not be reported as unknown");
+  assert.deepEqual(host.calls.statuses, [], "no uiCommandStatus notification for a local preference");
+  assert.deepEqual(host.calls.lease, []);
+  assert.deepEqual(host.calls.actions, []);
+
+  await api.handleMessage.call(host, { ...toggle, documentGeneration: 3 });
+  assert.equal(host.calls.lowTraffic.length, 1, "a stale webview document must not change the preference");
 });

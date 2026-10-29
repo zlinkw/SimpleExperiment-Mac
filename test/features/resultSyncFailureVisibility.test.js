@@ -258,7 +258,7 @@ const STAGE_RELATIVE = ".staged-slots/" + STAGE_ID + "/slot-0";
 //   requireExpired:false 成功路径与 true/缺省仍拒的兼容断言。
 const RELEASE_TMP_ROOTS = [];
 process.on("exit", () => {
-  for (const root of RELEASE_TMP_ROOTS) { try { fs.rmSync(root, { recursive: true, force: true }); } catch { /* 尽力清理 */ } }
+  for (const root of RELEASE_TMP_ROOTS) console.log(`[fixture retained] ${root}`);
 });
 function releaseFixture(options = {}) {
   const { capabilityReady = true, warningChoice, liveCandidates, deleteState = "accepted", statusStates, releaseCandidate = true,
@@ -296,7 +296,7 @@ function releaseFixture(options = {}) {
       : { identity: STAGE_ID, generation: STAGE_GEN, status: "committed", createdAt: 1, terminalAt: 2, updatedAt: 3 }), ...(journalInit || {}) },
     writeJournal: () => fs.writeFileSync(journalFile, JSON.stringify(state.journal)),
     setJournal: patch => { Object.assign(state.journal, patch); state.writeJournal(); },
-    removeJournal: () => fs.rmSync(journalFile, { force: true }),
+    removeJournal: () => require("../_helpers/retainFixtureTarget.cjs")(projectRoot, journalFile),
     isolatedApplied: false, isolatedDestination: null, previewLedger: null,
     breakContext: () => { host.projectContextGeneration += 1; },
   };

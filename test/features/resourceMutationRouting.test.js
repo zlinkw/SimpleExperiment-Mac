@@ -9,7 +9,7 @@ test('cross-window queue writes merge fresh disk state and reject duplicate Plan
   const context={DistributedPlanQueue:queueApi,fs,fsNode:syncFs,path,process,crypto,workspaceRoot:()=> 'D:/project',UiCommandRemotePending:class extends Error {},
     StateStore_1:require('../../dist/state/StateStore'),errorMessage:error=>String(error?.message||error),compactSensitiveText:value=>String(value||'').slice(0,240)};
   vm.createContext(context);
-  vm.runInContext('this.operations={'+methods('async withQueueWriteResource(root, work)','async patchDistributedJob(').replace(/}\s+async saveDistributedQueue/,'}, async saveDistributedQueue')+'};',context);
+  vm.runInContext('this.operations={'+methods('async withQueueWriteResource(root, work','async patchDistributedJob(').replace(/}\s+async saveDistributedQueue/,'}, async saveDistributedQueue')+'};',context);
   const host=id=>({ ...context.operations,hostOperationLease:new HostOperationLeaseManager({leasePath:path.join(root,'legacy.json'),windowId:id}),
     context:{globalStorageUri:{fsPath:root}},distributedQueueWritePromise:Promise.resolve(),distributedQueueRoot:'D:/project',distributedQueueCache:queueApi.emptyDistributedQueue(),
     distributedQueueGeneration:0,detachStaleDistributedTick:()=>undefined });

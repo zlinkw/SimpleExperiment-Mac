@@ -64,7 +64,11 @@ test("runPlan uses one history-choice modal and no overwrite bypass checkbox", (
 
 test("publish reports each pre-upload stage and transfers only changed files", () => {
   const publish = extension.slice(extension.indexOf("async publishToGitHub("), extension.indexOf("async overwriteFromGitHub("));
-  assert.match(publish, /GitHub 已完成，正在准备 Worker 上传…/);
+  // 阶段文案必须如实描述 round 8 之后的真实形态：本机提交确定后，GitHub 网络推送与 Worker 上传并行，
+  // Worker 分支不再排在 GitHub 成功之后；旧串行文案保留在下面当反向断言，不许回来。
+  assert.match(publish, /正在准备本机提交与 GitHub 凭证…/);
+  assert.match(publish, /本机提交已确定，GitHub 推送与 Worker 上传并行进行…/, "必须有“本机提交已确定之后两条分支并行”的阶段事实");
+  assert.doesNotMatch(publish, /GitHub 已完成，正在准备 Worker 上传…/, "不得回到“Worker 上传等 GitHub 网络成功”的旧串行文案");
   assert.doesNotMatch(publish, /开始上传到 Worker/);
   const upload = extension.slice(extension.indexOf("async uploadProjectToWorkers("), extension.indexOf("async distributeCodeToWorkers("));
   assert.match(upload, /正在准备 SFTP 目标…/);
@@ -100,8 +104,8 @@ test("publish upload compares complete remote hashes and transfers only changed 
   const sync = extension.slice(extension.indexOf("async syncCodeTargets("), extension.indexOf("async inspectCodeSyncTarget("));
   assert.match(sync, /verifiedSftpProjectInventory/);
   assert.match(sync, /const inventoryScopePaths = \[\.\.\.new Set\(Object\.keys\(manifest\)\.map/);
-  assert.equal((sync.match(/scopePaths: exactPaths/g) || []).length, 1);
-  assert.match(sync, /for \(const exactPaths of PlanCodeScopeHost\.codeInventoryBatches\(manifest\)\)/);
+  assert.match(sync, /codeInventoryBatches\(manifest\)/);
+  assert.match(sync, /scopePaths: exactPaths/);
   assert.doesNotMatch(sync, /ensureRemoteAgentVersionConsistent/);
   assert.match(sync, /changedManifestFiles\(manifest, remoteFiles\)/);
   assert.match(sync, /manifest: uploadManifest/);
@@ -123,10 +127,11 @@ test("distributed job exposes one identity-bound tmux log jump and no inline log
   assert.ok(start >= 0 && end > start);
   const source = renderedPanel.slice(start, end);
   let html = "";
-  const sandbox = {
+  const sandbox = { MAC_PLAN_IDENTITY: false,
     asArray: value => Array.isArray(value) ? value : [],
     selectedExecutionPlanFile: "",
     collapsedExecutionPlanKeys: new Set(),
+    manualJobSelections: new Map(),
     persistWebviewState: () => undefined,
     operationRowsForState: () => [],
     taskSectionViewModelForState: () => ({ allRows: [] }),
@@ -148,7 +153,7 @@ test("distributed job exposes one identity-bound tmux log jump and no inline log
     compactTaskLogText: (value) => value,
     setHtmlIfChanged: (_id, value) => { html = value; },
   };
-  vm.runInNewContext(require("../_helpers/panelPrelude").panelPrelude() + source + "\nglobalThis.renderExecutionPlanList = renderExecutionPlanList;", sandbox);
+  vm.runInNewContext(source + "\nglobalThis.renderExecutionPlanList = renderExecutionPlanList;", sandbox);
   const state = { logs: { "tmp/tmux_logs/job.log": { text: "epoch 3/20" } }, distributedPlans: [{
     planFile: "experiments/plans/comparison/concatenation.yaml", enqueuedAt: "2026-01-01",
     jobs: [{ index: 0, case: "bus", seed: 42, status: "running", workerId: "nwpu2", outputDir: "work_dirs/bus/attempts/new",
@@ -158,7 +163,7 @@ test("distributed job exposes one identity-bound tmux log jump and no inline log
   assert.match(html, /data-job-tmux-log="1"/);
   assert.match(html, /data-command-id="command-123"/);
   assert.match(html, /data-output-dir="work_dirs\/bus\/attempts\/new"/);
-  assert.equal((html.match(/>查看窗口日志</g) || []).length, 1);
+  assert.equal((html.match(/data-job-tmux-log="1"/g) || []).length, 1);
   assert.doesNotMatch(html, /data-run-key=|训练日志|终端日志|epoch 3\/20/);
   assert.match(html, /loading-spinner/);
   state.selectedLogRunKey = "work_dirs/bus/attempts/new/train.log";

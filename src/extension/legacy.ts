@@ -13,6 +13,8 @@ import { runAllPlans, runSelectedPlans } from "./SelectedPlanBatchHost";
 import { attachIsolatedCleanup, markPlanTerminal, promoteDispatchedPlans } from "../features/PlanIsolatedBatchLedger";
 import { planSubmissionBatchFor } from "../features/PlanSubmissionBatch";
 import * as PlanCodeScopeHost from "./PlanCodeScopeHost";
+import { currentWindowSftpDiscovery, sameProjectRoot } from "../core/SimpleSftpWindow";
+import { readProjectConnectionValue, saveProjectConnectionValues } from "../core/ProjectConnectionProfiles";
 import * as fs from "fs/promises";
 import * as fsNode from "fs";
 import * as path from "path";
@@ -28,11 +30,12 @@ import { runProjectStaticCheck } from "../features/ProjectStaticCheck";
 import * as TmuxWindowIdentity from "../features/TmuxWindowIdentity";
 import * as GpuMemoryScheduling from "../features/GpuMemoryScheduling";
 import * as GpuQuotaScheduling from "../features/GpuQuotaScheduling";
+import * as GpuMemoryBudget from "../features/GpuMemoryBudget";
 import { syncGpuQuotaPolicies } from "./GpuQuotaPolicyHost";
 import { closeGpuTmuxSession, closeTmuxSession, manageTmuxSession } from "./GpuTmuxClose";
 import { callSftpWithProgress } from "../core/SimpleSftpProgressWait";
 import { deleteConfirmedScopeCopy, previewConfirmedScopeDeletion, completeConfirmedScopeDeletion, type ConfirmedScopeBatch, type ConfirmedScopeOutcome } from "../features/SyncScopeDelete";
-import { artifactStageBlockFromError, jobArtifactRunGeneration, stagedSlotReleaseEvidenceReady, syncScopeStagingIdentity, type JobArtifactStageBlock } from "../features/JobArtifactSyncIdentity";
+import { artifactStageBlockFromError, jobArtifactRunGeneration, jobArtifactBatchIdentity, stagedSlotReleaseEvidenceReady, syncScopeStagingIdentity, type JobArtifactStageBlock } from "../features/JobArtifactSyncIdentity";
 import { SafeRequestRetry, RequestReplacedError, assertRetryRequestCurrent, retryRequestSignal } from "../core/SafeRequestRetry";
 import { UiCommandCancelled } from "../core/UiCommandCancelled";
 import { preparePlanSafeRetry } from "../features/PlanSafeRetry";
@@ -68,6 +71,7 @@ import XshellTunnelIntegration_1 = require("../tunnel/XshellTunnelIntegration");
 import XshellTunnelCommandBuilder_1 = require("../tunnel/XshellTunnelCommandBuilder");
 import XshellTunnelPortProbe_1 = require("../tunnel/XshellTunnelPortProbe");
 import XshellSessionLauncher_1 = require("../tunnel/XshellSessionLauncher");
+import BackgroundSshTunnels_1 = require("../tunnel/BackgroundSshTunnels");
 import AgentTmuxPolicy_1 = require("../tunnel/AgentTmuxPolicy");
 import XshellSessionScanner_1 = require("../tunnel/XshellSessionScanner");
 import LocalSshConfig_1 = require("../tunnel/LocalSshConfig");
@@ -102,6 +106,7 @@ import * as GpuJobOwnership from "../features/GpuJobOwnership";
 import { changedManifestFiles, inventoryFilesByPath } from "../features/CodeSyncDelta";
 import { waitForCodeSyncProof } from "../features/CodeSyncProofWaiter";
 import { ManualDispatchHost } from "./ManualDispatchHost";
+import { OutputIsolationRecoveryHost, queueOutputIsolationRecovery } from "./OutputIsolationRecoveryHost";
 import { ServerQueueHost } from "./ServerQueueHost";
 import { ownExecutionExited } from "../features/DispatchWake";
 import { dispatchReadyManualJobs } from "../features/ManualJobDispatch";
@@ -175,6 +180,7 @@ import * as BranchPlanDispatch from "../project/BranchPlanDispatch";
 import * as BranchHeadBinding from "../project/BranchHeadBinding";
 import * as BranchPullRequest from "../project/BranchPullRequest";
 import * as UnifiedDispatchAdmission from "../project/UnifiedDispatchAdmission";
+import * as DispatchHandoffGate from "../features/DispatchHandoffGate";
 import { readGitIdentity as readGitIdentityProbe } from "../project/GitIdentityProbe";
 import { listPluginInstances, preflightPluginAt } from "../cli/LocalApiClient";
 import RenamedExtensionStateMigration_1 = require("../config/RenamedExtensionStateMigration");
@@ -403,13 +409,14 @@ const keys = {
     pendingWorkspaceContinuation: "simpleExperimentMac.pendingWorkspaceContinuation",
     pluginUpdateStatus: "simpleExperimentMac.pluginUpdateStatus",
     setupConfigurationSignature: "simpleExperimentMac.setupConfigurationSignature",
+    lowTrafficMode: "simpleExperimentMac.lowTrafficMode",
 };
 const API_CONFIG_NAMESPACE = "simpleExperimentMac";
 const API_CONFIG_PREFIX = `${API_CONFIG_NAMESPACE}.`;
 const API_SECRET_CONFIG_KEYS = new Set([`${API_CONFIG_NAMESPACE}.tunnel.agentToken`]);
 const API_STATE_KEYS = {
-    tunnelConfig: { store: "global", label: "隧道网关配置", writable: true },
-    setupConfig: { store: "global", label: "Xshell 会话与服务器配置", writable: true },
+    tunnelConfig: { store: "workspace", label: "当前项目隧道网关配置", writable: true },
+    setupConfig: { store: "workspace", label: "当前项目 Xshell 会话与服务器配置", writable: true },
     pptPlotConfig: { store: "global", label: "PPT 绘图配置（项目优先）", writable: true },
     uiLayout: { store: "global", label: "SimpleExperiment 面板布局", writable: true },
     hiddenLegacyTaskUiKeys: { store: "global", label: "隐藏旧任务 UI 键", writable: true },
@@ -423,6 +430,7 @@ const API_STATE_KEYS = {
     legacySftpNoticeShown: { store: "global", label: "旧 SFTP 插件提示", writable: true },
     pendingWorkspaceContinuation: { store: "global", label: "待续工作区操作", writable: false },
     migrationShown: { store: "global", label: "旧配置迁移提示", writable: true },
+    lowTrafficMode: { store: "global", label: "低流量模式", writable: false },
 } as Record<string, { store: "global" | "workspace"; label: string; writable: boolean }>;
 function validateApiConfigValue(key, schema, value) {
     const type = schema.type;
@@ -480,6 +488,16 @@ function redactApiStateValue(name, value) {
     }
     return value;
 }
+// Single derived cadence source (plan.md r2 §4/§10). Normal mode keeps the original schedule
+// byte-for-byte; the low traffic branch is only reached when the persisted preference is on and no
+// stronger constraint (pauseAll / manual_only / pauseAllBackgroundTraffic) is in effect. Every
+// timer/policy consumer reads this table only - no interval literal may be hardcoded elsewhere.
+// r2 final rules: B keeps a minimum cadence (queue 5s, necessary terminal confirmation 10s) while
+// A (display-only tmux / snapshot / stream / log tail) drops to 0, which means "no timer at all",
+// not "a slow timer". Turning the mode off restores these exact normal values.
+const NORMAL_TRAFFIC_INTERVALS = { queueMs: 500, progressMs: 2000, tmuxMs: 5000, snapshotFallbackSeconds: 5 };
+const LOW_TRAFFIC_INTERVALS = { queueMs: 5000, progressMs: 10000, tmuxMs: 0, snapshotFallbackSeconds: 0 };
+const LOW_TRAFFIC_REQUEST_HISTORY = 16;
 const FIRST_RUN_SETUP_PROMPT_VERSION = 4;
 const WORKSPACE_CONTINUATION_MAX_AGE_MS = 10 * 60_000;
 const SIMPLE_SFTP_EXTENSION_ID = "simple-local.simple-sftp-mac";
@@ -625,13 +643,13 @@ const SAFE_WEBVIEW_COMMANDS = new Set([
     "cleanupPlan", "reviewIsolatedPlanBatches",
     "markJobUnavailable", "restoreJobAvailability",
     "recallFailedJob",
-    "retryDistributedJob", "dispatchJobs", "queueRemainingJobs",
+    "retryDistributedJob", "dispatchJobs", "queueRemainingJobs", "recheckOutputIsolation",
     "stopAllPlans",
     "stopAndClearPlan",
     "stopAndClearPlans",
     "refreshLocalResults",
-    "webviewNotice", "webviewReady", "webviewHeartbeatAck", "webviewStateRendered", "webviewSectionInterest", "webviewSectionTelemetry", "webviewLayoutEvidence", "webviewBootstrapPhase", "webviewBootstrapError", "webviewRuntimeIncident", "webviewRenderError", "webviewVisibility", "copyPanelDiagnostics", "reloadPanel", "reloadPanelLowEffects", "reloadWindow", "recallPlanToLocalQueue", "quickSetup", "configureSessions", "configureAgentSessions", "writeAgentCommands", "saveTopologyMode", "saveAgentDefaults", "saveSchedulerConfig", "saveWorkerConfig", "addWorkerConfig", "deleteWorkerConfig", "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure", "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections", "prepareAgents", "test", "testAll", "showRegistry", "restart", "pauseStream", "resumeStream", "pauseAll",
-    "resumeNetwork", "snapshot", "manualGpuSnapshot", "loadGpuHistory", "gpuWindowSamples", "manualSchedulerSnapshot", "manualTracesSnapshot", "selectLogRunKey", "reassignWorkerTask", "openSetupGuide", "openAdvancedCommandsSetting", "applyPlanDatasetMapping", "autoMatchPlanDatasets",
+    "webviewNotice", "webviewReady", "webviewHeartbeatAck", "webviewStateRendered", "webviewSectionInterest", "webviewSectionTelemetry", "webviewLayoutEvidence", "webviewBootstrapPhase", "webviewBootstrapError", "webviewRuntimeIncident", "webviewRenderError", "webviewVisibility", "copyPanelDiagnostics", "reloadPanel", "reloadPanelLowEffects", "reloadWindow", "recallPlanToLocalQueue", "quickSetup", "configureSessions", "configureAgentSessions", "writeAgentCommands", "saveTopologyMode", "saveAgentDefaults", "saveSchedulerConfig", "saveWorkerConfig", "addWorkerConfig", "deleteWorkerConfig", "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure", "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections", "openXshell", "prepareAgents", "test", "testAll", "showRegistry", "restart", "pauseStream", "resumeStream", "pauseAll",
+    "toggleLowTrafficMode", "resumeNetwork", "snapshot", "manualGpuSnapshot", "loadGpuHistory", "gpuWindowSamples", "manualSchedulerSnapshot", "manualTracesSnapshot", "selectLogRunKey", "reassignWorkerTask", "openSetupGuide", "openAdvancedCommandsSetting", "applyPlanDatasetMapping", "autoMatchPlanDatasets",
     "script", "realCheck", "status", "offline", "openPlan", "savePlan", "archivePlan", "archivePlanCopy", "restoreArchivedPlan", "runAllPlans", "generatePlanGuide", "bootstrapProject", "generateOutputAdapter", "saveProjectAdapterRules", "saveResultColumnMapping", "saveRemoteRootPolicy", "saveResultCsvDir", "chooseResultCsvDir", "savePptPlotConfig", "choosePptPath", "chooseNewPptPath", "plotResultsToPpt", "refreshPptAutomation", "startPptAutomation", "openPptAutomationGuide", "clearLegacyTasks", "saveUiLayout", "resetUiLayout",
     "selectPlan", "selectExperiment",
     "publishGithub", "syncGithub", "overwriteGithub", "uploadProjectToHub", "uploadProjectToWorkers", "distributeCodeToWorkers", "deployLatestAgent", "configureDownloadScope", "configureCodeSyncIncludes", "configureServerSyncScope", "resetRemotePathConfirmations", "resetPptPathConfirmations", "downloadDebugBundle", "downloadRemoteResult", "openResultArtifact", "syncAllResultArtifacts", "rebuildProjectResultTables", "syncPendingPlanArtifacts", "splitProjectResultTable", "openLocalResultTable", "editResultColumnMapping", "openAuditTail",
@@ -641,7 +659,7 @@ const SAFE_WEBVIEW_COMMANDS = new Set([
     "abortScheduler", "clearOperations", "clearCache", "openScalarViewer", "openTensorBoard", "startTensorBoard", "stopTensorBoard", "getTensorBoardStatus", "copyTensorBoardUrl", "openTensorBoardUrl", "showLogHistory", "openFullLog", "copyText", "openLastCheckStaticReport", "copyLastCheckStaticReport", "runCheckStatic", "verifyAgentVersion", "fetchTmuxCapture", "fetchTmuxList", "killTmuxWindow", "clearTmuxTaskTabs",
 ]);
 const API_INTERNAL_COMMANDS = new Set([
-    "webviewNotice", "webviewReady", "webviewHeartbeatAck", "webviewStateRendered", "webviewSectionInterest", "webviewSectionTelemetry", "webviewLayoutEvidence", "webviewBootstrapPhase", "webviewBootstrapError", "webviewRuntimeIncident", "webviewRenderError", "webviewVisibility", "copyPanelDiagnostics", "reloadPanel", "reloadPanelLowEffects", "reloadWindow",
+    "webviewNotice", "webviewReady", "webviewHeartbeatAck", "webviewStateRendered", "webviewSectionInterest", "webviewSectionTelemetry", "webviewLayoutEvidence", "webviewBootstrapPhase", "webviewBootstrapError", "webviewRuntimeIncident", "webviewRenderError", "webviewVisibility", "copyPanelDiagnostics", "reloadPanel", "reloadPanelLowEffects", "reloadWindow", "toggleLowTrafficMode",
 ]);
 const SAFE_TRANSFER_RETRY_COMMANDS = new Set([
     "syncAllResultArtifacts", "rebuildProjectResultTables", "syncPendingPlanArtifacts",
@@ -652,7 +670,7 @@ const API_EXECUTABLE_COMMANDS = new Set([
     ...uiActionCommands,
     ...SAFE_WEBVIEW_COMMANDS,
 ].filter((command) => !API_INTERNAL_COMMANDS.has(command)));
-const COMMANDS_WITHOUT_UI_STATUS = new Set(["webviewNotice", "selectPlan", "selectExperiment", "selectLogRunKey", "openPlan", "status"]);
+const COMMANDS_WITHOUT_UI_STATUS = new Set(["webviewNotice", "selectPlan", "selectExperiment", "selectLogRunKey", "openPlan", "status", "toggleLowTrafficMode"]);
 const LOCAL_COMMAND_RELEASES_AFTER_TRIGGER = new Set(["startAllConnections", "testAll", "snapshot"]);
 const DEBUG_MODE_BLOCKED_UI_COMMANDS = new Set([
     "runAllPlans", "archivePlan", "restoreArchivedPlan", "archiveArtifacts", "excludeResults", "syncArtifacts", "completeThreeWay", "deleteArtifacts", "reconcileDeletions",
@@ -666,13 +684,13 @@ const UI_BUTTON_ACTION_COMMANDS = new Set([
     "cleanupPlan", "reviewIsolatedPlanBatches",
     "markJobUnavailable", "restoreJobAvailability",
     "recallFailedJob",
-    "retryDistributedJob", "dispatchJobs", "queueRemainingJobs",
+    "retryDistributedJob", "dispatchJobs", "queueRemainingJobs", "recheckOutputIsolation",
     "testAll", "snapshot", "startAllConnections", "runPlan", "parseResults", "configureDownloadScope", "configureCodeSyncIncludes", "configureServerSyncScope",
     ...uiActionCommands,
     "quickSetup", "openSetupGuide", "configureSessions", "configureAgentSessions", "writeAgentCommands",
     "saveTopologyMode", "saveAgentDefaults", "saveSchedulerConfig", "saveWorkerConfig", "addWorkerConfig", "deleteWorkerConfig",
     "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure",
-    "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections", "prepareAgents", "test", "testAll",
+    "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections", "openXshell", "prepareAgents", "test", "testAll",
     "showRegistry", "restart", "pauseStream", "resumeStream", "pauseAll", "resumeNetwork", "snapshot",
     "manualGpuSnapshot", "gpuWindowSamples", "manualSchedulerSnapshot", "manualTracesSnapshot", "selectLogRunKey", "script",
     "realCheck", "status", "offline", "openPlan", "savePlan", "archivePlan", "archivePlanCopy", "editResultColumnMapping", "runAllPlans",
@@ -837,10 +855,11 @@ async function activateExtension(context) {
         hostCommand("simpleExperimentMac.configureTunnelPorts", "configure-tunnel-ports", "配置隧道端口", () => provider?.configureTunnelPorts()),
         hostCommand("simpleExperimentMac.configureXshellRealtimeTunnel", "configure-xshell-tunnel", "配置 Xshell 隧道", () => provider?.configureXshellRealtimeTunnel()),
         hostCommand("simpleExperimentMac.startWorkerTunnel", "start-worker-tunnel", "启动 Worker 隧道", () => provider?.startWorkerTunnel()),
-        hostCommand("simpleExperimentMac.startXshellRealtimeTunnel", "start-xshell-tunnel", "启动 Xshell 隧道", () => provider?.startXshellRealtimeTunnel()),
-        hostCommand("simpleExperimentMac.startAllXshellRealtimeTunnels", "start-all-tunnels", "启动全部 Xshell 隧道", () => provider?.startAllXshellRealtimeTunnels()),
+        hostCommand("simpleExperimentMac.startXshellRealtimeTunnel", "start-xshell-tunnel", "启动后台隧道", () => provider?.startXshellRealtimeTunnel()),
+        hostCommand("simpleExperimentMac.startAllXshellRealtimeTunnels", "start-all-tunnels", "启动全部后台隧道", () => provider?.startAllXshellRealtimeTunnels()),
         hostCommand("simpleExperimentMac.startAllXshellAgentSessions", "start-agent-sessions", "启动全部 Agent 会话", () => provider?.startAllXshellAgentSessions()),
-        hostCommand("simpleExperimentMac.startAllXshellConnections", "start-all-connections", "启动全部 Xshell 连接", () => provider?.startAllXshellConnections()),
+        hostCommand("simpleExperimentMac.startAllXshellConnections", "start-all-connections", "启动全部后台连接", () => provider?.startAllXshellConnections()),
+        hostCommand("simpleExperimentMac.openXshellSessions", "open-xshell-sessions", "打开 Xshell 会话", () => provider?.openAllXshellSessions()),
         hostCommand("simpleExperimentMac.stopMacSystemTunnels", "stop-mac-system-tunnels", "停止本插件启动的系统隧道", () => provider?.stopMacSystemTunnels()),
         vscode.commands.registerCommand("simpleExperimentMac.testAllTunnels", () => provider?.testTunnel(true)),
         vscode.commands.registerCommand("simpleExperimentMac.showTunnelEndpointRegistry", () => provider?.showTunnelEndpointRegistry()),
@@ -870,7 +889,7 @@ async function activateExtension(context) {
     context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => void provider?.handleWorkspaceFoldersChanged()));
     void RemoteRootPolicyPrefill_1.prefillRemoteRootPolicy(
         context,
-        context.globalState.get(keys.setupConfig),
+        readProjectConnectionValue(context, workspaceRoot(), keys.setupConfig),
         vscode,
     ).catch(() => undefined);
     void provider.startLocalApiServer().catch((error) => {
@@ -970,6 +989,7 @@ const planSubmitProgress = {
     },
 };
 export class RealtimeTunnelPanelProvider {
+    private backgroundTunnelManager;
     readonly manualDispatchInFlight = new Set<string>();
     // Generations that currently HOLD an incoming run out of the two-generation window, recorded
     // per plan file when admission is refused; consumed by the cache-cleanup review so a blocked
@@ -1241,6 +1261,8 @@ export class RealtimeTunnelPanelProvider {
     availabilityPushInFlight = false;
     lastCodeSyncState = {};
     lastCodeSyncStats = { hashed: 0, hashReused: 0, cacheWriteSkipped: 0, inventoryCalls: 0, uploads: 0 };
+    /** 代码同步等待派发交接超时的有界证据快照（走既有诊断与动作错误通道）。 */
+    dispatchHandoffTimeoutEvidence: Record<string, any> | undefined;
     private readonly codeSyncWarmProofs = new Map<string, number>();
     private readonly codeSyncAgentProofs = new Map<string, { proofId: string; manifestDigest: string; scopeSignature: string; fileCount: number; runtimeGeneration: string }>();
     private readonly workerProbeSignatures = new Map<string, string>();
@@ -1336,6 +1358,16 @@ export class RealtimeTunnelPanelProvider {
     private planArtifactSyncStatusForcePending = false;
     private planArtifactSyncStatusRetryAt = 0;
     private planArtifactSyncStatusRetryCount = 0;
+    private lowTrafficMode = false;
+    private lowTrafficModeSwitching = false;
+    private lowTrafficModeError = "";
+    private lowTrafficModeSwitch: Promise<void> = Promise.resolve();
+    private lowTrafficModeRequests = new Map();
+    private queueTrafficTimer;
+    private queueTrafficTimerMs = 0;
+    private progressTrafficTimer;
+    private progressTrafficTimerMs = 0;
+    private trafficTimersDisposed = false;
     constructor(context) {
         this.context = context;
         this.context.subscriptions.push(this.cacheCleanupContextChanged);
@@ -1357,6 +1389,9 @@ export class RealtimeTunnelPanelProvider {
         void this.stableExtensionIdentityProbe();
         this.pluginUpdateStatus = this.refreshStoredPluginUpdateStatus(this.context.globalState.get(keys.pluginUpdateStatus));
         this.tunnelConfig = this.loadTunnelConfig();
+        // Read the persisted preference before the budget/client/timers so the very first
+        // realtimeRefreshPolicy() snapshot already carries the right cadence.
+        this.lowTrafficMode = this.context.globalState.get(keys.lowTrafficMode) === true;
         this.projectBootstrapPromise = this.bootstrapProjectLocalUiState()
             .catch(() => undefined)
             .finally(() => {
@@ -1366,16 +1401,161 @@ export class RealtimeTunnelPanelProvider {
         this.topologyRuntimeMode = this.projectTopologyAssessment().mode;
         this.budget = new RequestBudget_1.RequestBudget((0, TunnelGateway_1.requestBudgetConfigFromTunnel)(this.tunnelConfig));
         this.client = this.createClient();
-        const queueTimer = setInterval(() => { void this.tickDistributedQueue().catch((error) => { if (error?.code === "STALE_QUEUE_ROUND") return; this.recordActionError({ command: "distributedPlanQueue", message: errorMessage(error) }); }); }, 500);
-        queueTimer.unref?.();
-        this.context.subscriptions.push({ dispose: () => clearInterval(queueTimer) });
-        const progressTimer = setInterval(() => {
-            if (!this.distributedQueueCache?.plans.length || this.distributedQueueRoot !== workspaceRoot()) return;
-            void this.refreshServerPlanProgress({ automatic: true });
-        }, 2000);
-        progressTimer.unref?.();
-        this.context.subscriptions.push({ dispose: () => { clearInterval(progressTimer);
-            for (const request of this.progressRefreshRequests?.values() || []) request.controller.abort(); } });
+        this.context.subscriptions.push({ dispose: () => {
+            this.trafficTimersDisposed = true;
+            if (this.queueTrafficTimer) clearInterval(this.queueTrafficTimer);
+            if (this.progressTrafficTimer) clearInterval(this.progressTrafficTimer);
+            this.queueTrafficTimer = undefined;
+            this.progressTrafficTimer = undefined;
+            for (const request of this.progressRefreshRequests?.values() || []) request.controller.abort();
+        } });
+        this.scheduleTrafficTimers();
+    }
+    /**
+     * Single cadence source (plan D2). `enabled` is the persisted preference; `effective` is what
+     * schedulers actually apply. pauseAll/offline pause and the stronger manual_only /
+     * pauseAllBackgroundTraffic constraints win and are surfaced as blockedBy instead of being
+     * silently overwritten, and neither of them is rewritten by this switch.
+     */
+    private effectiveTrafficPolicy() {
+        const enabled = this.lowTrafficMode === true;
+        const paused = this.budget?.isPaused?.() === true
+            || this.lastHealth?.state === "paused" || this.lastHealth?.status === "paused";
+        const manualOnly = this.tunnelConfig?.refreshProfile === "manual_only";
+        const backgroundPaused = this.tunnelConfig?.pauseAllBackgroundTraffic === true;
+        const blockedBy = !enabled ? "" : paused ? "paused" : manualOnly ? "manual_only" : backgroundPaused ? "background_traffic_paused" : "";
+        const intervals = enabled && !blockedBy ? LOW_TRAFFIC_INTERVALS : NORMAL_TRAFFIC_INTERVALS;
+        // A-class (display-only) traffic follows the persisted toggle only, as a boolean: a stronger
+        // constraint (manual_only / paused / background paused) must never reopen the display gate, and
+        // a 0 cadence must not be clamped back to 5s by a downstream Math.max().
+        const displayAutoRefresh = !enabled;
+        return { enabled, effective: enabled && !blockedBy, blockedBy, displayAutoRefresh, intervals: { ...intervals }, scope: "global" };
+    }
+    /** Webview echo; the authoritative value always comes from the host, never from webview state. */
+    private trafficModeStateForWebview() {
+        return {
+            ...this.effectiveTrafficPolicy(),
+            switching: this.lowTrafficModeSwitching === true,
+            error: String(this.lowTrafficModeError || ""),
+        };
+    }
+    /** Re-arm queue/progress timers from the effective cadence; an unchanged cadence never churns timers. */
+    private scheduleTrafficTimers(): void {
+        if (this.trafficTimersDisposed) return;
+        const intervals = this.effectiveTrafficPolicy().intervals;
+        if (!this.queueTrafficTimer || this.queueTrafficTimerMs !== intervals.queueMs) {
+            if (this.queueTrafficTimer) clearInterval(this.queueTrafficTimer);
+            this.queueTrafficTimer = setInterval(() => { void this.tickDistributedQueue().catch((error) => { if (error?.code === "STALE_QUEUE_ROUND") return; this.recordActionError({ command: "distributedPlanQueue", message: errorMessage(error) }); }); }, intervals.queueMs);
+            this.queueTrafficTimer.unref?.();
+            this.queueTrafficTimerMs = intervals.queueMs;
+        }
+        if (!this.progressTrafficTimer || this.progressTrafficTimerMs !== intervals.progressMs) {
+            if (this.progressTrafficTimer) clearInterval(this.progressTrafficTimer);
+            this.progressTrafficTimer = setInterval(() => {
+                if (!this.distributedQueueCache?.plans.length || this.distributedQueueRoot !== workspaceRoot()) return;
+                // r2: this round is B (necessary terminal confirmation), not a display refresh, so a
+                // hidden panel must still run it - remote completions have to become local confirmed
+                // facts and trigger the post-completion sync / result collection without a click. It
+                // already keeps the original early exits and only queries Workers that still owe work
+                // (progressRefreshWorkerIds + excludeVerifiedCompleted), and it shares the in-flight
+                // inventory read with the queue round instead of issuing a second RPC.
+                void this.refreshServerPlanProgress({ automatic: true });
+            }, intervals.progressMs);
+            this.progressTrafficTimer.unref?.();
+            this.progressTrafficTimerMs = intervals.progressMs;
+        }
+    }
+    /** Apply a cadence change to the live client without resetClient(); runtime state stays intact. */
+    private applyTrafficScheduling(): void {
+        this.scheduleTrafficTimers();
+        this.client?.updateRefreshPolicy?.(this.realtimeRefreshPolicy());
+    }
+    /**
+     * Host-owned setter: validate, persist first, then apply. A failed Memento write restores the
+     * previous preference and the previous cadence, and reports the real error instead of a
+     * silent rollback. Repeated identical requestId values never flip the switch twice.
+     */
+    async setLowTrafficMode(enabled, requestId = "") {
+        const target = enabled === true;
+        const key = String(requestId || "").slice(0, 80);
+        if (key) {
+            const replay = this.lowTrafficModeRequests.get(key);
+            if (replay) return replay;
+        }
+        const run = async () => {
+            this.lowTrafficModeSwitching = true;
+            const previous = this.lowTrafficMode;
+            try {
+                if (previous === target) {
+                    this.lowTrafficModeError = "";
+                    this.applyTrafficScheduling();
+                    this.postState(true);
+                    return { ok: true, enabled: previous, unchanged: true };
+                }
+                this.lowTrafficMode = target;
+                try {
+                    await this.context.globalState.update(keys.lowTrafficMode, target);
+                }
+                catch (error) {
+                    this.lowTrafficMode = previous;
+                    const text = errorMessage(error);
+                    this.lowTrafficModeError = text;
+                    this.applyTrafficScheduling();
+                    this.postState(true);
+                    return { ok: false, enabled: previous, error: `低流量模式设置未保存：${text}` };
+                }
+                this.lowTrafficModeError = "";
+                this.applyTrafficScheduling();
+                this.postState(true);
+                return { ok: true, enabled: target };
+            }
+            finally {
+                this.lowTrafficModeSwitching = false;
+            }
+        };
+        const settled = this.lowTrafficModeSwitch.then(run, run);
+        this.lowTrafficModeSwitch = settled.then(() => undefined, () => undefined);
+        const outcome = await settled;
+        if (key) {
+            this.lowTrafficModeRequests.set(key, outcome);
+            while (this.lowTrafficModeRequests.size > LOW_TRAFFIC_REQUEST_HISTORY) {
+                const oldest = this.lowTrafficModeRequests.keys().next().value;
+                if (oldest === undefined) break;
+                this.lowTrafficModeRequests.delete(oldest);
+            }
+        }
+        return outcome;
+    }
+    private async handleLowTrafficModeToggle(message) {
+        const requestId = String(message?.requestId || "");
+        if (typeof message?.enabled !== "boolean") {
+            // A malformed frame must never silently flip the persisted preference to off.
+            this.postLowTrafficModeReceipt(requestId, {
+                ok: false,
+                enabled: this.lowTrafficMode === true,
+                error: "低流量模式设置未提交：请求缺少有效的开关值，保持原值。",
+            });
+            return;
+        }
+        const receipt = await this.setLowTrafficMode(message.enabled, requestId);
+        this.postLowTrafficModeReceipt(requestId, receipt);
+    }
+    /** Dedicated lightweight receipt; it never enters the remote pending/UI-status pipeline. */
+    private postLowTrafficModeReceipt(requestId, receipt) {
+        const view = this.view;
+        if (!view) return;
+        try {
+            view.webview.postMessage({
+                type: "lowTrafficModeUpdated",
+                requestId: String(requestId || ""),
+                ok: receipt?.ok === true,
+                enabled: receipt?.enabled === true,
+                error: String(receipt?.error || ""),
+            });
+        }
+        catch {
+            // A lost receipt converges through the next authoritative state frame or handshake retry.
+        }
     }
     refreshStoredPluginUpdateStatus(plan) {
         if (!plan || typeof plan !== "object" || !["update_available", "reload_required"].includes(String(plan.status)))
@@ -1408,6 +1588,7 @@ export class RealtimeTunnelPanelProvider {
                 preferredPortRetryMs: 3000,
                 discoveryPath: API_DISCOVERY_PATH,
                 workspace: scope,
+                getWorkspace: () => workspaceRoot() || "",
                 methods: this.createLocalApiMethods(),
                 viewerSessionKey: signingKey,
                 viewerSessionScope: scope,
@@ -2823,7 +3004,8 @@ export class RealtimeTunnelPanelProvider {
                     if (!excludeVerified.size) excludeVerified = undefined;
                 }
                 const snapshot = await WorkerProgressQuery.queryWorkerProgress(client, workerId, queries, executionSnapshot, {
-                    signal: options.signal, deferDiagnostics: true, excludeVerified, onSnapshot: snapshot => {
+                    signal: options.signal, deferDiagnostics: true, excludeVerified,
+                    terminalOnly: options.excludeVerifiedCompleted === true && this.lowTrafficMode === true, onSnapshot: snapshot => {
                         if (!current()) return;
                         this.storeWorkerTaskSnapshot(cacheKey, WorkerProgressQuery.mergeProgressSnapshot(this.cachedWorkerTaskSnapshot(workerId, root, cacheKey), snapshot));
                         this.postState();
@@ -2963,6 +3145,8 @@ export class RealtimeTunnelPanelProvider {
             this.lastWorkerTaskSnapshots.delete(this.lastWorkerTaskSnapshots.keys().next().value);
         this.noteWorkerTaskPlanStatus(cacheKey, snapshot);
         const [root, workerId] = cacheKey.split("\u0000");
+        // 精确查询才能释放在途传输的交接所有权；传输仍在途、查询不完整或任务不在快照里时 gate 自己会拒绝。
+        this.releaseDispatchHandoffsOnObservationLocal?.(root, workerId, snapshot);
         if (workerId && this.distributedQueueRoot === root && root === workspaceRoot()
             && ownExecutionExited(previousSnapshot, snapshot, this.distributedQueueCache, DistributedPlanQueue.canonicalProjectId(root)))
             this.requestDistributedQueueRefresh();
@@ -3184,6 +3368,7 @@ export class RealtimeTunnelPanelProvider {
         const stateKey = (keys as Record<string, string>)[name];
         if (!meta || !stateKey)
             throw new Error(`未知 SimpleExperiment 状态：${name}`);
+        if (name === "setupConfig" || name === "tunnelConfig") return readProjectConnectionValue(this.context, workspaceRoot(), stateKey);
         return meta.store === "global" ? this.context.globalState.get(stateKey) : this.context.workspaceState.get(stateKey);
     }
     async apiStateList() {
@@ -3230,7 +3415,9 @@ export class RealtimeTunnelPanelProvider {
             });
         const value = normalizeApiStateValue(key, params.value);
         const stateKey = (keys as Record<string, string>)[key];
-        if (meta.store === "global")
+        if (key === "setupConfig" || key === "tunnelConfig")
+            await saveProjectConnectionValues(this.context, workspaceRoot(), { [stateKey]: value });
+        else if (meta.store === "global")
             await this.context.globalState.update(stateKey, value);
         else
             await this.context.workspaceState.update(stateKey, value);
@@ -3262,7 +3449,9 @@ export class RealtimeTunnelPanelProvider {
                 current: redactApiStateValue(key, this.apiStateValue(key)),
             });
         const stateKey = (keys as Record<string, string>)[key];
-        if (meta.store === "global")
+        if (key === "setupConfig" || key === "tunnelConfig")
+            await saveProjectConnectionValues(this.context, workspaceRoot(), { [stateKey]: undefined });
+        else if (meta.store === "global")
             await this.context.globalState.update(stateKey, undefined);
         else
             await this.context.workspaceState.update(stateKey, undefined);
@@ -3327,7 +3516,7 @@ export class RealtimeTunnelPanelProvider {
                 networkHost: target.networkHost || "",
             })),
             modifications: {
-                xshellSessions: params.applyXshell === false ? [] : targets.map((target) => target.savedSessionPath).filter(Boolean),
+                xshellSessions: params.applyXshell === true ? targets.map((target) => target.savedSessionPath).filter(Boolean) : [],
                 remoteRuntime: params.deployRuntime === false ? [] : targets.map((target) => ({ serverId: target.id, installDir: this.agentRuntimeDirs(target.remoteRoot, target.agentInstallDir).installDir, workDir: this.agentRuntimeDirs(target.remoteRoot).workDir })),
             },
         };
@@ -3346,7 +3535,7 @@ export class RealtimeTunnelPanelProvider {
         const profileResult = await this.writeSftpManagerServerProfiles(targets.map((target) => target.id));
         if (profileResult.targetCount < targets.length)
             throw new Error(`project.prepare 写入 SimpleSFTP 目标不完整：需要 ${targets.length} 个，当前 ${profileResult.targetCount} 个。`);
-        const commandResults = params.applyXshell === false ? [] : await this.writeXshellAgentStartupCommands(false, false, serverIds);
+        const commandResults = params.applyXshell === true ? await this.writeXshellAgentStartupCommands(false, false, serverIds) : [];
         const blocked = commandResults.filter((item) => item.error || AGENT_STARTUP_BLOCKED_SKIP_REASONS.has(item.skippedReason));
         if (blocked.length)
             throw new Error(`project.prepare 未修改 Xshell 自启动命令：${blocked.map((item) => item.summary).join("；")}`);
@@ -3543,12 +3732,14 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
                 }),
                 preview: { operation: "startAllConnections", topology: this.apiPublicTopology(topology) },
             });
-        const targets = this.agentStartupTargets();
         const tunnelItems = this.tunnelLaunchItems();
-        const modificationPreview = targets.map((target) => ({
-            serverId: target.id,
-            xshellSession: target.filePath,
-            command: target.command,
+        const modificationPreview = tunnelItems.map((item) => ({
+            serverId: item.id,
+            transport: "background_openssh",
+            localForwardHost: item.config.localForwardHost,
+            localForwardPort: item.config.localForwardPort,
+            remoteAgentHost: item.config.remoteAgentHost,
+            remoteAgentPort: item.config.remoteAgentPort,
         }));
         const ports = tunnelItems.map((item) => ({
             serverId: item.id,
@@ -3563,11 +3754,7 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
                 preview: {
                     operation: "startAllConnections",
                     topology: this.apiPublicTopology(topology),
-                    servers: targets.map((target) => ({
-                        serverId: target.id,
-                        savedSessionPath: target.filePath,
-                        modification: "Xshell RemoteCommand / tmux Agent 启动",
-                    })),
+                    servers: modificationPreview,
                     ports,
                     remoteRoots: this.agentRuntimeUploadTargets().map((target) => ({
                         serverId: target.id,
@@ -3575,8 +3762,8 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
                     })),
                 },
             });
-        await this.startAllXshellConnections(false, false);
-        return { ok: true, started: true, topology: this.apiPublicTopology(topology), preview: modificationPreview, ports };
+        const started = await this.startAllXshellConnections(false, false);
+        return { ok: started === true, started: started === true, phase: started === true ? "listening" : "unconfirmed", topology: this.apiPublicTopology(topology), preview: modificationPreview, ports };
     }
     async apiServerTestAll(params = {}) {
         const topology = this.projectTopologyAssessment();
@@ -4417,7 +4604,11 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
     }
     async reloadProjectContextAfterWorkspaceChange() {
         this.resetProjectContextInMemory();
+        this.tunnelConfig = this.loadTunnelConfig();
+        this.setupConfig = this.loadSetupConfig();
+        this.invalidateSimpleSftpCapability();
         this.topologyRuntimeMode = this.projectTopologyAssessment().mode;
+        await this.localApiServer?.refreshWorkspace();
         this.resetClient();
         await this.bootstrapProjectLocalUiState();
         await this.refreshLocalPlanMetadata({ post: false, force: true }).catch((error) => {
@@ -5263,6 +5454,8 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
     }
     async dispose() {
         this.runConfirmation.cancel();
+        await this.backgroundTunnelManager?.dispose();
+        this.backgroundTunnelManager = undefined;
         if (this.panelHostEventLoopTimer) clearInterval(this.panelHostEventLoopTimer);
         this.panelHostEventLoopTimer = undefined;
         this.panelHostEventLoopHistogram?.disable();
@@ -5402,8 +5595,16 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
             }).catch(() => undefined);
             const diagnostics = client.diagnostics();
             const unavailable = diagnostics.endpoints.length > 0 && diagnostics.endpoints.every((endpoint) => endpoint.streamStatus === "disconnected");
-            this.lastError = unavailable ? "tunnel_unavailable" : undefined;
-            if (unavailable && !this.lastHealth) {
+            // Closing the display channels is an intentional low-traffic closure, not an outage: it must
+            // not be published as tunnel_unavailable / local_port_closed. A real connection error keeps
+            // displayAutoClosed false (connectionLost / any non-display disconnect clears it) and is still
+            // reported honestly; nothing here invents a connected health state either.
+            const displayGuarded = diagnostics.displayAutoRefreshDisabled === true && diagnostics.displayAutoClosed === true;
+            this.lastError = unavailable && !displayGuarded ? "tunnel_unavailable" : undefined;
+            // §20.4: a display transport error (including 401 or unknown evidence) is not a
+            // fresh filesystem/socket probe. Low traffic must retain the endpoint diagnostics,
+            // without inventing a checkedAt or claiming the local port was observed closed.
+            if (unavailable && !displayGuarded && !this.lastHealth && this.lowTrafficMode !== true) {
                 this.lastHealth = {
                     state: "local_port_closed",
                     status: "local_port_closed",
@@ -5417,6 +5618,10 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
                 return;
             this.lastError = errorMessage(error);
         }
+        // Converge the applied strategy (queue/progress cadence + A-class guard) on the fresh
+        // connection evidence, so a resume/config path cannot leave the client on a stale policy.
+        if (generation === this.projectContextGeneration && client === this.client)
+            this.applyTrafficScheduling();
         if (generation === this.projectContextGeneration && client === this.client)
             this.postState();
     }
@@ -5618,7 +5823,7 @@ return this.configureWorkerTunnels();
     async writeXshellAgentStartupCommands(showMessage = true, requireConfirm = true, serverIds = []) {
         assertSingleProjectWorkspace("写入 Agent 自启动路径");
         this.assertTopologyActualWorkRoots("写入 Agent 自启动路径");
-        const targets = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.agentStartupTargets(), serverIds);
+        const targets = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.agentStartupTargets().filter((target) => target.filePath), serverIds);
         if (!targets.length) {
             void vscode.window.showWarningMessage("没有可写入的 Xshell Agent 会话。请先配置或复用 Hub/Worker 会话。");
             return [];
@@ -5652,17 +5857,15 @@ return this.configureWorkerTunnels();
         return results;
     }
     async startAllXshellAgentSessions(showMessage = false, requireConfirm = true) {
-        void showMessage;
-        await this.startAllXshellRealtimeTunnels(requireConfirm);
-        return true;
+        void requireConfirm;
+        return this.prepareAgentsForFirstRun(showMessage);
     }
     async startAllXshellConnections(requireConfirm = true, scheduleAutoTest = true, serverIds = []) {
-        await this.syncXshellConfigBeforeNetwork("start all xshell connections");
-        const launchBlockers = this.currentTunnelLaunchBlockers();
-        if (launchBlockers.length) {
-            void vscode.window.showErrorMessage(`连接启动已阻止：${launchBlockers.join("；")}`);
-            return false;
-        }
+        return this.startBackgroundTunnels(requireConfirm, scheduleAutoTest, serverIds);
+    }
+    /** Explicit manual entry only: no deployment or background-failure fallback. */
+    async openAllXshellSessions(requireConfirm = true, serverIds = []) {
+        await this.refreshXshellSessionLibrary({ postState: false });
         const tunnelItems = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.tunnelLaunchItems(), serverIds);
         const launchItems = [
             ...tunnelItems
@@ -5680,17 +5883,13 @@ return this.configureWorkerTunnels();
         }
         const uniqueCount = new Set(launchItems.map((item) => localPathKey(item.sessionPath))).size;
         if (requireConfirm) {
-            const answer = await vscode.window.showWarningMessage(`启动连接将打开 ${uniqueCount} 个唯一 Xshell 隧道会话；同一个 .xsh 只打开一次，不会提交实验或自动修改 .xsh。若已点击“写入 Agent 自动启动命令”，Agent 会由 Xshell RemoteCommand 自动启动，并进入自动计算的当前项目代码目录。\n\n隧道会话 ${tunnelItems.length} 个：\n${tunnelItems.map((item) => `${item.id}: ${item.config.savedSessionPath || "未配置"}  ${tunnelHttpEndpoint(item.config.localForwardHost, item.config.localForwardPort)}`).join("\n") || "-"}\n\n插件不会直接执行 ${"s" + "sh"}/${"s" + "cp"}/${"r" + "sync"}。`, { modal: true }, "确认启动连接");
-            if (answer !== "确认启动连接")
+            const answer = await vscode.window.showWarningMessage(`将打开 ${uniqueCount} 个唯一 Xshell 会话供手动操作；同一个 .xsh 只打开一次，并保留会话原有的登录命令与设置。后台隧道和 Agent 部署由各自入口管理。\n\n${launchItems.map((item) => `${item.id}: ${item.sessionPath}`).join("\n")}`, { modal: true }, "打开 Xshell");
+            if (answer !== "打开 Xshell")
                 return;
         }
-        await this.launchUniqueXshellSessions(launchItems);
-        if (scheduleAutoTest && this.setupConfig.autoTestTunnelAfterStart) {
-            this.schedulePostLaunchAutoTest();
-        }
-        else {
-            void this.ensureRealtimeConnected("xshell sessions launched");
-        }
+        const results = await this.launchUniqueXshellSessions(launchItems);
+        void vscode.window.showInformationMessage(`Xshell 打开请求：${results.join("；")}。连接状态请在 Xshell 中查看。`);
+        return results;
     }
     async prepareAgentsForFirstRun(showMessage = true) {
         if(!await this.ensureSimpleSftpReadyForSetup("准备 Agent")){
@@ -5708,11 +5907,11 @@ return this.configureWorkerTunnels();
         this.assertTopologyActualWorkRoots("准备 Agent");
         const preparationBlockers = this.currentAgentPreparationBlockers();
         if (preparationBlockers.length)
-            throw new Error(`Agent 准备已阻止，尚未修改 .xsh 或部署 runtime：${preparationBlockers.join("；")}`);
+            throw new Error(`Agent 准备已阻止，尚未部署 runtime：${preparationBlockers.join("；")}`);
         const targets = this.agentStartupTargets();
         const expectedTargets = this.enabledWorkerConfigs().length;
         if (targets.length !== expectedTargets)
-            throw new Error(`Agent 准备目标不完整：需要 ${expectedTargets} 个，当前 ${targets.length} 个。请检查当前拓扑内所有服务器的 Xshell 会话和项目父目录。`);
+            throw new Error(`Agent 准备目标不完整：需要 ${expectedTargets} 个，当前 ${targets.length} 个。请检查当前拓扑内服务器地址和项目父目录。`);
         this.assertExecutionCondaEnvReady(this.workerActionTargets());
         const availableProfileTargets = this.sftpSharedTargets().length;
         if (availableProfileTargets < expectedTargets) {
@@ -5729,14 +5928,9 @@ return this.configureWorkerTunnels();
             const profileResult = await this.writeSftpManagerServerProfiles(targets.map((target) => target.id));
             if (profileResult.targetCount < expectedTargets)
                 throw new Error(`当前项目 SimpleSFTP 目标写入不完整：需要 ${expectedTargets} 个，当前 ${profileResult.targetCount} 个。尚未修改 .xsh 或上传 runtime。`);
-            progress.report({ message: "写入 Xshell Agent 自启动命令" });
-            const commandResults = await this.writeXshellAgentStartupCommands(false, false);
-            const blocked = commandResults.filter((item) => item.error || AGENT_STARTUP_BLOCKED_SKIP_REASONS.has(item.skippedReason));
-            if (blocked.length)
-                throw new Error(`Agent 自启动命令未就绪，尚未部署远端 runtime：${blocked.map((item) => item.summary).join("；")}`);
             progress.report({ message: "部署 runtime" });
             const deployed = await this.deployLatestAgentRuntime(false, true, [], true, { promptLegacyMigration: true, reportStage: message => progress.report({ message }) });
-            progress.report({ message: "启动 Xshell 会话" });
+            progress.report({ message: "建立后台 SSH 隧道" });
             await this.startAllXshellConnections(false, false);
             const deadline = Date.now() + 60000;
             let completion = tunnelTestCompletion(this.setupConfig, this.lastProbe, this.lastHealth, this.lastWorkerProbes, false);
@@ -5880,50 +6074,69 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         const doc = await vscode.workspace.openTextDocument({ language: "json", content: JSON.stringify(this.endpointRegistryState(), null, 2) });
         await vscode.window.showTextDocument(doc, { preview: true });
     }
-    async startAllXshellRealtimeTunnels(requireConfirm = true) {
-        await this.syncXshellConfigBeforeNetwork("start all tunnels");
-        const portConflicts = this.currentPortConflicts();
-        const blockingConflicts = portConflicts.filter((conflict) => conflict.severity === "error");
-        if (blockingConflicts.length) {
-            void vscode.window.showErrorMessage(`端口冲突阻止启动全部隧道：${blockingConflicts.map((conflict) => `${conflict.endpointId}:${conflict.requestedPort}`).join(", ")}。请在服务器卡片中选择唯一的 Xshell 本机端口对后保存。`);
-            return;
-        }
-        const launchItems = this.tunnelLaunchItems();
-        const errors = launchItems.flatMap((item) => (0, XshellTunnelSetup_1.validateXshellSetupConfig)(item.config).map((error) => `${item.id}: ${error}`));
-        errors.push(...launchItems.map((item) => {
-            const unsafeForward = this.unsafeXshellForwardMessage(item.config);
-            return unsafeForward ? `${item.id}: ${unsafeForward}` : "";
-        }).filter((message) => Boolean(message)));
-        if (errors.length) {
-            void vscode.window.showErrorMessage(`${errors.join(" ")} 请先导入或配置隧道。`);
-            return;
-        }
+    private backgroundTunnels() {
+        if (!this.backgroundTunnelManager) this.backgroundTunnelManager = new BackgroundSshTunnels_1.BackgroundSshTunnelManager({
+            portAvailable: (host, port) => XshellTunnelLauncher_1.isLocalPortAvailable(port, host),
+            portListening: BackgroundSshTunnels_1.backgroundPortListening,
+            assertBusinessAllowed: () => require("../updates/Bootstrap").assertBusinessAllowed(),
+            probeTunnel: async endpoint => {
+                const item = this.tunnelLaunchItems().find(row => row.id === endpoint.id);
+                if (!item) return false;
+                try {
+                    const probe = await XshellTunnelPortProbe_1.probeWorkerTelemetryTunnel({ ...item.config,
+                        hubHost: endpoint.host, hubUser: endpoint.user, hubSshPort: endpoint.sshPort,
+                        localForwardHost: endpoint.localForwardHost, localForwardPort: endpoint.localForwardPort,
+                        remoteAgentHost: endpoint.remoteAgentHost, remoteAgentPort: endpoint.remoteAgentPort,
+                        token: this.tunnelConfig.token }, { timeoutMs: 1500 });
+                    return probe.status === "ok";
+                } catch { return false; }
+            },
+        });
+        return this.backgroundTunnelManager;
+    }
+    async startBackgroundTunnels(requireConfirm = true, scheduleAutoTest = true, serverIds = []) {
+        const projectContext = this.captureProjectContext();
+        await this.syncXshellConfigBeforeNetwork("start background tunnels");
+        if (!this.projectContextIsCurrent(projectContext)) throw new UiCommandCancelled("工作区已切换，后台隧道启动已取消。");
+        const blockers = this.currentTunnelLaunchBlockers();
+        if (blockers.length) throw new Error(`后台隧道启动已阻止：${blockers.join("；")}`);
+        const items = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.tunnelLaunchItems(), serverIds);
+        if (!items.length) throw new Error("没有明确启用的 Worker 隧道。");
+        const endpoints = items.map(BackgroundSshTunnels_1.backgroundTunnelEndpoint);
+        const identity = JSON.stringify([endpoints, this.tunnelConfig.token]);
+        const assertCurrent = () => {
+            if (!this.projectContextIsCurrent(projectContext) || projectContext.signal.aborted
+                || identity !== JSON.stringify([AgentRuntimeScope_1.selectAgentRuntimeTargets(this.tunnelLaunchItems(), serverIds).map(BackgroundSshTunnels_1.backgroundTunnelEndpoint), this.tunnelConfig.token]))
+                throw new UiCommandCancelled("服务器配置或工作区已变化，旧后台连接请求已取消，请重新启动。");
+        };
         if (requireConfirm) {
-            const answer = await vscode.window.showWarningMessage(`即将启动 ${launchItems.length} 个 Xshell 会话。插件将按每个端点的主机和端口配置连接，本地实时状态会从 已配置 Worker 隧道聚合。\n\n${launchItems.map((item) => `${item.id}: ${tunnelHttpEndpoint(item.config.localForwardHost, item.config.localForwardPort)} -> ${tunnelHttpEndpoint(item.config.remoteAgentHost, item.config.remoteAgentPort)}`).join("\n")}`, { modal: true }, "启动全部隧道");
-            if (answer !== "启动全部隧道")
-                return;
+            const answer = await vscode.window.showWarningMessage(`将后台启动 ${endpoints.length} 个 Worker SSH 隧道，使用与 SimpleSFTP 相同的系统密钥或 ssh-agent 认证。\n\n${endpoints.map(item => `${item.id}: ${item.user}@${item.host}:${item.sshPort}；${tunnelHttpEndpoint(item.localForwardHost, item.localForwardPort)} → ${tunnelHttpEndpoint(item.remoteAgentHost, item.remoteAgentPort)}`).join("\n")}`, { modal: true }, "启动后台隧道");
+            if (answer !== "启动后台隧道") return false;
         }
-        const integration = this.integration();
-        for (const item of launchItems) {
-            const occupancy = await this.detectPortOccupancy(item.config.localForwardPort, item.id);
-            if (occupancy === "current_tunnel") {
-                continue;
-            }
-            if (occupancy === "unknown_process" || occupancy === "existing_tunnel") {
-                continue;
-            }
-            if (!(await (0, XshellTunnelLauncher_1.isLocalPortAvailable)(item.config.localForwardPort, item.config.localForwardHost || "127.0.0.1"))) {
-                continue;
-            }
-            await integration.launchTunnel(item.config);
-            await waitForXshellBatchLaunchSlot();
-        }
-        if (this.setupConfig.autoTestTunnelAfterStart) {
-            this.schedulePostLaunchAutoTest();
-        }
-        else {
-            void this.ensureRealtimeConnected("xshell launched all");
-        }
+        assertCurrent();
+        const manager = this.backgroundTunnels();
+        const enabled = new Set(this.enabledWorkerConfigs().map(worker => worker.id));
+        const retired = manager.running().filter(row => !enabled.has(row.id)).map(row => row.id);
+        const retiredOutcomes = retired.length ? await manager.stop(retired) : [];
+        assertCurrent();
+        const outcomes = await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification,
+            title: "启动后台 SSH 隧道", cancellable: false }, progress => manager.launchAll(endpoints,
+                { signal: projectContext.signal, assertCurrent, report: message => progress.report({ message }) }));
+        assertCurrent();
+        outcomes.push(...retiredOutcomes.filter(row => row.state === "failed"));
+        const live = outcomes.filter(row => row.state === "verified" || row.state === "existing_tunnel");
+        const pending = outcomes.filter(row => row.state === "requested");
+        const failed = outcomes.filter(row => row.state === "failed" || row.state === "cancelled");
+        const summary = `后台隧道：已监听 ${live.length} 个，待确认 ${pending.length} 个，失败或取消 ${failed.length} 个。`
+            + outcomes.map(row => row.message).join("；") + "。Agent 就绪状态以检测结果为准。";
+        if (failed.length || pending.length) void vscode.window.showWarningMessage(summary);
+        else void vscode.window.showInformationMessage(summary);
+        if (scheduleAutoTest && this.setupConfig.autoTestTunnelAfterStart) this.schedulePostLaunchAutoTest();
+        else void this.ensureRealtimeConnected("background tunnels launched");
+        return outcomes.length > 0 && outcomes.every(row => row.state === "verified" || row.state === "existing_tunnel");
+    }
+    async startAllXshellRealtimeTunnels(requireConfirm = true) {
+        return this.startBackgroundTunnels(requireConfirm);
     }
     async testTunnel(userInitiated = false) {
         const generation = this.projectContextGeneration;
@@ -6097,6 +6310,10 @@ return this.testTunnel(true);
         if (generation !== this.projectContextGeneration || client !== this.client)
             return;
         this.lastHealth = { state: "paused", status: "paused", checkedAt: new Date().toISOString(), message: "所有网络活动已暂停。" };
+        // The preference is kept; only the effective cadence yields to the stronger pause constraint.
+        // Re-apply the whole strategy (host timers and client policy) against the current toggle so the
+        // queue/progress cadence and the A-class guard converge on the same state.
+        this.applyTrafficScheduling();
         this.postState();
     }
     async resumeNetwork() {
@@ -6104,7 +6321,13 @@ return this.testTunnel(true);
         await this.clearOfflineImport();
         if (generation !== this.projectContextGeneration)
             return;
+        // The pause marker written by pauseAllNetworkActivity is stale from here on: keeping it would
+        // make effectiveTrafficPolicy() believe a pause is still in force, so the applied strategy would
+        // diverge from the persisted toggle. ensureRealtimeConnected converges again on fresh evidence.
+        if (this.lastHealth?.state === "paused" || this.lastHealth?.status === "paused")
+            this.lastHealth = undefined;
         this.client.resume();
+        this.applyTrafficScheduling();
         void this.ensureRealtimeConnected("resume network");
         this.postState();
     }
@@ -6279,9 +6502,25 @@ return this.testTunnel(true);
         if (generation === this.projectContextGeneration && client === this.client)
             this.postState();
     }
+    /**
+     * Authoritative backstop for A-class display reads: while the low-traffic guard is on, only an
+     * explicitly user-initiated request performs a round. The webview gates its own automatic entries,
+     * but a request queued before the panel learned the mode (or a pre-handshake initial pull) still
+     * must not produce traffic. Signal-carrying rounds come from the API server (C-class) and are
+     * handled by their own callers, never by this check.
+     */
+    private displayReadBlockedFor(message: any): boolean {
+        return this.effectiveTrafficPolicy().displayAutoRefresh === false && stringField(message, "origin") !== "user";
+    }
     async loadGpuHistoryFromUi(message) {
         const generation = this.projectContextGeneration;
         const client = this.client;
+        const displayOrigin = stringField(message, "origin");
+        // A05: in low traffic an automatic history request performs no read at all and publishes no
+        // result frame (no sample happened); the area keeps its cached curve plus the real sample time
+        // and only the explicit manual entry (origin "user") reaches the server.
+        if (this.displayReadBlockedFor(message))
+            return;
         const query = (0, GpuHistoryState_1.normalizeGpuHistoryQuery)({
             serverId: stringField(message, "serverId") || undefined,
             gpuId: stringField(message, "gpuId") || undefined,
@@ -6308,6 +6547,19 @@ return this.testTunnel(true);
         }
         if (generation === this.projectContextGeneration && client === this.client)
             this.postState(true);
+        if (generation === this.projectContextGeneration && client === this.client) {
+            // One honest result frame per round so the panel's per-key sample / manual-refresh times come
+            // from the round the host actually served, not from the click.
+            this.view?.webview.postMessage({
+                type: "gpuHistoryResult",
+                ok: !failure,
+                serverId: query.serverId || "overview",
+                gpuId: query.gpuId || "overview",
+                origin: displayOrigin === "user" ? "user" : "auto",
+                fetchedAt: new Date().toISOString(),
+                error: failure ? errorMessage(failure) : undefined,
+            });
+        }
         if (failure && stringField(message, "clientActionId"))
             throw failure;
     }
@@ -6461,7 +6713,7 @@ return this.testTunnel(true);
         if (command === "answerRunConfirmation") { this.runConfirmation.answer(message); return; }
         if (command === "retryPlanSubmission") return this.resumePlanSubmission(String(message.operationId || ""));
         if (command === "cancelPlanSubmission") return this.cancelPlanRunSubmission(String(message.operationId || ""));
-        if (["webviewNotice", "webviewReady", "webviewBootstrapPhase", "webviewBootstrapError", "webviewRuntimeIncident", "webviewRenderError", "webviewHeartbeatAck", "webviewStateRendered", "webviewSectionInterest", "webviewSectionTelemetry", "webviewLayoutEvidence", "webviewVisibility"].includes(command)
+        if (["webviewNotice", "webviewReady", "webviewBootstrapPhase", "webviewBootstrapError", "webviewRuntimeIncident", "webviewRenderError", "webviewHeartbeatAck", "webviewStateRendered", "webviewSectionInterest", "webviewSectionTelemetry", "webviewLayoutEvidence", "webviewVisibility", "toggleLowTrafficMode"].includes(command)
             && !this.isCurrentPanelDocumentMessage(message, command)) return;
         if (this.extensionRuntimeVersionState().reloadRequired && command !== "reloadWindow") {
             this.showPanelReloadRequired();
@@ -6577,6 +6829,9 @@ return this.testTunnel(true);
                     this.transitionPanelLifecycle("degraded", `section:${String(message.section).slice(0, 40)}`);
                 }
                 break;
+            case "toggleLowTrafficMode":
+                await this.handleLowTrafficModeToggle(message);
+                break;
             case "reloadPanel":
                 await this.reloadPanelHtml();
                 break;
@@ -6605,6 +6860,8 @@ return this.testTunnel(true);
                 return await this.retryDistributedJobFromUi(message);
             case "dispatchJobs":
                 return await new ManualDispatchHost(this, workspaceRoot()).dispatch(message, true);
+            case "recheckOutputIsolation":
+                return await new OutputIsolationRecoveryHost(this,workspaceRoot()).fromUi(message);
             case "queueRemainingJobs":
                 return await new ServerQueueHost(this, workspaceRoot()).dispatch(message, true);
             case "analyzeRuntimeLog": {
@@ -6690,6 +6947,9 @@ return this.testTunnel(true);
                 break;
             case "startAllConnections":
                 await this.startAllXshellConnections();
+                break;
+            case "openXshell":
+                await this.openAllXshellSessions();
                 break;
             case "prepareAgents":
                 await this.prepareAgentsForFirstRun(message.uiMode !== true);
@@ -9090,67 +9350,107 @@ return false;
             this.pluginUpdateInstalling = false;
         }
     }
-    async syncToGitHub(confirm = true, taskName) {
-        if (confirm)
-            this.notifyLocalActionStarted("同步到 GitHub", "正在执行 git add/commit/push。");
+    /**
+     * 本机仓库准备必须按序先完成：绑定项目/仓库、必要的 stage 与 commit，并确定待推送提交。
+     * 提交钩子会改变源码，因此这一步与后续 Worker 上传读源码不得交错；本步不走任何网络。
+     */
+    async prepareLocalGitPublish(taskName, report = (_text: string) => { }) {
         const repo = await this.primaryGitRepository();
         await vscode.commands.executeCommand("git.stageAll");
-        if (gitRepositoryHasChanges(repo)) {
-            const message = timestampCommitMessage(taskName, changedFileNamesFromRepo(repo));
+        const committed = gitRepositoryHasChanges(repo);
+        const message = timestampCommitMessage(taskName, committed ? changedFileNamesFromRepo(repo) : []);
+        if (committed) {
             assertNonEmptyCommitMessage(message);
             repo.inputBox.value = message;
             await repo.commit(message);
-            await repo.push();
-            void vscode.window.showInformationMessage(`GitHub 同步完成：${message}`);
-            return;
         }
-        await repo.push();
-        void vscode.window.showInformationMessage(`GitHub 同步完成：${timestampCommitMessage(taskName, [])}`);
+        const hasRemote = gitRepositoryHasRemote(repo);
+        report(`待推送提交已确定${committed ? "（本次新建提交）" : "（无本地变更）"}：${message}`);
+        return { repo, message, committed, hasRemote };
+    }
+    /** 只走网络：已有远端则 push，否则走既有首次仓库发布流程；不读写 Worker，也不读源码树。 */
+    async publishPreparedGitBranch(prepared, report = (_text: string) => { }) {
+        if (prepared.hasRemote) {
+            report("正在推送到 GitHub…");
+            await prepared.repo.push();
+            return { pushed: true, createdRemote: false };
+        }
+        const root = workspaceRoot();
+        if (!root)
+            throw new Error("请先打开一个工作区，再执行 GitHub 发布。");
+        const cp = require("child_process");
+        const probe = cp.spawnSync("gh", ["--version"], { encoding: "utf8", timeout: 5000 });
+        const ghMissing = probe.error || probe.status !== 0;
+        if (ghMissing) {
+            const choice = await vscode.window.showErrorMessage(`未检测到 gh CLI（GitHub 官方命令行）。首次发布需要它创建仓库。请先安装 gh 并执行 \`gh auth login\`，然后重试。`, { modal: true }, "打开安装页", "查看文档");
+            if (choice === "打开安装页")
+                await vscode.env.openExternal(vscode.Uri.parse("https://cli.github.com/"));
+            else if (choice === "查看文档")
+                await vscode.env.openExternal(vscode.Uri.parse("https://docs.github.com/zh/github-cli/github-cli/setting-up-the-github-cli"));
+            throw new Error("gh CLI 未安装或未登录，无法创建远程仓库；已引导打开安装页，请安装后重新执行「发布到git并上传worker」。");
+        }
+        report("首次发布：正在创建远端仓库并推送…");
+        await runVsCodeShellTask("SimpleExperiment GitHub publish", "gh repo create --source . --remote origin --private --push", root);
+        return { pushed: true, createdRemote: true };
+    }
+    async syncToGitHub(confirm = true, taskName) {
+        if (confirm)
+            this.notifyLocalActionStarted("同步到 GitHub", "正在执行 git add/commit/push。");
+        // 本机准备（含 stage/commit）与网络 push 的次序不变，只是拆成可单独复用的两段。
+        const prepared = await this.prepareLocalGitPublish(taskName);
+        await this.publishPreparedGitBranch(prepared);
+        void vscode.window.showInformationMessage(`GitHub 同步完成：${prepared.message}`);
     }
     async publishToGitHub(taskName) {
         await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: "发布到git并上传worker", cancellable: false }, async (progress) => {
             const report = (message, increment) => progress.report({ message, increment });
-            report("正在连接 GitHub 并提交/推送仓库…", 8);
+            // 总进度按各分支最新状态归并：增量只在确定阶段加一次，交错回调只改写文案，不重复累加。
+            const branchState = { git: "正在准备本机提交", workers: "等待本机准备" };
+            const merged = () => report(`GitHub：${branchState.git}｜Worker：${branchState.workers}`, 0);
+            report("正在准备本机提交与 GitHub 凭证…", 8);
             const token = await this.githubUpdateToken(true);
-            const repo = await this.primaryGitRepository();
-            if (gitRepositoryHasRemote(repo)) {
-                await this.syncToGitHub(false, taskName);
+            const prepared = await this.prepareLocalGitPublish(taskName, text => { branchState.git = text; merged(); });
+            // 本机准备完成后，Git 网络推送与 Worker 上传是两条独立分支：Worker 不等 Git 网络成功，
+            // 任一侧失败都不得自动取消另一侧已经开始的工作，也不得提前释放已发起的写入所有权。
+            // 两条分支各自收敛为结果对象，Promise.all 不会提前拒绝而留下无主写入。
+            report("本机提交已确定，GitHub 推送与 Worker 上传并行进行…", 14);
+            const gitBranch = (async () => {
+                try {
+                    const result = await this.publishPreparedGitBranch(prepared, text => { branchState.git = text; merged(); });
+                    branchState.git = result?.createdRemote ? "首次仓库已发布" : "已推送";
+                    return { ok: true, result };
+                } catch (error) {
+                    branchState.git = `失败：${errorMessage(error)}`;
+                    return { ok: false, error };
+                } finally { merged(); }
+            })();
+            const workerBranch = (async () => {
+                try {
+                    const upload = await this.uploadProjectToWorkers(false, {
+                        progressReport: text => { branchState.workers = text; merged(); }, progressSpan: 70,
+                    });
+                    branchState.workers = upload.message;
+                    return { ok: true, upload };
+                } catch (error) {
+                    branchState.workers = `失败：${errorMessage(error)}`;
+                    return { ok: false, error };
+                } finally { merged(); }
+            })();
+            const [gitResult, workerResult] = await Promise.all([gitBranch, workerBranch]);
+            // 四种组合分别如实呈现；成功目标不回滚，未知写入只提示先查询。
+            if (gitResult.ok && workerResult.ok) {
+                report(workerResult.upload.message, 0);
+                void vscode.window.showInformationMessage(`GitHub 已发布；${workerResult.upload.message}`);
+            } else if (gitResult.ok) {
+                void vscode.window.showErrorMessage(`GitHub 已发布，但 Worker 上传失败：${errorMessage(workerResult.error)}。可单独使用「上传到 Worker」入口重试。`);
+                throw workerResult.error;
+            } else if (workerResult.ok) {
+                void vscode.window.showErrorMessage(`GitHub 发布失败：${errorMessage(gitResult.error)}；Worker 上传已完成（${workerResult.upload.message}），成功目标未回滚。请单独使用「同步到 GitHub」入口重试。`);
+                throw gitResult.error;
+            } else {
+                void vscode.window.showErrorMessage(`GitHub 与 Worker 均失败：GitHub ${errorMessage(gitResult.error)}；Worker ${errorMessage(workerResult.error)}。请分别使用对应入口重试；结果未知的写入会先查询，不会自动重放。`);
+                throw gitResult.error;
             }
-            else {
-                const root = workspaceRoot();
-                if (!root)
-                    throw new Error("请先打开一个工作区，再执行 GitHub 发布。");
-                await vscode.commands.executeCommand("git.stageAll");
-                if (gitRepositoryHasChanges(repo)) {
-                    const message = timestampCommitMessage(taskName, changedFileNamesFromRepo(repo));
-                    assertNonEmptyCommitMessage(message);
-                    repo.inputBox.value = message;
-                    await repo.commit(message);
-                }
-                const cp = require("child_process");
-                const probe = cp.spawnSync("gh", ["--version"], { encoding: "utf8", timeout: 5000 });
-                const ghMissing = probe.error || probe.status !== 0;
-                if (ghMissing) {
-                    const choice = await vscode.window.showErrorMessage(`未检测到 gh CLI（GitHub 官方命令行）。首次发布需要它创建仓库。请先安装 gh 并执行 \`gh auth login\`，然后重试。`, { modal: true }, "打开安装页", "查看文档");
-                    if (choice === "打开安装页")
-                        await vscode.env.openExternal(vscode.Uri.parse("https://cli.github.com/"));
-                    else if (choice === "查看文档")
-                        await vscode.env.openExternal(vscode.Uri.parse("https://docs.github.com/zh/github-cli/github-cli/setting-up-the-github-cli"));
-                    throw new Error("gh CLI 未安装或未登录，无法创建远程仓库；已引导打开安装页，请安装后重新执行「发布到git并上传worker」。");
-                }
-                await runVsCodeShellTask("SimpleExperiment GitHub publish", "gh repo create --source . --remote origin --private --push", root);
-            }
-            report("GitHub 已完成，正在准备 Worker 上传…", 22);
-            let upload;
-            try {
-                upload = await this.uploadProjectToWorkers(false, { progressReport: report, progressSpan: 70 });
-            }
-            catch (uploadErr) {
-                void vscode.window.showErrorMessage(`GitHub 已发布，但 Worker 上传失败：${errorMessage(uploadErr)}。可单独使用「上传到 Worker」入口重试。`);
-                throw uploadErr;
-            }
-            report(upload.message, 0);
-            void vscode.window.showInformationMessage(`GitHub 已发布；${upload.message}`);
             void token;
         });
     }
@@ -9331,6 +9631,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             await this.agentLifecycleForTarget(target, before.status === "unhealthy" || before.status === "running" && before.runningVersion !== runtimeVersion ? "restart" : "ensure", manifest, true);
         });
         if (deferVerification) return { targets, manifest, timings };
+        await this.startBackgroundTunnels(false, false, targets.map(target => target.id));
         // 手动触发(showMessage=true)：单次 verify 立即返回，避免 fetch failed/ECONNREFUSED 无意义延迟；仅自动触发(showMessage=false)才轮询重试
         let verifyIssues: any;
         let _verifyOk: boolean;
@@ -10516,7 +10817,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             : aggregate;
         return statuses;
     }
-    async mergeLatestWorkerVersions(root, targets, selectedPaths, relative, report = (_stage: string) => {}, options: { metricsOnly?: boolean; signal?: AbortSignal; completedJob?: { sourceId: string; planId: string; commandId: string; retentionKey: string; requiredArtifacts?: Record<string, string> }; assertCurrent?: () => Promise<void>; verifyOnly?: boolean } = {}) {
+    async mergeLatestWorkerVersions(root, targets, selectedPaths, relative, report = (_stage: string) => {}, options: { prepareOnly?: boolean; metricsOnly?: boolean; signal?: AbortSignal; completedJob?: { sourceId: string; planId: string; commandId: string; retentionKey: string; requiredArtifacts?: Record<string, string> }; assertCurrent?: () => Promise<void>; verifyOnly?: boolean } = {}) {
         const checkCancelled = () => { if (options.signal?.aborted) throw new UiCommandCancelled("同步服务器结果已取消，未下载指标文件。"); };
         checkCancelled();
         if (options.metricsOnly && !selectedPaths.length) return { completed: [], errors: [] };
@@ -10536,6 +10837,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         const configured = this.enabledWorkerConfigs().map((worker) => worker.id).filter(Boolean);
         if (configured.some((id) => !targets.some((target) => target.id === id))) throw new Error("有 Worker 未连接或未启用；请恢复连接后再合并最新版。");
         const copyScope = {};
+        let preparedHeld = false;
         if (artifactCopy) {
             const config = vscode.workspace.getConfiguration("simpleExperimentMac", vscode.Uri.file(root));
             if (selectedPaths.some(file => isLocalCodeOwnedPath(file, true, config.get("codeSync.includePaths", []), config.get("codeSync.scopePaths"))))
@@ -10693,6 +10995,39 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 if (options.verifyOnly) return { completed: [], files, errors: work.length ? [`仍有 ${work.length} 个文件待同步；请点“重试产物同步”。`] : [], foreignOnly: foreignCopies };
                 const source = targets.find(row => row.id === sourceId);
                 const completed = [];
+                if (options.prepareOnly) {
+                    const preparedArtifactCopy: import("../features/ArtifactBatchTransfer").PreparedArtifactCopy = {
+                        member: { retentionKey: options.completedJob.retentionKey, planId: options.completedJob.planId,
+                            commandId: options.completedJob.commandId, files }, files, foreignOnly: foreignCopies,
+                        assertCurrent: async () => { checkCancelled(); await options.assertCurrent?.(); assertArtifactBindingsCurrent(); },
+                        release: () => this.activeArtifactSyncScopes.delete(copyScope),
+                        // Empty deltas still contribute their frozen identity to a retry of this member set.
+                        requests: targets.filter(row => row.id !== sourceId).map(destination => ({
+                            source: this.sftpServerOptions(source),
+                            destination: { ...this.sftpServerOptions(destination), host: this.sftpServerOptions(destination).networkHost || this.sftpServerOptions(destination).host },
+                            paths: groups.get(destination.id) || [],
+                            guard: async (paths: string[]) => {
+                                await options.assertCurrent?.(); assertArtifactBindingsCurrent(); checkCancelled();
+                                await this.assertSshTransportIdentities([source, destination]);
+                                for (const file of paths) if (isUnderMachineStatePrefixes(file, sourcePrefixes, true)
+                                    || isUnderMachineStatePrefixes(file, machinePrefixesFor(destination.id), true))
+                                    throw Error("本次冻结机器状态映射与产物批次路径冲突：" + file);
+                            },
+                            transfer: async (paths: string[], identity, jobs: number) => {
+                                await this.simpleSftpApiCall("sync.serverToServerFpsync", {
+                                    source: this.sftpServerOptions(source), destination: { ...this.sftpServerOptions(destination),
+                                        host: this.sftpServerOptions(destination).networkHost || this.sftpServerOptions(destination).host },
+                                    relativePaths: paths, confirm: true, pathConfirmed: true, ...identity, compression: "auto", singleStream: true,
+                                    taskLabel: workerFpsyncTaskLabel({ action: "合并同步任务最新产物", sourceId, destinationId: destination.id,
+                                        detail: jobs + " 个 job / " + paths.length + " 个文件" }) });
+                            },
+                            inventory: async (paths: string[]) => (await this.verifiedSftpProjectInventory({
+                                source: this.sftpServerOptions(destination), relativePath: ".", scopePaths: paths })).files,
+                        })),
+                    };
+                    preparedHeld = true;
+                    return { preparedArtifactCopy };
+                }
                 for (const [id, paths] of groups) {
                     const destination = targets.find(row => row.id === id);
                     await options.assertCurrent?.();
@@ -10744,7 +11079,8 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             return { completed: results.filter((item) => !item.error).map((item) => item.item.path),
                 errors: [...skipped, ...results.filter((item) => item.error).map((item) => `${item.item.path}：${item.error}`)] };
         } finally {
-            if (artifactCopy) this.activeArtifactSyncScopes.delete(copyScope);
+            if (artifactCopy && !preparedHeld) this.activeArtifactSyncScopes.delete(copyScope);
+            else if (artifactCopy) { /* The prepared batch owns release through its finally. */ }
             else this.syncScopeMutationInFlight = false;
         }
     }
@@ -10890,7 +11226,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 scopeBatches.set(endpointId, await previewConfirmedScopeDeletion(
                     (method, params) => this.simpleSftpApiCall(method, params, 0),
                     { id: endpointId, kind: "remote", host: server.host, user: server.user || server.username, port: server.port, root: server.remotePath },
-                    list, stage => report(`${endpointId}：${stage}`)));
+                    list, root, stage => report(`${endpointId}：${stage}`)));
             }
         }
         for (const item of work) {
@@ -11037,7 +11373,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             const destination = this.sftpServerOptions(row);
             for (const directory of plan.directoryDeletes) {
                 report(`${row.id}：清理已确认目录 ${directory}`);
-                await this.deleteSyncScopeRemoteCopy(row.id, destination, directory, true, report);
+                await this.deleteSyncScopeRemoteCopy(root, row.id, destination, directory, true, report);
             }
             for (const group of plan.groups) {
                 const batchNote = group.batchCount > 1 ? ` · 批次 ${group.batch}/${group.batchCount}` : "";
@@ -11133,7 +11469,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         });
         return work.map((item) => item.path);
     }
-    async deleteSyncScopeRemoteCopy(id, server, relative, directory, report = (_stage: string) => {}) {
+    async deleteSyncScopeRemoteCopy(root, id, server, relative, directory, report = (_stage: string) => {}) {
         const guard = this.targetRootGuard({ ...server, id });
         if (!guard || guard.unknown || isUnderMachineStatePrefixes(relative, guard.prefixes, directory))
             throw new Error("远端机器状态路径或其祖先不可删除；请核对节点状态根。");
@@ -11146,7 +11482,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             snapshot => report(`${id}：已检查 ${snapshot.processedFiles || 0} 项文件元数据`),
             ["files.cleanup.inspect", "files.cleanup.execute"].includes(method) ? { source: { ...server, id }, relativePath: relative } : undefined),
             { id, kind: "remote", host: server.host, user: server.user || server.username,
-                port: server.port, root: server.remotePath }, relative, directory, report);
+                port: server.port, root: server.remotePath }, relative, directory, root, report);
     }
     async removeSyncScopeCopies(root, targets, relative, endpointIds, directory, report = (_stage: string) => {}) {
         this.assertArtifactSyncPathsIdle?.(root, [relative]);
@@ -11185,7 +11521,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             report(`正在删除 ${copy.id} 的 ${relative}`);
             try {
                 if (copy.id === "local") await deleteLocalSyncPath(root, relative);
-                else await this.deleteSyncScopeRemoteCopy(copy.id, copy.server, relative, directory, report);
+                else await this.deleteSyncScopeRemoteCopy(root, copy.id, copy.server, relative, directory, report);
                 completed.push(copy.id);
             } catch (error) {
                 try {
@@ -11324,7 +11660,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             if (endpointId === "local") {
                 if (directory) {
                     const destination = this.sftpServerOptions(row);
-                    await this.deleteSyncScopeRemoteCopy(row.id, destination, relative, true, report);
+                    await this.deleteSyncScopeRemoteCopy(root, row.id, destination, relative, true, report);
                 }
                 const files = directory ? sourceInventory : { [relative]: sourceInventory[relative] };
                 const manifest = Object.fromEntries(Object.entries(files).map(([file, info]: [string, any]) => [file, { size: info.size, sha256: info.sha256 }]));
@@ -11435,7 +11771,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                             sourceId: sourceRow.id, destinationId: target.id, detail: directory,
                         }) });
                 } else {
-                    await this.deleteSyncScopeRemoteCopy(target.id, destination, directory, true);
+                    await this.deleteSyncScopeRemoteCopy(root, target.id, destination, directory, true);
                     if (Object.keys(sourceFiles).length) {
                         const manifest = Object.fromEntries(Object.entries(sourceFiles).map(([file, info]: [string, any]) => [file, { sha256: info.sha256, size: info.size }]));
                         const result = await (async () => {
@@ -11468,7 +11804,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         }
     }
     async ensureCodeReadyForRun(projectContext = this.captureProjectContext(), bodies = [], reportStage = (_text: string) => {}, onTargetReady?) {
-        reportStage("正在准备运行前代码同步…");
+        reportStage("正在检查运行代码；仅有变化时自动上传…");
         await this.prepareSftpTargets("ensureCodeReadyForRun", "simpleSftpMac.uploadWorkspace");
         if (!this.projectContextIsCurrent(projectContext))
             throw new UiCommandCancelled("工作区已切换，运行前代码同步已取消。");
@@ -11484,7 +11820,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 throw new UiCommandCancelled("工作区已切换，运行前代码同步已取消。");
             return onTargetReady(...args);
         } : undefined;
-        reportStage("正在同步运行所需代码…");
+        reportStage("正在核对各 Worker 的运行代码…");
         const [syncedTargets] = await Promise.all([
             this.syncCodeTargets(targets, "run", { projectContext, hashCompare: true, progressReport: (text) => reportStage(text), onTargetReady: targetReady }),
             versionsReady,
@@ -11509,14 +11845,1095 @@ reportStage("正在准备校验所需代码…");
  const synced=await this.syncCodeTargets(targets,"plan-check",{hashCompare:true,progressReport:reportStage});
  if(synced?.length&&!synced.some(t=>t.id===selected))this.stampWorkerPoolManualTarget(body,synced[0].id);
 }
+    /** 交接 gate 与 tick 阶段账本。状态只存于本模块的纯结构，经既有状态/错误通道上报，不新增文件与定时器。 */
+    // 不在字段初始化时碰模块命名空间：很多测试只摘出部分类成员到 VM 宿主，字段初始化器会连带
+    // 拉起整个 gate 模块引用。这里改为首次真实使用时惰性创建，调用方永远拿到真实结构。
+    private dispatchHandoffGate: ReturnType<typeof DispatchHandoffGate.createGate> | undefined = undefined;
+    private codeUploadTargetLeases: ReturnType<typeof DispatchHandoffGate.createTargetLeaseTable> | undefined = undefined;
+    private gateStateLocal() {
+        return this.dispatchHandoffGate || (this.dispatchHandoffGate = DispatchHandoffGate.createGate());
+    }
+    private targetLeaseTableLocal() {
+        return this.codeUploadTargetLeases || (this.codeUploadTargetLeases = DispatchHandoffGate.createTargetLeaseTable());
+    }
+    /** tick 生命周期与交接记录的身份对应（仅本轮生命周期内有效）。 */
+    private readonly distributedTickIds = new WeakMap<object, string>();
+    private codeUploadHandoffSeq = 0;
+    /** tick 身份经字段传给 core，避免给二参签名的既有提取夹具新增参数。 */
+    private distributedCurrentTickId: string | undefined = undefined;
+    /** 写入结果未知的目标租约保留表：键为实际写目标键，只有主动查询确认结束后才放回。 */
+    private retainedCodeUploadTargetLeases: Record<string, any> | undefined = undefined;
+    /** 同一实际目标的接管决策串行队列：查询在途时兄弟分支可能刚取锁，并发决策会误取消本轮自己的上传。 */
+    private codeUploadTakeoverTails: Map<string, Promise<void>> | undefined = undefined;
+    /**
+     * 本轮（同一个 syncId）正拿着写锁、已越过真实写入边界的分支起点集合。
+     * 只在 `upload.workspace` 调用期间存在（无论成败都注销），用于在操作项不带主机/路径时也能认出“这是本轮刚启动的上传”。
+     */
+    private codeUploadRoundWriteEpochs: Map<string, Set<{ targetKey: string; startedAtMs: number }>> | undefined = undefined;
+    /**
+     * 「取消也救不回来」的未完成项提示台账（被拒、结果不明确、寻不到身份、取消后始终不落地）。
+     * 只用于下一轮的覆盖确认框如实列出，不是写入所有权表：这里不释放未知写入、保留租约或围栏，
+     * 条目上限只为防内存无限增长，淘汰最早条目也不会让任何目标变得可以写。
+     */
+    private codeUploadStaleSuspects: Map<string, any> | undefined = undefined;
+    /** 本轮（同一 syncId）冻结的写入范围（目标键 + 清单指纹），覆盖批准必须绑死它（A3）。 */
+    private codeUploadRoundScopeLocal: { syncId: string; fingerprint: string; targetKeys: Set<string> } | undefined = undefined;
+    /** 同一轮（syncId）的“当场补问”单飞：并行分支共用同一次模态框与同一个决定，绝不弹第二个框。 */
+    private codeUploadStaleAsks: Map<string, Promise<any>> | undefined = undefined;
+    /** 本轮（同一 syncId）的历史记录覆盖决定：批准与否、批准了哪些目标与哪些记录绑定（身份+实例+发起时间）。 */
+    private codeUploadStaleRounds: Map<string, any> | undefined = undefined;
+    private distributedTickSeq = 0;
+    /** 每 Worker（按实际写目标）独立的传输/校验/proof 阶段，不折叠成“全部成功”。 */
+    private codeSyncTargetResults: Array<Record<string, any>> = [];
+    beginCodeUploadHandoffLocal(root: string, scope: string, workerIds: readonly string[]) {
+        if (!root) return undefined;
+        return DispatchHandoffGate.beginUpload(this.gateStateLocal(), {
+            uploadId: `upload-${++this.codeUploadHandoffSeq}`, root, scope: String(scope || ""), workerIds: workerIds || [],
+        });
+    }
+    endCodeUploadHandoffLocal(uploadId?: string) {
+        if (uploadId) DispatchHandoffGate.endUpload(this.gateStateLocal(), String(uploadId));
+    }
+    /** 等待已登记的派发交接真正结束；超时只说明本轮仍未安全，不释放任何交接所有权。 */
+    awaitDispatchHandoffSafeLocal(intent: { uploadId: string; root: string; workerIds: readonly string[] } | undefined, timeoutMs: number) {
+        if (!intent) return Promise.resolve({ safe: true, waitedMs: 0, timedOut: false, blocking: [] });
+        return DispatchHandoffGate.waitForBlockingClear(this.gateStateLocal(), intent.root, intent.workerIds || [], timeoutMs);
+    }
+    markCodeUploadWorkerReadyLocal(intent: { uploadId: string; root: string } | undefined, root: string, workerId: string, targetKey?: string) {
+        if (!intent || !workerId) return;
+        DispatchHandoffGate.markWorkerUploadState(this.gateStateLocal(), intent.uploadId, root, workerId, "uploaded");
+        if (targetKey) DispatchHandoffGate.noteUploadTarget(this.gateStateLocal(), intent.uploadId, root, workerId, targetKey);
+    }
+    markCodeUploadWorkerFailedLocal(intent: { uploadId: string; root: string } | undefined, root: string, workerId: string, error: string, targetKey?: string) {
+        if (!intent || !workerId) return;
+        if (targetKey) DispatchHandoffGate.noteUploadTarget(this.gateStateLocal(), intent.uploadId, root, workerId, targetKey);
+        DispatchHandoffGate.markWorkerUploadState(this.gateStateLocal(), intent.uploadId, root, workerId, "unknown-failed", error);
+    }
+    /** 记下本轮写入的真实目标键（规范服务器 + 实际 root），别名共享目标靠它判定。 */
+    noteCodeUploadTargetLocal(intent: { uploadId: string; root: string } | undefined, root: string, workerId: string, targetKey: string) {
+        if (!intent || !workerId || !targetKey) return;
+        DispatchHandoffGate.noteUploadTarget(this.gateStateLocal(), intent.uploadId, root, workerId, targetKey);
+    }
+    /** 派发入口重查：本轮上传尚未确认写入完成的 Worker 不得接受新派发。 */
+    dispatchHandoffAllowsWorkerLocal(root: string, workerId: string) {
+        return !DispatchHandoffGate.uploadBlocksWorker(this.gateStateLocal(), root, workerId, this.dispatchTargetKeyLocal(workerId));
+    }
+    dispatchHandoffYieldsRoundLocal(root: string, workerIds: readonly string[]) {
+        const entries = (workerIds || []).map((workerId: string) => ({ workerId, targetKey: this.dispatchTargetKeyLocal(workerId) }));
+        return DispatchHandoffGate.uploadYieldsWholeRound(this.gateStateLocal(), root, entries);
+    }
+    /** 派发 gate 入口：为已过准入前置筛选的派发登记交接所有权（所有权先于准入落盘）。 */
+    registerDispatchHandoffsLocal(input: { tickId: string; generation: number; root: string; projectId: string; dispatches: any[] }) {
+        let registered = 0;
+        for (const dispatch of input.dispatches || []) {
+            if (!dispatch?.commandId || !dispatch.workerId) continue;
+            DispatchHandoffGate.beginHandoff(this.gateStateLocal(), { tickId: input.tickId, generation: input.generation, root: input.root,
+                projectId: input.projectId, workerId: String(dispatch.workerId || ""), planId: String(dispatch.planId || ""),
+                planFile: String(dispatch.planFile || ""), jobIndex: Number(dispatch.jobIndex), commandId: String(dispatch.commandId || ""),
+                gpuId: dispatch.gpuId === undefined ? "" : String(dispatch.gpuId), attempt: Number(dispatch.attempt || 0) });
+            registered += 1;
+        }
+        return registered;
+    }
+    advanceDispatchHandoffLocal(root: string, commandId: string, phase: DispatchHandoffGate.DispatchHandoffPhase) {
+        if (!root || !commandId) return undefined;
+        return DispatchHandoffGate.advanceHandoff(this.gateStateLocal(), root, commandId, phase);
+    }
+    markDispatchHandoffTransmissionLocal(root: string, commandId: string) {
+        if (!root || !commandId) return;
+        DispatchHandoffGate.markHandoffTransmission(this.gateStateLocal(), root, commandId);
+    }
+    /**
+     * 底层传输落定：外层函数已返回不等于送达，因此本方法只能由传输自己的 promise 调用。
+     * fire-and-forget 可以继续向调用方返回 unknown，但在途登记不会随外层返回消失。
+     */
+    markDispatchHandoffTransportSettledLocal(root: string, commandId: string, outcome: "ok" | "failed") {
+        if (!root || !commandId) return undefined;
+        return DispatchHandoffGate.markHandoffTransportSettled(this.gateStateLocal(), root, commandId, outcome);
+    }
+    /** 把传输 promise 的落定接到交接登记上（不吞错，原有错误上报保持原样）。 */
+    observeDispatchHandoffTransportLocal(root: string, commandId: string, posted: Promise<unknown>) {
+        void Promise.resolve(posted).then(() => this.markDispatchHandoffTransportSettledLocal?.(root, commandId, "ok"),
+            () => this.markDispatchHandoffTransportSettledLocal?.(root, commandId, "failed"));
+    }
+    /** 本机提交/退回没真的落盘：不删所有权，只标注当前在等什么证据。 */
+    markDispatchHandoffAwaitingEvidenceLocal(root: string, commandId: string, reason: string) {
+        if (!root || !commandId) return undefined;
+        return DispatchHandoffGate.markHandoffAwaitingEvidence(this.gateStateLocal(), root, commandId, reason);
+    }
+    /** 精确查询（完整、无错误的 Worker 任务观测）后的释放；传输仍在途时 gate 自己会拒绝释放。 */
+    releaseDispatchHandoffsOnObservationLocal(root: string, workerId: string, snapshot: any) {
+        if (!root || !workerId) return 0;
+        return DispatchHandoffGate.releaseHandoffsOnObservation(this.gateStateLocal(), root, workerId, snapshot);
+    }
+    endDispatchHandoffLocal(root: string, commandId: string, outcome: DispatchHandoffGate.HandoffOutcome) {
+        if (!root || !commandId) return false;
+        return DispatchHandoffGate.endHandoff(this.gateStateLocal(), root, commandId, outcome);
+    }
+    /**
+     * 本机队列真的落盘后的可靠移交：已发送记 committed，从未发送记 unsent-released。
+     * 没拿到这条证据时调用方只能标注等待，不能拿“发送函数已返回”当提交成功。
+     */
+    commitDispatchHandoffLocal(root: string, commandId: string) {
+        if (!root || !commandId) return false;
+        const gate = this.gateStateLocal();
+        const record = DispatchHandoffGate.advanceHandoff(gate, root, commandId, "local-receipt-commit");
+        if (!record) return false;
+        record.localCommitConfirmed = true;
+        return DispatchHandoffGate.endHandoff(gate, root, commandId, record.transmissionStarted ? "committed" : "unsent-released");
+    }
+    /** 整轮结束/换代：本轮未提交的交接按真实结局回收，绝不改写成已提交。 */
+    endTickHandoffsLocal(tickId: string | undefined, outcome: DispatchHandoffGate.HandoffOutcome) {
+        return tickId ? DispatchHandoffGate.endRoundHandoffs(this.gateStateLocal(), tickId, outcome) : 0;
+    }
+    beginDistributedTickRecordLocal(root: string, generation: number): string {
+        return `tick-${++this.distributedTickSeq}`;
+    }
+    beginDistributedTickLocal(tickId: string | undefined, root: string, generation: number) {
+        if (!tickId) return undefined;
+        return DispatchHandoffGate.beginTick(this.gateStateLocal(), { tickId, root: root || "", generation });
+    }
+    setDistributedTickPhaseLocal(tickId: string | undefined, phase: string, detail?: { workerId?: string; planId?: string; planFile?: string; jobIndex?: number; commandId?: string; sent?: boolean }) {
+        if (!tickId) return;
+        DispatchHandoffGate.setTickPhase(this.gateStateLocal(), tickId, phase, detail);
+    }
+    endDistributedTickRecordLocal(tickId: string | undefined, outcome: string, error?: unknown) {
+        if (!tickId) return;
+        DispatchHandoffGate.endTick(this.gateStateLocal(), tickId, outcome, error ? errorMessage(error) : undefined);
+    }
+    /** 等待超时证据：走既有可持久化错误通道，同时刷新面板诊断快照。 */
+    recordDispatchHandoffTimeoutLocal(source: string, intent: { uploadId: string; root: string; workerIds: readonly string[] } | undefined, wait: any) {
+        const root = String(intent?.root || workspaceRoot() || "");
+        const blocking = wait?.blocking || DispatchHandoffGate.blockingHandoffs(this.gateStateLocal(), root, intent?.workerIds || []);
+        const evidence = DispatchHandoffGate.handoffEvidence(this.gateStateLocal(), root, blocking);
+        this.dispatchHandoffTimeoutEvidence = { source: String(source || ""), at: new Date().toISOString(), waitedMs: Number(wait?.waitedMs || 0), ...evidence };
+        const active = evidence.blocking.map((row: any) => `${row.workerId || "?"}/${row.planFile || row.planId || "?"}#${row.jobIndex} ${row.phase}${row.sent ? " 已发送" : " 未确认发送"} ${row.elapsedMs}ms`);
+        const tickPhase = evidence.tick.ticks.filter((row: any) => row.outcome === "in-flight")
+            .map((row: any) => `${row.tickId} ${row.phase}#${row.phaseIndex} ${row.elapsedMs}ms`);
+        const storage = this.distributedQueueStorageDiagnostics || { status: "ready" };
+        const message = `原派发尚未确认结束，代码同步未写入；请刷新任务状态后重试。`
+            + `交接阶段[${active.slice(0, 4).join("；") || "无活跃交接"}]本轮阶段[${tickPhase.slice(0, 3).join("；") || "无进行中 tick"}]`
+            + `队列诊断 ${storage.status}${(storage as any).reason ? `/${(storage as any).reason}` : ""}`;
+        // 精确身份要能走过真实压缩与序列化、重载后仍可核对：tickId / generation / 阻塞 commandId / phase /
+        // 已等时长 / 是否已发 / 传输是否落定 / 有界队列诊断；只留白名单字段，不带密钥和文件清单。
+        const gateSnapshotForEvidence: any = (evidence as any)?.gate || {};
+        const latestQueueMetric = (this.distributedQueueMetrics || []).slice(-1)[0] || {};
+        const handoffEvidenceDetails = {
+            source: String(source || ""),
+            waitedMs: Number(wait?.waitedMs || 0),
+            tickId: String(wait?.tickId || this.distributedCurrentTickId || evidence.blocking[0]?.tickId || ""),
+            generation: Number(wait?.generation || evidence.blocking[0]?.generation || 0),
+            blockingHandoffCount: Number(gateSnapshotForEvidence.activeHandoffCount || evidence.blocking.length || 0),
+            activeUploadCount: (gateSnapshotForEvidence.uploadIntents || []).length,
+            queueBytes: Number(latestQueueMetric.queueBytes || 0),
+            clearedJobsCount: Number(latestQueueMetric.clearedJobs || 0),
+            queueStorageStatus: String(storage?.status || "ready"),
+            queueStorageReason: String((storage as any)?.reason || ""),
+            blocking: evidence.blocking.slice(0, 4).map((row: any) => ({ tickId: String(row.tickId || ""),
+                generation: Number(row.generation || 0), workerId: String(row.workerId || ""), commandId: String(row.commandId || ""),
+                phase: String(row.phase || ""), sent: row.sent === true, transportSettled: row.transportSettled === true,
+                transportOutcome: String(row.transportOutcome || ""), elapsedMs: Number(row.elapsedMs || 0) })),
+        };
+        this.recordActionError({ command: "codeUploadDispatchHandoff", message, details: { dispatchHandoff: handoffEvidenceDetails },
+            suggestion: "已保留仍在执行的派发交接所有权；请刷新任务状态后重试，不会重叠写入同一 Worker。" });
+        this.postState();
+        return message;
+    }
+    dispatchHandoffDiagnosticsLocal() {
+        const snapshot: Record<string, any> = DispatchHandoffGate.gateSnapshot(this.gateStateLocal(), workspaceRoot() || "");
+        if (this.dispatchHandoffTimeoutEvidence) snapshot.lastWaitTimeout = this.dispatchHandoffTimeoutEvidence;
+        return snapshot;
+    }
+    distributedTickDiagnosticsLocal() {
+        return DispatchHandoffGate.tickSnapshot(this.gateStateLocal(), workspaceRoot() || "");
+    }
+    /** 发送口最后的 gate 重查：新登记的写入意图未交接完成前不得开始传输（抛出后由既有「明确未发送」路径退回）。 */
+    assertDispatchHandoffSendAllowedLocal(root: string, workerId: string) {
+        if (!root || !workerId) return;
+        if (DispatchHandoffGate.uploadBlocksWorker(this.gateStateLocal(), root, workerId, this.dispatchTargetKeyLocal(workerId)))
+            throw new Error(`代码写入尚未交接完成，${workerId} 的远端项目根不能并发覆盖；本次任务未发送。`);
+    }
+    /** 非 tick 通道（手动/服务器队列/失败重试）同样进入交接所有权；tick 已登记的由 tick 在回执提交后结束。 */
+    ensureDispatchHandoffForSendLocal(root: string, workerId: string, commandId: string, plan: any, job: any, gpuId: any) {
+        if (!root || !commandId || !workerId) return false;
+        if (DispatchHandoffGate.hasHandoff(this.gateStateLocal(), root, commandId)) return false;
+        DispatchHandoffGate.beginHandoff(this.gateStateLocal(), { tickId: "send-channel", generation: Number(this.distributedQueueGeneration),
+            root, projectId: String(plan?.projectId || ""), workerId, planId: String(plan?.id || ""), planFile: String(plan?.planFile || ""),
+            jobIndex: Number(job?.index), commandId, gpuId: gpuId === undefined ? "" : String(gpuId), attempt: Number(job?.attempt || 0) });
+        return true;
+    }
+    /**
+     * 代码写入目标的真实身份：走生产侧已有绑定 sftpServerOptions → sshTransportIdentity。
+     * 解析不出来就明确失败，绝不退回统一的占位身份：否则不同服务器只要 remotePath 相同就会
+     * 抢同一把写锁，把用户要的跳服务器并行打成串行。
+     */
+    resolveCodeUploadTargetIdentityLocal(target: any) {
+        if (typeof this.sftpServerOptions !== "function")
+            throw new Error("无法解析代码写入目标的服务器身份（SFTP 配置解析入口不可用），本轮未开始写入。");
+        const server = this.sftpServerOptions(target);
+        const label = String(target?.label || target?.id || "SSH 目标");
+        const host = String(server?.host || server?.networkHost || "").trim();
+        if (!host)
+            throw new Error(`${label} 没能解析出可用的服务器地址，本轮未开始写入；请先在设置里补全该服务器地址或 SSH 别名。`);
+        const remoteRoot = String(target?.remotePath || server?.remotePath || "")
+            .replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+        if (!remoteRoot)
+            throw new Error(`${label} 缺少远端项目根，本轮未开始写入；避免把不同项目的写入归并成同一把锁。`);
+        // POSIX 路径区分大小写，root 不得无条件转小写；主机名不区分，因此只主机部分转小写。
+        const port = Number(server?.port || 22) || 22;
+        return { host, port, remoteRoot, networkHost: String(server?.networkHost || ""),
+            sshConfigAlias: String(server?.sshConfigAlias || ""), sshConfigHost: String(server?.sshConfigHost || ""),
+            key: `${host.toLowerCase()}:${port}:${remoteRoot}` };
+    }
+    /** 代码写入目标租约：以规范服务器 + 实际远端 root 为键，与 Worker ID 无关；身份解析失败不得默默写入。 */
+    async acquireCodeUploadTargetLeaseLocal(target: any, ownerId: string, signal?: AbortSignal, resolvedIdentity?: { key?: string }) {
+        // 调用方可以在等锁前自己先把身份解出来（别名判定需要等锁前就有目标键）；
+        // 不重复解析也不编造身份，空身份仍走原路径重新解析或明确报错。
+        const identity = resolvedIdentity?.key ? { key: String(resolvedIdentity.key) } : this.resolveCodeUploadTargetIdentityLocal(target);
+        const acquired = await DispatchHandoffGate.acquireTargetLease(this.targetLeaseTableLocal(), identity.key, ownerId, { signal });
+        const deferred = (acquired as DispatchHandoffGate.TargetLeaseDeferred).deferred;
+        // 拿不到令牌只有一种情况：同一实际目标已被上一份未确认写入围栏，调用方必须按「未开始、需核实」处理。
+        return { token: deferred ? undefined : acquired as DispatchHandoffGate.TargetLeaseToken, key: identity.key, identity, deferred };
+    }
+    releaseCodeUploadTargetLeaseLocal(token: any) {
+        return token ? DispatchHandoffGate.releaseTargetLease(this.targetLeaseTableLocal(), token) : false;
+    }
+    /** 写入结果未知时保留目标租约：释放即等于允许另一个 Worker 覆盖同一实际目标。 */
+    /** 写入结果未知时保留目标租约：释放即等于允许另一个 Worker 覆盖同一实际目标。 */
+    retainCodeUploadTargetLeaseLocal(lease: any) {
+        if (!lease?.token || !lease.key) return false;
+        this.retainedCodeUploadTargetLeases = { ...(this.retainedCodeUploadTargetLeases || {}), [lease.key]: lease.token };
+        // 锁确实保留住了，但已经排在这把锁上的同批分支不能无限等：围栏会把它们以「未开始、需核实」放出去，
+        // 整批因此能正常收敛，下一次重试才能进到主动查询恢复；围栏与保留租约本身都原样留着。
+        DispatchHandoffGate.fenceTargetLease(this.targetLeaseTableLocal(), lease.token,
+            `上一份写入该目标的写入结果未确认结束（${lease.key}）`);
+        return true;
+    }
+    releaseRetainedCodeUploadTargetLeaseLocal(targetKey: string) {
+        const token = (this.retainedCodeUploadTargetLeases || {})[targetKey];
+        if (!token) return false;
+        delete this.retainedCodeUploadTargetLeases![targetKey];
+        return DispatchHandoffGate.releaseTargetLease(this.targetLeaseTableLocal(), token);
+    }
+    /** 目标当前是否有写入结果未知的在途写入（同时看 gate 记录与保留租约）。 */
+    pendingCodeUploadUnknownWriteLocal(root: string, identity: { targetKey?: string; workerId?: string }) {
+        const record = DispatchHandoffGate.pendingUnknownCodeWrite(this.gateStateLocal(), root, identity);
+        if (!record) return undefined;
+        return { ...record, retainedLease: Boolean((this.retainedCodeUploadTargetLeases || {})[record.targetKey]) };
+    }
+    /** 主动查询确认写入已结束后，才释放未知写入所有权与保留的目标租约。 */
+    resolveCodeUploadUnknownWriteLocal(root: string, identity: { targetKey?: string; workerId?: string }) {
+        const record = DispatchHandoffGate.resolveUnknownCodeWrite(this.gateStateLocal(), root, identity);
+        if (!record) return undefined;
+        this.releaseRetainedCodeUploadTargetLeaseLocal(record.targetKey);
+        return record;
+    }
+    /**
+     * 实际写目标的传输核实（只读投影，不碰远端、不写队列、不带超时参数）：
+     * 只用 SimpleSFTP 自己的 `transfers.list`，再按 `codeUploadTargetRowsLocal` 分类：
+     * 本机插件发起的未结束传输与未终结台账（包括只有 `id=operationId`、没有活动传输行也没有主机/路径的纯台账行，
+     * 以及只有 `{id, stage}` 的当前上传阶段项）都必须参与静默判定；
+     * 本轮兄弟分支正在写的项既不取消，也不能在端口与本目标分不开时谎称静默。
+     * 已可靠归因到其他实际目标的行不阻塞本目标（否则同批不同 root 的并行写入会互相锁死）；
+     * SimpleSFTP 自己的“同目标仍有未确认旧请求”守卫仍是底线。
+     * 旧的 `sync.projectTreeState` 只回答“目录在不在/是不是空”，不能证明写操作已结束，已不再使用。
+     */
+    async verifyCodeUploadTargetQuiescentLocal(target: any, targetKey: string, syncId?: string) {
+        const label = String(target?.label || target?.id || "Worker");
+        let state: any;
+        try {
+            state = await this.simpleSftpApiCall("transfers.list", {});
+        }
+        catch (error) {
+            return { quiescent: false, rows: [] as any[], blocked: [] as any[], protectedRows: [] as any[],
+                pendingOperations: 0, evidence: "operation-query-failed",
+                detail: `${label} 的传输操作查询本身失败：${errorMessage(error)}` };
+        }
+        const transfers = Array.isArray(state?.transfers) ? state.transfers : undefined;
+        const operations = Array.isArray(state?.operations) ? state.operations : undefined;
+        const busy = state?.busy && typeof state.busy === "object" ? state.busy : undefined;
+        const instanceId = String(state?.instanceId || "");
+        if (state?.ok !== true || !transfers || !operations || !instanceId || !busy
+            || busy.schemaVersion !== 1 || typeof busy.busy !== "boolean") {
+            return { quiescent: false, rows: [] as any[], blocked: [] as any[], protectedRows: [] as any[],
+                pendingOperations: 0, evidence: "operation-state-incomplete",
+                detail: `${label} 的写操作状态返回不完整（缺实例身份、传输表或忙投影），不能把“查不到字段”当成已收敛` };
+        }
+        const attribution = this.codeUploadTargetRowsLocal(transfers, operations, targetKey,
+            this.codeUploadCurrentRoundTargetKeysLocal(syncId), this.codeUploadRoundWriteFloorLocal(syncId));
+        const rows = attribution.rows;
+        const blocked = attribution.blocked;
+        const pendingOperations = attribution.pendingOperations;
+        // 静默只能由“没有可取消项、也没有无法寻址项”得出；未终结台账即使没有活动传输行也必须参与判定。
+        const note = (busy.busy === true || pendingOperations)
+            ? `（写入引擎整体报忙或有 ${pendingOperations} 项未终结操作，其中 ${attribution.protectedRows.length} 项是本轮兄弟分支正在写的，不会被取消）`
+            : "";
+        if (rows.length) {
+            const phase = String(rows[0].phase || rows[0].status || "active");
+            const foreign = rows.filter((row: any) => row.targetScoped !== true).length;
+            return { quiescent: false, rows, blocked, protectedRows: attribution.protectedRows, pendingOperations,
+                evidence: "operation-active",
+                detail: `${label} 的本机写入引擎上仍有 ${rows.length} 项本插件发起的未结束传输（阶段 ${phase}，其中 ${foreign} 项归属不明或属于其他 Worker）${note}` };
+        }
+        if (blocked.length) {
+            const reasons = [...new Set(blocked.map((row: any) => String(row.reason)))].join("、");
+            return { quiescent: false, rows, blocked, protectedRows: attribution.protectedRows, pendingOperations,
+                evidence: String(blocked[0].reason),
+                detail: `${label} 的本机写入引擎上还有 ${blocked.length} 项无法寻址或无法与本轮写入区分的未结束传输/操作（${reasons}），本轮不接管${note}` };
+        }
+        return { quiescent: true, rows, blocked, protectedRows: attribution.protectedRows, pendingOperations,
+            evidence: "operation-write-quiesced",
+            detail: `${label} 的实际写入目标已无本插件发起的活动传输（实例 ${instanceId.slice(0, 24)}）${note}` };
+    }
+    /**
+     * 把一次真实写入包在“本轮写入边界”里：调用 `upload.workspace` 之前登记起点，无论成功、失败还是抛错都注销。
+     * 这样同一 syncId 的其他并行分支在接管查询时能分辨“这个不带主机/路径的操作项是不是本轮刚启动的上传”。
+     */
+    async withCodeUploadRoundWriteLocal(syncId: string, targetKey: string, run: () => Promise<any>) {
+        const roundKey = String(syncId || "");
+        const table = this.codeUploadRoundWriteEpochs || (this.codeUploadRoundWriteEpochs = new Map<string, Set<{ targetKey: string; startedAtMs: number }>>());
+        const epoch = { targetKey: String(targetKey || ""), startedAtMs: Date.now() };
+        const epochs = table.get(roundKey) || new Set<{ targetKey: string; startedAtMs: number }>();
+        epochs.add(epoch);
+        table.set(roundKey, epochs);
+        try { return await run(); }
+        finally {
+            const alive = table.get(roundKey);
+            if (alive) { alive.delete(epoch); if (!alive.size) table.delete(roundKey); }
+        }
+    }
+    /** 本轮正在写入的最早起点；本轮没有任何分支在写就交回 undefined（此时取消范围与原来完全一致，旧操作照旧逐项取消）。 */
+    codeUploadRoundWriteFloorLocal(syncId?: string) {
+        const epochs = this.codeUploadRoundWriteEpochs?.get(String(syncId || ""));
+        if (!epochs || !epochs.size) return undefined;
+        return Math.min(...[...epochs].map((epoch: any) => Number(epoch.startedAtMs)));
+    }
+    /**
+     * 本轮自己人正在写的实际目标键：租约所有者等于本次 syncId 的那些键。
+     * 这就是“本轮刚发起、绝不能被自己取消”的唯一依据；被保留的旧租约属于上一份未确认写入，不算本轮。
+     */
+    codeUploadCurrentRoundTargetKeysLocal(syncId?: string) {
+        const keys: string[] = [];
+        const held = this.codeUploadTargetLeases?.held;
+        if (!syncId || !held || typeof held.entries !== "function") return keys;
+        for (const [key, token] of held.entries()) {
+            if (String((token as any)?.ownerId || "") === String(syncId)) keys.push(String(key));
+        }
+        return keys;
+    }
+    /**
+     * 把本机插件发起的“活动传输 + 未终结台账操作/当前上传阶段项”分类（只读，不发任何写请求）。
+     * 身份形状按已安装的 SimpleSFTP 0.2.114 真实返回写（`transfers.list` = `listActiveTransfers()` +
+     * `listTransferOperationState()`），不用“有没有 id”区分活动项与台账项：
+     * - `transfers` 行：`{ id(=transferId), operation, localPath, remotePath, host, status, phase, operationId? }`，
+     *   只有这一类的 id 才能当 transferId。
+     * - `operations` 项只有两种：当前上传阶段 `{ id(=operationId), stage, startedAt }`，与未终结台账行
+     *   `{ id(=operationId), operationId, operationInstanceId, status, reason, recovery, childCount }`；
+     *   两者的 id 都是操作身份，且都没有顶层 host/remotePath，因此绝不把它们的 id 当 transferId 发给取消接口。
+     * 用户已授权：能精确归属本目标就精确取消；归属不明、缺台账实例身份、或只存在于台账/阶段表里的未终结项，
+     * 就按“本插件发起”逐项目取消。本机 `transfers.list` 的传输表与台账按构造只包含本机这个
+     * 插件实例发起的传输；别的电脑上插件发起的传输不会出现在本机台账，也取消不到，
+     * 因此“不误杀其他电脑”天然成立，不需要额外的归属标记（服务器侧 tmux 前缀不标传输，不能当归属依据）。
+     * - rows：可取消项，按身份种类带上已有的 transferId 或 operationId（有 operationInstanceId 就带上）；
+     *   targetScoped=true 表示已精确归因到本目标，false 表示归属不明或属于其他 Worker（回执要如实区分）。
+     * - protectedRows：本轮自己人（同一次同步的兄弟分支，租约所有者就是本次 syncId）正在写的行，绝不取消；
+     *   与它同一 operationId 的台账/阶段项会被去重，不会再作为可取消项重复出现。
+     * - blocked：既无 transferId 又无 operationId 的项——SimpleSFTP 的取消接口无法寻址，
+     *   这是接口前提而不是保守选择；另含“属本轮又与本目标同主机同路径”的端口不可分辨项。
+     */
+    codeUploadTargetRowsLocal(transfers: any[], operations: any[], targetKey: string, currentRoundKeys: string[] = [],
+        currentRoundWriteFloorMs?: number) {
+        // 键形如 `host:port:/posix/root`；root 可含冒号，因此只剥前两段，且不转小写 POSIX 路径。
+        const splitKey = (key: string) => {
+            const parts = String(key || "").split(":");
+            if (parts.length < 3) return undefined;
+            return { host: parts[0].toLowerCase(), root: parts.slice(2).join(":").replace(/\/+$/, "") };
+        };
+        const owner = splitKey(targetKey);
+        const roundKeys = (currentRoundKeys || []).map(splitKey).filter(Boolean) as Array<{ host: string; root: string }>;
+        const normalize = (value: any) => String(value || "").replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+        const sameTarget = (identity: { host: string; root: string } | undefined, host: string, root: string) => Boolean(
+            identity && host && root && String(host).toLowerCase() === identity.host
+            && (root === identity.root || root.startsWith(`${identity.root}/`) || identity.root.startsWith(`${root}/`)));
+        // SimpleSFTP 与插件跑在同一台机器、同一个时钟上，startedAt 是操作创建时刻的 ISO 字符串。
+        const stamp = (value: any) => { const at = Date.parse(String(value || "")); return Number.isFinite(at) ? at : undefined; };
+        // 本轮已有分支在实际写入时，不能证明“比本轮写入更早”的操作项一律当自己人（只能排队，不能取消）。
+        const roundFloor = Number.isFinite(Number(currentRoundWriteFloorMs)) ? Number(currentRoundWriteFloorMs) : undefined;
+        const maybeCurrentRoundWrite = (entry: any) => roundFloor !== undefined
+            && (entry.startedAtMs === undefined || entry.startedAtMs >= roundFloor);
+        // 传输身份：只有这一类的 id 是 transferId，也只有这一类带主机与远端路径。
+        const transferItems = (transfers || []).map((row: any) => ({
+            transferId: String(row?.id || row?.transferId || ""),
+            operationId: String(row?.operationId || ""),
+            operationInstanceId: "",
+            host: String(row?.host || "").trim(), root: normalize(row?.remotePath),
+            status: String(row?.status || ""), phase: String(row?.phase || row?.stage || ""),
+            startedAtMs: stamp(row?.startedAt),
+        }));
+        // 操作身份：当前阶段项与未终结台账行按 operationId 归并成一项，身份取更全的那份；两个都没有的另存。
+        const operationItems = new Map<string, any>();
+        const anonymousOperations: any[] = [];
+        let pendingOperations = 0;
+        for (const row of operations || []) {
+            if (String(row?.status || "") === "settled") continue;
+            // 真实返回里两种形状的共同点：id 就是 operationId（台账行额外重复一份 operationId 字段）。
+            const operationId = String(row?.operationId || row?.id || "");
+            const item = {
+                transferId: "", operationId,
+                operationInstanceId: String(row?.operationInstanceId || ""),
+                host: String(row?.host || "").trim(), root: normalize(row?.remotePath),
+                status: String(row?.status || ""), phase: String(row?.stage || row?.phase || ""),
+                startedAtMs: stamp(row?.startedAt),
+            };
+            if (!operationId) { anonymousOperations.push(item); pendingOperations += 1; continue; }
+            const existing = operationItems.get(operationId);
+            operationItems.set(operationId, existing ? {
+                transferId: "", operationId,
+                operationInstanceId: existing.operationInstanceId || item.operationInstanceId,
+                host: existing.host || item.host, root: existing.root || item.root,
+                status: existing.status || item.status, phase: existing.phase || item.phase,
+                startedAtMs: existing.startedAtMs ?? item.startedAtMs,
+            } : item);
+        }
+        // 传输行与同一 operationId 的台账/阶段项去重：同一份工作只算一项，既保留可取消的 transferId，
+        // 也保证“本轮兄弟正在写”那张传输被保护时，它的台账项不会再作为可取消项出现。
+        const entries: any[] = [];
+        for (const transfer of transferItems) {
+            const paired = transfer.operationId ? operationItems.get(transfer.operationId) : undefined;
+            if (paired) {
+                operationItems.delete(transfer.operationId);
+                entries.push({
+                    transferId: transfer.transferId, operationId: transfer.operationId,
+                    operationInstanceId: paired.operationInstanceId,
+                    host: transfer.host || paired.host, root: transfer.root || paired.root,
+                    status: transfer.status || paired.status, phase: transfer.phase || paired.phase,
+                    startedAtMs: transfer.startedAtMs ?? paired.startedAtMs,
+                });
+                pendingOperations += 1;
+                continue;
+            }
+            entries.push(transfer);
+        }
+        for (const item of operationItems.values()) { entries.push(item); pendingOperations += 1; }
+        for (const item of anonymousOperations) entries.push(item);
+        const rows: any[] = [];
+        const protectedRows: any[] = [];
+        const blocked: any[] = [];
+        const classify = (entry: any) => {
+            // 取消接口只能按 transferId 或 operationId 寻址；两个都没有就发不出取消（接口前提，不是保守选择）。
+            if (!entry.transferId && !entry.operationId) {
+                blocked.push({ ...entry, reason: "operation-unaddressable" });
+                return;
+            }
+            const ours = sameTarget(owner, entry.host, entry.root);
+            if (!entry.host && !entry.root && maybeCurrentRoundWrite(entry)) {
+                // 只有操作身份的阶段项/台账行不带主机与路径，没法靠归属认出它属于本轮哪个分支。
+                // 本轮已有分支越过写入边界，而该项又不能被证明比本轮写入更早，就只能当自己人：
+                // 既不取消，也不能声称静默（上层转为排队等锁）。比本轮写入明确更早的旧操作仍按用户授权取消。
+                blocked.push({ ...entry, reason: "operation-current-round-ambiguous" });
+                return;
+            }
+            if (roundKeys.some(key => sameTarget(key, entry.host, entry.root))) {
+                // 本轮兄弟正在写：绝不取消；若它还跟本目标同主机同路径（端口分不出），也不能声称静默。
+                if (ours) blocked.push({ ...entry, reason: "operation-current-round-ambiguous" });
+                else protectedRows.push(entry);
+                return;
+            }
+            rows.push({ ...entry, targetScoped: ours });
+        };
+        for (const entry of entries) classify(entry);
+        return { rows, protectedRows, blocked, pendingOperations };
+    }
+    /** 取消本机插件发起的一次传输：按台账已有的身份寻址（transferId 或 operationId，有实例身份就带上），结果严格判定。 */
+    async cancelCodeUploadTargetWriteLocal(target: any, row: any) {
+        const label = String(target?.label || target?.id || "Worker");
+        const transferId = String(row?.transferId || "");
+        const operationId = String(row?.operationId || "");
+        const operationInstanceId = String(row?.operationInstanceId || "");
+        const id = transferId || operationId;
+        // 唯一的硬性前提：两个可寻址身份都没有。SimpleSFTP 的取消接口只能按 transferId 或 operationId 找人，
+        // 两个都缺就发不出有意义的取消，只能保守阻塞并明确失败（这是接口寻址前提，不是保守选择）。
+        if (!transferId && !operationId) {
+            return { accepted: false, id: "", evidence: "operation-unaddressable",
+                detail: `${label}：上一份传输既没有 transferId 也没有 operationId，取消接口无法寻址` };
+        }
+        const params: any = { reason: "用户重新发起同步，取消上一次传输以接管" };
+        if (transferId) params.transferId = transferId;
+        if (operationId) params.operationId = operationId;
+        // 台账里有实例身份就原样带上作为守卫；没有就只交已有的身份，不自己编一个。
+        if (operationInstanceId) params.operationInstanceId = operationInstanceId;
+        let result: any;
+        try { result = await this.simpleSftpApiCall("transfers.cancel", params); }
+        catch (error) {
+            return { accepted: false, id, evidence: "operation-cancel-failed",
+                detail: `${label}：取消上一次传输的请求本身失败（${errorMessage(error)}）` };
+        }
+        const status = String(result?.status || "");
+        if (status === "identityMismatch") {
+            return { accepted: false, id, evidence: "operation-identity-mismatch",
+                detail: `${label}：取消被拒，传输实例身份不符（identityMismatch）` };
+        }
+        if (result?.ok !== true || result?.cancelled !== true) {
+            return { accepted: false, id, evidence: "operation-cancel-refused",
+                detail: `${label}：取消未被接受（cancelled=${String(result?.cancelled)}，status=${status || "?"}）` };
+        }
+        if (status === "outcomeUnknown" || status === "notFound") {
+            return { accepted: false, id, evidence: `operation-cancel-${status}`,
+                detail: `${label}：取消结果不明确（status=${status}）` };
+        }
+        return { accepted: true, id, status, evidence: "cancel-requested", detail: "" };
+    }
+    /**
+     * 同一实际写目标的接管决策必须串行：两个别名分支并发决策时，B 的查询在途期间 A 可能刚取锁开始上传，
+     * B 会把本轮兄弟的上传当成旧传输取消。接管段内只查询与取消，从不等写租约，因此串行不会死锁。
+     */
+    async takeoverCodeUploadTargetLocal(target: any, targetKey: string, syncId: string) {
+        const key = String(targetKey || "");
+        const tails = this.codeUploadTakeoverTails || (this.codeUploadTakeoverTails = new Map<string, Promise<void>>());
+        const previous = tails.get(key) || Promise.resolve();
+        const run = () => this.takeoverCodeUploadTargetLockedLocal(target, key, syncId);
+        const current = previous.then(run, run);
+        const settled = current.then(() => undefined, () => undefined);
+        tails.set(key, settled);
+        try { return await current; }
+        finally { if (tails.get(key) === settled) tails.delete(key); }
+    }
+    /**
+     * 同一实际写目标的接管：用户要求“直接取消上一次传输、确认落地后直接接管”，所以这里不是被动等上一份停下。
+     * 规则：用户只授权取消本机这个插件实例发起的传输（别的电脑发起的不会出现在本机台账，也取消不到）：
+     * 能精确归因到本目标就精确取消；归属不明、缺台账实例身份、或只在台账里的未终结项，同样按“本插件发起”逐项取消；
+     * 唯一硬性前提是 transferId 与 operationId 都没有（取消接口无法寻址）；
+     * 发每一张取消请求前都要重新核对本轮写目标归属，查询期间新开始的本轮兄弟分支不得被取消；
+     * 取消被拒/抛错/身份不符、或取消后本机侧仍有活动传输 → 保留未知写入所有权并明确失败，绝不盲写。
+     * 等取消落地的节奏复用本项目已有的本地退让常数（attempt < 4 退让、20 * (attempt + 1) ms），
+     * 但这是新增的有界复核行为：最多退让 20 + 40 + 60 + 80 = 200ms，另加五次复核调用自身耗时，总等待不是固定值；
+     * 退让用完后仍不静默就本轮失败、以后可重试，不引入新的超时预算参数，也不把“等够了”当成成功。
+     */
+    async takeoverCodeUploadTargetLockedLocal(target: any, targetKey: string, syncId: string) {
+        const label = String(target?.label || target?.id || "Worker");
+        // 覆盖批准绑定的冻结写入范围（A3）：本轮清单指纹 + 这个实际目标键，发送前范围变了就停下重新确认。
+        const staleScopeEpoch = { targetKey: String(targetKey || ""),
+            fingerprint: String(this.codeUploadRoundScopeLocal?.fingerprint || "") };
+        // 只有“本轮自己人正拿着这把锁”才算兄弟；被保留下来的租约按定义是上一份未确认的写入，永远不是兄弟。
+        const currentBatchWriting = () => {
+            const held = this.codeUploadTargetLeases?.held?.get?.(String(targetKey || ""));
+            const retainedBefore = Boolean((this.retainedCodeUploadTargetLeases || {})[String(targetKey || "")]);
+            return !retainedBefore && held && String(held.ownerId || "") === String(syncId || "");
+        };
+        // 排队等锁的回执：默认本分支什么都没取消；如果在发现兄弟之前已经真取消过旧写入，
+        // 就必须把这些身份原样带回去，不能因为结局是“排队”就把已做过的取消抹掉。
+        const siblingReceipt = (stage: string, cancelledAlready: string[] = [], foreignAlready = 0) => ({
+            quiescent: true, takeover: "sibling", cancelled: cancelledAlready, cancelledForeign: foreignAlready,
+            evidence: "sibling-writing",
+            detail: `${label}：${cancelledAlready.length
+                ? `已先取消 ${cancelledAlready.length} 项本插件发起的旧写入，随后发现同一次同步已有分支在该实际目标上写入（${stage}）`
+                : `同一次同步已有分支在该实际目标上写入（${stage}）`}，本分支只排队等锁，不取消自己人的传输` });
+        if (currentBatchWriting()) return siblingReceipt("接管入口处");
+        const first = await this.verifyCodeUploadTargetQuiescentLocal(target, targetKey, syncId);
+        /**
+         * 覆盖接管的唯一出路（A1/A2/A3 返修后）：
+         * ① 只读预检已经拿**本轮实时投影**把这批未完成记录列给用户（或它们已按严格 3 小时过期）；
+         * ② 这里再拿**当下这一份实时投影**逐条核验，每一条都必须各自满足
+         *    「严格 >3h 过期 / 本轮按同一绑定被明确批准」二者之一，否则整分支零写入。
+         * 「取消已被接受」不再把记录从授权集合里消掉：接受取消不等于确认退出，仍活着的记录必须被算进去；
+         * 本轮兄弟项（operation-current-round-ambiguous）永远不在判定与清单里，只能排队。
+         * 它不把“取消未落地”谎称为静默，只给出诚实的覆盖回执。
+         */
+        const staleReceipt = (state: any, why: string, cancelledAlready: string[] = [],
+            cancelledForeignAlready = 0) => {
+            const verdict = this.codeUploadStaleOverwriteLocal(syncId, targetKey,
+                [...(state.rows || []), ...(state.blocked || [])], staleScopeEpoch);
+            if (!verdict) return undefined;
+            if (verdict.covered !== true) {
+                // 本轮没批准过（或根本没弹框）→ 交回原来的明确失败文案，不伪装成“范围变了”，也不弹第二个框。
+                const outstanding = [...(verdict.unknown || []), ...(verdict.unapproved || [])]
+                    .map((item: any) => item.identity || "（无身份）");
+                if (!outstanding.length) return undefined;
+                return { ...state, takeover: "stale-changed", cancelled: cancelledAlready,
+                    evidence: verdict.scopeChanged ? "stale-scope-changed" : "stale-consent-required",
+                    detail: `${label}：${verdict.scopeChanged
+                        ? `确认覆盖之后未完成记录发生变化（${outstanding.slice(0, 4).join("、")}${outstanding.length > 4 ? " 等" : ""}），旧批准对新身份/新实例/新发起时间一律无效`
+                        : `${outstanding.length} 项未完成记录还没拿到本轮明确批准（${outstanding.slice(0, 4).join("、")}${outstanding.length > 4 ? " 等" : ""}）`}，本轮停止，请重新发起同步以确认新的覆盖范围；本轮未写入任何字节` };
+            }
+            const shownAt = (record: any) => Number.isFinite(Number(record?.startedAtMs))
+                ? new Date(Number(record.startedAtMs)).toLocaleString() : "（本地时间缺失或异常）";
+            const ignoredAts = (verdict.expiredRecords || []).map((record: any) => shownAt(record));
+            return { ...state, takeover: "stale-overwrite", cancelled: cancelledAlready, cancelledForeign: cancelledForeignAlready,
+                stale: { expired: verdict.expired, expiredOnly: verdict.expiredOnly, consented: (verdict.consented || []).slice(),
+                    ignoredCount: (verdict.expiredRecords || []).length, ignoredAts },
+                evidence: verdict.expiredOnly ? "stale-overwrite-expired" : "stale-overwrite-authorized",
+                detail: `${label}：${verdict.expiredOnly
+                    ? `${verdict.expired.length} 项未完成记录已超过 3 小时（${ignoredAts.slice(0, 4).join("、")}${ignoredAts.length > 4 ? " 等" : ""}），按你的长期授权过期接管`
+                    : "你已确认完全覆盖这些未完成记录"}；它们的退出从未被确认落地（${why}），本轮按授权覆盖写入，只覆盖本次勾选范围，不声称远端目录已干净` };
+        };
+        if (first.quiescent) return { ...first, takeover: "idle", cancelled: [] as string[] };
+        if (!first.rows.length) {
+            // 没有任何可取消项，而阻塞原因全是“本轮兄弟刚启动的写入”→ 这就是排队等锁，不是旧传输，不能取消。
+            if (this.codeUploadBlockedByCurrentBatchLocal(first.blocked)) return siblingReceipt("查询返回后");
+            // 寻不到身份的台账项就是“永远再也取消不掉”那类：记进诊断台账便于回执核对，覆盖判定仍按实时投影逐条走。
+            this.noteCodeUploadStaleSuspectsLocal(targetKey, first.blocked, String(first.evidence || "operation-unaddressable"));
+            const stale = staleReceipt(first, String(first.evidence || "取消接口无法寻址"));
+            if (stale) return stale;
+            return { ...first, takeover: "blocked", cancelled: [] as string[] };
+        }
+        // 到这里说明既有要取消的旧项（可能还有不带主机/路径的本轮操作项）：
+        // 先把旧项按用户授权取消，再在下面的复核里将剩下的本轮项转为排队，不因为兄弟在写就跳过旧项取消。
+        const cancelled: string[] = [];
+        let cancelledForeign = 0;
+        for (const row of first.rows) {
+            // 上一张取消可能刚好让兄弟取到锁：发下一张前重新核对，查询期间新开始的兄弟不能当旧传输取消。
+            if (currentBatchWriting()) return siblingReceipt("查询返回后");
+            const receipt = await this.cancelCodeUploadTargetWriteLocal(target, row);
+            if (receipt.accepted !== true) {
+                // 取消被拒：此刻的实时状态就是覆盖判定的输入，一条也不因为“已经发过取消”而被排除。
+                this.noteCodeUploadStaleSuspectsLocal(targetKey, [...(first.rows || []), ...(first.blocked || [])],
+                    String(receipt.evidence || "operation-cancel-refused"));
+                const stale = staleReceipt(first, String(receipt.evidence || "取消未被接受"), cancelled, cancelledForeign);
+                if (stale) return stale;
+                return { ...first, takeover: "refused", cancelled, evidence: receipt.evidence,
+                    detail: `${receipt.detail}；本轮不接管、不覆盖，已保留原操作身份` };
+            }
+            if (row.targetScoped !== true) cancelledForeign += 1;
+            cancelled.push(receipt.id);
+        }
+        const cancelledText = `已取消 ${cancelled.length} 项本插件发起的在传任务`
+            + (cancelledForeign ? `（含 ${cancelledForeign} 项其他 Worker 的未完成上传或归属不明的传输）` : "");
+        for (let attempt = 0; ; attempt += 1) {
+            const again = await this.verifyCodeUploadTargetQuiescentLocal(target, targetKey, syncId);
+            if (again.quiescent) {
+                return { ...again, takeover: "cancelled", cancelled, cancelledForeign,
+                    detail: `${label}：${cancelledText}（${cancelled.slice(0, 4).join("、")}${cancelled.length > 4 ? " 等" : ""}），已确认本机侧静默，现在接管写入（只能保证本机侧没有其他任务还在写，不声称远端目录完全干净）` };
+            }
+            // 取消被接受不等于旧传输已终结：排队放行必须同时满足“复核后已没有旧活跃项（rows 已空）”
+            // 与“剩下的阻塞确实全是本轮兄弟”。只要 rows 还在，就不能凭 blocked 里的本轮阶段项转 sibling：
+            // 不同 root 的新分支接下来申请的是自己那把锁，不会等兄弟，旧传输还在写就会开新写入。
+            // 因此这里继续往下的既有有界复核，窗口用尽按 still-active 明确失败（不写、不清未知记录、不放保留租约）。
+            if (!again.rows.length
+                && (currentBatchWriting() || this.codeUploadBlockedByCurrentBatchLocal(again.blocked))) {
+                return siblingReceipt("取消后复核时", cancelled, cancelledForeign);
+            }
+            if (!again.rows.length || attempt >= 4) {
+                // A2：这里的判定输入是**复核后仍未完成的全部非兄弟记录**。已发过取消、甚至取消已被接受的
+                // 记录都还在里面；只有实时查询不再返回它们才算自然退出（那时上面已按 cancelled 返回）。
+                this.noteCodeUploadStaleSuspectsLocal(targetKey, [...(again.rows || []), ...(again.blocked || [])], "取消后仍未落地");
+                const stale = staleReceipt(again, "已请求取消但仍未确认落地", cancelled, cancelledForeign);
+                if (stale) return stale;
+                return { ...again, takeover: "still-active", cancelled,
+                    detail: `${label}：已请求取消上一次写入但仍未确认落地（${again.detail}）；本轮不接管、不覆盖，请重试` };
+            }
+            await new Promise((resolve) => setTimeout(resolve, 20 * (attempt + 1)));
+        }
+    }
+        /** 阻塞项是否全部来自“本轮兄弟分支正在同一实际目标上写”：是则排队等锁，而不是失败或取消自己人。 */
+    codeUploadBlockedByCurrentBatchLocal(blocked) {
+        const rows = Array.isArray(blocked) ? blocked : [];
+        return rows.length > 0 && rows.every((row: any) => String(row?.reason || "") === "operation-current-round-ambiguous");
+    }
+    /**
+     * 一项未完成记录距今多久：时间缺失、非法或来自未来一律交回 undefined，
+     * 这类记录不得自动过期，只能进确认框并标成异常（与字段调查里“startedAt 缺失”的真实形状一致）。
+     */
+    codeUploadStaleAgeLocal(startedAtMs?: number) {
+        const at = Number(startedAtMs);
+        if (!Number.isFinite(at) || at <= 0 || at > Date.now()) return undefined;
+        return Date.now() - at;
+    }
+    /**
+     * 这项记录是不是“取消也救不回来”：取消接口寻不到身份、取消被拒/身份不符/报回 outcomeUnknown/notFound，
+     * 或实时投影/台账已把它自己记成 outcomeUnknown。“取消被接受但本轮窗口内还没落地”不算：
+     * 那是还在退场的活跃传输，只能继续按已审的有界复核处理；A1 之后是否打扰用户已经由预检的实时投影直接决定，
+     * 这个判定只用于诊断台账与回执文案，不再是“要不要问用户”的前置门槛。
+     */
+    codeUploadStuckOperationLocal(item: any) {
+        const why = String(item?.why || item?.reason || "");
+        if (why === "operation-unaddressable" || why === "operation-identity-mismatch" || why.startsWith("operation-cancel-")) return true;
+        return String(item?.status || "").toLowerCase() === "outcomeunknown";
+    }
+    /** 未完成项的身份：只用取消接口认的那两种身份（transferId/operationId）；匿名项退化到状态+创建时间，不新造第三种身份。 */
+    codeUploadStaleIdentityLocal(item: any) {
+        const transferId = String(item?.transferId || "");
+        const operationId = String(item?.operationId || "");
+        if (transferId && operationId) return `${transferId}|${operationId}`;
+        if (transferId || operationId) return transferId || operationId;
+        return `anonymous:${String(item?.status || item?.phase || "unknown")}:${Number.isFinite(Number(item?.startedAtMs)) ? Number(item.startedAtMs) : "?"}`;
+    }
+    /**
+     * 一项记录的**完整批准绑定**（A3）：取消接口认的身份 + 台账实例身份 + 发起时间。
+     * 批准只认这整份绑定：同一个 operationId 换成别的 `operationInstanceId` 或别的发起时间，
+     * 就是另一份操作，旧批准一律无效，必须重新确认。缺失的字段原样记成 `?`，不猜也不省略。
+     */
+    codeUploadStaleBindingLocal(item: any) {
+        const identity = this.codeUploadStaleIdentityLocal(item);
+        const instanceId = String(item?.operationInstanceId || "");
+        const startedAtMs = Number.isFinite(Number(item?.startedAtMs)) ? Number(item.startedAtMs) : undefined;
+        return { identity, instanceId, startedAtMs,
+            bindingKey: `${identity}\u0000inst=${instanceId || "?"}\u0000at=${Number.isFinite(Number(startedAtMs)) ? Number(startedAtMs) : "?"}`,
+            host: String(item?.host || ""), root: String(item?.root || "") };
+    }
+    /**
+     * 记下“取消救不回来”的未完成项，只作诊断台账（回执与排查用）：
+     * A1 之后确认框的内容一律来自本轮**实时投影**，不再由这张内存表驱动，重载或换窗口都不会丢提问，
+     * 已结束的旧记录也不会因为还留在这里而继续触发提问。这里同样不释放未知写入所有权、保留租约或围栏。
+     */
+    noteCodeUploadStaleSuspectsLocal(targetKey: string, items: any[], why: string) {
+        const table = this.codeUploadStaleSuspects || (this.codeUploadStaleSuspects = new Map<string, any>());
+        const key = String(targetKey || "");
+        for (const item of Array.isArray(items) ? items : []) {
+            if (String(item?.reason || "") === "operation-current-round-ambiguous") continue;
+            const identity = this.codeUploadStaleIdentityLocal(item);
+            if (!identity) continue;
+            table.delete(`${key}\u0000${identity}`);
+            const observedAt = Number.isFinite(Number(item?.startedAtMs)) ? Number(item.startedAtMs)
+                : Number(Date.parse(String(item?.startedAt || "")));
+            table.set(`${key}\u0000${identity}`, { targetKey: key, identity, why: String(why || ""),
+                host: String(item?.host || ""), root: String(item?.root || ""), status: String(item?.status || ""),
+                phase: String(item?.phase || ""), unaddressable: String(item?.reason || "") === "operation-unaddressable",
+                startedAtMs: Number.isFinite(observedAt) ? observedAt : undefined,
+                seenAtMs: Date.now() });
+        }
+        while (table.size > 128) {
+            const oldest = table.keys().next().value;
+            if (oldest === undefined) break;
+            table.delete(oldest);
+        }
+        return table.size;
+    }
+    /**
+     * 覆盖确认前的预检与“接管失败当场补问”共用同一份实时分类（A1 返修），两种口径：
+     *  · `stuckOnly`（整批预检）：只列取消接口根本寻不到身份的未终结记录——不试一次取消就已证明救不回来，
+     *    必须当轮问清；仍可能被“取消→核实落地”救回的传输（带 transferId/operationId）不在这里打扰用户。
+     *  · 默认（接管即将失败时）：列出实时仍未完成的全部非兄弟记录——此刻取消已被证明救不回来，一条也不许漏。
+     * 整批预检排在所有只读预检之后、任何新写租约与发送之前：
+     * 逐个目标读**本轮实时** `transfers.list` 投影（与接管入口同一个只读分类器，不发取消、不取锁、不写字节），
+     * 把仍然未完成、且不是本轮兄弟的记录全部如实分类：严格超过 3 小时的按长期授权直接过期，
+     * 其余（含 3 小时以内、正好 3 小时、时间缺失/非法/来自未来）在同一次调用里过一次模态框。
+     * 第一次遇到也必须当轮就问，不允许要求用户“先失败一次再重试”；投影本身失败的目标本轮不猜测，
+     * 交回接管入口按原有查询失败路径处理。
+     */
+    async collectCodeUploadStaleRecordsLocal(enabledTargets: any[], root: string, syncId: string, options: any = {}) {
+        const byTargetKey = new Map<string, any>();
+        const expired: any[] = [];
+        const needsConsent: any[] = [];
+        const querying: string[] = [];
+        const writeTargets: any[] = [];
+        const unknownWriteTargets: any[] = [];
+        const targetKeys = new Set<string>();
+        const targets = (Array.isArray(enabledTargets) ? enabledTargets : []).filter(Boolean);
+        const stuckOnly = options?.stuckOnly === true;
+        const push = (record: any) => {
+            const age = this.codeUploadStaleAgeLocal(record.startedAtMs);
+            record.ageMs = age;
+            record.anomalous = age === undefined;
+            // 严格超过 3 小时才算过期；正好 3 小时、时间缺失/非法/来自未来都必须进确认框。
+            record.expired = age !== undefined && age > CODE_UPLOAD_STALE_OPERATION_AGE_MS;
+            (record.expired ? expired : needsConsent).push(record);
+            if (!byTargetKey.has(record.targetKey)) byTargetKey.set(record.targetKey, []);
+            byTargetKey.get(record.targetKey).push(record);
+        };
+        for (const target of targets) {
+            let identity: any;
+            try { identity = this.resolveCodeUploadTargetIdentityLocal(target); }
+            catch { continue; }   // 身份解不出的目标由分支自己按原路径明确失败，这里不猜身份
+            const targetKey = String(identity?.key || "");
+            const label = String(target?.label || target?.id || "Worker");
+            writeTargets.push({ targetKey, label, host: String(identity?.host || ""), root: String(identity?.remoteRoot || "") });
+            if (targetKey) targetKeys.add(targetKey);
+            const live = await this.verifyCodeUploadTargetQuiescentLocal(target, targetKey, syncId);
+            if (live.evidence === "operation-query-failed" || live.evidence === "operation-state-incomplete") {
+                querying.push(label);
+                continue;
+            }
+            const records: any[] = [];
+            for (const item of [...(live.rows || []), ...(live.blocked || [])]) {
+                // 本轮兄弟分支正在写的项永远不在覆盖范围：它只能排队，绝不让用户“覆盖自己人”。
+                if (String(item?.reason || "") === "operation-current-round-ambiguous") continue;
+                // 预检口径只收“取消接口根本寻不到身份”的记录：不试一次取消就已证明救不回来，必须当轮问清。
+                // 仍可能被已审的“取消→核实落地”拿回真凭据的（带 transferId/operationId）不在这里打扰用户；
+                // 那条路径真的失败时，同一轮会走 codeUploadStaleLateConsentLocal 当场补问，不需要用户先失败一轮。
+                if (stuckOnly && (String(item?.transferId || "") !== "" || String(item?.operationId || "") !== "")) continue;
+                const binding = this.codeUploadStaleBindingLocal(item);
+                const status = String(item?.status || "");
+                const phase = String(item?.phase || "");
+                records.push({ targetKey, label, ...binding, status, phase,
+                    // 旧记录自己没有主机/路径信息时如实标“归属未知”，绝不拿本次目标冒充它的已知归属（A3）。
+                    attributionKnown: item?.targetScoped === true || Boolean(binding.host || binding.root),
+                    kind: String(item?.reason || "") === "operation-unaddressable"
+                        ? "取消接口无法寻址的未终结记录"
+                        : (this.codeUploadStuckOperationLocal({ ...item, why: item?.reason })
+                            ? `取消也救不回来的未终结记录（状态 ${status || phase || "未知"}）`
+                            : `仍未结束的传输（${phase || status || "无阶段"}）`),
+                    tableKey: `${targetKey}\u0000${binding.identity}` });
+            }
+            for (const record of records) push(record);
+            if (!records.length) continue;
+            // 本机记下的“写入结果未知”所有权不是传输记录：不进覆盖判定与批准集合（它没有可靠的创建时间，
+            // 拿它参与 3 小时过期判断会把长期授权变成永远要点确认）。只在确认框里如实列出，
+            // 让用户知道这个目标上的未知写入所有权与保留租约会随本轮接管一并处理。
+            const ownershipView = this.pendingCodeUploadUnknownWriteLocal?.(root, { targetKey, workerId: target.id });
+            if (ownershipView) unknownWriteTargets.push({ targetKey, label,
+                host: String(identity?.host || ""), root: String(identity?.remoteRoot || ""),
+                retainedLease: ownershipView.retainedLease === true });
+        }
+        return { expired, needsConsent, byTargetKey, querying, writeTargets, unknownWriteTargets, targetCount: targets.length,
+            targetKeys: [...targetKeys],
+            scopeKeys: new Set(targets.map((target: any) => String(target?.id || ""))) };
+    }
+    /**
+     * 一个原生模态框列完本轮全部待覆盖记录（复用“写入 Agent 自启动路径”那套 `{ modal: true }` + 精确按钮判定）。
+     * A3：批准清单**一条也不许截断**——过去用 `slice(0, 12)` 只展示 12 条却批准全部，等于让用户签没看过的清单。
+     * 旧记录归属不完整时明确写“归属未知”，并把“本次实际要覆盖的目标”另列，不冒充旧传输的已知归属。
+     * 不接任何“记住选择/不再提醒”的持久豁免：决定只对这一次点击、这批目标、这组记录绑定有效。
+     */
+    async askCodeUploadStaleOverwriteLocal(summary: any) {
+        const shownAt = (record: any) => Number.isFinite(Number(record?.startedAtMs))
+            ? new Date(Number(record.startedAtMs)).toLocaleString() : "（本地时间缺失或异常）";
+        const describe = (record: any) => `- ${record.label}｜${record.attributionKnown
+            ? `${record.host || "主机未知"}｜${record.root || "远端根未知"}` : "旧记录归属未知（SimpleSFTP 不给主机与路径）"}｜${record.kind}`
+            + `｜操作身份 ${record.identity}｜实例 ${record.instanceId || "SimpleSFTP 未给"}｜开始于 ${shownAt(record)}`
+            + (record.status ? `｜状态 ${record.status}` : "") + (record.phase ? `｜阶段 ${record.phase}` : "")
+            + (record.anomalous ? "｜时间缺失/非法/来自未来，不能自动过期" : (typeof record.ageMs === "number" ? `｜已过 ${Math.floor(record.ageMs / 60000)} 分钟` : ""));
+        const lines: string[] = [];
+        if ((summary?.expired || []).length) {
+            lines.push(`以下 ${summary.expired.length} 条已超过 3 小时，按你的长期授权直接过期接管，不需要你确认：`);
+            for (const record of summary.expired) lines.push(describe(record));
+            lines.push("");
+        }
+        lines.push(`以下 ${summary.needsConsent.length} 条还没到 3 小时（或创建时间异常），需要你确认才能覆盖（一条不漏，全部列在下面）：`);
+        for (const record of summary.needsConsent) lines.push(describe(record));
+        if ((summary?.writeTargets || []).length) {
+            lines.push("", `本次实际要覆盖的目标（共 ${summary.writeTargets.length} 个，同名文件会被覆盖，其他文件不动）：`);
+            for (const item of summary.writeTargets)
+                lines.push(`→ ${item.label}｜${item.host || "主机未知"}｜${item.root || "远端根未知"}`);
+        }
+        if ((summary?.unknownWriteTargets || []).length) {
+            lines.push("", `本机在下列目标上还记着“写入结果未知”的所有权与保留租约（共 ${summary.unknownWriteTargets.length} 个，批准后会一并被本轮接管）：`);
+            for (const item of summary.unknownWriteTargets)
+                lines.push(`→ ${item.label}｜${item.host || "主机未知"}｜${item.root || "远端根未知"}｜保留租约 ${item.retainedLease ? "仍在" : "不在"}`);
+        }
+        if ((summary?.querying || []).length)
+            lines.push("", `另外 ${summary.querying.length} 个目标本轮查不到写操作状态（${summary.querying.slice(0, 4).join("、")}），本轮不猜测它们，仍按原有失败保护处理。`);
+        lines.push("", "“完全覆盖并继续”会重新申请写入租约，并向这些目标发送本次勾选范围的文件。",
+            "这些记录的退出从未被确认，覆盖它们不等于证明它们已经停止。",
+            "批准只绑定上面列出的操作身份、实例与发起时间：发送前只要有任何一条换了实例、换了发起时间或新冒出来，本轮立刻停止、一个字节也不写。",
+            "选“不覆盖，本轮停止”或关掉本框，本轮不申请任何新写租约、不发送任何数据，原有未知写入记录与保留租约都原样保留。");
+        const detail = lines.join("\n");
+        const answer = await vscode.window.showWarningMessage("存在未完成传输，是否完全覆盖后继续？",
+            { modal: true, detail }, "完全覆盖并继续", "不覆盖，本轮停止");
+        const approved = answer === "完全覆盖并继续";
+        return { approved, reason: approved ? "" : (answer === "不覆盖，本轮停止" ? "用户选择不覆盖" : "用户未确认") };
+    }
+    /**
+     * 记下本轮的覆盖决定：只对这一批目标、刚才列出的**记录绑定**（身份+实例+发起时间）以及
+     * 冻结的本次写入范围（目标键 + 勾选 Worker + 清单指纹）生效，本轮结束即作废。
+     * 超过 3 小时的记录按用户长期授权自动过期（不需要点按钮），其余必须 `approved === true` 才算批准。
+     */
+    recordCodeUploadStaleDecisionLocal(syncId: string, summary: any, decision: any, scope: any = {}) {
+        const rounds = this.codeUploadStaleRounds || (this.codeUploadStaleRounds = new Map<string, any>());
+        const targets = new Map<string, any>();
+        for (const record of [...(summary?.expired || []), ...(summary?.needsConsent || [])]) {
+            const row = targets.get(String(record.targetKey)) || { identities: new Set<string>(), bindings: new Set<string>(), expired: new Set<string>() };
+            row.identities.add(String(record.identity));
+            row.bindings.add(String(record.bindingKey));
+            if (record.expired) row.expired.add(String(record.bindingKey));
+            targets.set(String(record.targetKey), row);
+        }
+        // 把“为什么必须覆盖”原样留在本轮决定上：没批准时失败文案要如实带上待覆盖记录的原因与身份，
+        // 不能把“取消接口无法寻址”这类硬事实压缩成一句“用户未确认”。
+        const basis = [...(summary?.needsConsent || []), ...(summary?.expired || [])].slice(0, 8)
+            .map((record: any) => `${record.kind || "仍未结束的传输"}（${record.identity || "身份未知"}）`).join("；");
+        const entry = { decidedAtMs: Date.now(), approved: decision?.approved === true,
+            autoExpired: decision?.autoExpired === true, reason: String(decision?.reason || ""), basis,
+            modalShown: decision?.modalShown === true, expiredCount: (summary?.expired || []).length,
+            consentCount: (summary?.needsConsent || []).length, expiredRecords: (summary?.expired || []).slice(),
+            scopeKeys: summary?.scopeKeys || new Set<string>(), targets,
+            scopeTargetKeys: new Set([...(scope?.targetKeys || summary?.targetKeys || [])].map((key: any) => String(key))),
+            scopeFingerprint: String(scope?.fingerprint || "") };
+        rounds.set(String(syncId || ""), entry);
+        return entry;
+    }
+    /**
+     * 接管即将失败时的覆盖判定（A2/A3 返修）：输入是**当下实时仍未完成的全部非兄弟记录**。
+     * 每条记录必须各自满足下面之一，缺任何一条就整分支零写入：
+     * 1) 实时自带创建时间、严格超过 3 小时 → 按用户长期授权直接过期；
+     * 2) 本轮模态框列出过、且**同一绑定（身份+实例+发起时间）**被明确批准 → 按本次确认覆盖。
+     * 「取消已被接受」不再是凭据；本轮没列过、换了实例或发起时间、目标/清单范围变了，一律不覆盖。
+     * 本轮兄弟项不参与判定（它们只能排队，永远不让用户覆盖自己人）。
+     */
+    codeUploadStaleOverwriteLocal(syncId: string, targetKey: string, blockers: any[], scopeEpoch?: any) {
+        const items = (Array.isArray(blockers) ? blockers : [])
+            .filter((item: any) => String(item?.reason || "") !== "operation-current-round-ambiguous");
+        if (!items.length) return undefined;
+        const decision = (this.codeUploadStaleRounds || new Map<string, any>()).get(String(syncId || ""));
+        const approved = decision?.approved === true && decision?.modalShown === true;
+        const scope = decision?.targets?.get(String(targetKey || ""));
+        // 冻结范围核验：批准只对当时那批目标与那份清单有效，发送前发现范围变了就必须停下重新确认。
+        const hasDecision = Boolean(decision);
+        const scopeChanged = hasDecision && Boolean(scopeEpoch) && (
+            decision.scopeFingerprint !== String(scopeEpoch.fingerprint || "")
+            || !(decision.scopeTargetKeys || new Set<string>()).has(String(scopeEpoch.targetKey || "")));
+        const expiredRecords: any[] = [];
+        const consented: string[] = [];
+        const unapproved: any[] = [];
+        const unknown: any[] = [];
+        for (const item of items) {
+            const binding = this.codeUploadStaleBindingLocal(item);
+            const age = this.codeUploadStaleAgeLocal(binding.startedAtMs);
+            if (age !== undefined && age > CODE_UPLOAD_STALE_OPERATION_AGE_MS) {
+                expiredRecords.push({ identity: binding.identity, bindingKey: binding.bindingKey, startedAtMs: Number(binding.startedAtMs) });
+                continue;
+            }
+            if (scope?.bindings?.has(binding.bindingKey)) {
+                if (approved) { consented.push(binding.identity); continue; }
+                unapproved.push(binding);
+                continue;
+            }
+            unknown.push(binding);
+        }
+        // 本轮没有真正弹框、真正批准过时，“这项没列过”不是“范围变了”，而是本来就该保留的硬失败：
+        // 交回 undefined 让接管按原身份不符/取消未被接受/无法寻址的原文案失败，不发明新说法。
+        if (!hasDecision) return undefined;   // 本轮根本没列过、没批准过：交回原有明确失败文案，不谎称“范围变了”
+        if ((unknown.length || unapproved.length) && !approved && !scopeChanged) return undefined;
+        if (unknown.length || unapproved.length || scopeChanged) {
+            return { covered: false, unknown, unapproved, scopeChanged,
+                consented: [] as string[], expired: [] as string[], expiredRecords: [] as any[] };
+        }
+        return { covered: true, expired: expiredRecords.map((record: any) => record.identity), consented,
+            expiredOnly: !consented.length, expiredRecords };
+    }
+    /** 已按确认或 3 小时过期真正接管过的记录，从诊断台账里摘掉，避免下一轮继续拿已结束记录做提示。 */
+    clearCodeUploadStaleSuspectsLocal(targetKey: string, identities: any[]) {
+        const table = this.codeUploadStaleSuspects;
+        if (!table) return 0;
+        let cleared = 0;
+        for (const identity of Array.isArray(identities) ? identities : []) {
+            const key = `${String(targetKey || "")}\u0000${String(identity || "")}`;
+            if (table.delete(key)) cleared += 1;
+        }
+        return cleared;
+    }
+    /**
+     * 接管按原有失败路径收场时的“当场补一次确认”入口（A1 返修）：只读投影、逐条分类，
+     * 本轮还没做过覆盖决定时才弹**一个**框；批准就重试一次接管，拒绝/关闭/本轮已经问过就交回明确文案。
+     * 这里不发取消、不取锁、不写字节；拒绝时原有未知写入记录与保留租约一条都不动。
+     */
+    async codeUploadStaleLateConsentLocal(syncId: string, target: any, root: string, batchTargets: any[]) {
+        const label = String(target?.label || target?.id || "Worker");
+        const roundScope = this.codeUploadRoundScopeLocal;
+        // 冻结范围对不上本轮（不是同一次同步，或本轮还没建立范围）就不猜测，交回原失败文案。
+        if (!roundScope || String(roundScope.syncId || "") !== String(syncId || "")) return "";
+        const rounds = this.codeUploadStaleRounds || (this.codeUploadStaleRounds = new Map<string, any>());
+        if (rounds.has(String(syncId || ""))) return "";   // 本轮已经决定过：绝不弹第二个框
+        const scopeTargets = () => (Array.isArray(batchTargets) && batchTargets.length ? batchTargets : [target]);
+        // 同一轮并行的多个分支只能问一次：第一个分支创建这份“本轮询问”，其余分支等待同一个结果。
+        // 询问覆盖**整批**目标（不是一个分支），保证一个框列全本批待覆盖记录，批准后每个分支的绑定都在清单里。
+        const asks = this.codeUploadStaleAsks || (this.codeUploadStaleAsks = new Map<string, Promise<any>>());
+        const key = String(syncId || "");
+        let pending = asks.get(key);
+        if (!pending) {
+            pending = (async () => {
+                const summary = await this.collectCodeUploadStaleRecordsLocal(scopeTargets(), root, syncId);
+                if (!(summary?.expired || []).length && !(summary?.needsConsent || []).length)
+                    return { none: true };   // 实时查不到仍未完成的记录（自然退场或投影不可用）：不猜，按原失败处理
+                const decision = (summary.needsConsent || []).length
+                    ? { ...(await this.askCodeUploadStaleOverwriteLocal(summary)), modalShown: true }
+                    : { approved: true, reason: "", autoExpired: true, modalShown: false };
+                return { summary, decision };
+            })();
+            asks.set(key, pending);   // 同步占位：并发分支只能看到这一份询问
+        }
+        const outcome = await pending;
+        if (outcome?.none) return "";
+        // 批准的绑定就是刚才列给用户的那一份，绝不另算一份新的清单。
+        if (outcome?.summary && !rounds.has(key)) {
+            this.recordCodeUploadStaleDecisionLocal(syncId, outcome.summary, outcome.decision,
+                { targetKeys: roundScope.targetKeys, fingerprint: roundScope.fingerprint });
+        }
+        this.logOperationFact?.(`[code-sync] ${label}：接管失败后当场确认是否覆盖（${outcome?.decision?.approved
+            ? "已批准，重试一次接管" : `${outcome?.decision?.reason || "用户未确认"}，本轮不写入`}）`);
+        // 批准：交回空串，调用方重试接管；没批准：只交回“为什么没批”，原失败事实由调用方保留（不替换成新的说法）。
+        return outcome?.decision?.approved === true ? ""
+            : `${outcome?.decision?.reason || "用户未确认"}（本轮未申请新写租约、未发送任何数据，重新发起同步会再次列出这些未完成记录）`;
+    }
+    /**
+    /** 把 Worker ID 映射到它的真实写目标键；解不出就交回空键，由 gate 只按原 Worker ID 规则判定，不编造身份。 */
+    dispatchTargetKeyLocal(workerId: string) {
+        if (!workerId || typeof this.sftpSharedTargets !== "function" || typeof this.sftpServerOptions !== "function") return "";
+        let row: any;
+        try { row = (this.sftpSharedTargets() || []).find((target: any) => String(target?.id || "") === String(workerId)); }
+        catch { return ""; }
+        if (!row) return "";
+        try { return this.resolveCodeUploadTargetIdentityLocal(row).key; }
+        catch { return ""; }
+    }
+    /** 记下“写入结果未知”的原操作身份与目标所有权（只有主动查询确认结束才能解除）。 */
+    rememberUnknownCodeWriteLocal(intent: { uploadId: string; root: string } | undefined, root: string, target: any,
+        lease: any, syncId: string, error: unknown) {
+        const identity = this.gateStateLocal ? DispatchHandoffGate.recordUnknownCodeWrite(this.gateStateLocal(), {
+            uploadId: String(intent?.uploadId || syncId || ""), syncId: String(syncId || ""),
+            root: String(root || ""), targetKey: String(lease?.key || "") || `worker:${target?.id || ""}`,
+            workerId: String(target?.id || ""), error: errorMessage(error), transportStarted: true,
+        }) : undefined;
+        this.markCodeSyncTargetResultLocal?.(target, syncId, { unknownWrite: true, error: errorMessage(error) });
+        return identity;
+    }
+    /** 每 Worker（实际写目标）的阶段结果：传输、校验、proof 分开，失败详情不被其他 Worker 覆盖。 */
+    markCodeSyncTargetResultLocal(target: any, syncId: string, patch: Record<string, any>) {
+        const rows = this.codeSyncTargetResults || (this.codeSyncTargetResults = []);
+        const key = `${String(syncId || "")}\u0000${String(target?.id || "")}`;
+        const existing = rows.find((row) => row.key === key);
+        const record = existing || { key, syncId: String(syncId || ""), workerId: String(target?.id || ""),
+            label: String(target?.label || target?.id || ""), remotePath: String(target?.remotePath || ""),
+            leaseKey: "", targetKey: "", transfer: "pending", verified: "pending", proof: "pending", ready: false };
+        const stages = ["transfer", "verified", "proof"];
+        for (const [name, value] of Object.entries(patch || {})) {
+            if (value === undefined) continue;
+            if (stages.includes(name)) {
+                const current = String(record[name] || "pending");
+                // 阶段不跨级升级：传输未确认完成不能把 proof 记成就绪。
+                if (name === "proof" && value === "done" && record.transfer !== "done") continue;
+                // 已失败的阶段只允许同一阶段的后续观察覆盖，不会被其他阶段或其他 Worker 的成功洗成成功。
+                if (current.endsWith("-failed") && !String(value).endsWith("-failed") && String(patch.retryStage || "") !== name) continue;
+                // 已完成阶段不会因后续阶段失败被抹回未知；失败详情仍记在 error。
+                if (current === "done" && String(value) !== "done" && String(patch.retryStage || "") !== name) continue;
+            }
+            record[name] = value;
+        }
+        record.ready = record.transfer === "done" && record.verified !== "pending" && record.proof === "done";
+        if (record.ready) record.readyAt = new Date().toISOString();
+        if (!existing) rows.push(record);
+        if (rows.length > 64) rows.splice(0, rows.length - 64);
+        return record;
+    }
     async syncCodeTargets(targets, scope, options = {}) {
         if (this.syncScopeMutationInFlight) throw new Error("文件树操作进行中，代码同步稍后重试。");
         if (this.codeSyncInFlight) throw new Error("已有代码同步进行中，请完成后重试，未覆盖正在使用的代码。");
         this.codeSyncInFlight = (this.codeSyncInFlight || 0) + 1;
+        // 交接 gate：在任何 await 之前同步登记「禁止新派发进入」的意图，派发侧进入 gate 时重查该意图。
+        // 方法存在性防护只服务 VM 部分提取夹具，真实扩展类内这些方法恒定存在。
+        const handoffWorkerIds = (targets || []).filter(Boolean).map((target) => String(target.id || "")).filter(Boolean);
+        let codeUploadHandoff = this.beginCodeUploadHandoffLocal?.(options.projectContext?.root || workspaceRoot(), scope, handoffWorkerIds);
+        // 本轮覆盖决定只能活到本轮结束，变量提到 try 外才能在 finally 里擦掉。
+        let staleRoundKey = "";
         try {
-        const dispatchInFlight = this.distributedQueueTickPromise;
-        if (dispatchInFlight) await this.boundedPromise(() => dispatchInFlight, 10_000,
-            new Error("原派发尚未确认结束，代码同步未写入；请刷新任务状态后重试。"));
+        // 只等待已获所有权的派发真正交接完成（准入落盘→证明准备→发送或明确未发送→本机回执提交），
+        // 不再等待整轮 tick；10_000 语义是「安全交接等待预算」，超既不上传也不释放仍活跃的交接所有权。
+        const dispatchInFlight = codeUploadHandoff
+            ? this.awaitDispatchHandoffSafeLocal?.(codeUploadHandoff, 10_000)
+            : Promise.resolve({ safe: true, waitedMs: 0, timedOut: false, blocking: [] });
+        let handoffWait: any;
+        try {
+            handoffWait = await this.boundedPromise(() => dispatchInFlight, 10_000,
+                new Error("原派发尚未确认结束，代码同步未写入；请刷新任务状态后重试。"));
+        }
+        catch (error) {
+            // 外层预算同时到期时也要留下同一轮阶段的有界证据，用户文案保持原样。
+            throw new Error(this.recordDispatchHandoffTimeoutLocal?.("codeSyncTargets", codeUploadHandoff, undefined)
+                || errorMessage(error));
+        }
+        if (handoffWait && handoffWait.safe !== true) {
+            const reason = this.recordDispatchHandoffTimeoutLocal?.("codeSyncTargets", codeUploadHandoff, handoffWait);
+            throw new Error(reason || "原派发尚未确认结束，代码同步未写入；请刷新任务状态后重试。");
+        }
         const projectContext = options.projectContext;
         // Set by prepareCodeSyncRootGuards once this operation's frozen binding
         // exists; every later await boundary in this function re-checks it
@@ -11539,6 +12956,11 @@ reportStage("正在准备校验所需代码…");
         const root = projectContext?.root || workspaceRoot();
         if (!root)
             throw new Error("请先打开一个工作区，再同步代码。");
+        // 等待期间工作区可能已切换：意图必须绑到真正要写入的项目根，登记与换绑之间没有 await，不留空档。
+        if (codeUploadHandoff && codeUploadHandoff.root !== root) {
+            this.endCodeUploadHandoffLocal?.(codeUploadHandoff.uploadId);
+            codeUploadHandoff = this.beginCodeUploadHandoffLocal?.(root, scope, handoffWorkerIds);
+        }
         let enabledTargets = targets.filter(Boolean);
         if (!enabledTargets.length)
             throw new Error("没有可用于代码同步的 Worker 目标。");
@@ -11597,6 +13019,28 @@ reportStage("正在准备校验所需代码…");
         const inventoryScopePaths = [...new Set(Object.keys(manifest).map((file) => file.split("/")[0]))].sort();
         assertCurrent();
         const fingerprint = fingerprintFromManifest(manifest);
+        if (["run", "plan-check"].includes(scope) && options.hashCompare === true) {
+            const checked = await this.checkRunCodeWithoutUploadLocal(enabledTargets, root, manifest, fingerprint,
+                includePaths, scopePaths, holds, assertCurrent, progressReport);
+            assertCurrent();
+            if (checked) {
+                this.lastCodeSyncState = { fingerprint, scope, workers: "已核对，代码一致，未上传",
+                    workerVersions: { ...(this.lastCodeSyncState?.workerVersions || {}), ...checked.workerVersions }, updatedAt: new Date().toISOString() };
+                this.lastCodeSyncStats = { hashed: Number(built.stats?.hashed || 0), hashReused: Number(built.stats?.reused || 0),
+                    cacheWriteSkipped: Number(built.stats?.cacheWriteSkipped || 0), inventoryCalls: checked.inventoryCalls, uploads: 0 };
+                for (const target of enabledTargets) {
+                    assertCurrent();
+                    this.markCodeUploadWorkerReadyLocal?.(codeUploadHandoff, root, target.id);
+                    await options.onTargetReady?.(target.id);
+                }
+                progressReport?.("所有 Worker 的运行代码已核对一致；未上传代码，继续 Plan 校验。");
+                this.postState();
+                await this.persistProjectCodeSyncState();
+                assertCurrent();
+                return enabledTargets;
+            }
+            progressReport?.("检测到代码变化或仍有待核实写入；按原同步保护检查，仅上传变化文件。");
+        }
         const expectedRelativeFiles = Object.keys(manifest).sort((a, b) => a.localeCompare(b)).slice(0, 8);
         let heldWorkers = [];
         const incremental = scope === "run" && typeof options.onTargetReady === "function";
@@ -11641,11 +13085,58 @@ reportStage("正在准备校验所需代码…");
         this.lastCodeSyncState = { fingerprint, scope, workers: roleStatus.workersRunning, workerVersions, updatedAt: new Date().toISOString() };
         void this.persistProjectCodeSyncState().catch(() => undefined);
         this.postState();
+        const syncId = String(codeUploadHandoff?.uploadId || `sync-${Date.now()}`);
+        staleRoundKey = syncId;
+        // 本轮冻结的写入范围（实际目标键 + 清单指纹）：覆盖批准绑死它，发送前范围变了就停下重新确认（A3）。
+        this.codeUploadRoundScopeLocal = {
+            syncId,
+            fingerprint,
+            targetKeys: new Set(enabledTargets.map((item) => {
+                try { return String(this.resolveCodeUploadTargetIdentityLocal(item)?.key || ""); } catch { return ""; }
+            }).filter(Boolean)),
+        };
+        // 历史未完成传输必须排在所有只读预检之后、任何新写租约与发送之前：这里只查一次投影、
+        // 最多弹一个原生模态框列出全部待覆盖目标。批准前本方法不取锁、不发送；批准只对本批目标与
+        // 刚才列出的记录身份生效。只有“超过 3 小时自动过期”一种情况不需要点按钮（用户长期授权）。
+        // 批量预检只在“本机确实还留着上一份未确认写入的所有权/保留租约”时读实时投影：
+        // 那正是本功能针对的场景，也是整批只弹一个框的前提；本机没有任何未知写入所有权时
+        // 不额外增加只读轮次（旧的“先取消→核实落地→接管”路径与只读预检次数都保持原样）。
+        const stalePrecheckNeeded = enabledTargets.some((item: any) => {
+            try {
+                const key = String(this.resolveCodeUploadTargetIdentityLocal(item)?.key || "");
+                return Boolean(key && this.pendingCodeUploadUnknownWriteLocal?.(root, { targetKey: key, workerId: item?.id }));
+            } catch { return false; }
+        });
+        const staleSummary = stalePrecheckNeeded
+            ? await this.collectCodeUploadStaleRecordsLocal?.(enabledTargets, root, syncId, { stuckOnly: true })
+            : undefined;
+        if (staleSummary && ((staleSummary.needsConsent || []).length || (staleSummary.expired || []).length)) {
+            if (progressReport)
+                progressReport(`发现 ${(staleSummary.needsConsent || []).length + (staleSummary.expired || []).length} 项仍未完成的传输，正在确认是否完全覆盖…`);
+            const decision = (staleSummary.needsConsent || []).length
+                ? { ...(await this.askCodeUploadStaleOverwriteLocal(staleSummary)), modalShown: true }
+                : { approved: true, reason: "", autoExpired: true, modalShown: false };
+            assertCurrent();
+            this.recordCodeUploadStaleDecisionLocal(syncId, staleSummary, decision,
+                { targetKeys: staleSummary.targetKeys, fingerprint });
+            this.logOperationFact?.(`[code-sync] 历史未完成传输：${decision.approved
+                ? `已批准完全覆盖（超过 3 小时自动过期 ${staleSummary.expired.length} 项，本轮模态框确认 ${staleSummary.needsConsent.length} 项）`
+                : `${decision.reason || "用户未确认"}，本轮不申请新写租约、不发送`}`);
+            if (decision.approved !== true && progressReport)
+                progressReport(`${decision.reason || "用户未确认"}：本轮不写入任何文件，原有未知写入记录与保留租约都原样保留`);
+        }
+        const cancelledBranches = [];
         const progressStep = progressReport ? Number(options.progressSpan || 0) / enabledTargets.length : 0;
         const hashCompare = options.hashCompare === true;
-        await mapLimited(enabledTargets, 2, async (target, index) => {
+        const uploadOneTarget = async (target, index, lease?, leaseState?) => {
+            // 旧未知写入的核实与释放已经提到等锁之前（见下方 mapLimited 回调）：
+            // 能走到这里说明本轮已拿到写锁，不在持锁期间做恢复查询。
+            // 写入边界与返回边界是两个事实：未越过边界 = 明确未开始；越过但未返回 = 结果未知。
+            let writeStarted = false;
+            let writeReturned = false;
             if (progressReport) progressReport(`正在读取 ${target.label || target.id} 的远端清单（${index + 1}/${enabledTargets.length}）…`);
             try {
+                this.markCodeSyncTargetResultLocal?.(target, syncId, { transfer: "pending" });
                 if (incremental) await this.safeWorkerCodeSyncTargets([target], root, fingerprint, scope, progressReport);
                 let uploadManifest = manifest;
                 let remoteFiles;
@@ -11665,8 +13156,10 @@ reportStage("正在准备校验所需代码…");
                             codeSyncProofRuntimeGeneration: proof.runtimeGeneration } : {}) };
                 };
                 if (hashCompare) {
-                    if (target.role === "worker" && workerProbeOk && this.codeSyncWarmProofs?.get(warmProofKey) > Date.now()) {
+                    if (!["run", "plan-check"].includes(scope) && target.role === "worker" && workerProbeOk && this.codeSyncWarmProofs?.get(warmProofKey) > Date.now()) {
                         workerVersions[target.id] = await workerVersion();
+                        this.markCodeSyncTargetResultLocal?.(target, syncId, { transfer: "done", verified: "done", proof: "done", retryStage: "transfer" });
+                        this.markCodeUploadWorkerReadyLocal?.(codeUploadHandoff, root, target.id, lease?.key);
                         await options.onTargetReady?.(target.id);
                         if (progressReport) progressReport(`${target.label || target.id}：Extension Host 内近期远端核对凭据有效，跳过递归清单`);
                         return;
@@ -11695,7 +13188,10 @@ reportStage("正在准备校验所需代码…");
                     if (!Object.keys(uploadManifest).length) {
                         if (progressReport && progressStep > 0) progressReport(`${target.label || target.id} 内容未变化，未重传`, progressStep);
                         if (target.role === "worker") {
+                            this.markCodeSyncTargetResultLocal?.(target, syncId, { transfer: "done", verified: "done", retryStage: "transfer" });
                             workerVersions[target.id] = await workerVersion(true);
+                            this.markCodeSyncTargetResultLocal?.(target, syncId, { proof: "done" });
+                            this.markCodeUploadWorkerReadyLocal?.(codeUploadHandoff, root, target.id, lease?.key);
                             await options.onTargetReady?.(target.id);
                             if (workerProbeOk) this.rememberCodeSyncWarmProof(warmProofKey);
                             void this.persistProjectCodeSyncState().catch(() => undefined);
@@ -11705,8 +13201,9 @@ reportStage("正在准备校验所需代码…");
                 }
                 if (progressReport) progressReport(`正在传输 ${target.label || target.id} 的 ${Object.keys(uploadManifest).length} 个变化文件…`);
                 const transferStarted = Date.now();
+                writeStarted = true;
                 syncStats.uploads += 1;
-                const result = await this.simpleSftpApiCall("upload.workspace", {
+                const result = await this.withCodeUploadRoundWriteLocal(syncId, String(lease?.key || ""), () => this.simpleSftpApiCall("upload.workspace", {
                     apiMode: true,
                     confirm: true,
                     pathConfirmed: true,
@@ -11724,11 +13221,14 @@ reportStage("正在准备校验所需代码…");
                     if (snapshot.stalled || snapshot.phase === "stalled") progressReport(`${target.label || target.id}：暂未观察到新增写入，仍在查询；可手动取消`);
                     else if (snapshot.writtenBytes !== undefined) progressReport(`${target.label || target.id}：远端已写入 ${snapshot.writtenBytes}/${snapshot.totalBytes || 0} 字节，${snapshot.writtenFiles || 0}/${snapshot.totalFiles || 0} 个文件；内容待核验`);
                     else progressReport(`${target.label || target.id}：已处理 ${snapshot.processedFiles || 0} 个文件，${snapshot.processedBytes || 0} 字节`);
-                });
+                }));
+                // 调用已返回：无论结果是成是败，传输本身已终结，不属于“仍在途”的未知写入。
+                writeReturned = true;
                 assertCurrent();
                 if (!sftpUploadSucceeded(result, hashCompare ? "" : fingerprint))
                     throw new Error(resultError(result) || "SFTP 上传未确认成功。");
                 if (progressReport) progressReport(`${target.label || target.id} 传输完成（本段 ${Date.now() - transferStarted} ms）`);
+                this.markCodeSyncTargetResultLocal?.(target, syncId, { transfer: "done" });
                 // SimpleSFTP verifies every uploaded file after extraction. A second
                 // full project inventory here would repeat the expensive tree scan.
                 if (!hashCompare) {
@@ -11737,9 +13237,12 @@ reportStage("正在准备校验所需代码…");
                     const mismatches = verified.filter((row) => !row.exists || String(row.sha256 || "").toLowerCase() !== String(manifest[row.path]?.sha256 || "").toLowerCase());
                     if (mismatches.length)
                         throw new Error(`上传后源码校验失败：${mismatches.slice(0, 12).map((row) => `${row.path}${row.exists ? " 版本不一致" : " 缺失"}`).join("、")}${mismatches.length > 12 ? ` 等 ${mismatches.length} 项` : ""}`);
+                    this.markCodeSyncTargetResultLocal?.(target, syncId, { verified: "done" });
                 }
                 if (target.role === "worker") {
                     workerVersions[target.id] = await workerVersion(true);
+                    this.markCodeSyncTargetResultLocal?.(target, syncId, { proof: "done" });
+                    this.markCodeUploadWorkerReadyLocal?.(codeUploadHandoff, root, target.id, lease?.key);
                     await options.onTargetReady?.(target.id);
                     if (hashCompare && workerProbeOk) this.rememberCodeSyncWarmProof(warmProofKey);
                     void this.persistProjectCodeSyncState().catch(() => undefined);
@@ -11747,11 +13250,154 @@ reportStage("正在准备校验所需代码…");
                 if (progressReport && progressStep > 0) progressReport(`已完成 ${target.label || target.id}（${index + 1}/${enabledTargets.length}）`, progressStep);
             }
             catch (error) {
-                if (isUiCommandCancelled(error))
-                    throw error;
+                if (isUiCommandCancelled(error)) {
+                    // 不在这里抛出：mapLimited 内部用 Promise.all，一个回调提前拒绝会让其他在途上传失去登记。
+                    // 取消也不能丢未知写入身份：已越过传输边界的取消同样是“结果未知”。
+                    if (writeStarted && !writeReturned) {
+                        this.rememberUnknownCodeWriteLocal?.(codeUploadHandoff, root, target, lease, syncId, error);
+                        if (leaseState) leaseState.retain = true;
+                    }
+                    cancelledBranches.push(error);
+                    return;
+                }
+                // 三段失败要分开：未进入传输 = 明确未开始；调用已返回但结果不对 = 已确认终结；
+                // 越界后报错 = 仍在途的未知写入，必须保留操作身份与目标租约。
+                const unknownInFlight = writeStarted && !writeReturned;
+                const failureStage = unknownInFlight ? "unknown-failed" : "confirmed-failed";
+                // 传输已确认完成的阶段由记录器自身保护，不会被本轮失败抹回未知；失败详情仍记在 error。
+                this.markCodeSyncTargetResultLocal?.(target, syncId, { transfer: failureStage, verified: failureStage,
+                    proof: failureStage, error: errorMessage(error) });
+                // 写入结果无法确认的 Worker 保留「未知失败」所有权，不因其他 Worker 成功或本轮结束被洗成就绪。
+                this.markCodeUploadWorkerFailedLocal?.(codeUploadHandoff, root, target.id, errorMessage(error), lease?.key);
+                if (unknownInFlight) {
+                    this.rememberUnknownCodeWriteLocal?.(codeUploadHandoff, root, target, lease, syncId, error);
+                    if (leaseState) leaseState.retain = true;
+                }
                 failures.push({ role: target.role, label: target.label, message: errorMessage(error) });
             }
+        };
+        // 同一实际写目标（规范服务器 + 实际远端 root）互斥，不同目标继续并行且保留既有并发度 2；
+        // 超过两个目标按容量排队，一个槽位释放即补位，不等前两个目标全部结束。
+        const preparedTargets: any[] = [];
+        // 接管准备只查询、取消及确认旧记录。整批准备收敛前，任何目标都不能拿新写租约或发送。
+        // A 静默不能使它绕过 B 尚未完成的覆盖确认；拒绝/关闭仍保证整批零写入。
+        await mapLimited(enabledTargets, 2, async (target, index) => {
+            // 先解身份、先登记、再等锁：正在同一实际目标上排队的别名 Worker 也必须带着自己的目标键参与判定，
+            // 否则“上一份已完成、另一份还在等锁”时会被提前放行，向共享 root 的写入仍可交错。
+            let targetKey = "";
+            try { targetKey = this.resolveCodeUploadTargetIdentityLocal(target).key; }
+            catch (error) {
+                // 解不出身份就是明确未开始写入：逐目标失败上报，绝不退回占位身份去抢锁。
+                failures.push({ role: target.role, label: target.label, message: errorMessage(error) });
+                return;
+            }
+            this.noteCodeUploadTargetLocal?.(codeUploadHandoff, root, target.id, targetKey);
+            this.markCodeSyncTargetResultLocal?.(target, syncId, { leaseKey: targetKey, targetKey });
+            const staleDecision = this.codeUploadStaleRounds?.get(String(syncId));
+            if (staleDecision && staleDecision.approved !== true) {
+                // 只读预检后的模态框没拿到批准：整批在本方法里统一停下，一字节也不发。
+                // 这里甚至排在接管之前：用户选了“本轮停止”，就连取消旧传输也不做，
+                // 原有未知写入记录、保留租约与围栏全部原样留着。
+                const whyText = String(staleDecision.reason || "用户未确认");
+                const basisText = String(staleDecision.basis || "");
+                this.markCodeSyncTargetResultLocal?.(target, syncId, { staleConsent: whyText,
+                    staleConsentBasis: basisText,
+                    error: `${whyText}：本轮未申请新写租约、未发送任何数据` });
+                failures.push({ role: target.role, label: target.label,
+                    message: `${whyText}：本轮未申请新的写入租约、未发送任何数据，原有未知写入记录与保留租约都未清除`
+                        + (basisText ? `（刚才列出的待覆盖记录：${basisText}）` : "") });
+                return;
+            }
+            // 上一份没确认结束的写入按用户要求直接取消，并核实本目标确实静默之后才接管写入（包括交出被保留的那把租约）。
+            // 这一步必须排在等锁之前：先等锁就是在等自己必须先核实才能释放的那把锁，同批别名等待者也无法收敛。
+            let takeover = await this.takeoverCodeUploadTargetLocal?.(target, targetKey, syncId)
+                || { quiescent: true, takeover: "unavailable", cancelled: [], detail: "" };
+            if (takeover.quiescent !== true && takeover.takeover !== "stale-overwrite") {
+                // A1：接管按原有失败路径收场之前，先在本轮当场问一次（只读投影 + 一个模态框）。
+                // 批准就重试一次接管（重试只可能拿回静默/排队/明确覆盖，绝不盲写）；
+                // 拒绝、关掉框或本轮已经问过的，仍按原失败收场，未知写入与保留租约一条不动。
+                const veto = await this.codeUploadStaleLateConsentLocal?.(syncId, target, root, enabledTargets);
+                if (veto) {
+                    // 没批就保留接管失败的原事实文案（不发明新说法），只追加“为什么这轮没继续”。
+                    failures.push({ role: target.role, label: target.label,
+                        message: `${takeover.detail}；本轮未获覆盖确认：${veto}` });
+                    return;
+                }
+                const retried = await this.takeoverCodeUploadTargetLocal?.(target, targetKey, syncId);
+                if (retried && (retried.quiescent === true || retried.takeover === "sibling" || retried.takeover === "stale-overwrite")) {
+                    takeover = retried;
+                } else {
+                    // 取消不掉、身份不符、取消后仍活跃或查询不可用：保留未知写入所有权，本轮不写一字节。
+                    // 用最近一次查询到的事实报失败（重试后拿到的新说法比旧的那份更准）。
+                    if (retried) takeover = retried;
+                    failures.push({ role: target.role, label: target.label,
+                        message: `${takeover.detail}；不会盲目覆盖` });
+                    return;
+                }
+            }
+            preparedTargets[index] = { target, index, targetKey, takeover };
         });
+        const batchDecision = this.codeUploadStaleRounds?.get(String(syncId));
+        if (!batchDecision || batchDecision.approved === true) await mapLimited(preparedTargets.filter(Boolean), 2, async (prepared) => {
+            const { target, index, targetKey, takeover } = prepared;
+            const leaseState = { retain: false };
+            const pendingUnknown = this.pendingCodeUploadUnknownWriteLocal?.(root, { targetKey, workerId: target.id });
+            if (pendingUnknown && takeover.takeover !== "sibling") {
+                this.resolveCodeUploadUnknownWriteLocal?.(root, { targetKey, workerId: target.id });
+                if (progressReport) progressReport(takeover.takeover === "stale-overwrite"
+                    ? `${target.label || target.id}：按${takeover.stale?.expiredOnly
+                        ? `超过 3 小时的自动过期授权（忽略 ${takeover.stale?.ignoredCount || 0} 项，本地时间 ${(takeover.stale?.ignoredAts || []).slice(0, 3).join("、") || "缺失"}）`
+                        : "你刚才确认的完全覆盖"}接管该目标；上一份写入的退出仍未被确认，这不是“已确认结束”`
+                    : `${target.label || target.id}：已确认上一次写入结束（${takeover.evidence}），继续本轮同步`);
+            }
+            if (takeover.takeover === "stale-overwrite") {
+                // 回执如实记下覆盖来源与被忽略的旧记录条数/本地时间，不伪装成“已确认落地”。
+                const staleInfo = takeover.stale || {};
+                // 已按确认或 3 小时过期真正接管过的记录从提示台账摘掉，下一轮不能再拿它们弹框。
+                this.clearCodeUploadStaleSuspectsLocal?.(targetKey,
+                    [...(staleInfo.expired || []), ...(staleInfo.consented || [])]);
+                this.markCodeSyncTargetResultLocal?.(target, syncId, { takeover: "stale-overwrite",
+                    staleIgnored: staleInfo.ignoredCount || 0, staleIgnoredAts: (staleInfo.ignoredAts || []).slice(0, 4),
+                    staleAuthorizedBy: staleInfo.expiredOnly ? "expired-over-3h" : "user-modal-approval" });
+                this.logOperationFact?.(`[code-sync] ${target.label || target.id}：${takeover.detail}`);
+            }
+            if (takeover.takeover === "cancelled") {
+                // 面板/回执要能看出发生了一件什么：包括取消了本插件的多少项在传任务、其中多少属于其他 Worker。
+                this.markCodeSyncTargetResultLocal?.(target, syncId, {
+                    takeover: "cancelled", cancelledWrites: (takeover.cancelled || []).slice(0, 4),
+                    cancelledForeign: takeover.cancelledForeign || 0 });
+                this.logOperationFact?.(`[code-sync] ${target.label || target.id}：${takeover.detail}`);
+                if (progressReport) progressReport(`${target.label || target.id}：上一次传输已被取消并接管（已取消 ${(takeover.cancelled || []).length} 项本插件在传任务，含其他 Worker 的未完成上传 ${(takeover.cancelledForeign || 0)} 项；仅覆盖本次勾选范围，本机侧静默不等于远端目录完全干净）`);
+            }
+            if (takeover.takeover === "sibling" && (takeover.cancelled || []).length) {
+                // 排队等锁前回了一笔旧写入：这也是本插件真实做过的取消，必须如实上报，不能只报“排队”。
+                this.markCodeSyncTargetResultLocal?.(target, syncId, {
+                    takeover: "sibling", cancelledWrites: (takeover.cancelled || []).slice(0, 4),
+                    cancelledForeign: takeover.cancelledForeign || 0 });
+                this.logOperationFact?.(`[code-sync] ${target.label || target.id}：${takeover.detail}`);
+                if (progressReport) progressReport(`${target.label || target.id}：排队等锁前先取消了 ${(takeover.cancelled || []).length} 项本插件发起的旧写入（含其他 Worker 的未完成上传 ${(takeover.cancelledForeign || 0)} 项），同一次同步的兄弟分支写完后本分支再接管；仅覆盖本次勾选范围`);
+            }
+            const lease = await this.acquireCodeUploadTargetLeaseLocal?.(target, syncId, undefined, { key: targetKey })
+                || { token: undefined, key: targetKey, deferred: undefined };
+            if (!lease.token && lease.deferred) {
+                // 同一实际目标已被上一份未确认写入围栏：本分支明确「未开始、需核实」，
+                // 不写一字节、不接管别人的写锁，也不得替持有者交出保留租约。
+                const reason = String(lease.deferred.reason || "上一次写入结果未确认结束");
+                this.markCodeSyncTargetResultLocal?.(target, syncId, { leaseDeferred: true, error: `${reason}；本轮未开始写入` });
+                failures.push({ role: target.role, label: target.label,
+                    message: `${reason}：本目标本轮未开始写入，需要主动核实后重试` });
+                return;
+            }
+            try { return await uploadOneTarget(target, index, lease, leaseState); }
+            finally {
+                // 写入结果未知的目标不得提前放回租约：否则另一个 Worker 可以立刻覆盖同一实际目标。
+                if (leaseState.retain && lease.token) this.retainCodeUploadTargetLeaseLocal?.(lease);
+                else this.releaseCodeUploadTargetLeaseLocal?.(lease.token);
+            }
+        });
+        // 全部已发起分支真正收敛后才会到这里，之后的 finally 才能释放 gate 与写入计数；
+        // 不能把 finally 的执行当作底层写入已结束。
+        if (cancelledBranches.length) throw cancelledBranches[0];
         if (failures.length) {
             const failedText = failures.map((failure) => `${failure.label}: ${failure.message}`);
             this.lastCodeSyncState = {
@@ -11782,7 +13428,67 @@ reportStage("正在准备校验所需代码…");
         this.lastCodeSyncStats = syncStats;
         if (progressReport) progressReport(`代码同步完成：哈希重算 ${syncStats.hashed}、沿用 ${syncStats.hashReused}${syncStats.cacheWriteSkipped ? "，本地缓存未改写" : ""}，远端清单请求 ${syncStats.inventoryCalls} 次，上传 ${syncStats.uploads} 次`);
         return enabledTargets;
-        } finally { this.codeSyncInFlight--; }
+        } finally {
+            // 只回收本次上传的意图；仍在执行的派发交接与结果未知的 Worker 所有权保持原样。
+            this.endCodeUploadHandoffLocal?.(codeUploadHandoff?.uploadId);
+            // 本轮的覆盖决定不能溜到下一轮去复用。
+            if (staleRoundKey) {
+                this.codeUploadStaleRounds?.delete(String(staleRoundKey));
+                if (String(this.codeUploadRoundScopeLocal?.syncId || "") === String(staleRoundKey)) this.codeUploadRoundScopeLocal = undefined;
+                this.codeUploadStaleAsks?.delete(String(staleRoundKey));
+            }
+            this.codeSyncInFlight--;
+        }
+    }
+    async checkRunCodeWithoutUploadLocal(targets, root, manifest, fingerprint, includePaths, scopePaths, holds, assertCurrent, progressReport?) {
+        // Only current read evidence can bypass upload, never unresolved writers or old warm receipts.
+        const quiescent = async (target) => {
+            const key = String(this.resolveCodeUploadTargetIdentityLocal(target)?.key || "");
+            if (!key || this.pendingCodeUploadUnknownWriteLocal(root, { targetKey: key, workerId: target.id })) return false;
+            const live = await this.verifyCodeUploadTargetQuiescentLocal(target, key, "");
+            assertCurrent();
+            return live.quiescent === true;
+        };
+        let inventoryCalls = 0;
+        if (targets.some(target => this.lastWorkerProbes?.[target.id]?.status !== "ok")) return undefined;
+        for (const target of targets) {
+            if (!await quiescent(target)) return undefined;
+            const remoteFiles = {};
+            progressReport?.(`正在检查 ${target.label || target.id} 的代码差异…`);
+            for (const exactPaths of PlanCodeScopeHost.codeInventoryBatches(manifest)) {
+                const inventory = await this.verifiedSftpProjectInventory({ source: this.sftpServerOptions(target),
+                    relativePath: ".", recursive: true, scopePaths: exactPaths, inventoryPurpose: "code-sync" });
+                inventoryCalls++;
+                Object.assign(remoteFiles, inventoryFilesByPath(inventory));
+                assertCurrent();
+            }
+            if (Object.keys(changedManifestFiles(manifest, remoteFiles)).length) return undefined;
+        }
+        const eligible = await this.safeWorkerCodeSyncTargets(targets, root, fingerprint, "run", progressReport);
+        assertCurrent();
+        if (eligible.length !== targets.length || targets.some(target => !eligible.includes(target))) return undefined;
+        const workerVersions = {};
+        const inventoryScopePaths = [...new Set(Object.keys(manifest).map(file => file.split("/")[0]))].sort();
+        for (const target of targets) {
+            if (!await quiescent(target)) return undefined;
+            const key = this.codeSyncWarmProofKey(target, root, fingerprint, includePaths, scopePaths);
+            this.codeSyncAgentProofs.delete(key);
+            const proof = await this.ensureWorkerCodeSyncProof(target, root, fingerprint, manifest,
+                includePaths, scopePaths, inventoryScopePaths, key, progressReport);
+            assertCurrent();
+            if (!proof?.proofId || proof.manifestDigest !== fingerprint || !proof.runtimeGeneration) return undefined;
+            workerVersions[target.id] = { fingerprint, files: Object.keys(manifest).sort(), syncedAt: new Date().toISOString(),
+                ...(proof ? { codeSyncProofId: proof.proofId, manifestDigest: proof.manifestDigest,
+                    codeSyncScopeSignature: proof.scopeSignature, codeSyncProofVerifiedAt: proof.verifiedAt,
+                    codeSyncProofRuntimeGeneration: proof.runtimeGeneration } : {}) };
+        }
+        const latest = await buildLocalCodeManifest(root, includePaths, scopePaths, { executionOnly: true,
+            machineStateGuard: this.localMachineStateGuard(root), cacheFile: this.localCodeManifestCacheFile(root) });
+        assertCurrent();
+        if (fingerprintFromManifest(PlanCodeScopeHost.runSourceManifest(filterHeldFiles(latest, holds))) !== fingerprint)
+            throw new Error("本机代码在检查期间已变化，尚未上传或开始运行，请重新提交。");
+        for (const target of targets) if (!await quiescent(target)) return undefined;
+        return { workerVersions, inventoryCalls };
     }
     async safeWorkerCodeSyncTargets(targets, root, fingerprint, scope, progressReport?, options = {}) {
         const workers = targets.filter((target) => target.role === "worker");
@@ -12618,6 +14324,7 @@ this.assertPlanTopologyReady("Plan 调度");
         this.stampWorkerPoolManualTarget(body, selected);
         return selected;
     }
+    private distributedQueueMetrics: Array<Record<string, any>> = [];
     async loadDistributedQueue(root) {
         const file = DistributedPlanQueue.distributedQueuePath(this.context.globalStorageUri.fsPath, root);
         // r17-A: one-time race-safe migration of the known legacy snapshot into the project
@@ -12629,6 +14336,27 @@ this.assertPlanTopologyReady("Plan 调度");
         let migration: Awaited<ReturnType<typeof ensureProjectSnapshotMigrated>>;
         const hasSameRootSnapshot = this.distributedQueueRoot === root && this.distributedQueueCache;
         let source;
+        const loadStartedAt = Date.now();
+        let readMs = 0;
+        let parseMs = 0;
+        // 队列指标是纯诊断：记录器随方法自带，不给“摘出类成员进 VM 宿主”的用例新增跨方法依赖。
+        const shape = (queue: any, bytes: number) => ({ plans: Array.isArray(queue?.plans) ? queue.plans.length : 0,
+            clearedJobs: Array.isArray(queue?.clearedJobs) ? queue.clearedJobs.length : 0,
+            deferred: Array.isArray(queue?.deferred) ? queue.deferred.length : 0, queueBytes: Number(bytes || 0) });
+        const record = (patch: Record<string, any>) => {
+            try {
+                const metrics = this.distributedQueueMetrics || (this.distributedQueueMetrics = []);
+                const last = metrics[metrics.length - 1];
+                // 同体积同条数的空转轮次只累计计数，不涨条目，也不额外写盘。
+                if (last && last.op === "load" && last.queueBytes === patch.queueBytes && last.plans === patch.plans
+                    && last.clearedJobs === patch.clearedJobs) {
+                    last.repeats = Number(last.repeats || 1) + 1; last.at = new Date().toISOString(); last.lastMs = Number(patch.totalMs || 0);
+                    return;
+                }
+                metrics.push({ at: new Date().toISOString(), op: "load", repeats: 1, ...patch });
+                if (metrics.length > 24) metrics.splice(0, metrics.length - 24);
+            } catch { /* 诊断失败不影响队列读写 */ }
+        };
         try { migration = await ensureProjectSnapshotMigrated(String(root || ""), legacyFile, file); source = await fs.readFile(file, "utf8").catch(async (error) => { if (error?.code === "ENOENT") return migration === "invalid-legacy" ? await fs.readFile(legacyFile, "utf8") : ""; throw error; }); }
         catch (error) {
             if (!hasSameRootSnapshot) throw error;
@@ -12637,11 +14365,19 @@ this.assertPlanTopologyReady("Plan 调度");
             return DistributedPlanQueue.cloneDistributedQueue(this.distributedQueueCache, this.distributedQueueDiskSignature);
         }
         const signature = DistributedPlanQueue.distributedQueueDiskSignature(source);
-        if (hasSameRootSnapshot && signature === this.distributedQueueDiskSignature)
-            return DistributedPlanQueue.cloneDistributedQueue(this.distributedQueueCache, signature);
+        readMs = Date.now() - loadStartedAt;
+        if (hasSameRootSnapshot && signature === this.distributedQueueDiskSignature) {
+            const cloneStartedAt = Date.now();
+            const cached = DistributedPlanQueue.cloneDistributedQueue(this.distributedQueueCache, signature);
+            record({ ...shape(cached, (typeof Buffer === "undefined" ? source.length : Buffer.byteLength(source, "utf8"))),
+                cacheHit: true, readMs, cloneMs: Date.now() - cloneStartedAt, totalMs: Date.now() - loadStartedAt });
+            return cached;
+        }
         let queue;
+        const parseStartedAt = Date.now();
         try {
             queue = DistributedPlanQueue.restoreFormalJobQueue(source ? JSON.parse(source) : DistributedPlanQueue.emptyDistributedQueue());
+            parseMs = Date.now() - parseStartedAt;
             if (queue.schemaVersion !== 1 || !Array.isArray(queue.plans)) throw new Error("分布式 Plan 队列格式无效，已停止自动派发。");
             if (Array.isArray(queue.deferred)) queue.deferred = queue.deferred.map((row) => row.status === "processing" ? { ...row, status: "pending" } : row);
             for (const plan of queue.plans) {
@@ -12662,13 +14398,21 @@ this.assertPlanTopologyReady("Plan 调度");
             if (!hasSameRootSnapshot) throw error;
             this.distributedQueueStorageDiagnostics = { status: "stale", updatedAt: new Date().toISOString(),
                 reason: "queue-parse-failed", message: compactSensitiveText(errorMessage(error), 240) };
+            record({ ...shape(this.distributedQueueCache, (typeof Buffer === "undefined" ? source.length : Buffer.byteLength(source, "utf8"))),
+                status: "stale", readMs, parseMs, totalMs: Date.now() - loadStartedAt });
             return DistributedPlanQueue.cloneDistributedQueue(this.distributedQueueCache, this.distributedQueueDiskSignature);
         }
+        const cacheCopyStartedAt = Date.now();
         this.distributedQueueCache = JSON.parse(JSON.stringify(queue));
+        const cacheCopyMs = Date.now() - cacheCopyStartedAt;
         this.distributedQueueRoot = root;
         this.distributedQueueDiskSignature = signature;
         if (this.distributedQueueStorageDiagnostics?.status === "stale") this.distributedQueueStorageDiagnostics = { status: "ready" };
-        return DistributedPlanQueue.cloneDistributedQueue(this.distributedQueueCache, signature);
+        const cloneStartedAt = Date.now();
+        const snapshot = DistributedPlanQueue.cloneDistributedQueue(this.distributedQueueCache, signature);
+        record({ ...shape(snapshot, (typeof Buffer === "undefined" ? source.length : Buffer.byteLength(source, "utf8"))),
+            cacheHit: false, readMs, parseMs, cacheCopyMs, cloneMs: Date.now() - cloneStartedAt, totalMs: Date.now() - loadStartedAt });
+        return snapshot;
     }
     async withQueueWriteResource(root, work, options = {}) {
         if (!this.hostOperationLease) return work();
@@ -12856,8 +14600,44 @@ this.assertPlanTopologyReady("Plan 调度");
                 queue = admissionQueue;
             }
             await fs.mkdir(path.dirname(file), { recursive: true });
+            const serializeStartedAt = Date.now();
+            // 同上：写侧指标自带记录器，避免给切片宿主新增依赖；同内容轮次只计数。
+            const shape = (queue: any, bytes: number) => ({ plans: Array.isArray(queue?.plans) ? queue.plans.length : 0,
+                clearedJobs: Array.isArray(queue?.clearedJobs) ? queue.clearedJobs.length : 0,
+                deferred: Array.isArray(queue?.deferred) ? queue.deferred.length : 0, queueBytes: Number(bytes || 0) });
+            const record = (patch: Record<string, any>) => {
+                try {
+                    const metrics = this.distributedQueueMetrics || (this.distributedQueueMetrics = []);
+                    const last = metrics[metrics.length - 1];
+                    if (last && last.op === "save" && last.queueBytes === patch.queueBytes && last.plans === patch.plans
+                        && last.clearedJobs === patch.clearedJobs && Boolean(last.sameContent) === Boolean(patch.sameContent)) {
+                        last.repeats = Number(last.repeats || 1) + 1; last.at = new Date().toISOString(); last.lastMs = Number(patch.totalMs || 0);
+                        return;
+                    }
+                    metrics.push({ at: new Date().toISOString(), op: "save", repeats: 1, ...patch });
+                    if (metrics.length > 24) metrics.splice(0, metrics.length - 24);
+                } catch { /* 诊断失败不影响队列提交 */ }
+            };
+            queue = DistributedPlanQueue.retainQueueMemoryEstimates(queue, current);
             const serialized = DistributedPlanQueue.serializeDistributedQueue(queue);
+            const serializeMs = Date.now() - serializeStartedAt;
+            const queueShape = shape(queue, (typeof Buffer === "undefined" ? serialized.length : Buffer.byteLength(serialized, "utf8")));
+            // r18-B：空转的 500ms 观察轮次也会提交“最新队列”。逐字节内容未变时没有任何新事实需要落盘，
+            // 而重写要付 2MB 级 JSON 的临时文件+rename，并在 rename 前再读一次盘（实测 12 秒内 43 次
+            // 写入内容完全相同、约 3.6 次/秒），把调度轮次拖长到让“等原派发结束”的调用方（代码同步
+            // 10 秒上限）超时。处理方式与 mutateLatest 的未变化分支一致：发布磁盘快照、保留 base 签名、
+            // 不产生 staging 写。携带新派发意图的保存（dispatchAdmission）不走此短路，同意回执不变。
+            if (!options.appendPlanId && options.dispatchAdmission !== true && serialized === diskSource) {
+                publishDiskSnapshot(diskSource, diskSignature, "ready", undefined);
+                DistributedPlanQueue.setDistributedQueueBaseSignature(queue, diskSignature);
+                if (workingQueue && workingQueue !== queue) DistributedPlanQueue.setDistributedQueueBaseSignature(workingQueue, diskSignature);
+                // 同内容轮次不写盘，只记一条有界观察，确认 500ms 空转轮没有全量重写。
+                record({ ...queueShape, sameContent: true, serializeMs,
+                    writeMs: 0, totalMs: Date.now() - serializeStartedAt });
+                return;
+            }
             let publicationConflict = false;
+            const writeStartedAt = Date.now();
             try {
                 await atomicWriteText(file, serialized, { beforeRename: async () => {
                     assertStopBatch();
@@ -12883,9 +14663,14 @@ this.assertPlanTopologyReady("Plan 调度");
                 throw error;
             }
             this.distributedQueueRoot = root;
+            const cacheCopyStartedAt = Date.now();
             this.distributedQueueCache = DistributedPlanQueue.keepCurrentObservations(JSON.parse(JSON.stringify(queue)),
                 (options.artifactMutation || options.publicationMutation || options.controlMutation) && this.distributedQueueRoot === root ? this.distributedQueueCache : undefined);
+            const cacheCopyMs = Date.now() - cacheCopyStartedAt;
             this.distributedQueueDiskSignature = DistributedPlanQueue.distributedQueueDiskSignature(serialized);
+            record({ ...queueShape, sameContent: false, serializeMs,
+                writeMs: Date.now() - writeStartedAt, cacheCopyMs, dispatchAdmission: options.dispatchAdmission === true,
+                totalMs: Date.now() - serializeStartedAt });
             if (options.artifactMutation || options.publicationMutation) {
                 this.distributedQueueMetadataWrites = [...(this.distributedQueueMetadataWrites || []),
                     { root, from: diskSignature, to: this.distributedQueueDiskSignature }].slice(-64);
@@ -12997,6 +14782,8 @@ this.assertPlanTopologyReady("Plan 调度");
         });
     }
     async artifactSyncFromUi(message, verifyOnly = false) {
+        if (this.workerCodeSyncTargets().length < 2)
+            return { status: "completed", message: "当前只有一台已启用 Worker，无需 Worker 间产物同步。" };
         const root = workspaceRoot(), client = this.client, generation = this.projectContextGeneration;
         if (!root || !client) throw new Error("请连接当前项目的 Worker 后重试。");
         const planIds = Array.isArray(message.planIds) ? message.planIds.map(String) : [String(message.planId || "")];
@@ -13195,6 +14982,7 @@ this.assertPlanTopologyReady("Plan 调度");
         return { status: "failed", message: "预览未能把候选冻结为唯一隔离目标（token/路径绑定不完整），未执行任何修改。" };
     }
     private async syncCompletedPlanArtifacts(context) {
+        if (this.workerCodeSyncTargets().length < 2) return;
         const root = context.root;
         const client = this.client;
         const targetsKey = () => JSON.stringify(this.workerCodeSyncTargets().map(row => [row.id, row.host, row.port, row.user, row.remotePath]));
@@ -13275,6 +15063,7 @@ this.assertPlanTopologyReady("Plan 调度");
         void this.refreshPlanArtifactSyncStatus(force).catch((error) => console.warn(`[SimpleExperiment] 产物同步状态读取未完成：${errorMessage(error).slice(0, 300)}`));
     }
     private async refreshPlanArtifactSyncStatus(force = false): Promise<void> {
+        if (this.workerCodeSyncTargets().length < 2) { this.planArtifactSyncStatuses = {}; return; }
         const root = workspaceRoot();
         const queue = this.distributedQueueCache;
         if (!root || this.distributedQueueRoot !== root || !queue || !this.isRealtimeMode()) return;
@@ -13676,10 +15465,23 @@ this.assertPlanTopologyReady("Plan 调度");
         if (!task || this.distributedQueueTickPromise !== task) return;
         this.distributedQueueTickPromise = undefined;
         void Promise.resolve(task).then(() => undefined, () => undefined);
+        // 换代/停止后的旧轮已被围栏：既不能发送也不能写盘，本轮未提交交接按失效结局回收，
+        // 同时保留其阶段与身份供诊断，不把失效轮次冒充为已完成。
+        const detachedTickId = this.distributedTickIds?.get?.(task);
+        if (detachedTickId) {
+            this.endTickHandoffsLocal?.(detachedTickId, "stale-generation");
+            this.endDistributedTickRecordLocal?.(detachedTickId, "invalidated", "本轮已被换代或停止围栏隔离");
+            this.distributedTickIds?.delete?.(task);
+        }
     }
     requestDistributedQueueRefresh() {
         this.distributedQueueRefreshRequested = true;
         void this.tickDistributedQueue().catch(error => { if (error?.code === "STALE_QUEUE_ROUND") return; this.recordActionError({ command: "distributedPlanQueue", message: errorMessage(error) }); });
+    }
+    queueOutputIsolationRecoveryLocal(root: string) {
+        if (!root || this.distributedQueueRoot !== root || !this.distributedQueueCache?.plans?.some(plan =>
+            plan.jobs.some(job => job.status === "pending" && job.outputIsolationBlocked && !job.commandId))) return;
+        void queueOutputIsolationRecovery(this,root).catch(error => this.recordActionError({command:"recheckOutputIsolation",message:errorMessage(error)}));
     }
     async tickDistributedQueue() {
         if (this.manualDispatchInFlight?.size) return;
@@ -13688,13 +15490,21 @@ this.assertPlanTopologyReady("Plan 调度");
         if (cleanup?.blocksTaskScheduling ?? cleanup?.executing) return;
         if (this.distributedQueueTickPromise) return this.distributedQueueTickPromise;
         if (this.distributedPlanStopEpoch) return;
+        this.queueOutputIsolationRecoveryLocal?.(workspaceRoot());
         this.distributedQueueRefreshRequested = false;
         if (this.taskLifecycleProtocol === 2) void syncGpuQuotaPolicies(this, workspaceRoot()).catch(() => {});
         const generation = this.distributedQueueGeneration;
         const abort = new AbortController();
         this.distributedTickAbort = abort;
+        const tickId = this.beginDistributedTickRecordLocal?.(workspaceRoot(), generation);
+        // tick 身份经字段传递，保持 tickDistributedQueueCore 原有的二参签名（多份夹具只按二参拼接切片）。
+        this.distributedCurrentTickId = tickId;
         const task = this.tickDistributedQueueCore(generation, abort.signal);
+        this.distributedTickIds?.set?.(task, tickId);
         this.distributedQueueTickPromise = task;
+        this.beginDistributedTickLocal?.(tickId, workspaceRoot(), generation);
+        // catch 已记过终态时，finally 不得再用“本轮结束/换代”覆盖失败结局或重复回收交接。
+        let tickTerminalRecorded = false;
         try {
             await task;
             // 隔离账本派发终局：挂在已登记 tick 生命周期的完成点上（同代际才执行，随 abort/换代自然失效）。
@@ -13704,8 +15514,24 @@ this.assertPlanTopologyReady("Plan 调度");
                 await this.promoteIsolatedDispatchLocal(generation)
                     .catch(error => this.observeIsolatedLedgerPromotionError(error));
         }
+        catch (error) {
+            // 本轮异常终止也要给出精确终态：失败的 tick 不能永远留在 in-flight；已发送但传输未落定的
+            // 交接由 gate 保留所有权，这里只按真实结局记账，不拿“本轮失败”抹掉未知写入。
+            const staleRound = generation !== this.distributedQueueGeneration;
+            tickTerminalRecorded = true;
+            this.endTickHandoffsLocal?.(tickId, staleRound ? "stale-generation" : "tick-failed");
+            this.endDistributedTickRecordLocal?.(tickId, staleRound ? "invalidated" : "failed", { generation });
+            throw error;
+        }
         finally {
             if (this.distributedTickAbort === abort) this.distributedTickAbort = undefined;
+            // 本轮 tick 生命周期终点：未提交的交接按真实结局回收（generation 已不是本轮的轮次不可能再发送或写盘），
+            // 不会把仍在执行的派发当作已提交，也不会让同步侧永久等待；异常路径已在 catch 里记过终态。
+            if (!tickTerminalRecorded) {
+                this.endTickHandoffsLocal?.(tickId, generation === this.distributedQueueGeneration ? "round-ended" : "stale-generation");
+                this.endDistributedTickRecordLocal?.(tickId, generation === this.distributedQueueGeneration ? "completed" : "invalidated");
+            }
+            this.distributedTickIds?.delete?.(task);
             if (this.distributedQueueTickPromise === task) {
                 this.distributedQueueTickPromise = undefined;
                 if (this.distributedQueueRefreshRequested && generation === this.distributedQueueGeneration && !this.distributedPlanStopEpoch)
@@ -13796,7 +15622,11 @@ this.assertPlanTopologyReady("Plan 调度");
     }
     async sendDistributedJob(plan, job, workerId, gpuId, commandId, sharedCodeManifest?) {
         let transmissionStarted = false;
+        // 非 tick 通道的交接所有权在本函数内回收；tick 已登记的所有权仍由 tick 在回执提交后结束。
+        let channelHandoffRoot = "";
         try {
+        if (this.ensureDispatchHandoffForSendLocal?.(workspaceRoot() || "", workerId, commandId, plan, job, gpuId) === true)
+            channelHandoffRoot = workspaceRoot() || "";
         // 块B防旁路（批准方案§4）：统一域内只允许发送已在本机队列持久化同意的精确身份。
         // 发送前的普适 save→send 顺序使所有既有通道自然通过；任何未来旁路在此被硬拒。
         const unifiedSendDomain = this.unifiedDomainState();
@@ -13834,7 +15664,11 @@ this.assertPlanTopologyReady("Plan 调度");
         const workerConfig = this.enabledWorkerConfigs().find((worker) => worker.id === workerId);
         const schedulerSettings = this.schedulerSettings() as any;
         if (probes?.[workerId]?.capabilities?.endpoints?.gpuQuotaScheduling !== 1) throw new Error("GPU_QUOTA_PROTOCOL_REQUIRED：请更新 Worker Agent/Scheduler，未发送任务。");
-        const memoryScheduling = { ...GpuQuotaScheduling.quotaSettings(schedulerSettings, workerConfig, this.lastRealtimeState?.gpu?.[workerId] || []), gpuQuotaScheduling: 1 };
+        if (probes?.[workerId]?.capabilities?.endpoints?.gpuMemoryBudgetScheduling !== 1)
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE：${workerId} 需要更新 Agent/Scheduler 才能安全预留显存；未派发任务。`);
+        const memoryScheduling = { ...GpuQuotaScheduling.quotaSettings(schedulerSettings, workerConfig, this.lastRealtimeState?.gpu?.[workerId] || []),
+            gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1,
+            ...(job.gpuMemoryReservation ? { gpuMemoryReservation: job.gpuMemoryReservation } : {}) };
         if (memoryScheduling.gpuCardOverrides && probes?.[workerId]?.capabilities?.endpoints?.gpuCardQuotaScheduling !== 1) throw new Error("GPU_CARD_QUOTA_PROTOCOL_REQUIRED：逐卡配置需要更新 Worker Agent/Scheduler，未发送任务。");
         if (memoryScheduling.gpuMaxConcurrentCards !== undefined && probes?.[workerId]?.capabilities?.endpoints?.gpuCardLimitScheduling !== 1) throw new Error("GPU_CARD_LIMIT_PROTOCOL_REQUIRED：服务器占卡上限需要更新 Worker Agent/Scheduler，未发送任务。");
         const settings = vscode.workspace.getConfiguration("simpleExperimentMac");
@@ -13904,7 +15738,10 @@ this.assertPlanTopologyReady("Plan 调度");
             // stop the transport. Re-check the fence synchronously right before posting.
             if (workspaceRoot() !== root || this.client !== client || this.distributedQueueGeneration !== generation || this.distributedPlanStopEpoch)
                 throw new Error("提交已取消或项目已切换，未向 Worker 发送任务。");
+            // 交接 gate：最后围栏前重查写入意图；新登记意图按「明确未发送」安全退回，不留无主准入意图。
+            this.assertDispatchHandoffSendAllowedLocal?.(root, workerId);
             transmissionStarted = true;
+            this.markDispatchHandoffTransmissionLocal?.(root, commandId);
             return client.postWorkerAction(workerId, "start-worker-task", request);
         });
         if (job.lifecycleProtocol === 2) {
@@ -13916,15 +15753,44 @@ this.assertPlanTopologyReady("Plan 调度");
             // between this final fence and the post below.
             if (workspaceRoot() !== root || this.client !== client || this.distributedQueueGeneration !== generation || this.distributedPlanStopEpoch)
                 throw new Error("提交已取消或项目已切换，未向 Worker 发送任务。");
+            // 协议 2 直接发送口同样先重查 gate，再标记真实传输边界；这里之后没有任何 await，围栏与发送同拍。
+            this.assertDispatchHandoffSendAllowedLocal?.(root, workerId);
             transmissionStarted = true;
-            void client.postWorkerAction(workerId, "start-worker-task", request)
+            this.markDispatchHandoffTransmissionLocal?.(root, commandId);
+            // 协议 2 也是“发起即返回”：底层 POST 未落定前，交接登记必须保留为“传输在途”。
+            // 向调用方返回 unknown 仍可继续，但所有权不会随外层返回消失；后续由精确查询或本机落盘释放。
+            const posted = client.postWorkerAction(workerId, "start-worker-task", request);
+            this.observeDispatchHandoffTransportLocal?.(root, commandId, posted);
+            void posted
                 .catch(error => this.recordActionError({ command: "distributedSubmissionTransport", message: errorMessage(error) }));
             return { lifecycleProtocol: 2, status: "unknown", commandId, message: "请求已发送；由主动查询核实远端任务" };
         }
-        return await transfer();
+        let transported: unknown;
+        try {
+            transported = await transfer();
+        }
+        catch (error) {
+            // 旧传输渠道同理：报错不等于未送达，只记传输已落定，所有权留给精确查询/本机落盘。
+            if (transmissionStarted) this.markDispatchHandoffTransportSettledLocal?.(root, commandId, "failed");
+            throw error;
+        }
+        if (transmissionStarted) this.markDispatchHandoffTransportSettledLocal?.(root, commandId, "ok");
+        return transported;
         } catch (error) {
             if (!transmissionStarted) throw Object.assign(new Error(String(error?.message || error)), { dispatchNotSent: true, cause: error });
             throw error;
+        }
+        finally {
+            if (channelHandoffRoot) {
+                if (transmissionStarted) {
+                    // 外层调用已返回 ≠ 送达≠本机已接管；传输仍未落定时不能改写成“已交精确查询”的口气。
+                    const held = (this.dispatchHandoffDiagnosticsLocal?.().activeHandoffs || [])
+                        .find((row: any) => row.commandId === commandId);
+                    this.markDispatchHandoffAwaitingEvidenceLocal?.(channelHandoffRoot, commandId,
+                        held?.transportSettled ? "channel-send-returned-awaiting-exact-query" : "channel-send-returned-transport-in-flight");
+                }
+                else this.endDispatchHandoffLocal?.(channelHandoffRoot, commandId, "unsent-released");
+            }
         }
     }
     async releaseUnsentDistributedJob(root, plan, job, error) {
@@ -13941,6 +15807,10 @@ this.assertPlanTopologyReady("Plan 调度");
     }
     async tickDistributedQueueCore(generation = this.distributedQueueGeneration, signal?: AbortSignal) {
         const root = workspaceRoot();
+        // tick 阶段账本与交接 gate 状态分别记录；直接调用（含既有提取夹具）未带身份时自建一条，不复用上轮。
+        const tickId = String(this.distributedCurrentTickId || "") || this.beginDistributedTickRecordLocal?.(root, generation);
+        this.beginDistributedTickLocal?.(tickId, root, generation);
+        this.setDistributedTickPhaseLocal?.(tickId, "load-queue");
         const queueWriteCurrent = () => generation === this.distributedQueueGeneration && !this.distributedPlanStopEpoch && !signal?.aborted && workspaceRoot() === root;
         const abandonHungProbe = () => {
             if (queueWriteCurrent()) return false;
@@ -13958,6 +15828,7 @@ this.assertPlanTopologyReady("Plan 调度");
             void FailedJobRecovery.processFailedAttemptRecoveries(this, root, makeOpId).catch(error =>
                 this.recordActionError({ command: "failedAttemptRecovery", message: errorMessage(error) }));
         let newTerminal = false;
+        if (this.lowTrafficMode === true && !DistributedSchedulingPolicy.lowTrafficQueueNeedsObservation(queue)) return;
         if (!queue.plans.length && !(queue.deferred || []).length && !this.workerActionTargets().length) return;
         const targetsNeedingMirror = this.workerCodeSyncTargets().filter((target) => queue.plans.some((plan) => plan.jobs.some((job) => job.status === "completed" && !job.mirroredWorkerIds?.includes(target.id))));
         const disconnectedMirror = targetsNeedingMirror.some((target) => this.lastWorkerProbes[target.id]?.status !== "ok");
@@ -13987,11 +15858,12 @@ this.assertPlanTopologyReady("Plan 调度");
         const probeTask = this.distributedQueueTickPromise;
         let probeWatch;
         const snapshotsStartedAt = Date.now();
+        this.setDistributedTickPhaseLocal?.(tickId, "worker-snapshots");
         // Scheduling needs current windows, not slow artifact/log verification.
         const probes = this.readWorkerTaskSnapshotBatch(snapshotWorkerIds, { signal, executionOnly: this.taskLifecycleProtocol === 2 });
         const submissionPlansForTiming = () => [...(this.distributedSubmissionTimings?.entries?.() || [])]
             .filter(([planId]) => queue.plans.some((plan) => plan.id === planId));
-        const gpuSnapshotPromise = Promise.resolve().then(() => this.client.getGpu({ dispatch: true })).then(
+        const gpuSnapshotPromise = this.lowTrafficMode === true ? undefined : Promise.resolve().then(() => this.client.getGpu({ dispatch: true })).then(
             (value) => ({ value, completedAt: Date.now() }), () => ({ value: undefined, completedAt: Date.now() }));
         const taskSnapshots = await new Promise((resolve) => {
             const finish = (value) => { if (probeWatch) clearInterval(probeWatch); resolve(value); };
@@ -14102,11 +15974,23 @@ this.assertPlanTopologyReady("Plan 调度");
             } catch (error) { job.blockReason = errorMessage(error); }
         }
         if (stopTargets.length && queueWriteCurrent()) await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
-        const gpuSnapshotResult = await gpuSnapshotPromise;
+        // Low traffic first accepts the inventory's fresh collector sample; the
+        // client reuses that exact frame or queries /gpu if it is stale/missing.
+        const gpuSnapshotResult = await (gpuSnapshotPromise || Promise.resolve().then(() => this.client.getGpu({ dispatch: true })).then(
+            value => ({ value, completedAt: Date.now() }), () => ({ value: undefined, completedAt: Date.now() })));
         const dispatchGpuSnapshot = gpuSnapshotResult.value;
         for (const [, timing] of submissionPlansForTiming())
             this.recordPlanSubmissionTimingByOperation?.(timing.operationId, "gpuSnapshotMs", gpuSnapshotResult.completedAt - snapshotsStartedAt);
         if (!queueWriteCurrent()) return;
+        // 交接 gate：粗筛之后本轮还经过召回/重试等多个 await，同步意图必须在此重查；
+        // 全部候选 Worker 仍被未完成写入挡住时整轮让路（仍按原规则落盘本轮观察）。
+        if (this.dispatchHandoffYieldsRoundLocal?.(root, this.workerActionTargets().map((target) => target.id))) {
+            this.setDistributedTickPhaseLocal?.(tickId, "yield-code-upload");
+            await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
+            this.postState();
+            return;
+        }
+        this.setDistributedTickPhaseLocal?.(tickId, "schedule-retries");
         // Code upload and new dispatch never mutate one Worker project root concurrently.
         if (this.codeSyncInFlight && !(this.workerPreparation?.root === root && this.workerPreparation.preparation.ready.size)) {
             await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
@@ -14242,7 +16126,7 @@ this.assertPlanTopologyReady("Plan 调度");
                 if (plan.projectId !== projectId || plan.recoveryConflict || plan.schedulingMode === "server_prequeue" && plan.localDispatchOverride !== true) continue;
                 for (const job of plan.jobs) {
                     if (!queueWriteCurrent()) return;
-                    if (job.recallRequested === true || job.stopIntent) continue;
+                    if (job.recallRequested === true || job.stopIntent || job.automaticWorkerId) continue;
                     if (job.recoveryConflict || !job.workerId || !job.commandId
                         || !(job.status === "queued" || job.status === "cancelled" && job.reassignmentPending)) continue;
                     const snapshot = snapshotsByWorker.get(job.workerId);
@@ -14319,6 +16203,8 @@ this.assertPlanTopologyReady("Plan 调度");
                 const memoryPolicy = GpuQuotaScheduling.quotaSettings(scheduler, workerConfig, dispatchGpuSnapshot?.[target.id] || []);
                 const memory = GpuQuotaScheduling.quotaPlacement(dispatchGpuSnapshot?.[target.id] || [], memoryCounts.get(target.id) || new Map(), memoryPolicy);
                 return { workerId: target.id, online: live, idleGpuAdmission: snapshot?.capabilities?.idleGpuAdmission === true,
+                    gpuBudgetSupported: this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.gpuMemoryBudgetScheduling === 1,
+                    gpuRows: dispatchGpuSnapshot?.[target.id] || [], gpuPolicy: memoryPolicy,
                     gpuSlots: memory?.slots, memoryWeight: memory?.weight,
                     declaredJobPaths: this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.declaredJobPaths === true
                         && this.lastWorkerProbes?.[target.id]?.capabilities?.endpoints?.formalJobIdentityEnv === 1
@@ -14330,12 +16216,15 @@ this.assertPlanTopologyReady("Plan 调度");
             });
             await PlanCodeScopeHost.inspectPlanCodeSlots(this, queue, workers, signal);
             if (!queueWriteCurrent()) return;
+            // gate 重查：inspect 期间新登记的写入意图必须在分配前生效，否则不会为被阻塞目标持久化不会发送的准入意图。
+            const dispatchableWorkers = workers.filter((worker: any) => this.dispatchHandoffAllowsWorkerLocal?.(root, String(worker?.workerId || "")) !== false);
             const ownedGpuSnapshot = GpuJobOwnership.projectGpuOwnership(dispatchGpuSnapshot || {},
                 GpuJobOwnership.submittedGpuJobs(queue, taskSnapshots, DistributedPlanQueue.canonicalProjectId(root),
                     Object.fromEntries(targets.map(target => [target.id, target.project_dir]))));
             const hosted = { queue: DistributedSchedulingPolicy.localSchedulingQueue(queue), dispatches: [] };
             queue = hosted.queue;
-            const allocation = DistributedPlanQueue.allocateAvailable(queue, workers, { requireIdleGpuAdmission: true, localIdleOnly: true });
+            const allocation = DistributedPlanQueue.allocateAvailable(queue, dispatchableWorkers, { requireIdleGpuAdmission: true, localIdleOnly: true,
+                memoryBudget: GpuMemoryBudget.memoryBudgetAdmission(queue, dispatchableWorkers) });
             queue = allocation.queue;
             const hostedRetries = queue.plans.flatMap((plan) => DistributedPlanQueue.hostedRetryCandidates(plan)
                 .filter((job) => job.lifecycleProtocol !== 2 && job.workerId && job.commandId
@@ -14352,6 +16241,9 @@ this.assertPlanTopologyReady("Plan 调度");
             }
             // 块B：save 返回统一准入回执；被拒意图已随 save 剥回本地等待，绝不进入发送集合。
             let durableAdmissionReceipt;
+            this.setDistributedTickPhaseLocal?.(tickId, "dispatch-admission", { workerId: dispatches.map((item: any) => item.workerId).join(",").slice(0, 120) });
+            // 交接所有权从准入意图落盘前开始，覆盖证明准备、真实发送或明确未发送、本机回执提交。
+            this.registerDispatchHandoffsLocal?.({ tickId, generation, root, projectId, dispatches });
             if (dispatches.length) durableAdmissionReceipt = await this.saveDistributedQueue(root, queue, { queueGeneration: generation, dispatchAdmission: true });
             if (durableAdmissionReceipt?.dispatchAdmission && dispatches.some((item) =>
                 UnifiedDispatchAdmission.dispatchAdmissionDenied(durableAdmissionReceipt, item.planId, item.jobIndex, item.commandId))) {
@@ -14382,6 +16274,9 @@ this.assertPlanTopologyReady("Plan 调度");
                 const gpuId = "gpuId" in dispatch ? dispatch.gpuId as string : undefined;
                 const launchKey = DistributedPlanQueue.distributedJobControlKey(plan, job);
                 this.distributedLaunchInFlight.add(launchKey);
+                this.advanceDispatchHandoffLocal?.(root, dispatch.commandId, "code-proof-prepare");
+                this.setDistributedTickPhaseLocal?.(tickId, "code-proof-prepare", { workerId: dispatch.workerId, planId: dispatch.planId,
+                    jobIndex: dispatch.jobIndex, commandId: dispatch.commandId, sent: false });
                 let receipt: any;
                 let receiptError: unknown;
                 try {
@@ -14454,7 +16349,23 @@ this.assertPlanTopologyReady("Plan 调度");
                     }
                 }).catch((error) => { receiptCommitError ||= error; });
                 try { await receiptCommits; }
-                finally { this.distributedLaunchInFlight.delete(launchKey); }
+                finally {
+                    // 发送函数已返回、整轮结束、换代都不是释放证据：只有本机队列真的落盘
+                    // （commitDispatchHandoffLocal）或精确查询确认，才结束已发送的交接。
+                    const handoff = this.advanceDispatchHandoffLocal?.(root, dispatch.commandId, "local-receipt-commit");
+                    if (receiptCommitError) {
+                        // 回执提交失败、明确未发送的退回失败，都不能记成 committed / unsent-released。
+                        this.markDispatchHandoffAwaitingEvidenceLocal?.(root, dispatch.commandId,
+                            handoff?.transmissionStarted === true ? "receipt-commit-failed" : "unsent-rollback-incomplete");
+                    }
+                    else if (!handoff?.transmissionStarted && !receiptError)
+                        this.endDispatchHandoffLocal?.(root, dispatch.commandId, "unsent-released");
+                    else this.markDispatchHandoffAwaitingEvidenceLocal?.(root, dispatch.commandId,
+                        handoff?.transmissionStarted === true ? "awaiting-round-commit-or-exact-query" : "awaiting-unsent-rollback-evidence");
+                    this.setDistributedTickPhaseLocal?.(tickId, "receipt-commit", { workerId: dispatch.workerId, planId: dispatch.planId,
+                        jobIndex: dispatch.jobIndex, commandId: dispatch.commandId, sent: handoff?.transmissionStarted === true });
+                    this.distributedLaunchInFlight.delete(launchKey);
+                }
             }));
             await receiptCommits;
             if (receiptCommitError) throw receiptCommitError;
@@ -14462,7 +16373,9 @@ this.assertPlanTopologyReady("Plan 调度");
                 if (timing) this.recordPlanSubmissionTimingByOperation?.(timing.operationId, "dispatchMs", Date.now() - dispatchStartedAt);
             }
             if (!queueWriteCurrent()) return;
-            if (queueWriteCurrent()) await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
+            await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
+            // 本机队列真的落盘了：这才是“状态已可靠移交”，逐条按真实结局结束交接。
+            for (const dispatch of dispatches) this.commitDispatchHandoffLocal?.(root, String(dispatch.commandId || ""));
             if (newTerminal || Date.now() >= this.distributedNextPostprocessAt) {
                 this.distributedNextPostprocessAt = Date.now() + 60_000;
                 this.scheduleDistributedPostprocess(root, newTerminal);
@@ -14524,7 +16437,9 @@ this.assertPlanTopologyReady("Plan 调度");
             this.postState();
             return;
         }
-        const allocation = DistributedPlanQueue.allocateAvailable(queue, workers);
+        // gate 重查（同上）：分配前重新查询写入意图，避免为被阻塞目标持久化不会发送的准入意图。
+        const dispatchableLegacyWorkers = workers.filter((worker: any) => this.dispatchHandoffAllowsWorkerLocal?.(root, String(worker?.workerId || "")) !== false);
+        const allocation = DistributedPlanQueue.allocateAvailable(queue, dispatchableLegacyWorkers);
         queue = allocation.queue;
         if (!queueWriteCurrent()) {
             this.postState();
@@ -14533,6 +16448,8 @@ this.assertPlanTopologyReady("Plan 调度");
         // 块B：旧兼容路径同样必须过统一准入；这里的 job 查找不核 commandId，
         // 所以被拒意图只能靠回执过滤排除（不得依赖队列状态）。
         let legacyAdmissionReceipt;
+        this.setDistributedTickPhaseLocal?.(tickId, "dispatch-admission", { workerId: allocation.dispatches.map((item: any) => item.workerId).join(",").slice(0, 120) });
+        this.registerDispatchHandoffsLocal?.({ tickId, generation, root, projectId: DistributedPlanQueue.canonicalProjectId(root), dispatches: allocation.dispatches });
         if (allocation.dispatches.length) legacyAdmissionReceipt = await this.saveDistributedQueue(root, queue, { queueGeneration: generation, dispatchAdmission: true });
         if (!queueWriteCurrent()) {
             this.postState();
@@ -14555,6 +16472,11 @@ this.assertPlanTopologyReady("Plan 调度");
             } catch (error) {
                 return { dispatch, plan, job, error };
             } finally {
+                // 旧兼容传输的发送与本机回执在同一回调内收敛；这里不凭“发送已返回”抹掉所有权，
+                // 真正的释放放在下面的队列落盘之后（commitDispatchHandoffLocal）。
+                const handoff = this.advanceDispatchHandoffLocal?.(root, dispatch.commandId, "local-receipt-commit");
+                this.markDispatchHandoffAwaitingEvidenceLocal?.(root, dispatch.commandId,
+                    handoff?.transmissionStarted === true ? "awaiting-legacy-round-commit-or-exact-query" : "awaiting-legacy-unsent-evidence");
                 this.distributedLaunchInFlight.delete(launchKey);
             }
         }));
@@ -14587,6 +16509,7 @@ this.assertPlanTopologyReady("Plan 调度");
                 return;
             }
             await this.saveDistributedQueue(root, queue, { queueGeneration: generation });
+            this.commitDispatchHandoffLocal?.(root, String(dispatch.commandId || ""));
         }
         if (newTerminal || Date.now() >= this.distributedNextPostprocessAt) {
             this.distributedNextPostprocessAt = Date.now() + 60_000;
@@ -14595,6 +16518,7 @@ this.assertPlanTopologyReady("Plan 调度");
         this.postState();
     }
     async syncDistributedJobArtifacts(root, queue, phase: "fragments" | "bulk", verifyAll = false, report?, automatic?) {
+        if (this.workerCodeSyncTargets().length < 2) return;
         const contract = this.distributedProjectContract();
         const targets = new Map(this.workerCodeSyncTargets().map((target) => [target.id, target]));
         const online = [...targets.keys()].filter((id) => this.lastWorkerProbes[id]?.status === "ok");
@@ -14764,8 +16688,7 @@ this.assertPlanTopologyReady("Plan 调度");
         // Plan ownership stays in each record; compatible files share one archive per Worker pair.
         const groups = new Map<string, any[]>();
         for (const item of transfers) {
-            const key = JSON.stringify([item.source, item.destination, item.plan.planFile,
-                item.job.index, item.job.case, item.job.seed]);
+            const key = JSON.stringify([item.source, item.destination]);
             if (!groups.has(key)) groups.set(key, []);
             groups.get(key).push(item);
         }
@@ -14776,6 +16699,11 @@ this.assertPlanTopologyReady("Plan 调度");
                 await this.assertSshTransportIdentities([first.sourceRow, first.target]);
                 await automatic?.assertCurrent();
                 const paths = [...new Set<string>(items.flatMap((item) => item.paths))].sort();
+                const batchIdentity = jobArtifactBatchIdentity(items.map(item => ({
+                    retentionKey: JSON.stringify(["job-artifacts", item.plan.planFile, item.job.index, item.job.case, item.job.seed]),
+                    planId: item.plan.id, commandId: item.job.commandId,
+                    files: Object.fromEntries(item.paths.map((file: string) => [file, String(item.job.artifacts?.[file] || "").toLowerCase()])),
+                })));
                 for (let offset = 0; offset < paths.length; offset += 5000) {
                     await automatic?.assertCurrent();
                     report?.({ phase: "transferring", workerId: `${first.sourceId} → ${first.workerId}`,
@@ -14783,11 +16711,10 @@ this.assertPlanTopologyReady("Plan 调度");
                     await this.simpleSftpApiCall("sync.serverToServerFpsync", { source: first.source,
                         destination: { ...first.destination, host: first.destination.networkHost || first.destination.host },
                         relativePaths: paths.slice(offset, offset + 5000), compression: "auto", singleStream: true,
-                        retentionKey: JSON.stringify(["job-artifacts", first.plan.planFile, first.job.index, first.job.case, first.job.seed]),
+                        retentionKey: batchIdentity.retentionKey,
                         // r6：与完成任务链复用同一纯函数——真实 plan.id/commandId 加分批前完整冻结
                         // 清单（paths 全集，不取当前批次）。同输入跨入口同代，同 command 内容变化开新代。
-                        generation: jobArtifactRunGeneration(first.plan.id, first.job.commandId,
-                            Object.fromEntries(paths.map((file: string) => [file, String(first.job.artifacts?.[file] || "").toLowerCase()]))),
+                        generation: batchIdentity.generation,
                         confirm: true, pathConfirmed: true,
                         taskLabel: workerFpsyncTaskLabel({ action: automatic ? "自动同步已完成 Plan 产物" : "压缩同步最新版 Plan 产物",
                             sourceId: first.sourceId, destinationId: first.workerId,
@@ -14977,7 +16904,7 @@ this.assertPlanTopologyReady("Plan 调度");
                 }),
                 remove: async (record) => {
                     await this.assertSshTransportIdentities([targets.get(record.workerId)]);
-                    await this.deleteSyncScopeRemoteCopy(record.workerId, servers.get(record.workerId), record.outputDir, true);
+                    await this.deleteSyncScopeRemoteCopy(root, record.workerId, servers.get(record.workerId), record.outputDir, true);
                 },
                 retired: async (candidate) => {
                     const latest = await this.loadDistributedQueue(root);
@@ -15116,8 +17043,9 @@ this.assertPlanTopologyReady("Plan 调度");
         if (!isCurrent()) return;
         if (["running", "starting", "queued"].includes(state.execution))
             throw new Error("所选任务仍在服务器排队或运行；请先中止或明确召回。");
-        if (anomalyOnly && (state.status !== "completed" || state.completionState !== "review_required"))
-            throw new Error("本轮查询未确认该 job 已完成且存在运行异常；未删除或重跑。");
+        if (anomalyOnly && (!["completed", "failed"].includes(state.status)
+            || !["exited", "failed"].includes(state.execution) || state.completionState !== "review_required"))
+            throw new Error("本轮查询未确认该 job 已结束且存在运行异常；未删除或重跑。");
         // 返修（2026-10-22 父裁决，两阶段）P0：
         // 阶段 1（初次准入）：允许当前原生协议真正核实的「已取消」或「已终止」原始形态——
         //   取消完成：cancelled===true 且 tmux===null；
@@ -16226,7 +18154,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         });
         const selectedWorker = manual.workerTunnels.find((worker) => worker.id === endpointId);
         await this.ensureXshellSessionLoaded(selectedWorker?.savedSessionPath);
-        await this.applySetupDraft(this.withXshellDerivedFields(manual), { syncAssignmentsFromFields: true });
+        await this.applySetupDraft(this.withImportedXshellFields(manual, sessionPathChanged(currentWorker.savedSessionPath, selectedWorker?.savedSessionPath) ? endpointId : ""), { syncAssignmentsFromFields: true });
         const savedWorker = this.setupConfig.workerTunnels.find((worker) => worker.id === endpointId);
         void this.showServerConfigSavedNextStep(savedWorker?.displayName || endpointId, savedWorker?.agentProjectDir).catch((error) => {
             void vscode.window.showErrorMessage(`服务器配置已保存，但后续引导失败：${errorMessage(error)}`);
@@ -16247,7 +18175,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             workerTunnels: workers,
         });
         await this.ensureXshellSessionLoaded(worker.savedSessionPath);
-        await this.applySetupDraft(this.withXshellDerivedFields(manual), { syncAssignmentsFromFields: true });
+        await this.applySetupDraft(this.withImportedXshellFields(manual, worker.id), { syncAssignmentsFromFields: true });
         if (showMessage)
             void vscode.window.showInformationMessage(`${worker.displayName || worker.id} 已添加并全局保存。`);
         return true;
@@ -16270,17 +18198,9 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         await this.applySetupDraft(manual, { syncAssignmentsFromFields: true });
     }
     async startTunnelEndpointFromUi(message) {
-        await this.syncXshellConfigBeforeNetwork("start endpoint");
-        const endpointId = stringField(message, "endpointId") || "hub";
-        const item = this.tunnelLaunchItems().find((entry) => entry.id === endpointId);
-        if (!item) {
-            void vscode.window.showWarningMessage(`未找到隧道会话：${endpointId}`);
-            return;
-        }
-        const answer = await vscode.window.showWarningMessage(`启动 ${endpointId} 的本地 Xshell 隧道会话？\n\n${item.config.savedSessionPath || "未配置 .xsh 路径"}`, { modal: true }, "启动");
-        if (answer !== "启动")
-            return;
-        await this.launchTunnelItem(item);
+        const endpointId = stringField(message, "endpointId");
+        if (!endpointId) throw new Error("请选择明确的 Worker 端点。");
+        await this.startBackgroundTunnels(true, true, [endpointId]);
     }
     async startAgentEndpointFromUi(message) {
         const id = stringField(message, "endpointId") || "hub";
@@ -21918,11 +23838,13 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     }
     readSimpleSftpCapabilities() {
         const launch = this.simpleSftpCapLaunch;
-        if (this.simpleSftpCapShared && this.simpleSftpCapShared.launch === launch) return this.simpleSftpCapShared.promise;
+        const root = workspaceRoot();
+        if (this.simpleSftpCapShared && this.simpleSftpCapShared.launch === launch && this.simpleSftpCapShared.root === root) return this.simpleSftpCapShared.promise;
         const shared = (async () => {
             const discoveryFile = path.join(require("../platform/HostPaths").componentDirectory("sftp"), "api.json");
             for (let attempt = 0; attempt < 2; attempt++) {
-                const discovery = JSON.parse(await fs.readFile(discoveryFile, "utf8"));
+                const discovery = await currentWindowSftpDiscovery(vscode.extensions, root,
+                    async () => JSON.parse(await fs.readFile(discoveryFile, "utf8")));
                 const endpoint = new URL(String(discovery.baseUrl || ""));
                 if (endpoint.protocol !== "http:" || !["127.0.0.1", "localhost", "::1"].includes(endpoint.hostname))
                     throw new Error("SimpleSFTP 本地 API 地址不安全。");
@@ -21933,6 +23855,15 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 if (capabilityResponse.status === 401 && attempt === 0) continue;
                 if (!capabilityResponse.ok) throw new Error(`SimpleSFTP capability 查询失败：HTTP ${capabilityResponse.status}`);
                 const capabilities = await capabilityResponse.json();
+                if (capabilities.instanceId !== `${discovery.pid}:${discovery.startedAt}`
+                    || capabilities.name !== "SimpleSFTP" || capabilities.version !== discovery.version)
+                    throw new Error("SFTP_INSTANCE_MISMATCH：当前 SimpleSFTP 监听身份已变化，未转交请求。");
+                if (capabilities.windowScope === 1 && (!sameProjectRoot(String(capabilities.workspace || ""), root)
+                    || Number(capabilities.pid) !== process.pid))
+                    throw new Error("SFTP_WORKSPACE_MISMATCH：SimpleSFTP 项目窗口不匹配，未转交请求。");
+                if (workspaceRoot() !== root) throw new Error("SFTP_WORKSPACE_CHANGED：项目已变化，未转交请求。");
+                headers["X-Simple-Api-Instance"] = capabilities.instanceId;
+                headers["X-Simple-Api-Workspace"] = encodeURIComponent(root);
                 return {
                     endpoint,
                     headers,
@@ -21947,7 +23878,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         shared.catch(() => {
             if (this.simpleSftpCapShared && this.simpleSftpCapShared.promise === shared) this.simpleSftpCapShared = undefined;
         });
-        this.simpleSftpCapShared = { launch, promise: shared };
+        this.simpleSftpCapShared = { launch, root, promise: shared };
         return shared;
     }
     async simpleSftpCapability(method, timeoutMs = 0) {
@@ -21983,13 +23914,19 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         const { fileIndexRound, fileIndexBinding, ...plainRequest } = params || {};
         const request = fileIndexRound !== undefined || fileIndexBinding !== undefined ? plainRequest : params || {};
         const capLaunchAtStart = this.simpleSftpCapLaunch;
+        const requestRoot = workspaceRoot();
         const query = sftpFileIndexQuery(method, params || {});
         // The cleanup node carries the SSH alias; the full source also carries
         // its configured network identity. Keep the page/read/mutation owner stable.
         const observationSource = method === "files.cleanup.inspect" && cleanupObservation ? cleanupObservation.source
             : request.node?.kind === "local" ? undefined : request.source || request.server || request.node;
         const index = query && this.projectFileObservationIndex?.(observationSource);
-        const load = () => callSftpWithProgress(method, request, (name) => this.simpleSftpCapability(name), onProgress);
+        const load = () => callSftpWithProgress(method, request, async (name) => {
+            if (workspaceRoot() !== requestRoot) throw new Error("SFTP_WORKSPACE_MISMATCH：项目已变化，未转交请求。");
+            const capability = await this.simpleSftpCapability(name);
+            if (workspaceRoot() !== requestRoot) throw new Error("SFTP_WORKSPACE_MISMATCH：项目已变化，未转交请求。");
+            return capability;
+        }, onProgress);
         if (index) {
             const client = this.client, root = workspaceRoot();
             for (let attempt = 0; ; attempt++) {
@@ -22881,6 +24818,17 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             await this.copyLastCheckStaticReportFromUi();
     }
     async fetchTmuxCaptureFromUi(message: any, options: { signal?: AbortSignal; publish?: boolean } = {}) {
+        if (!options.signal && this.displayReadBlockedFor(message))
+            return;
+        if (!options.signal) {
+            // One round per Worker+window key while the low-traffic guard is on; normal mode keeps its
+            // own round per request.
+            return this.displayReadOnce(this.displayReadKey("tmuxCapture", `${String(this.tmuxWorkerId(message) || "")}|${String(message?.window || message?.session || message?.name || "")}`),
+                () => this.fetchTmuxCaptureRound(message, options));
+        }
+        return this.fetchTmuxCaptureRound(message, options);
+    }
+    private async fetchTmuxCaptureRound(message: any, options: { signal?: AbortSignal; publish?: boolean } = {}) {
         const workerId = this.tmuxWorkerId(message);
         const _pfxRaw = (this.setupConfig as any)?.sessionPrefix || (this.setupConfig as any)?.remoteTmuxSessionPrefix || "simple";
         const _pfx = (0, AgentTmuxPolicy_1.normalizeRemoteTmuxSessionPrefix)(_pfxRaw);
@@ -22925,10 +24873,55 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         if (!endpoint) throw new Error(`Worker ${workerId} 的隧道端点未配置`);
         return endpoint;
     }
+    /**
+   * Display-class reads are keyed by what the user is looking at, not by the click. Merging is a
+   * low-traffic-only optimization: in normal mode every request still performs its own round, so the
+   * normal-mode traffic trajectory stays bit-for-bit the same as before this switch existed. When the
+   * guard is on, repeated clicks on the same Worker/section share one network round, but every caller
+   * still publishes a reply carrying its OWN requestId (see fetchTmuxListForCaller), so a UI that
+   * timed out and retried is never answered with a swallowed or stale identity. Callers that need
+   * their own cancellation (API server, signal-carrying rounds) never merge. The key carries the
+   * project context generation and workspace root, so a project/connection switch cannot join an
+   * older round, and readTmuxListAfterKill bypasses this map entirely for its fresh closeCheck read.
+   */
+    private displayReadInFlight = new Map<string, Promise<any>>();
+    private displayMergeEnabled(): boolean {
+        return this.effectiveTrafficPolicy().displayAutoRefresh === false;
+    }
+    private displayReadKey(kind: string, identity: string): string {
+        return kind + "|" + String(this.projectContextGeneration) + "|" + (workspaceRoot() || "-") + "|" + identity;
+    }
+    private displayReadOnce<T>(key: string, reader: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+        if (signal || !this.displayMergeEnabled()) return reader();
+        const active = this.displayReadInFlight.get(key);
+        if (active) return active as Promise<T>;
+        const promise = reader().finally(() => {
+            if (this.displayReadInFlight.get(key) === promise) this.displayReadInFlight.delete(key);
+        });
+        this.displayReadInFlight.set(key, promise);
+        return promise;
+    }
     async fetchTmuxListFromUi(_message: any) {
+        if (this.displayReadBlockedFor(_message))
+            return;
         const workers = this.enabledWorkerConfigs();
         const workerIds = _message?.allWorkers === true ? workers.map((worker) => worker.id) : [this.tmuxWorkerId(_message, true)];
-        await Promise.all(workerIds.map((workerId) => this.fetchOneTmuxListFromUi(workerId, _message?.requestId)));
+        await Promise.all(workerIds.map((workerId) => this.fetchTmuxListForCaller(workerId, _message?.requestId)));
+    }
+    /**
+     * N clicks produce one network round under the low-traffic guard but N replies, each with the
+     * caller's own requestId; in normal mode this is exactly one round per request, as before.
+     */
+    private async fetchTmuxListForCaller(workerId: string, requestId?: number) {
+        if (!this.displayMergeEnabled()) return this.fetchOneTmuxListFromUi(workerId, requestId);
+        try {
+            const result = await this.displayReadOnce(this.displayReadKey("tmuxList", workerId),
+                () => this.readTmuxListNetwork(workerId));
+            return this.publishTmuxList(workerId, result, requestId);
+        }
+        catch (exc: any) {
+            return this.publishTmuxListFailure(workerId, requestId, exc);
+        }
     }
     publishTmuxList(workerId: string, result: any, requestId?: number, publish = true) {
         const cfg = vscode.workspace.getConfiguration("simpleExperimentMac");
@@ -22950,22 +24943,31 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     async fetchOneTmuxListFromUi(workerId: string, requestId?: number, options: { signal?: AbortSignal; publish?: boolean } = {}) {
         options.signal?.throwIfAborted();
         try {
-            let result: any = null;
-            const tryClient = (this.client as any)?.clients?.get(workerId);
-            if (tryClient && typeof tryClient.requestJson === "function") {
-                result = await tryClient.requestJson(`/api/tmux/list`, "manual_refresh", undefined, { method: "GET", userInitiated: true, signal: options.signal });
-            }
-            if (!result) {
-                result = await this.requestTmuxJson(workerId, `/api/tmux/list`, 5000, 512 * 1024, options.signal);
-            }
+            const result = await this.readTmuxListNetwork(workerId, options.signal);
             return this.publishTmuxList(workerId, result, requestId, options.publish !== false);
         } catch (exc: any) {
             if (options.signal?.aborted) throw exc;
-            const msg = String(exc?.message || exc || "fetch failed").slice(0, 500);
-            const payload = { type: "tmuxList", ok: false, available: false, workerId, requestId, workers: this.enabledWorkerConfigs().map((worker) => ({ id: worker.id, name: worker.displayName || worker.id })), sessions: [], error: msg, fetchedAt: new Date().toISOString() };
-            if (options.publish !== false) this.view?.webview.postMessage(payload);
-            return payload;
+            return this.publishTmuxListFailure(workerId, requestId, exc, options.publish !== false);
         }
+    }
+    /** The network round only: publishing stays with the caller so each requestId gets its own reply. */
+    private async readTmuxListNetwork(workerId: string, signal?: AbortSignal) {
+        signal?.throwIfAborted();
+        const tryClient = (this.client as any)?.clients?.get(workerId);
+        let result: any = null;
+        if (tryClient && typeof tryClient.requestJson === "function") {
+            result = await tryClient.requestJson(`/api/tmux/list`, "manual_refresh", undefined, { method: "GET", userInitiated: true, signal });
+        }
+        if (!result) {
+            result = await this.requestTmuxJson(workerId, `/api/tmux/list`, 5000, 512 * 1024, signal);
+        }
+        return result;
+    }
+    private publishTmuxListFailure(workerId: string, requestId: number | undefined, exc: any, publish = true) {
+        const msg = String(exc?.message || exc || "fetch failed").slice(0, 500);
+        const payload = { type: "tmuxList", ok: false, available: false, workerId, requestId, workers: this.enabledWorkerConfigs().map((worker) => ({ id: worker.id, name: worker.displayName || worker.id })), sessions: [], error: msg, fetchedAt: new Date().toISOString() };
+        if (publish) this.view?.webview.postMessage(payload);
+        return payload;
     }
     private requestTmuxJson(workerId: string, requestPath: string, timeoutMs: number, maxBytes: number, signal?: AbortSignal): Promise<any> {
         const endpoint = this.tmuxEndpoint(workerId);
@@ -23884,7 +25886,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         }
     }
     loadTunnelConfig() {
-        const saved = this.context.globalState.get(keys.tunnelConfig) || {};
+        const saved = readProjectConnectionValue(this.context, workspaceRoot(), keys.tunnelConfig) || {};
         const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         return (0, TunnelGateway_1.normalizeTunnelGatewayConfig)({
             ...TunnelGateway_1.defaultTunnelGatewayConfig,
@@ -23896,22 +25898,11 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         });
     }
     loadSetupConfig() {
-        if (this.isMacVariant()) {
-            const config = vscode.workspace.getConfiguration("simpleExperimentMac");
-            const saved = this.context.globalState.get(keys.setupConfig) || {};
-            try {
-                return ManualTunnel_1.setupFromManualEndpoints(config.get(ManualTunnel_1.MANUAL_ENDPOINT_SETTING, []), {
-                    ...saved, remoteTmuxSessionPrefix: config.get("tunnel.remoteTmuxSessionPrefix", saved.remoteTmuxSessionPrefix || "simple"),
-                    condaEnv: config.get("tunnel.condaEnv", saved.condaEnv || ""),
-                });
-            } catch (error) {
-                return { ...ManualTunnel_1.setupFromManualEndpoints([]), manualEndpointError: errorMessage(error) };
-            }
-        }
-        const saved = this.context.globalState.get(keys.setupConfig) || {};
+        if (!workspaceRoot()) return XshellTunnelSetup_1.normalizeXshellSetupConfig({ ...XshellTunnelSetup_1.defaultXshellTunnelSetupConfig, workerTunnels: [] });
+        const saved = readProjectConnectionValue(this.context, workspaceRoot(), keys.setupConfig) || {};
         const config = vscode.workspace.getConfiguration("simpleExperimentMac");
         const sessionDefaults = this.sessionDefaultInspections(config);
-        const storedSignature = this.context.globalState.get(keys.setupConfigurationSignature);
+        const storedSignature = readProjectConnectionValue(this.context, workspaceRoot(), keys.setupConfigurationSignature);
         const hasStoredSignature = typeof storedSignature === "string";
         const savedDefaultsWin = hasStoredSignature && storedSignature === this.sessionDefaultConfigurationSignature(sessionDefaults);
         const sessionDefaultValue = (key, savedValue, fallback) => {
@@ -24020,24 +26011,17 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             allowStreaming: true,
             refreshProfile: "realtime",
         });
-        const configuration = vscode.workspace.getConfiguration("simpleExperimentMac");
-        // These updates raise handleConfigurationChanged, which reloads the
-        // global setup. Persist the new Worker settings before that reentry.
+        // A panel save belongs to this project. Explicit user/global settings
+        // remain templates; changing this panel must not rewrite other windows.
         await this.saveState();
-        await Promise.all([
-            configuration.update("tunnel.remoteTmuxSessionPrefix", next.remoteTmuxSessionPrefix, vscode.ConfigurationTarget.Global),
-            configuration.update("tunnel.condaEnv", next.condaEnv, vscode.ConfigurationTarget.Global),
-            configuration.update("tunnel.agentLoginPolicy", next.agentLoginPolicy || "preserve", vscode.ConfigurationTarget.Global),
-        ]);
-        await this.context.globalState.update(keys.setupConfigurationSignature, this.sessionDefaultConfigurationSignature());
+        await saveProjectConnectionValues(this.context, workspaceRoot(), { [keys.setupConfigurationSignature]: this.sessionDefaultConfigurationSignature() });
         this.resetClient();
         this.postState();
     }
     async saveState() {
         const tunnel = persistedTunnelGatewayConfig(this.tunnelConfig);
         const setup = persistedXshellSetupConfig(this.setupConfig);
-        await this.context.globalState.update(keys.tunnelConfig, tunnel);
-        await this.context.globalState.update(keys.setupConfig, setup);
+        await saveProjectConnectionValues(this.context, workspaceRoot(), { [keys.tunnelConfig]: tunnel, [keys.setupConfig]: setup });
     }
     async refreshLocalSshConfig(force = false) {
         const fingerprint = localMetadataFingerprint([LocalSshConfig_1.defaultSshConfigPath()]);
@@ -24159,15 +26143,17 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
         await this.applySetupDraft(synced, { syncAssignmentsFromFields: true });
     }
     async syncXshellConfigBeforeNetwork(reason, options = {}) {
-        await Promise.all([
-            this.refreshXshellSessionLibrary({ postState: options.postState !== false }),
-            this.refreshLocalSshConfig(),
-        ]);
+        // Persisted endpoint fields own runtime connections; session files are only import/manual sources.
+        await this.refreshLocalSshConfig();
         await this.assertSshTransportIdentities(this.sftpSharedTargets());
-        await this.syncConfiguredXshellSessions(reason, options.postState !== false);
     }
     withXshellDerivedFields(config) {
+        // Compatibility normalization: runtime refresh never re-imports a saved session.
+        return XshellTunnelSetup_1.normalizeXshellSetupConfig(config);
+    }
+    withImportedXshellFields(config, importEndpointId = "") {
         const workers = config.workerTunnels.map((worker) => {
+            if (worker.id !== importEndpointId) return worker;
             const info = this.sessionInfoForPath(worker.savedSessionPath);
             const forward = chooseXshellForward(info, worker.savedSessionForwardIndex, worker.localForwardPort, worker.remoteTelemetryPort || worker.remoteAgentPort);
             const workerHost = worker.workerHost || worker.hubHost || info?.host || "";
@@ -24353,6 +26339,12 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
         this.gpuHistoryState.reset();
         this.budget = new RequestBudget_1.RequestBudget((0, TunnelGateway_1.requestBudgetConfigFromTunnel)(this.tunnelConfig));
         this.client = this.createClient();
+        // A fresh client / new project context must never join a display read that started earlier.
+        this.displayReadInFlight.clear();
+        // A config-driven client reset (manual_only / pauseAllBackgroundTraffic / endpoint changes)
+        // must converge the cadence and the A-class guard on the current toggle, not only on the
+        // policy snapshot baked into the new client; timers are re-armed from the same strategy.
+        this.applyTrafficScheduling();
         this.realtimeUiStateRefs = undefined;
         this.cacheCleanupConnectionKey = "";
         this.planArtifactSyncStatuses = {};
@@ -24573,7 +26565,8 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
             preferWebSocket: streaming,
             fallbackToSse: streaming,
             fallbackToPolling: this.tunnelConfig.refreshProfile !== "manual_only",
-            snapshotFallbackIntervalSeconds: 5,
+            snapshotFallbackIntervalSeconds: this.effectiveTrafficPolicy().intervals.snapshotFallbackSeconds,
+            displayAutoRefresh: this.effectiveTrafficPolicy().displayAutoRefresh,
             pauseWhenWebviewHidden: hiddenPause,
             keepAgentStreamWhenHidden: true,
         };
@@ -24649,9 +26642,7 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
         const hubPath = this.setupConfig.savedSessionPath;
         {}
         for (const worker of this.enabledWorkerConfigs()) {
-            const filePath = worker.savedSessionPath;
-            if (!filePath)
-                continue;
+            const filePath = worker.savedSessionPath || "";
             const dirs = this.agentRuntimeDirs(worker.agentProjectDir, worker.agentInstallDir);
             const workerCommand = (0, AgentTmuxPolicy_1.agentTmuxStartupCommand)({ role: "worker", endpointId: worker.id, host: worker.remoteAgentHost, port: worker.remoteTelemetryPort || worker.remoteAgentPort, installDir: dirs.installDir, stateDir: worker.agentStateDir, workerStateDir: worker.workerStateDir, workDir: dirs.workDir, condaEnv: effectiveWorkerCondaEnv(worker, this.setupConfig.condaEnv), sessionPrefix: (this.setupConfig as any).sessionPrefix || (this.setupConfig as any).sessionPrefix || this.setupConfig.remoteTmuxSessionPrefix });
             targets.push({
@@ -24671,10 +26662,7 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
             const topology = this.projectTopologyAssessment();
             return topology.valid ? [] : topology.issues;
         }
-        return uniqueStrings([
-            ...this.currentTunnelLaunchBlockers(),
-            ...agentSessionReuseBlockers(this.agentStartupTargets()),
-        ]);
+        return uniqueStrings(this.tunnelLaunchItems().flatMap((item) => BackgroundSshTunnels_1.backgroundTunnelErrors(item)));
     }
     currentTunnelLaunchBlockers() {
         const items = this.tunnelLaunchItems();
@@ -24682,10 +26670,7 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
             .filter((conflict) => conflict.severity === "error")
             .map((conflict) => conflict.message || conflict.suggestion);
         for (const item of items) {
-            blockers.push(...(0, XshellTunnelSetup_1.validateXshellSetupConfig)(item.config).map((error) => `${item.id}: ${error}`));
-            const unsafeForward = this.unsafeXshellForwardMessage(item.config);
-            if (unsafeForward)
-                blockers.push(`${item.id}: ${unsafeForward}`);
+            blockers.push(...BackgroundSshTunnels_1.backgroundTunnelErrors(item));
         }
         return uniqueStrings(blockers);
     }
@@ -24702,7 +26687,7 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
             return this.agentSessionStateCacheValue;
         }
         const value = {
-            mode: "xshell_saved_session_tmux",
+            mode: "background_ssh_managed_tmux",
             canWriteStartupCommands: this.agentStartupTargets().length > 0,
             preparationBlockers: this.currentAgentPreparationBlockers(),
             workers: this.setupConfig.workerTunnels.map((worker) => {
@@ -24711,7 +26696,7 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
                     id: worker.id,
                     displayName: worker.displayName,
                     enabled: worker.enabled !== false,
-                    configured: require("../platform/Terminal").configuredWorkerTransport(worker),
+                    configured: Boolean((worker.workerHost || worker.hubHost) && (worker.workerUser || worker.hubUser)),
                     sessionPath: worker.savedSessionPath,
                     tmuxSessionName: (0, AgentTmuxPolicy_1.defaultAgentTmuxSessionName)("worker", worker.id, (this.setupConfig as any).sessionPrefix || (this.setupConfig as any).sessionPrefix || this.setupConfig.remoteTmuxSessionPrefix),
                     actualWorkRoot: dirs.workRoot,
@@ -24722,7 +26707,7 @@ return uniqueStrings(this.setupConfig.workerTunnels.flatMap(w=>[w.savedSessionPa
                     startupCommand: (0, AgentTmuxPolicy_1.agentTmuxStartupCommand)({ role: "worker", endpointId: worker.id, host: worker.remoteAgentHost, port: worker.remoteTelemetryPort || worker.remoteAgentPort, installDir: dirs.installDir, stateDir: worker.agentStateDir, workerStateDir: worker.workerStateDir, workDir: dirs.workDir, condaEnv: effectiveWorkerCondaEnv(worker, this.setupConfig.condaEnv), sessionPrefix: (this.setupConfig as any).sessionPrefix || (this.setupConfig as any).sessionPrefix || this.setupConfig.remoteTmuxSessionPrefix }),
                 };
             }),
-            note: "Agent 是独立辅助服务，由 SimpleSFTP 核验归属后准备、复用或升级；Xshell 只负责登录与隧道。所列 tmux 名称保留用于旧版 Agent 历史会话。",
+            note: "Agent 由 SimpleSFTP 通过后台连接核验归属、准备和启动；隧道由后台系统 SSH 建立。Xshell 保留会话导入和手动打开入口。",
         };
         this.agentSessionStateCacheSetup = this.setupConfig;
         this.agentSessionStateCacheSessions = sessions;
@@ -24825,7 +26810,7 @@ return "历史服务器";
             assignments,
             conflicts,
             policy,
-            note: `${"Worker"} 连接都由 Xshell 会话本地端口转发提供；插件按每个端点的配置主机和端口连接。配置保存在 VS Code 全局扩展状态中。插件不内置 ${"S" + "SH"}，也不会执行 ${"s" + "sh"}/${"s" + "cp"}/${"r" + "sync"}。`,
+            note: "Worker 隧道由后台系统 SSH 按每个端点配置的主机和端口建立。Agent 部署由 SimpleSFTP 管理，Xshell 用于导入服务器和手动终端。",
         };
         this.endpointRegistryStateCacheConfig = this.setupConfig;
         this.endpointRegistryStateCacheHubProbe = this.lastProbe;
@@ -24838,7 +26823,7 @@ return "历史服务器";
     }
     configurationSourceState() {
         const config = vscode.workspace.getConfiguration("simpleExperimentMac");
-        const saved = this.context.globalState.get(keys.setupConfig) || {};
+        const saved = readProjectConnectionValue(this.context, workspaceRoot(), keys.setupConfig) || {};
         const inspectedWorkers = config.inspect("tunnel.workerTunnels");
         const workspaceWorkers = inspectedWorkers?.workspaceFolderValue ?? inspectedWorkers?.workspaceValue ?? inspectedWorkers?.globalValue;
         const savedWorkerCount = saved.workerTunnels?.length || 0;
@@ -24856,7 +26841,7 @@ return "历史服务器";
         if (this.configurationSourceStateCacheKey === cacheKey && this.configurationSourceStateCacheValue)
             return this.configurationSourceStateCacheValue;
         const value = {
-            primary: "VS Code globalState",
+            primary: "当前项目 workspaceState",
             endpointProfiles: savedWorkerCount || saved.savedSessionPath ? "已导入" : "未导入",
             savedHubSession: Boolean(saved.savedSessionPath),
             savedHubAgentSession: Boolean(saved.agentSessionPath),
@@ -24888,26 +26873,7 @@ return "历史服务器";
         }
     }
     async launchTunnelItem(item) {
-        const errors = (0, XshellTunnelSetup_1.validateXshellSetupConfig)(item.config);
-        if (errors.length) {
-            void vscode.window.showErrorMessage(`${item.id}: ${errors.join(" ")}`);
-            return;
-        }
-        const unsafeForward = this.unsafeXshellForwardMessage(item.config);
-        if (unsafeForward) {
-            void vscode.window.showErrorMessage(`${item.id}: ${unsafeForward}`);
-            return;
-        }
-        const occupancy = await this.detectPortOccupancy(item.config.localForwardPort, item.id);
-        if (occupancy === "current_tunnel") {
-            return;
-        }
-        if (occupancy !== "available") {
-            return;
-        }
-        const launch = await this.integration().launchTunnel(item.config);
-        if (!launch.launched)
-            void vscode.window.showErrorMessage(`${item.id}: ${launch.message} ${launch.error || ""}`.trim());
+        return this.startBackgroundTunnels(false, true, [item.id]);
     }
     unsafeXshellForwardMessage(config) {
         const info = this.sessionInfoForPath(config.savedSessionPath);
@@ -25299,6 +27265,7 @@ return "历史服务器";
             actionErrors: Array.isArray(source.actionErrors) ? source.actionErrors.slice(0, 4) : [],
             diagnostics: { panelLifecycle: this.panelLifecycleState, panelStateTelemetryPreviousSample: this.latestPanelStateTelemetry || null, ...(source.diagnostics || {}) },
             lastError: String(source.lastError || ""), degraded: true, degradedMessage: message,
+            trafficMode: source.trafficMode && typeof source.trafficMode === "object" ? source.trafficMode : this.trafficModeStateForWebview(),
         } as WebviewClusterState;
     }
     private buildState(options: { panelProjection?: boolean } = {}): WebviewClusterState {
@@ -25469,6 +27436,17 @@ return "历史服务器";
                 panelStateTelemetryPreviousSample: this.latestPanelStateTelemetry || null,
             });
         diagnostics.distributedQueueStorage = this.distributedQueueStorageDiagnostics || { status: "ready" };
+        // 交接 gate 与 tick 阶段分开上报，不折叠为“派发中”；均为有界快照，不含密钥与文件清单。
+        diagnostics.dispatchHandoff = this.dispatchHandoffDiagnosticsLocal?.() || { status: "idle" };
+        diagnostics.distributedQueueTick = this.distributedTickDiagnosticsLocal?.() || { status: "idle" };
+        // 队列体积与各阶段耗时只取有界最近项，不复制队列内容，也不新增写盘。
+        diagnostics.distributedQueueMetrics = (this.distributedQueueMetrics || []).slice(-24);
+        // 逐 Worker（实际写目标）的阶段结果：传输/校验/proof 分开保留，不被合并成一个全局成功布尔。
+        diagnostics.codeSyncTargetResults = (Array.isArray(this.codeSyncTargetResults) ? this.codeSyncTargetResults.slice(-12) : [])
+            .map((record: any) => ({ targetId: String(record?.workerId || ""), syncId: String(record?.syncId || ""),
+                targetKey: String(record?.targetKey || ""), transfer: String(record?.transfer || ""),
+                verified: String(record?.verified || ""), proof: String(record?.proof || ""), ready: record?.ready === true,
+                unknownWrite: record?.unknownWrite === true, error: String(record?.error || "").slice(0, 160) }));
         diagnostics.completedPlanMirror = this.completedPlanMirrorDiagnostics || { status: "ready" };
         diagnostics.planOutputRetention = this.lastPlanOutputRetention || { status: "idle" };
         timing.diagnosticsMs = Math.max(0, Date.now() - diagnosticsStartedAt);
@@ -25525,7 +27503,9 @@ return "历史服务器";
                     localQueueOnly: job.localQueueOnly === true, recallRequested: job.recallRequested === true,
                     recallOperationId: job.recallOperationId || "",
                     commandId: job.commandId, logPath: job.logPath, finishedAt: job.finishedAt, outputRetiredAt: job.outputRetiredAt,
-                    error: job.error, blockReason: job.blockReason, admissionRejection: job.admissionRejection, failureDiagnostic: job.failureDiagnostic, formalConflictEvidence: job.formalConflictEvidence,
+                    error: job.error, blockReason: job.blockReason, outputIsolationBlocked: job.outputIsolationBlocked,
+                    automaticWorkerId: job.automaticWorkerId, manualDispatch: job.manualDispatch, manualDispatchNotice: job.manualDispatchNotice,
+                    admissionRejection: job.admissionRejection, failureDiagnostic: job.failureDiagnostic, formalConflictEvidence: job.formalConflictEvidence,
                     artifactError: job.artifactError,
                     artifactStageBlock: job.artifactStageBlock && job.artifactStageBlock.schemaVersion === 1
                         && job.artifactStageBlock.code === "TRANSFER_STAGE_PENDING" ? job.artifactStageBlock : undefined,
@@ -25687,6 +27667,7 @@ return "历史服务器";
             diagnostics,
             lastError: webviewLastError,
             checkStaticReports: this.listCheckStaticReportsSync(),
+            trafficMode: this.trafficModeStateForWebview(),
         };
         timing.totalMs = Math.max(0, Date.now() - totalStartedAt);
         this.latestPanelBuildTiming = timing;
@@ -26324,6 +28305,7 @@ return "历史服务器";
             extensionVersion: String(this.context?.extension?.packageJSON?.version || ""),
             sessionStartedAt: this.sessionStartedAt,
             connectionMode: "xshell_tunnel_realtime",
+            trafficMode: this.trafficModeStateForWebview(),
             localEndpoint: (0, TunnelGateway_1.localBaseUrl)(this.tunnelConfig),
             workspace,
             setup,
@@ -27711,6 +29693,9 @@ function normalizeActionErrorRow(value) {
         ...(OperationOutcome_1.normalizeOperationOutcome(row.operationOutcome) ? { operationOutcome: OperationOutcome_1.normalizeOperationOutcome(row.operationOutcome) } : {}),
         ...(capabilityMissing.length ? { capabilityMissing } : {}),
         ...(command === "panelLifecycle" && row.details && typeof row.details === "object" ? { details: compactPanelLifecycleDetails(row.details) } : {}),
+        // 交接超时证据也要能重载后读回：只取有界的 dispatchHandoff 精确身份，其他 details 一律丢弃。
+        ...(command === "codeUploadDispatchHandoff" && row.details?.dispatchHandoff && typeof row.details.dispatchHandoff === "object"
+            ? { details: { dispatchHandoff: compactDispatchHandoffEvidence(row.details.dispatchHandoff) } } : {}),
         timestamp: String(row.timestamp || new Date().toISOString()),
     };
 }
@@ -28239,12 +30224,13 @@ function agentStartupWriteConfirmationDetail(startupTargets, runtimeTargets, inc
     const lines = [
         includeRuntimeUpload ? "【强制确认】准备 Agent 并启动" : "【强制确认】写入 Agent 自启动路径",
         "",
+        ...(includeRuntimeUpload ? ["通过 SimpleSFTP 后台部署和启动 Agent，随后建立系统 SSH 隧道。"] : [
         `本地 Xshell 会话文件（${sessions.length} 个）：`,
         ...(sessions.length ? sessions.flatMap((item) => {
             const id = String(item.id || "Agent").trim() || "Agent";
             const filePath = String(item.filePath || "").trim();
             return [`- ${id} 会话：${filePath}`, `- ${id} 固定备份：${filePath}.simple-backup`];
-        }) : ["- 未配置"]),
+        }) : ["- 未配置"])]),
         "",
         includeRuntimeUpload ? "预期上传的远端文件位置：" : "Agent 启动后使用的预期远端文件位置（本操作不上传）：",
     ];
@@ -28265,7 +30251,7 @@ function agentStartupWriteConfirmationDetail(startupTargets, runtimeTargets, inc
     }
     lines.push("");
     if (includeRuntimeUpload) {
-        lines.push(`准备 ${sessions.length} 个独立辅助 Agent：`, "1. 通过 SimpleSFTP 只读核对运行身份与状态目录归属，健康同版本复用", "2. 缺失时部署并启动；旧版仅核实归属且无活动任务后升级", "3. 原登录行为保留；只有 agentLoginPolicy=managed 才维护独立启动段", "4. 检测实际运行版本及当前配置的隧道；不修改平台入口或停止用户训练");
+        lines.push(`准备 ${(startupTargets || []).length} 个独立辅助 Agent：`, "1. 通过 SimpleSFTP 后台核对运行身份与状态目录归属，健康同版本复用", "2. 缺失时部署并启动，旧版核实归属后升级", "3. 在指定 tmux 窗口管理辅助 Agent，保留任务和原有 Xshell 登录行为", "4. 后台建立当前配置的隧道并检测实际运行版本；不修改平台入口或停止用户训练");
     }
     else {
         lines.push("本操作只写入上述本地 .xsh 及固定备份，不上传远端文件，也不会修改 X11、Host、User、端口转发或其它会话项。");
@@ -30157,7 +32143,7 @@ const hostOperationUiCommands = new Set([
     "quickSetup", "configureSessions", "configureAgentSessions", "writeAgentCommands", "reassignWorkerTask",
     "saveTopologyMode", "saveAgentDefaults", "saveSchedulerConfig", "saveWorkerConfig", "addWorkerConfig", "deleteWorkerConfig",
     "startTunnelEndpoint", "startAgentEndpoint", "configureWorkers", "configurePorts", "repairPorts", "configure",
-    "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections", "prepareAgents",
+    "startHub", "startWorker", "start", "startAll", "startAgents", "startAllConnections", "openXshell", "prepareAgents",
     "restart", "pauseStream", "resumeStream", "pauseAll", "resumeNetwork", "script", "offline",
     "savePlan", "archivePlan", "restoreArchivedPlan", "runAllPlans", "generatePlanGuide", "bootstrapProject",
     "generateOutputAdapter", "saveProjectAdapterRules", "savePptPlotConfig", "choosePptPath", "chooseNewPptPath",
@@ -30194,6 +32180,7 @@ const HOST_OPERATION_LEASE_ACTION_LABELS = Object.freeze({
     analyzeRuntimeLog: "重新分析运行日志",
     retryDistributedJob: "核验并恢复任务",
     recallFailedJob: "召回失败 job 到本机重跑",
+    recheckOutputIsolation: "重新核实并恢复待派发 job",
     markJobUnavailable: "标记 job 不可用",
     restoreJobAvailability: "撤销 job 不可用",
     quickSetup: "检查服务器配置",
@@ -30204,10 +32191,11 @@ const HOST_OPERATION_LEASE_ACTION_LABELS = Object.freeze({
     startAgentEndpoint: "启动 Agent 端点",
     startHub: "启动 Hub 隧道",
     startWorker: "启动 Worker 隧道",
-    start: "启动 Xshell 隧道",
+    start: "启动后台隧道",
     startAll: "启动全部隧道",
     startAgents: "启动 Agent 会话",
     startAllConnections: "启动全部连接",
+    openXshell: "打开 Xshell 会话",
     prepareAgents: "准备 Agent",
     runPlan: "运行计划",
     reproducePlan: "恢复并重新运行",
@@ -31483,8 +33471,10 @@ function serverSetupMissingItems(setup, hubRequired = true) {
     const workers = Array.isArray(config.workerTunnels) ? config.workerTunnels.filter((worker) => worker && worker.enabled !== false) : [];
     for (const worker of workers) {
         const label = String(worker.displayName || worker.id || "Worker");
-        if (!require("../platform/Terminal").configuredWorkerTransport(worker))
-            missing.push(`${label} Termius 转发端点`);
+        if (!String(worker.workerHost || worker.hubHost || "").trim())
+            missing.push(`${label} 服务器地址`);
+        if (!String(worker.workerUser || worker.hubUser || "").trim())
+            missing.push(`${label} 登录用户名`);
         if (!String(worker.agentProjectDir || "").trim())
             missing.push(`${label} 项目父目录`);
     }
@@ -35550,6 +37540,40 @@ function compactUiActionError(error) {
         timestamp: new Date().toISOString(),
     };
 }
+/** 交接超时证据的有界压缩：只允许精确身份与计数，重载后仍能读回“当时挡住的是谁”。 */
+function compactDispatchHandoffEvidence(value) {
+    if (!value || typeof value !== "object") return undefined;
+    const text = (raw, max) => typeof raw === "string" && raw ? compactSensitiveText(raw, max) : undefined;
+    const count = (raw) => Number.isSafeInteger(raw) && raw >= 0 ? raw : undefined;
+    const row = (item) => {
+        if (!item || typeof item !== "object") return undefined;
+        const tick = text(item.tickId, 64);
+        const commandId = text(item.commandId, 96);
+        if (!tick || !commandId) return undefined;
+        return {
+            tickId: tick, generation: count(item.generation) || 0, workerId: text(item.workerId, 64) || "",
+            commandId, phase: text(item.phase, 48) || "", sent: item.sent === true,
+            transportSettled: item.transportSettled === true, transportOutcome: text(item.transportOutcome, 32) || "",
+            elapsedMs: count(item.elapsedMs) || 0,
+        };
+    };
+    const blocking = (Array.isArray(value.blocking) ? value.blocking : []).slice(0, 4).map(row).filter(Boolean);
+    const out = {
+        ...(text(value.source, 48) ? { source: text(value.source, 48) } : {}),
+        ...(count(value.waitedMs) !== undefined ? { waitedMs: value.waitedMs } : {}),
+        ...(text(value.tickId, 64) ? { tickId: text(value.tickId, 64) } : {}),
+        ...(count(value.generation) !== undefined ? { generation: value.generation } : {}),
+        ...(count(value.blockingHandoffCount) !== undefined ? { blockingHandoffCount: value.blockingHandoffCount } : {}),
+        ...(count(value.activeUploadCount) !== undefined ? { activeUploadCount: value.activeUploadCount } : {}),
+        ...(count(value.queueBytes) !== undefined ? { queueBytes: value.queueBytes } : {}),
+        ...(count(value.clearedJobsCount) !== undefined ? { clearedJobsCount: value.clearedJobsCount } : {}),
+        ...(text(value.queueStorageStatus, 24) ? { queueStorageStatus: text(value.queueStorageStatus, 24) } : {}),
+        ...(text(value.queueStorageReason, 48) ? { queueStorageReason: text(value.queueStorageReason, 48) } : {}),
+        ...(blocking.length ? { blocking } : {}),
+    };
+    return Object.keys(out).length ? out : undefined;
+}
+
 function compactPanelLifecycleDetails(details) {
     if (!details || typeof details !== "object") return undefined;
     const safeEnum = (value, allowed) => allowed.includes(String(value)) ? String(value) : undefined;
@@ -35587,6 +37611,7 @@ function compactPanelLifecycleDetails(details) {
         ...(safeCount(details.stateBuildDurationMs) !== undefined ? { stateBuildDurationMs: details.stateBuildDurationMs } : {}),
         ...(safeCount(details.telemetrySampleId) !== undefined ? { telemetrySampleId: details.telemetrySampleId } : {}),
         ...(compactPanelRenderEvidence(details.renderEvidence) ? { renderEvidence: compactPanelRenderEvidence(details.renderEvidence) } : {}),
+        ...(compactDispatchHandoffEvidence(details.dispatchHandoff) ? { dispatchHandoff: compactDispatchHandoffEvidence(details.dispatchHandoff) } : {}),
     };
 }
 function panelLifecycleDiagnosticMessage(reason) {
@@ -36026,7 +38051,10 @@ async function openReusableMappedTemp(root, relative) {
             if (latest.dev !== opened.dev || latest.ino !== opened.ino || latest.nlink !== 1)
                 throw new Error(`本机映射暂存文件身份在打开后变化：${relative}`);
         }
-        return { full: checked.full, handle, identity: { dev: opened.dev, ino: opened.ino } };
+        // 句柄已经打开，此后任何异常都必须先归还句柄，所以暂存槽所在目录的 realpath 采样放在同一个受保护 try 内；
+        // 采样失败按原样抛出（走下面的 catch 关闭句柄），不吞异常，也不留漏句柄的路径。
+        const parentReal = await fs.realpath(path.dirname(checked.full));
+        return { full: checked.full, handle, identity: { dev: opened.dev, ino: opened.ino }, parentReal };
     }
     catch (error) {
         await handle.close().catch(() => undefined);
@@ -36088,6 +38116,9 @@ async function distributeMappedDownloads(root, entries, transfers, overwrite, ho
             const parent = path.dirname(destination);
             await fs.mkdir(parent, { recursive: true });
             const checkedParent = await fs.realpath(parent);
+            // 写入前记下目标父目录自身的 dev/ino：目标父目录被改名让位后同名重建时，重新解析出的路径字符串仍然相等，
+            // 只有目录身份能识别；lstat 异常按原样抛出，不吞成通过。
+            const checkedParentStat = await fs.lstat(checkedParent);
             const rootReal = await fs.realpath(root);
             const parentWithin = path.relative(rootReal, checkedParent);
             if (parentWithin.startsWith("..") || path.isAbsolute(parentWithin))
@@ -36096,6 +38127,10 @@ async function distributeMappedDownloads(root, entries, transfers, overwrite, ho
             const temporaryRelative = mappedResultTemporaryRelativePath(destinationRelative);
             const temporaryState = await openReusableMappedTemp(root, temporaryRelative);
             const temporary = temporaryState.full;
+            // 暂存槽目录不应由目标父目录代替：槽位固定在项目根下的 simple_cluster/tmp/mapped-staging，
+            // 发布前的身份校验必须与该槽所在目录（打开时已解析过符号链接）比对，拿 checkedParent 比对会让每次正常发布都误判。
+            // 该采样由 openReusableMappedTemp 在持有句柄保护的 try 内完成，避免此处 realpath 抛错漏关句柄。
+            const temporaryParentReal = temporaryState.parentReal;
             try {
                 if (process.platform === "darwin") {
                     const copied = await MacResultFiles.withMacResultFile(root, sourceRelative, RESULT_ARTIFACT_MAX_BYTES,
@@ -36117,10 +38152,20 @@ async function distributeMappedDownloads(root, entries, transfers, overwrite, ho
                 residues.push(temporary);
                 throw new Error(`本机映射父目录在写入后发生变化，暂存保留：${temporary}`);
             }
+            // 字符串复核通过仍可能是「原父目录被改名让位 + 同名新建目录」：路径一致但已是另一个目录，
+            // 必须靠 dev/ino 差异保留暂存并拒绝发布。ino 缺失/为 0/不可比较时不启用本判据（退回上面的字符串比较），
+            // 不比较 mtime/ctime/birthtime；lstat 的权限或 I/O 异常原样抛出，不当作通过。
+            const latestParentStat = await fs.lstat(currentParent.identity);
+            const parentDirectoryIdentityChanged = checkedParentStat.ino > 0 && latestParentStat.ino > 0
+                && (checkedParentStat.dev !== latestParentStat.dev || checkedParentStat.ino !== latestParentStat.ino);
+            if (parentDirectoryIdentityChanged) {
+                residues.push(temporary);
+                throw new Error(`本机映射父目录在写入后发生变化，暂存保留：${temporary}`);
+            }
             const latestTemp = await fs.lstat(temporary).catch((error) => error?.code === "ENOENT" ? undefined : Promise.reject(error));
             const latestTempReal = latestTemp ? await fs.realpath(temporary) : "";
             const tempIdentityChanged = latestTemp && temporaryState.identity.ino && latestTemp.ino && (temporaryState.identity.dev !== latestTemp.dev || temporaryState.identity.ino !== latestTemp.ino);
-            if (!latestTemp?.isFile() || latestTemp.isSymbolicLink() || tempIdentityChanged || path.resolve(latestTempReal) !== path.resolve(checkedParent, path.basename(temporary))) {
+            if (!latestTemp?.isFile() || latestTemp.isSymbolicLink() || tempIdentityChanged || path.resolve(latestTempReal) !== path.resolve(temporaryParentReal, path.basename(temporary))) {
                 residues.push(temporary);
                 throw new Error(`本机映射暂存文件身份在发布前变化，暂存保留：${temporary}`);
             }
@@ -37520,6 +39565,12 @@ function resultError(result) {
     return result && typeof result === "object" ? String(result.error || "") : "";
 }
 const NON_SUCCESSFUL_SYNC_STATUSES = new Set(["-", "待同步", "pending", "unknown", "running", "已跳过", "未参与本次同步"]);
+/**
+ * 历史未完成传输的自动过期边界：严格超过 3 小时仍未确认结束的旧记录，用户已长期授权直接覆盖接管，
+ * 不再逐轮把它顶回审核；正好 3 小时、更短、以及创建时间缺失/非法/来自未来的记录，必须先过一次原生模态框。
+ * 这条时间只决定「还要不要再问用户一次」，不是远端进程已退出的证明，也不放宽任何写入前提。
+ */
+const CODE_UPLOAD_STALE_OPERATION_AGE_MS = 3 * 60 * 60 * 1000;
 function syncRoleStatus(targets, previous = {}, fingerprint = "") {
     const workerCount = targets.filter((target) => target.role === "worker").length;
     const sameFingerprint = Boolean(fingerprint) && String(previous?.fingerprint || "") === fingerprint;

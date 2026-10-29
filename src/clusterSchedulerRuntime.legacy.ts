@@ -354,6 +354,8 @@ def iso_age_seconds(value: object) -> float | None:
 
 
 def load_yaml_file(path: str | Path) -> dict[str, Any]:
+    if yaml is None:
+        raise RuntimeError("PLAN_YAML_UNAVAILABLE: Plan 解析进程缺少 PyYAML；请在所选任务环境配置该依赖。解释器：" + sys.executable)
     with Path(path).open("r", encoding="utf-8") as f:
         value = yaml.safe_load(f) or {}
     tracked = globals().get("PLAN_VALIDATION_INPUT_FILES")
@@ -485,6 +487,19 @@ def load_plan(path: str | Path) -> dict[str, Any]:
     plan["_file"] = str(path)
     plan["_revision"] = hashlib.sha256(Path(path).read_bytes()).hexdigest()
     return plan
+
+
+def plan_execution_mode_report(path: str | Path, revision: str) -> dict[str, Any]:
+    """Pure Plan parsing: no validation, data access, output creation or admission."""
+    raw = Path(path).read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if len(raw) > 1048576 or not revision or digest != revision:
+        raise ValueError("Original Plan revision unavailable; execution mode cannot be recovered safely")
+    plan = load_plan(path)
+    mode = plan_execution_mode(plan)
+    if Path(path).read_bytes() != raw:
+        raise ValueError("Original Plan changed during execution mode verification")
+    return {"ok": True, "executionMode": mode, "planRevision": digest}
 
 
 def plan_execution_mode(plan: dict[str, Any], requested: str = "") -> str:
@@ -829,26 +844,6 @@ def plan_runner(plan: dict[str, Any]) -> dict[str, Any]:
     return runner
 
 
-def posix_plan_relative_path(value: object, label: str, allow_root: bool = False) -> str:
-    if allow_root and value in (".", "./"):
-        return "."
-    if (not isinstance(value, str) or not value or len(value.encode("utf-8")) > 4096
-            or value.startswith("/") or ":" in value or chr(92) in value
-            or any(ord(char) < 32 or ord(char) == 127 for char in value)
-            or any(part in ("", ".", "..") for part in value.split("/"))):
-        raise SystemExit(label + " 必须是保留真实拼写的项目内相对 POSIX 路径")
-    return value
-
-def path_field(record: dict[str, Any], *keys: str) -> str:
-    for key in keys:
-        value = record.get(key)
-        if value is None or value == "":
-            continue
-        if not isinstance(value, str):
-            raise SystemExit(key + " 必须是路径字符串")
-        return value
-    return ""
-
 def declared_path_values(value: Any) -> list[str]:
     if isinstance(value, str):
         return [value]
@@ -859,7 +854,7 @@ def declared_path_values(value: Any) -> list[str]:
         if isinstance(item, str):
             values.append(item)
         elif isinstance(item, dict):
-            path = path_field(item, "path", "file", "directory", "dir")
+            path = text_field(item, "path", "file", "directory", "dir")
             if path:
                 values.append(path)
     return values
@@ -867,8 +862,13 @@ def declared_path_values(value: Any) -> list[str]:
 
 def safe_project_relative_path(root: Path, value: object, label: str, allow_root: bool = False,
                                require_exists: bool = False, require_directory: bool = False) -> str:
-    text = posix_plan_relative_path(value, label, allow_root=allow_root)
-    normalized = text
+    text = str(value or "").strip().replace("\\", "/")
+    if not text or text.startswith("/") or re.match(r"^[A-Za-z]:", text):
+        raise SystemExit(f"{label} 必须是项目内相对路径：{text or '<empty>'}")
+    parts = [part for part in text.split("/") if part and part != "."]
+    if any(part == ".." for part in text.split("/")):
+        raise SystemExit(f"{label} 不允许包含 ..：{text}")
+    normalized = "/".join(parts) or "."
     project_root = root.resolve()
     candidate = (project_root / normalized).resolve()
     try:
@@ -1142,7 +1142,14 @@ def runner_result_alias_fields(runner: dict[str, Any]) -> dict[str, str]:
 
 
 def normalize_default_result_csv_dir(value: Any) -> str:
-    return posix_plan_relative_path("experiments/results" if value in (None, "") else value, "--default-result-csv-dir")
+    text = str(value or "experiments/results").strip().replace("\\", "/")
+    if text.startswith("/") or re.match(r"^[A-Za-z]:", text):
+        raise SystemExit("--default-result-csv-dir 必须是项目内相对目录。")
+    text = text.strip("/")
+    parts = [part for part in text.split("/") if part and part != "."]
+    if not parts or any(part == ".." for part in parts):
+        raise SystemExit("--default-result-csv-dir 必须是项目内相对目录。")
+    return "/".join(parts)
 
 
 def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/results") -> tuple[dict[str, Any], list[Job]]:
@@ -1223,13 +1230,13 @@ def build_jobs(plan: dict[str, Any], default_result_csv_dir: str = "experiments/
             job_name = render_template(job_name_tpl, values)
             experiment_name = render_template(str(naming.get("experiment_name") or "{suite}/{case}/seed_{seed}"), {**values, "job_name": job_name})
             values.update({"job_name": job_name, "experiment_name": experiment_name})
-            output_tpl = path_field(case_item, *OUTPUT_DIR_KEYS) or path_field(plan, *OUTPUT_DIR_KEYS)
+            output_tpl = text_field(case_item, *OUTPUT_DIR_KEYS) or text_field(plan, *OUTPUT_DIR_KEYS)
             output_dir = render_template(output_tpl, values) if output_tpl else (Path(render_template(sweep_dir_tpl, values)) / job_name).as_posix()
-            output_dir = posix_plan_relative_path(output_dir, "output_dir")
+            output_dir = output_dir.replace("\\\\", "/")
             values.update({"output_dir": output_dir, "outputDir": output_dir})
             for alias_key in OUTPUT_TEMPLATE_ALIAS_KEYS:
                 values[alias_key] = output_dir
-            working_dir_tpl = path_field(local_runner, "working_directory", "workingDirectory", "cwd") or "."
+            working_dir_tpl = text_field(local_runner, "working_directory", "workingDirectory", "cwd") or "."
             working_directory = safe_project_relative_path(
                 Path.cwd(), render_template(working_dir_tpl, values), "runner.working_directory",
                 allow_root=True, require_exists=True, require_directory=True,
@@ -2329,7 +2336,7 @@ def formal_job_preflight(job: Job, identity: dict[str, Any], mode: str) -> dict[
             manifest = directory / "artifact_manifest.json"
             if manifest.is_file() and manifest.stat().st_size > 1024 * 1024:
                 raise ValueError("ARTIFACT_MANIFEST_TOO_LARGE")
-            report = json.loads(manifest.read_text(encoding="utf-8")).get("simpleExperimentMac", {}) if manifest.is_file() else {}
+            report = json.loads(manifest.read_text(encoding="utf-8")).get("simpleExperiment", {}) if manifest.is_file() else {}
             source_run = saved.get("runtime", {}).get("execution_provenance", {}).get("commandId")
             if report.get("outputDir") == job.output_dir and report.get("runId") == source_run and source_run:
                 if mode == "train" and formal_resume_targets(job) or not Path(job.result_csv).exists():
@@ -2480,7 +2487,7 @@ def native_job_result(job: Job, identity: dict[str, Any], mode: str, outcome: st
     if csv_path.is_file():
         file_stats[job.result_csv] = native_file_stat(csv_path)
     # Completion evidence is an output, not a mutable queue/owner snapshot.
-    document["simpleExperimentMac"] = {"schemaVersion": 1, "runId": identity["commandId"], "status": outcome,
+    document["simpleExperiment"] = {"schemaVersion": 1, "runId": identity["commandId"], "status": outcome,
         "planFile": str(job.template_values.get("plan_file") or ""), "job": {"index": job.index, "case": job.case, "seed": job.seed},
         "mode": mode, "outputDir": job.output_dir, "resultCsv": job.result_csv,
         "fileStats": file_stats,
@@ -2647,8 +2654,7 @@ def run_job_mode(args: argparse.Namespace) -> None:
     chosen = [job for job in jobs if int(job.index) == int(args.only_index)]
     if not chosen:
         raise SystemExit(f"No job selected for index {args.only_index}.")
-    raw_override = getattr(args, "output_dir_override", "")
-    output_override = posix_plan_relative_path(raw_override, "--output-dir-override") if raw_override not in (None, "") else ""
+    output_override = str(getattr(args, "output_dir_override", "") or "").replace("\\", "/").strip("/")
     if output_override:
         parts = output_override.split("/")
         if os.path.isabs(output_override) or any(part in ("", ".", "..") for part in parts):
@@ -2840,7 +2846,7 @@ def slug(value: object, fallback: str = "unknown", limit: int = 48) -> str:
 
 
 def plan_runtime_key(plan: str | Path, fallback: str = "plan") -> str:
-    raw = str(plan or "")
+    raw = str(plan or "").strip()
     try:
         path = Path(raw)
         resolved = path.resolve()
@@ -2849,7 +2855,7 @@ def plan_runtime_key(plan: str | Path, fallback: str = "plan") -> str:
         except ValueError:
             identity = resolved.as_posix()
     except Exception:
-        identity = raw
+        identity = raw.replace("\\", "/")
     stem = Path(raw).stem if raw else fallback
     prefix = slug(stem, fallback, 34)
     digest = hashlib.sha1((identity or raw or fallback).encode("utf-8")).hexdigest()[:10]
@@ -3949,12 +3955,10 @@ def launch_experiment(worker: dict[str, Any], plan: str, experiment_index: int, 
     prefix = "dbg" if debug_mode else ("tst" if mode == "test" else "run")
     session = f"{prefix}{experiment_index}-{int(time.time() * 1000) % 1000000}-{random.randint(100, 999)}"
     project_dir = str(worker["project_dir"])
-    posix_plan_relative_path(plan, "plan")
-    output_dir_text = posix_plan_relative_path(output_dir, "output_dir") if output_dir != "" else ""
-    default_result_csv_dir = normalize_default_result_csv_dir(default_result_csv_dir)
     runtime_path = ensure_worker_runtime(worker)
     raw_log = log_dir / f"{slug(worker['id'], 'worker')}_{experiment_index}_{gpu_id}_{slug(session, 'session')}.log"
     command_id = session
+    output_dir_text = str(output_dir or "").replace("\\", "/").strip()
     config_path_text = output_dir_text.rstrip("/") + "/job_config.yaml" if output_dir_text else ""
     loaded = load_plan(plan)
     _, declared_jobs = build_jobs(loaded, default_result_csv_dir)
@@ -4153,6 +4157,7 @@ def main() -> None:
     parser.add_argument("--formal-job-preflight", action="store_true")
     parser.add_argument("--formal-job-structure-only", action="store_true")
     parser.add_argument("--check-execution-shell-json", action="store_true")
+    parser.add_argument("--plan-execution-mode-json", action="store_true")
     parser.add_argument("--print-job-dir", action="store_true")
     parser.add_argument("--describe-jobs", action="store_true")
     parser.add_argument("--validate-plan", action="store_true")
@@ -4207,6 +4212,9 @@ def main() -> None:
         raise SystemExit("FORMAL_JOB_STRUCTURE_ONLY_REQUIRES_PREFLIGHT: execution always validates assets")
     _SCHEDULER_ARGS_FOR_GUARD = args
     args.default_result_csv_dir = normalize_default_result_csv_dir(args.default_result_csv_dir)
+    if args.plan_execution_mode_json:
+        print(json.dumps(plan_execution_mode_report(args.plan, args.plan_revision), ensure_ascii=False))
+        return
     if args.check_execution_shell_json:
         print(json.dumps(execution_shell_preflight(), ensure_ascii=False))
         return
@@ -4259,6 +4267,9 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception as _sched_guard_exc:
+        if getattr(globals().get("_SCHEDULER_ARGS_FOR_GUARD"), "plan_execution_mode_json", False):
+            print("PLAN_MODE_QUERY_FAILED: " + str(_sched_guard_exc), file=sys.stderr)
+            raise SystemExit(2)
         # Startup / scheduler failure path: the scheduling loop's own except block
         # already emits a terminal event and re-raises, so we skip here when one
         # exists. For crashes before the loop (conda env missing, YAML parse,

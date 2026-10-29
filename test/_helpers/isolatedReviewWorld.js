@@ -6,7 +6,7 @@ const clone=value=>JSON.parse(JSON.stringify(value));
 function load(file,imports){const m=new Module(file,module);m.filename=file;m.paths=Module._nodeModulePaths(path.dirname(file));const original=m.require.bind(m);m.require=name=>imports[name]||original(name);
  m._compile(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,file);return m.exports;}
 async function world(options={}){
- const root=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'isolated-review-main-')),storage=path.join(root,'storage'),ledger=path.join(storage,'batches.json');
+ const fixtureRoot=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'isolated-review-main-')),root=path.join(fixtureRoot,'workspace'),storage=path.join(root,'storage'),ledger=path.join(storage,'batches.json');
  const originalId='1'.repeat(48),archiveBatch='job-'+'a'.repeat(48),destination='clean_dir/'+archiveBatch+'/work/p0',node={id:'local',kind:'local',root};
  const mkdir=rel=>fs.mkdirSync(path.join(root,rel),{recursive:true});mkdir('work/p0');mkdir(path.dirname(destination));
  fs.writeFileSync(path.join(root,'work/p0/marker.txt'),'OLD');fs.renameSync(path.join(root,'work/p0'),path.join(root,destination));
@@ -20,7 +20,7 @@ async function world(options={}){
   function scan(p){const st=fs.lstatSync(p);if(st.isSymbolicLink())throw Error('SYMLINK_TARGET');if(st.isDirectory())for(const n of fs.readdirSync(p).sort())scan(path.join(p,n));else rows.push([path.relative(x.target,p),fs.readFileSync(p).toString('hex')]);}
   scan(x.target);return cleanupDigest([String(x.st.dev),String(x.st.ino),rows]);}
  function removeRegistered(relative){assert.equal(relative,destination);const x=safeTarget(relative);if(!x)return;const previous=process.cwd();
-  process.chdir(x.parent);try{assert.equal(fs.realpathSync(process.cwd()),x.parent);fs.rmSync('./'+path.basename(x.target),{recursive:true});}finally{process.chdir(previous);}}
+  process.chdir(x.parent);try{assert.equal(fs.realpathSync(process.cwd()),x.parent);require('./retainFixtureTarget.cjs')(fixtureRoot,x.target,'directory');}finally{process.chdir(previous);}}
  const calls=[],backends=new Map(),stats={executions:0,queueWrites:0,leaseCalls:0};let busyPreview=false,busyExecute=false,unknownExecute=false,badRoot=false,hold,enterExecution;
  const executionEntered=new Promise(resolve=>enterExecution=resolve);
  function state(rec){const fp=fingerprint(rec.relative);return !fp?'completed':fp!==rec.fingerprint?'unknown':rec.unknown?'unknown':'pending';}

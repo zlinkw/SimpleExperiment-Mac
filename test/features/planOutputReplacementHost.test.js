@@ -68,6 +68,7 @@ function runReplacementHostFixture(change = () => {}) {
     saveDistributedQueue:async()=>events.push('hold'),
     askRunConfirmation:async p=>{events.push('ask'+p.phase);change('ask'+p.phase,host,nodes,body);return p.phase===1?'rerun_all':'isolate_and_run';}};
   const cleanup={service:{
+    prepareEmptyParentCleanup:async()=>[],confirmEmptyParentCleanup:async()=>{},
     preview:async request=>{const job=request.job.manifest.declarations[0];return {token:String(job.index),digest:'frozen'+job.index,action:'isolate',scope:{},blockers:[],verifiedOnly:false,expiresAt:Date.now()+6e5,confirmations:0,
       rows:[{node:{id:'w',kind:'remote',user:'u',host:'worker',port:22},absolutePath:'/safe/project/'+job.output_dir,type:'directory',disposition:'isolate'}]};},
     confirm:async p=>{confirmations.set(p.token,p.phase);events.push('confirm'+p.phase+p.token);},

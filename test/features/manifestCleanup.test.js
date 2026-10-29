@@ -69,6 +69,18 @@ async function fixture({retiredWithoutCsv=false}={}){
   return {adapter,host,sources,declarations,calls,preview,confirm,fail:value=>queryFail=value,change:()=>changed=true,get mutations(){return mutations}};
 }
 
+test('old mirror ledger never adds disabled Workers to the current cleanup or replacement scope',async()=>{
+ const f=await fixture(),root=path.dirname(f.host.context.globalStorageUri.fsPath);
+ const ledger=require('../../dist/features/PlanArtifactSync').planSyncLedgerStoragePath(f.host.context.globalStorageUri.fsPath,root);
+ const document={schemaVersion:2,entries:{old:{planFile:'experiments/plans/p.yaml',revision:'old',runId:'old',sourceWorkerId:'nwpu2',artifactPaths:[],directoryPaths:[],destinations:{nwpu3:{status:'synced'},nwpu5:{status:'synced'}}}}};
+ await fs.mkdir(path.dirname(ledger),{recursive:true});await fs.writeFile(ledger,JSON.stringify(document),'utf8');
+ f.host.setupConfig.workerTunnels.push(...['nwpu2','nwpu3','nwpu5'].map(id=>({id,enabled:false})));
+ const preview=await f.preview('delete',false,true);
+ assert.ok(!preview.blockers.some(row=>['nwpu2','nwpu3','nwpu5'].includes(row.nodeId)));
+ assert.ok(preview.rows.every(row=>['local','worker'].includes(row.node.id)));
+ assert.ok(f.calls.every(row=>!row.params.node||['local','worker'].includes(row.params.node.id)));
+ assert.deepEqual(JSON.parse(await fs.readFile(ledger,'utf8')),document,'historical records remain intact');
+});
 test('PLAN cleanup retains PLAN and default/shared configs even with confirmed paths',async()=>{
   const f=await fixture(),root=path.dirname(f.host.context.globalStorageUri.fsPath);
   await fs.mkdir(path.join(root,'configs'),{recursive:true});

@@ -83,12 +83,6 @@ test("legacy script command opens the actual Termius guide on Mac for all three 
 
 test("actual Mac provider reads settings, fails closed and bypasses private-session operations", async () => {
   let value = [endpoint()];
-  const provider = compiledMethod("loadSetupConfig", { vscode: { workspace: { getConfiguration: () => ({ get: (key, fallback) => key === manual.MANUAL_ENDPOINT_SETTING ? value : fallback }) } } });
-  provider.isMacVariant = () => true; provider.context = { globalState: { get: () => ({ savedSessionPath: "private.xsh" }) } };
-  const parsed = provider.loadSetupConfig();
-  assert.equal(parsed.workerTunnels[0].localForwardPort, 29101);
-  assert.equal(parsed.workerTunnels[0].savedSessionPath, undefined, "a saved private session file never enters the Mac setup");
-  value = [{ ...endpoint(), localForwardPort: 0 }]; const invalid = provider.loadSetupConfig(); assert.match(invalid.manualEndpointError, /整数/); assert.equal(invalid.workerTunnels.length, 0);
   // The production chain applies the Mac host adapter over the shared provider; run the real module.
   const adapterFile = path.resolve(__dirname, "../../dist/platform/MacHostAdapter.js");
   const localRequire = require("node:module").createRequire(adapterFile);
@@ -111,6 +105,7 @@ test("actual Mac provider reads settings, fails closed and bypasses private-sess
   const mac = new BaseProvider();
   const loaded = mac.loadSetupConfig();
   assert.equal(loaded.workerTunnels[0].localForwardPort, 29101); assert.equal(loaded.macManagedSessions, true);
+  assert.equal(loaded.workerTunnels[0].savedSessionPath, undefined, "a saved private session file never enters the Mac setup");
   value = [{ ...endpoint(), localForwardPort: 0 }];
   const adapterInvalid = mac.loadSetupConfig(); assert.match(adapterInvalid.manualEndpointError, /整数/); assert.equal(adapterInvalid.workerTunnels.length, 0);
   value = [endpoint()];
@@ -119,9 +114,15 @@ test("actual Mac provider reads settings, fails closed and bypasses private-sess
   mac.setupConfig = manual.setupFromManualEndpoints([endpoint()]);
   await mac.syncXshellConfigBeforeNetwork("fixture");
   assert.equal(mac.sshRefreshed, 1); assert.equal(mac.identitiesChecked, 1);
-  mac.startMacSystemTunnels = async (requireConfirm, ids) => { mac.launchCall = { requireConfirm, ids }; return { declined: false, outcomes: [{ id: ids[0], state: "verified", message: "已确认监听" }] }; };
+  mac.startBackgroundTunnels = async (requireConfirm, scheduleAutoTest, ids) => { mac.launchCall = { requireConfirm, scheduleAutoTest, ids }; return true; };
   assert.equal(await mac.launchTunnelItem({ id: "worker-a" }), true);
-  assert.deepEqual(Array.from(mac.launchCall.ids), ["worker-a"], "launch routes to the sanctioned one-click system tunnel entry");
+  assert.deepEqual(Array.from(mac.launchCall.ids), ["worker-a"], "launch routes to the shared project-bound system tunnel entry");
+  const held = mac.backgroundTunnels();
+  assert.equal(mac.backgroundTunnelManager, held, "the shared project-switch disposer must own the Mac forwarder");
+  await held.dispose(); mac.backgroundTunnelManager = undefined;
+  const next = mac.backgroundTunnels();
+  assert.notEqual(next, held, "a new project must not recover a disposed Mac-only manager slot");
+  await next.dispose();
 });
 
 test("manual server cards expose settings, guide and detection without session file controls", () => {
@@ -153,8 +154,9 @@ test("manual server cards expose settings, guide and detection without session f
   assert.equal(inputs.some(input => input.key === "savedSessionPath"), false, "Mac cards never expose a session-file field");
   assert.deepEqual(inputs.filter(input => input.scope === "worker:worker-a" && ["localForwardPort", "remoteTelemetryPort"].includes(input.key)).map(input => input.value), ["29101", "29200"]);
   for (const text of ["startTunnelEndpoint", "saveWorkerConfig", "研究 项目", "&lt;script&gt;"]) assert.ok(card.includes(text), text);
-  assert.doesNotMatch(card, /\.xsh|Xshell|<script>/);
+  assert.doesNotMatch(card, /\.xsh|<script>|>一键打开 Xshell/);
   const serverCardsSource = slice("renderServerCards", "renderTensorBoardLinkRow");
+  assert.match(serverCardsSource, />打开终端指引/);
   for (const command of ["prepareAgents", "testAll", "startAll"]) assert.ok(serverCardsSource.includes('data-command="' + command + '"'), command);
 });
 
@@ -173,7 +175,7 @@ test("actual Mac preparation blockers accept manual endpoints and report invalid
 test("Mac UI readiness and toolbar follow saved endpoints rather than missing session files", () => {
   const source = fs.readFileSync(path.resolve(__dirname, "../../src/ui/PanelHtml.legacy.ts"), "utf8");
   const terminal = require("../../dist/platform/Terminal");
-  const base = { EMPTY_SERVER_SETUP: {},
+  const base = { EMPTY_SERVER_SETUP: {}, String, Boolean,
     enabledWorkerTunnelsForState: state => state.setup.workerTunnels.filter(worker => worker.enabled), meaningfulValue: value => Boolean(value), asArray: value => Array.isArray(value) ? value : [],
     nativeWorkerTransportConfigured: terminal.configuredWorkerTransport };
   const sandbox = new Proxy(base, { get: (target, key) => key in target ? target[key] : (typeof key === "string" ? () => "" : undefined), has: () => true });

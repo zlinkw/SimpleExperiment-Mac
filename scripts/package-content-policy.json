@@ -23,6 +23,22 @@
   "markdown_runtime_allow_evidence": "No packaged project Markdown is required; tracked runtime producers supply minimal user templates and online guide links.",
   "forbidden_ordered": [
     {
+      "category": "local-cleanup-staging",
+      "path_prefixes": [
+        "clean_dir/"
+      ],
+      "comment": "2026-10-28 本机清理暂存区（实际 VSIX 泄漏项 clean_dir/MANIFEST.md）：登记信息含本机绝对路径/pid/指纹，且 legacy.ts「将草稿移入 clean_dir」会把用户草稿移入该目录，绝不允许随公开包发布；.vscodeignore 同条目与清单门禁双防由 packageContentPolicy.test.js 钉住"
+    },
+    {
+      "category": "local-state",
+      "path_prefixes": [
+        "zlk_cluster/",
+        ".audit/",
+        ".tmp/"
+      ],
+      "comment": "2026-10-28 同类本地状态目录补齐清单门禁：zlk_cluster/.audit/.tmp 先前仅 .vscodeignore 排除，清单门禁无对应规则；均为机器本地状态（zlk_cluster 在 SyncScopeIndex/legacy.ts 已列为屏蔽目录），非发行文件"
+    },
+    {
       "category": "bundled-sftp",
       "path_prefixes": [
         "extensions/simple-sftp/"
@@ -60,6 +76,8 @@
     {
       "category": "unused-compiled",
       "paths": [
+        "dist/mac/OpenSshTunnels.js",
+        "dist/runtime/GpuMemoryBudget.js",
         "dist/agent/AgentEvent.js",
         "dist/agent/AgentSnapshot.js",
         "dist/agent/AgentStateReducer.js",

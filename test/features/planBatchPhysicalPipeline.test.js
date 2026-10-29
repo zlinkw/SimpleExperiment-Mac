@@ -20,7 +20,7 @@ const ast=ts.createSourceFile('host.ts',legacySource,ts.ScriptTarget.Latest,true
 function legacyMethods(names,globals={}){let cls;function visit(n){if(ts.isClassDeclaration(n)&&n.name?.text==='RealtimeTunnelPanelProvider')cls=n;ts.forEachChild(n,visit)}visit(ast);
   const members=cls.members.filter(n=>names.includes(n.name?.getText(ast)));assert.equal(members.length,names.length,names.join(','));
   return vm.runInNewContext(ts.transpileModule('class Host{'+members.map(n=>n.getText(ast)).join('\n')+'};Host',{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText,
-    {AbortController,errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
+    {AbortController,DispatchHandoffGate:require("../../dist/features/DispatchHandoffGate.js"),errorMessage:e=>e.message,compactSensitiveText:s=>String(s).slice(0,240),require:()=>({getUpdater:()=>undefined}),syncGpuQuotaPolicies:async()=>({}),
      DistributedPlanQueue:Q,fs:fsPromises,path,atomicWriteText,...globals});}
 
 const PLAN_A={planFile:'plans/a.yaml',dir:'work_dirs/a0',csv:'work_dirs/a0/m.csv',case:'ca',seed:1};
@@ -42,6 +42,7 @@ async function world(){
   const records=new Map();const stats={moves:0,deletes:0,preflights:0};
   let isolatedDeletePreviewCalls=0;
   const sftp=async(method,params)=>{
+    if(method==='files.cleanup.isolationParentsPreview')return{ok:true,eligible:false,targets:[]}; // This legacy fixture has no empty-parent capability.
     const abs=relative=>path.join(serverRoot,relative);
     if(method==='files.cleanup.preview'){
       const targets=[];
@@ -75,7 +76,7 @@ async function world(){
       if(row.action==='isolate'){const dest=abs(target.destination);await fsPromises.mkdir(path.dirname(dest),{recursive:true});
         await fsPromises.rename(abs(target.relativePath),dest);stats.moves+=1;
         return {ok:true,receipt:{source:target.relativePath,destination:target.destination,contentFingerprint:target.contentFingerprint}};}
-      await fsPromises.rm(abs(target.relativePath),{recursive:true,force:true});stats.deletes+=1;
+      if(await fsPromises.stat(abs(target.relativePath)).catch(()=>null)) require("../_helpers/retainFixtureTarget.cjs")(serverRoot,abs(target.relativePath),target.type); stats.deletes+=1;
       return {ok:true,receipt:{source:target.relativePath,contentFingerprint:target.contentFingerprint}};}
     throw Error('ADAPTER_REFUSES_'+method);};
   const scopes=new Map(plans.map(plan=>[plan.planFile,{projectId:Q.canonicalProjectId(root),planKey:'owner',planFile:plan.planFile,planHash:'h-'+plan.case,

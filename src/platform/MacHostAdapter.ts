@@ -2,7 +2,8 @@ import * as vscode from "vscode";
 import * as Manual from "../mac/ManualTunnel";
 import { manualTerminalSetup } from "./Terminal";
 import { selectAgentRuntimeTargets } from "../features/AgentRuntimeScope";
-import { OpenSshTunnelManager, LaunchOutcome } from "../mac/OpenSshTunnels";
+import { LaunchOutcome } from "../mac/OpenSshTunnels";
+import { BackgroundSshTunnelManager, backgroundPortListening } from "../tunnel/BackgroundSshTunnels";
 import { macAgentRuntimeManifest, tunnelEndpointFromLaunchItem } from "../mac/MacAgentStartup";
 import { agentTmuxStartupCommand, defaultAgentTmuxSessionName } from "../tunnel/AgentTmuxPolicy";
 import { effectiveMacCondaEnv } from "../mac/MacAgentStartup";
@@ -27,8 +28,7 @@ export function installMacHostAdapter(Provider: any): void {
     const setup = load.call(this), config = vscode.workspace.getConfiguration("simpleExperimentMac");
     const inspect = config.inspect(Manual.MANUAL_ENDPOINT_SETTING);
     const explicit = inspect && [inspect.globalValue, inspect.workspaceValue, inspect.workspaceFolderValue].some(value => value !== undefined);
-    const saved = this.context.globalState.get("simpleExperimentMac.xshellRealtimeTunnelConfig");
-    if (!explicit || saved && Object.hasOwn(saved, "workerTunnels")) return Manual.enforceManualSetup(setup);
+    if (!explicit || setup.workerTunnels?.length) return Manual.enforceManualSetup(setup);
     try { return manualTerminalSetup(Manual.setupFromManualEndpoints(config.get(Manual.MANUAL_ENDPOINT_SETTING, []), setup)); }
     catch (error: any) { return { ...Manual.setupFromManualEndpoints([], setup), manualEndpointError: error.message }; }
   };
@@ -52,8 +52,8 @@ export function installMacHostAdapter(Provider: any): void {
   };
 
   /** Lazily built system-OpenSSH forwarder; authentication stays inside SimpleSFTP Mac. */
-  function manager(this: any): OpenSshTunnelManager {
-    if (!this.__macTunnelManager) this.__macTunnelManager = new OpenSshTunnelManager({
+  function manager(this: any): BackgroundSshTunnelManager {
+    if (!this.backgroundTunnelManager) this.backgroundTunnelManager = new BackgroundSshTunnelManager({
       acquireAuth: async target => {
         const result: any = await vscode.commands.executeCommand("simpleSftpMac.acquireTunnelAuthentication", { host: target.host, username: target.username, port: target.port });
         if (!result || result.ok !== true || !Array.isArray(result.args) || typeof result.nonce !== "string"
@@ -63,6 +63,7 @@ export function installMacHostAdapter(Provider: any): void {
       },
       releaseAuth: nonce => Promise.resolve(vscode.commands.executeCommand("simpleSftpMac.releaseTunnelAuthentication", nonce)).catch(() => undefined),
       portAvailable: async (host, port) => isLocalPortAvailable(port, host),
+      portListening: backgroundPortListening,
       probeTunnel: async endpoint => {
         const item = this.tunnelLaunchItems().find((row: any) => row.id === endpoint.id);
         if (!item) return false;
@@ -73,8 +74,9 @@ export function installMacHostAdapter(Provider: any): void {
       },
       assertBusinessAllowed: () => (require("../updates/Bootstrap") as any).assertBusinessAllowed(),
     });
-    return this.__macTunnelManager;
+    return this.backgroundTunnelManager;
   }
+  p.backgroundTunnels = function () { return manager.call(this); };
 
   /** Ensures Agents through the shared managed lifecycle bridge after tunnels are live. */
   async function ensureMacAgents(this: any, ids: string[]): Promise<string[]> {
@@ -147,20 +149,15 @@ export function installMacHostAdapter(Provider: any): void {
   };
 
   p.startAllXshellConnections = async function (requireConfirm = true, scheduleAutoTest = true, ids: string[] = []) {
-    const result = await this.startMacSystemTunnels(requireConfirm, ids, "确认启动连接");
-    if (result.declined) return false;
-    if (scheduleAutoTest && this.setupConfig.autoTestTunnelAfterStart) this.schedulePostLaunchAutoTest();
-    else void this.ensureRealtimeConnected("mac system tunnels launched");
-    return result.outcomes.some((item: LaunchOutcome) => TUNNEL_LIVE_STATES.has(item.state));
+    return this.startBackgroundTunnels(requireConfirm, scheduleAutoTest, ids);
   };
   p.startAllXshellRealtimeTunnels = async function (requireConfirm = true) {
-    const result = await this.startMacSystemTunnels(requireConfirm, [], "启动全部隧道");
-    return !result.declined && result.outcomes.some((item: LaunchOutcome) => TUNNEL_LIVE_STATES.has(item.state));
+    return this.startBackgroundTunnels(requireConfirm);
   };
   p.launchTunnelItem = async function (item: any) {
-    const result = await this.startMacSystemTunnels(true, [item.id], "启动该隧道");
-    return result.outcomes.some((row: LaunchOutcome) => TUNNEL_LIVE_STATES.has(row.state));
+    return this.startBackgroundTunnels(true, true, [item.id]);
   };
+  p.openAllXshellSessions = function () { return this.showManualAgentGuide(); };
   p.startXshellRealtimeTunnel = function () { return this.startAllXshellRealtimeTunnels(); };
   p.launchUniqueXshellSessions = async function (items: any[] = []) {
     const ids = items.map(item => String(item.id || "").replace(/-(?:tunnel|agent)$/, "")).filter(Boolean);
@@ -207,14 +204,8 @@ export function installMacHostAdapter(Provider: any): void {
       launchTunnel: async (config: any) => {
         const item = provider.tunnelLaunchItems().find((row: any) => row.config.localForwardPort === config.localForwardPort);
         if (!item) return { launched: false, message: "没有匹配的 Worker 转发端点。" };
-        const result = await provider.startMacSystemTunnels(false, [item.id], "启动该隧道");
-        const outcome = result.outcomes[0];
-        return { launched: Boolean(outcome && TUNNEL_LIVE_STATES.has(outcome.state)), message: outcome ? outcome.message : "启动请求未发出。" };
+        const launched = await provider.startBackgroundTunnels(false, false, [item.id]);
+        return { launched: launched === true, message: launched ? "系统隧道已确认。" : "系统隧道尚未确认。" };
       } };
-  };
-  const originalDispose = p.dispose;
-  p.dispose = async function () {
-    try { return await originalDispose?.call(this); }
-    finally { const held = this.__macTunnelManager; this.__macTunnelManager = undefined; await held?.dispose?.(); }
   };
 }

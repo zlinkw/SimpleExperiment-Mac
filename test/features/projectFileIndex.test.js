@@ -197,10 +197,11 @@ test('real tree cleanup invalidates only its Worker and exact subtree, leaving a
   let release;const result=index.read(sftpFileIndexQuery('files.cleanup.inspect',{target:{relativePath:relative,type:'directory'}}),()=>new Promise(resolve=>release=resolve)).then(value=>({value}),error=>({error}));
   await until(()=>release);pending.push({result,release});
  }
- await host.deleteSyncScopeRemoteCopy('w1',server,'work_dirs/job',true);
+ await host.deleteSyncScopeRemoteCopy(storage,'w1',server,'work_dirs/job',true);
  for(const row of pending)row.release({ok:true,executorsChecked:true,executors:[],target:{missing:false}});
  const [other,sibling,same]=await Promise.all(pending.map(row=>row.result));
  assert.equal(other.error,undefined,'a deletion on w1 must not retire a live w2 presence check');assert.equal(sibling.error,undefined);
  assert.match(same.error.message,/INVALIDATED/);assert.equal(starts,1);assert.equal(a.snapshot().entries['work_dirs/job'].presence,'absent');
- const execute=requests.find(row=>row.method.endsWith('.execute'));assert.deepEqual(Object.keys(execute.params).sort(),['digest','index','tmuxSessionPrefix','token']);
+ const execute=requests.find(row=>row.method.endsWith('.execute'));assert.deepEqual(Object.keys(execute.params).sort(),['consumerRoot','digest','index','tmuxSessionPrefix','token']);assert.equal(execute.params.consumerRoot,storage,'the local consuming project identity is mandatory on every cleanup request');
+ assert.ok(requests.every(row=>row.params.consumerRoot===storage),'inspect/preview/confirm/execute/check all carry the same frozen consumer root');
 });

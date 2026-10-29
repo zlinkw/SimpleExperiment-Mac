@@ -91,7 +91,8 @@ test("forward-only argument array binds identity, ports and auth without any rem
 test("the real OpenSSH parser proves the produced argv keeps exactly the intended local forward", () => {
   const f = fixture();
   const args = f.manager.buildArguments(endpoint("worker-a"), ["-o", "BatchMode=no", "-F", "none", "-o", "StrictHostKeyChecking=accept-new"]);
-  const result = spawnSync("/usr/bin/ssh", ["-G", ...args], { encoding: "utf8", timeout: 5000 });
+  const nativeSsh = process.platform === "win32" ? path.join(process.env.SystemRoot, "System32", "OpenSSH", "ssh.exe") : "/usr/bin/ssh";
+  const result = spawnSync(nativeSsh, ["-G", ...args], { encoding: "utf8", timeout: 5000, windowsHide: true });
   assert.equal(result.status, 0, result.stderr);
   const lines = String(result.stdout).split("\n").map(line => line.trim()).filter(Boolean);
   const forwards = lines.filter(line => line.startsWith("localforward "));
@@ -99,7 +100,7 @@ test("the real OpenSSH parser proves the produced argv keeps exactly the intende
   assert.equal(lines.some(line => /^proxycommand (?!none$)/.test(line)), false);
   assert.equal(lines.some(line => /^permitlocalcommand yes$/.test(line)), false);
   // The frozen regression: ClearAllForwardings wipes the command-line -L entirely.
-  const poisoned = spawnSync("/usr/bin/ssh", ["-G", "-F", "none", "-o", "ClearAllForwardings=yes", "-N", "-L", "127.0.0.1:29101:127.0.0.1:29200", "scientist@worker-a.example.org"], { encoding: "utf8", timeout: 5000 });
+  const poisoned = spawnSync(nativeSsh, ["-G", "-F", "none", "-o", "ClearAllForwardings=yes", "-N", "-L", "127.0.0.1:29101:127.0.0.1:29200", "scientist@worker-a.example.org"], { encoding: "utf8", timeout: 5000, windowsHide: true });
   assert.equal(String(poisoned.stdout).split("\n").filter(line => line.trim().startsWith("localforward ")).length, 0);
 });
 

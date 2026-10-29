@@ -2,6 +2,21 @@ import { assertFastDeletePreviewSafety, chunkFastDeleteTargets, fastDeleteUpgrad
 
 type Rpc = (method: string, params: Record<string, any>) => Promise<any>;
 
+/**
+ * r18-A: SimpleSFTP binds every files.cleanup.* token to the LOCAL consuming project's absolute
+ * root (its authorization ledger lives inside that project). Missing → the backend refuses with
+ * CONSUMER_ROOT_INVALID before checking any target; wrong → this project's cleanup authorization
+ * would be written into another project. The scope tree, scope sync and Plan output retention all
+ * know their own project root, so callers hand it in explicitly and an invalid value stops the
+ * flow before a single cleanup request leaves this machine.
+ */
+export function frozenScopeConsumerRoot(value: unknown): string {
+  const root = typeof value === 'string' ? value.trim() : '';
+  if (!/^(?:[a-zA-Z]:[\\/]|\/)/.test(root) || /[\u0000\r\n]/.test(root))
+    throw new Error('删除未发起：缺少本机消费项目的绝对路径，未发送任何清理请求。');
+  return root;
+}
+
 /** Unified closed failure: an endpoint without the fast chain never silently falls back. */
 async function callUpgradeAware(rpc: Rpc, method: string, params: Record<string, any>): Promise<any> {
   try { return await rpc(method, params); }
@@ -13,7 +28,7 @@ async function callUpgradeAware(rpc: Rpc, method: string, params: Record<string,
 
 export type ConfirmedScopeRow = { relativePath: string; directory: boolean; type: 'file' | 'directory'; absolutePath: string;
   missing: boolean; device?: number; inode?: number; isolationName?: string; isolationAbsolutePath?: string };
-export type ConfirmedScopeBatch = { token: string; digest: string; node: Record<string, any>; rows: ConfirmedScopeRow[] };
+export type ConfirmedScopeBatch = { token: string; digest: string; node: Record<string, any>; consumerRoot: string; rows: ConfirmedScopeRow[] };
 export type ConfirmedScopeOutcome = { relativePath: string; directory: boolean; state: 'completed' | 'failed'; error?: string };
 
 /**
@@ -24,14 +39,16 @@ export type ConfirmedScopeOutcome = { relativePath: string; directory: boolean; 
 export async function previewConfirmedScopeDeletion(
   rpc: Rpc, node: Record<string, any>,
   entries: Array<{ relativePath: string; directory: boolean }>,
+  consumerRootInput: string,
   report: (stage: string) => void = () => {},
 ): Promise<ConfirmedScopeBatch[]> {
   const batches: ConfirmedScopeBatch[] = [];
   const root = String(node?.root || '').replace(/\/$/, '');
+  const consumerRoot = frozenScopeConsumerRoot(consumerRootInput);
   for (const chunk of chunkFastDeleteTargets(entries)) {
     report(`只读批量预检 ${chunk.length} 条路径`);
     const preview = await callUpgradeAware(rpc, 'files.cleanup.preview', { node, action: 'delete', authorizationMode: 'confirmed_paths',
-      observationMode: 'managed_tmux', targets: chunk.map(entry => ({ relativePath: entry.relativePath, type: entry.directory ? 'directory' : 'file' })) });
+      observationMode: 'managed_tmux', consumerRoot, targets: chunk.map(entry => ({ relativePath: entry.relativePath, type: entry.directory ? 'directory' : 'file' })) });
     assertFastDeletePreviewSafety(preview?.safety, chunk.length);
     if (!preview?.token || !preview?.digest || !Array.isArray(preview.targets) || preview.targets.length !== chunk.length)
       throw new Error('批量删除预检未核实：服务器返回的目标数量不正确，未执行任何删除。');
@@ -45,7 +62,7 @@ export async function previewConfirmedScopeDeletion(
       return { ...entry, type, absolutePath, missing: false, device: info.device, inode: info.inode,
         isolationName: info.isolationName, isolationAbsolutePath: info.isolationAbsolutePath };
     });
-    batches.push({ token: preview.token, digest: preview.digest, node, rows });
+    batches.push({ token: preview.token, digest: preview.digest, node, consumerRoot, rows });
   }
   return batches;
 }
@@ -60,12 +77,13 @@ export async function completeConfirmedScopeDeletion(
   report: (stage: string) => void = () => {},
   timing: { wait?: () => Promise<void>; timeoutMs?: number; now?: () => number } = {},
 ): Promise<ConfirmedScopeOutcome[]> {
+  const consumerRoot = frozenScopeConsumerRoot(batch.consumerRoot);
   const indexes = new Map(batch.rows.map((row, index) => [row, index]));
   const results = new Map<string, ConfirmedScopeOutcome>(batch.rows.map(row => [row.relativePath, { relativePath: row.relativePath, directory: row.directory, state: 'completed' as const }] as [string, ConfirmedScopeOutcome]));
   const present = batch.rows.filter(row => !row.missing);
   if (!present.length) return [...results.values()];
   const exactTargets = present.map(row => row.absolutePath);
-  const request = { token: batch.token, digest: batch.digest };
+  const request = { token: batch.token, digest: batch.digest, consumerRoot };
   for (const phase of [1, 2]) await rpc('files.cleanup.confirm', { ...request, phase, confirm: true, exactTargets });
   present.forEach(row => results.get(row.relativePath)!.state = 'failed');
   let sendError = '';
@@ -75,7 +93,7 @@ export async function completeConfirmedScopeDeletion(
   const now = timing.now || Date.now, inactivityMs = timing.timeoutMs ?? 15_000;
   let deadline = now() + inactivityMs, resolvedCount = 0;
   for (;;) {
-    const snapshot = await rpc('files.cleanup.status', { token: batch.token }).catch(() => undefined);
+    const snapshot = await rpc('files.cleanup.status', { token: batch.token, consumerRoot }).catch(() => undefined);
     let resolved = 0;
     if (snapshot) {
       for (const row of present) {
@@ -104,9 +122,11 @@ export async function completeConfirmedScopeDeletion(
 /** Called only after the tree's two exact-path confirmations. No transfer-ledger recovery. */
 export async function deleteConfirmedScopeCopy(
   rpc: Rpc, node: Record<string, any>, relativePath: string, directory: boolean,
+  consumerRootInput: string,
   report: (stage: string) => void = () => {},
   timing: { wait?: () => Promise<void>; timeoutMs?: number; now?: () => number } = {},
 ): Promise<void> {
+  const consumerRoot = frozenScopeConsumerRoot(consumerRootInput);
   const call: Rpc = async (method, params) => {
     for (let attempt = 0; ; attempt++) {
       report(`正在执行 ${method}：${relativePath}`);
@@ -125,25 +145,25 @@ export async function deleteConfirmedScopeCopy(
   };
   const target = { relativePath, type: directory ? 'directory' : 'file' };
   const refreshDeletedTarget = async () => {
-    const observed = await call('files.cleanup.inspect', { node, target, presenceOnly: true, allowMissing: true, observeExecutors: true });
+    const observed = await call('files.cleanup.inspect', { node, target, presenceOnly: true, allowMissing: true, observeExecutors: true, consumerRoot });
     if (observed?.ok !== true || observed.executorsChecked !== true || !Array.isArray(observed.executors)
       || observed.executors.length || observed.target?.missing !== true)
       throw new Error('删除后的文件状态未核实：目标仍存在、已重新创建或查询未完成；请刷新，不会自动重复删除。');
   };
-  const presence = await call('files.cleanup.inspect', { node, target, presenceOnly: true, allowMissing: true, observeExecutors: true });
+  const presence = await call('files.cleanup.inspect', { node, target, presenceOnly: true, allowMissing: true, observeExecutors: true, consumerRoot });
   if (presence?.ok !== true || presence.executorsChecked !== true || !Array.isArray(presence.executors))
     throw new Error('删除查询失败：未取得实际文件和清理窗口状态。');
   if (presence.executors.length) throw new Error('对应清理窗口仍在处理；请刷新文件列表，不重复删除。');
   if (presence.target?.missing === true) return;
   const preview = await callUpgradeAware(rpc, 'files.cleanup.preview', { node, action: 'delete', authorizationMode: 'confirmed_paths',
-    observationMode: 'managed_tmux', targets: [{ ...target, destination: 'clean_dir/' + relativePath }] });
+    observationMode: 'managed_tmux', consumerRoot, targets: [{ ...target, destination: 'clean_dir/' + relativePath }] });
   assertFastDeletePreviewSafety(preview?.safety, 1);
   if (preview.targets?.length !== 1) throw new Error('删除未核实：返回的目标数量不正确。');
   if (preview.targets[0].missing === true) { await refreshDeletedTarget(); return; }
   const absolutePath = node.root.replace(/\/$/, '') + '/' + relativePath;
   if (preview.targets[0].absolutePath !== absolutePath || preview.targets[0].type !== target.type)
     throw new Error('删除未核实：目标路径或类型已变化，请重新确认。');
-  const request = { token: preview.token, digest: preview.digest };
+  const request = { token: preview.token, digest: preview.digest, consumerRoot };
   for (const phase of [1, 2]) await call('files.cleanup.confirm', { ...request, phase, confirm: true, exactTargets: [absolutePath] });
   let sendError = '';
   let admissionWaiting = false;
@@ -153,7 +173,7 @@ export async function deleteConfirmedScopeCopy(
   const now = timing.now || Date.now, inactivityMs = timing.timeoutMs ?? 15_000;
   let deadline = now() + inactivityMs, removedEntries = 0, removedBytes = 0;
   do {
-    const proof = await call('files.cleanup.check', { token: preview.token, index: 0 });
+    const proof = await call('files.cleanup.check', { token: preview.token, index: 0, consumerRoot });
     if (proof?.ok !== true) throw new Error('删除查询失败：无法核实目标状态。');
     if (proof.state === 'completed') { await refreshDeletedTarget(); return; }
     if (proof.state === 'pending' && admissionWaiting) {

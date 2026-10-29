@@ -360,7 +360,7 @@ test("fenced retention claim: host lease, stable id, same-flow reuse, foreign ho
     observeWorker: async () => { throw new Error("tunnel down"); },
   }).claimRetentionWindow("plans/b.yaml", { planFile: "plans/b.yaml", commandId: "cmd-c2" }, failPreflight),
   error => error.planPreflightReported === true && /存在性核对失败/.test(error.message));
-  await fsp.rm(path.join(root, "simple_cluster/tmp/tmux_logs/leaving.log"));
+  require("../_helpers/retainFixtureTarget.cjs")(root,path.join(root, "simple_cluster/tmp/tmux_logs/leaving.log"),"file");
   const allowedHost = makeHost(hostA, twoGens);
   await allowedHost.claimRetentionWindow("plans/b.yaml", { planFile: "plans/b.yaml", commandId: "cmd-d" }, failPreflight);
   assert.equal(allowedHost.retentionBlockedWindows.has("plans/b.yaml"), false);
@@ -441,7 +441,7 @@ test("workspace backups keep exactly one history generation and refuse a third w
   assert.deepEqual(fs.readdirSync(path.join(backups, keys[0])), ["a.yaml.bak"]);
   assert.deepEqual(fs.readdirSync(path.dirname(target)), ["a.yaml"]);
   // Only the confirmed cleanup executor vacates the slot; the next write then rotates cleanly.
-  await fsp.rm(path.join(backups, keys[0], "a.yaml.bak"));
+  require("../_helpers/retainFixtureTarget.cjs")(root,path.join(backups, keys[0], "a.yaml.bak"),"file");
   await writer(target, "v3");
   assert.deepEqual(fs.readdirSync(path.join(backups, keys[0])), ["a.yaml.bak"]);
   assert.equal(fs.readFileSync(path.join(backups, keys[0], "a.yaml.bak"), "utf8"), "v2");

@@ -61,7 +61,11 @@ test("retired availability push cannot start network timers; active queue pollin
   p.longRunningPlanRunOperations = () => [];
   p.startAvailabilityPushLoop();
   assert.deepEqual(delays, []);
-  assert.match(source, /setInterval\(\(\) => \{ void this\.tickDistributedQueue\(\)[^\n]+, 500\)/);
+  // r2: the queue cadence now comes from the single traffic policy table instead of an inline
+  // literal, so the contract is: the polling call stays registered and normal mode keeps 500ms.
+  assert.match(source, /setInterval\(\(\) => \{ void this\.tickDistributedQueue\(\)[^\n]+, intervals\.queueMs\)/);
+  assert.match(source, /const NORMAL_TRAFFIC_INTERVALS = \{ queueMs: 500, progressMs: 2000, tmuxMs: 5000, snapshotFallbackSeconds: 5 \};/);
+  assert.match(source, /const LOW_TRAFFIC_INTERVALS = \{ queueMs: 5000, progressMs: 10000, tmuxMs: 0, snapshotFallbackSeconds: 0 \};/);
 });
 
 test("retired availability push clears its owned timer and cannot restart while tasks run", () => {
@@ -70,5 +74,7 @@ test("retired availability push clears its owned timer and cannot restart while 
   p.startAvailabilityPushLoop();assert.deepEqual(delays,[]);assert.deepEqual(cleared,[originalTimer]);assert.equal(p.availabilityPushTimer,undefined);
   assert.equal(p.availabilityPushLoopGeneration,1);p.longRunningPlanRunOperations=()=>[];p.startAvailabilityPushLoop();
   assert.deepEqual(delays,[]);assert.deepEqual(cleared,[originalTimer]);assert.equal(p.availabilityPushLoopGeneration,2);
-  assert.match(source,/setInterval\(\(\) => \{ void this\.tickDistributedQueue\(\)[^\n]+, 500\)/);
+  // Same contract in the compact form of this assertion block.
+  assert.match(source,/setInterval\(\(\) => \{ void this\.tickDistributedQueue\(\)[^\n]+, intervals\.queueMs\)/);
+  assert.match(source,/const NORMAL_TRAFFIC_INTERVALS = \{ queueMs: 500, progressMs: 2000, tmuxMs: 5000, snapshotFallbackSeconds: 5 \};/);
 });

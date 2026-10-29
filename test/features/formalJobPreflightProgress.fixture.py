@@ -4,6 +4,7 @@ import copy
 import contextlib
 import io
 import json
+import marshal
 import os
 import pathlib
 import subprocess
@@ -15,14 +16,14 @@ from types import SimpleNamespace
 
 repo = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo / "test/_helpers"))
-from extractRuntimeFunctions import extract_runtime_functions
+from extractRuntimeFunctions import compile_runtime_functions, extract_runtime_functions
 
 runtime = repo / "dist/runtime"
 variant = sys.argv[1]
 root = pathlib.Path(tempfile.mkdtemp(prefix="simple-formal-preflight-")).resolve()
 (root / "experiments/plans").mkdir(parents=True)
 hook = root / "validator.py"
-hook.write_text('''import hashlib, json, os, sys, time
+hook.write_text('''import hashlib, json, os, pathlib, sys, time
 processed = 0
 files = 0
 def validate_result_paths(config, contract):
@@ -31,17 +32,19 @@ def validate_result_paths(config, contract):
     files += 1
     print('SIMPLE_PROGRESS ' + json.dumps({'phase':'assets','processedFiles':files,'processedBytes':processed,'callbackIndex':index}), file=sys.stderr, flush=True)
     variant = os.environ['PROBE_VARIANT']
+    if os.environ.get('PROBE_WATCHDOG_READY'):
+        pathlib.Path(os.environ['PROBE_WATCHDOG_READY']).write_text('ready', encoding='utf-8')
     if variant == 'exit':
         print('ACTUAL_PREFLIGHT_EXIT_7', file=sys.stderr, flush=True)
         sys.exit(7)
-    if variant in ('grow','cancel'):
+    if variant not in ('stall','heartbeat','decreasing','exit'):
         digest = hashlib.sha256()
         with open('asset.dat','rb') as asset:
             for chunk in iter(lambda: asset.read(64), b''):
                 digest.update(chunk)
                 processed += len(chunk)
                 print('SIMPLE_PROGRESS ' + json.dumps({'phase':'assets','processedBytes':processed,'processedFiles':files}),file=sys.stderr,flush=True)
-                time.sleep(0.015)
+                if variant in ('grow','cancel'): time.sleep(0.015)
         if digest.hexdigest() != os.environ['PROBE_ASSET_SHA256']:
             raise ValueError('SOURCE_HASH_CHANGED')
     if variant in ('stall','heartbeat','decreasing'):
@@ -53,36 +56,43 @@ def validate_result_paths(config, contract):
     if variant == 'mixed': print('SIMPLE_PROGRESS {"processedBytes": 999999}',flush=True)
 ''', encoding="utf-8")
 (root / "asset.dat").write_bytes(b"owned-asset" * 512)
+asset_sha256 = __import__('hashlib').sha256((root / "asset.dat").read_bytes()).hexdigest()
 child = root / "scheduler_probe.py"
-child.write_text('''import argparse, json, os, pathlib, sys, time
-sys.path.insert(0, ''' + repr(str(repo / "test/_helpers")) + ''')
-from extractRuntimeFunctions import extract_runtime_functions
-scheduler = extract_runtime_functions(''' + repr(str(runtime / "cluster_scheduler.py")) + ''', ['formal_job_preflight_report', 'execution_shell_preflight'])
-# 资产核实归项目 hook（project_owned）后 Scheduler 预检不再执行 hook；失速/心跳/倒退/取消等
-# 看门狗场景由探针子进程自身产生，经真实 subprocess_inactivity_run 分类为 STALLED/CANCELLED。
-probe_variant = os.environ.get('PROBE_VARIANT', '')
-if probe_variant in ('stall', 'heartbeat', 'decreasing', 'cancel', 'exit', 'mixed'):
-    emit = lambda payload: print('SIMPLE_PROGRESS ' + json.dumps(payload), file=sys.stderr, flush=True)
-    if probe_variant == 'stall': time.sleep(2)
-    elif probe_variant == 'heartbeat':
-        for number in range(200): emit({'phase': 'heartbeat-' + str(number), 'processedBytes': 0, 'processedFiles': 1}); time.sleep(0.01)
-    elif probe_variant == 'decreasing':
-        for number in range(200): emit({'phase': 'assets', 'processedBytes': 1000 - number * 5, 'processedFiles': 0}); time.sleep(0.01)
-    elif probe_variant == 'cancel': time.sleep(2)
-    elif probe_variant == 'exit': print('ACTUAL_PREFLIGHT_EXIT_7', file=sys.stderr, flush=True); sys.exit(7)
-    elif probe_variant == 'mixed': print('SIMPLE_PROGRESS {"processedBytes": 999999}', flush=True)
-    print(json.dumps({'ok': True})); sys.exit(0)
+# AST dependency extraction is fixture preparation, rather than Worker startup or asset progress.
+# Prepare exactly the real selected functions once, before the scaled inactivity clock begins.
+# The child still starts a real interpreter, imports the real dependencies, and executes those
+# functions in its own module. No entry point/full runtime is imported or executed, and no fake
+# heartbeat is emitted to extend the production watchdog.
+prepared_scheduler = root / "scheduler_selected.marshal"
+prepared_scheduler.write_bytes(marshal.dumps(compile_runtime_functions(
+    str(runtime / "cluster_scheduler.py"), ["formal_job_preflight_report", "execution_shell_preflight"])))
+child.write_text('''import argparse, json, marshal, os, pathlib, sys, types
+TASK_SHELL_ENVIRONMENT_PROTOCOL = 1
+scheduler = types.ModuleType('isolated_runtime')
+scheduler.__file__ = ''' + repr(str(runtime / "cluster_scheduler.py")) + '''
+sys.modules[scheduler.__name__] = scheduler
+exec(marshal.loads(pathlib.Path(''' + repr(str(prepared_scheduler)) + ''').read_bytes()), scheduler.__dict__)
+if os.environ.get('PROBE_VARIANT') == 'no-environment':
+ def forbidden_environment_probe(): raise AssertionError('automatic environment probe invoked')
+ scheduler.execution_shell_preflight = forbidden_environment_probe
 p = argparse.ArgumentParser()
 p.add_argument('--formal-job-preflight',action='store_true')
+p.add_argument('--formal-job-structure-only',action='store_true')
 p.add_argument('--check-execution-shell-json',action='store_true')
 p.add_argument('--plan');p.add_argument('--only-index',type=int);p.add_argument('--mode')
 p.add_argument('--plan-revision');p.add_argument('--output-dir-override')
-p.add_argument('--formal-job-structure-only',action='store_true')
 p.add_argument('--default-result-csv-dir',default='experiments/results')
 args=p.parse_args()
+# Explicit fixture-only CPU progress probe exercises the real inactivity runner.
+# Production result_path_preflight must never import this project callback.
+if not args.formal_job_structure_only and os.environ.get('PROBE_VARIANT') in ('grow','cancel','stall','heartbeat','decreasing','exit','mixed'):
+ source=pathlib.Path('validator.py').read_text(encoding='utf-8').replace('def validate_result_paths(', 'def progress_probe(').replace("'callbackIndex':index", "'probeIndex':index")
+ scope={}
+ exec(compile(source,'fixture-progress-only','exec'),scope)
+ scope['progress_probe']({}, {'index':args.only_index})
 print(json.dumps(scheduler.execution_shell_preflight() if args.check_execution_shell_json else scheduler.formal_job_preflight_report(args),ensure_ascii=False),flush=True)
 ''', encoding="utf-8")
-scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["load_plan", "build_jobs", "formal_source_fingerprint", "run_job_mode", "formal_job_writer", "write_job_config"])
+scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"), ["load_plan", "build_jobs", "formal_source_fingerprint", "run_job_mode"])
 plan_file = "experiments/plans/formal.yaml"
 plan = {"mode": "train_test", "seeds": [42, 43, 44], "base_config": {"runtime": {}, "test": {}},
         "naming": {"sweep_dir": "work_dirs/formal", "job_name": "{case}_seed{seed}"},
@@ -107,9 +117,7 @@ command = {"schemaVersion": 1, "commandId": "owned-command", "runKey": "owned-co
 if variant == "identity": command["globalJobId"] = "foreign:0"
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"),
     ["accept_durable_plan_job", "subprocess_inactivity_run", "preflight_existing_worker_task", "drain_durable_plan_queue_once", "_execute_worker_command_unfenced"])
-# 移植后 Agent 不再在宿主侧解析 Plan 路径（worker_plan_project_path 已删除），由真实 Scheduler 在子进程内把关。
 queue, events, stderr, children = {"schemaVersion": 1, "jobs": []}, [], [], []
-inactivity_calls = []
 agent.read_durable_plan_queue = lambda _: copy.deepcopy(queue)
 def save(_, value):
     queue.clear(); queue.update(copy.deepcopy(value))
@@ -122,12 +130,11 @@ agent.signal_durable_plan_queue_processor = lambda *args: None
 agent.cluster_scheduler_path = lambda _: str(child)
 agent.formal_job_path_capable = lambda _: True  # The child runs the real Scheduler preflight implementation.
 agent.execution_shell_preflight_capable = lambda _: True  # Version rejection is tested separately; this child uses the real extracted probe.
-agent.task_shell_environment_capable = lambda _: True  # 现行正式链路要求 task-shell 环境协议；登录 shell 重绑行为由 executionShellEnvironment 专测覆盖。
 agent.simple_runtime_python = lambda env: sys.executable
 agent.scalar_scheduler_module = lambda: scheduler
 def environment():
     env = dict(os.environ, PROBE_VARIANT=variant, PYTHONDONTWRITEBYTECODE="1")
-    env["PROBE_ASSET_SHA256"] = scheduler.hashlib.sha256((root / "asset.dat").read_bytes()).hexdigest()
+    env["PROBE_ASSET_SHA256"] = asset_sha256
     return env
 agent.fresh_task_runtime_env = environment
 agent.progress_action = lambda *args, **kw: events.append(args[6] if len(args) > 6 else kw)
@@ -138,20 +145,42 @@ agent.redact_text = lambda value: value
 scale = 1 if variant in ("no-environment", "api", "api-environment", "api-completed", "fast", "duplicate", "pad", "staged") else 30
 agent.time = SimpleNamespace(**{name: getattr(time, name) for name in dir(time) if not name.startswith("__") and name not in ("monotonic", "sleep")},
     monotonic=lambda: time.monotonic() * scale, sleep=lambda seconds: time.sleep(min(seconds, 0.005)))
+# The inactivity variants use a controlled clock after their real probe starts.
+# Interpreter/AST startup and reader teardown remain real and bounded by the outer
+# 10s child limit; they are not multiplied into the virtual watchdog deadline.
+controlled_watchdog = variant in ("grow", "cancel", "stall", "heartbeat", "decreasing", "exit", "mixed")
+watchdog_clock = [0.0]
+watchdog_ready_files = []
+current_watchdog_ready = [None]
+if controlled_watchdog:
+    def watchdog_sleep(seconds):
+        if current_watchdog_ready[0] is not None and current_watchdog_ready[0].exists():
+            watchdog_clock[0] += seconds * 3
+        time.sleep(min(seconds, 0.005))
+    agent.time.monotonic = lambda: watchdog_clock[0]
+    agent.time.sleep = watchdog_sleep
 original_run, original_popen = subprocess.run, subprocess.Popen
 def scaled_run(*args, **kw):
     if kw.get("timeout") == 10: kw["timeout"] /= scale
     result = original_run(*args, **kw); stderr.append(result.stderr or ""); return result
 def popen(*args, **kw):
+    if controlled_watchdog:
+        ready = root / ("fixture-watchdog-ready-" + str(len(children)))
+        current_watchdog_ready[0] = ready
+        watchdog_ready_files.append(ready)
+        kw["env"] = dict(kw.get("env") or os.environ, PROBE_WATCHDOG_READY=str(ready))
     proc = original_popen(*args, **kw); children.append(proc); return proc
 agent.subprocess = SimpleNamespace(**{name: getattr(subprocess, name) for name in dir(subprocess) if not name.startswith("__")})
 agent.subprocess.run = scaled_run
 agent.subprocess.Popen = popen
+inactivity_durations = []
 original_inactivity = agent.subprocess_inactivity_run
 def inactivity(*args, **kw):
-    # 记录现行无固定墙钟预算的失速看门狗协议（stderr 进展流、非 file_step）。
-    inactivity_calls.append({"progress_stream": kw.get("progress_stream") or "", "file_step": bool(kw.get("file_step"))})
-    result = original_inactivity(*args, **kw); stderr.append(result.stderr or ""); return result
+    phase_started = time.monotonic()
+    try:
+        result = original_inactivity(*args, **kw); stderr.append(result.stderr or ""); return result
+    finally:
+        inactivity_durations.append((time.monotonic() - phase_started) * scale)
 agent.subprocess_inactivity_run = inactivity
 entry = {"cancel": threading.Event(), "processes": set(), "root": str(root), "action": "preflight-worker-task",
          "operationId": "preflight-op", "opId": "preflight-op", "payload": command}
@@ -159,7 +188,6 @@ agent.INACTIVITY_ACTION_CONTEXT.entry = entry
 if variant == "cancel": threading.Timer(0.4, entry["cancel"].set).start()
 started = time.monotonic()
 if variant == "staged":
-    # 0.5.403 staged 契约：真实准入/排空/启动函数全程零项目科学（asset hook）调用。
     # Real admission/drain/start functions. The tmux boundary is deliberately closed;
     # final Scheduler path validation uses a sentinel instead of a training command.
     command.update(action="start-worker-task", condaEnv="/fixture", schedulerPath=str(child))
@@ -250,7 +278,6 @@ if variant == "staged":
     assert not agent.DISTRIBUTED_GPU_RESERVATIONS, "proven never-started gate kept its own reservation"
     receipt.update(admissionAssetChecks=0, busyPollAssetChecks=0, startupAssetChecks=0, finalAssetChecks=0)
 elif variant == "api-completed":
-    # .403 完成态输出核验契约：真实 writer 落盘哈希 → 完成回执核验 → 篡改结果必须 COMPLETION_CHANGED 拒绝。
     raw = hook.read_bytes()
     command["codeManifest"] = {"validator.py": {"size": len(raw), "sha256": agent.hashlib.sha256(raw).hexdigest()}}
     command["codeFingerprint"] = agent.durable_code_manifest_digest(command["codeManifest"])
@@ -323,6 +350,11 @@ elif variant in ("api", "api-environment"):
     receipt["rejections"] = rejections
 else:
     receipt = agent.accept_durable_plan_job(str(root), command, "worker")
+    if receipt.get("status") == "queued":
+        try:
+            agent.verified_formal_job_command(str(root), command)
+        except Exception as exc:
+            receipt = agent.durable_plan_preflight_failure(command, exc, accepted=True)
 callbacks = []
 for line in "".join(stderr).splitlines():
     if line.startswith("SIMPLE_PROGRESS "):
@@ -338,5 +370,4 @@ elif variant != "api-completed":
 assert all(proc.poll() is not None for proc in children), "preflight child is still alive"
 assert not entry["processes"], "preflight child remained registered"
 print(json.dumps({"receipt": receipt, "callbacks": callbacks, "progressCount": len(events),
-                  "inactivityCalls": inactivity_calls,
-                  "elapsedVirtualSeconds": (time.monotonic() - started) * scale, "executionStarted": False}))
+                  "elapsedVirtualSeconds": watchdog_clock[0] if controlled_watchdog else (time.monotonic() - started) * scale, "elapsedTotalVirtualSeconds": (time.monotonic() - started) * scale, "watchdogReady": any(file.exists() for file in watchdog_ready_files), "inactivityDurations": inactivity_durations, "variant": variant, "executionStarted": False}))

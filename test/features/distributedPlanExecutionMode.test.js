@@ -42,7 +42,7 @@ function host(queue = Queue.emptyDistributedQueue()) {
   const owner = { queue, distributedQueueGeneration: 0, context: { globalStorageUri: { fsPath: 'C:/storage' } },
     sent:[],lastWorkerTaskSnapshots:new Map([[root+'\u0000worker',{capabilities:{taskLifecycle:2}}]]),
     lastCodeSyncState: { fingerprint: 'code', workerVersions: { worker: { codeSyncProofId: 'proof' } } },
-    lastWorkerProbes: { worker: { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1 }, actionEndpoints: { 'register-code-sync-proof': true } } } },
+    lastWorkerProbes: { worker: { capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1, gpuQuotaScheduling: 1, gpuMemoryBudgetScheduling: 1 }, actionEndpoints: { 'register-code-sync-proof': true } } } },
     workerActionTargets: () => [{ id: 'worker', condaEnv: 'env' }], enabledWorkerConfigs: () => [],
     schedulerSettings: () => ({}), loadDistributedQueue: async () => owner.queue,
     saveDistributedQueue: async (_, value) => { owner.queue = value; }, postState() {},

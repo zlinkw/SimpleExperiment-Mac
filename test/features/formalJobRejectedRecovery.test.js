@@ -26,7 +26,7 @@ test('rendered panel exposes explicit formal requeue without attempt and keeps r
   const start = script.indexOf('const failedRecallButton =');
   const end = script.indexOf('const failedCleanup =', start);
   assert.ok(start > 0 && end > start);
-  const render = new Function('job', 'group', 'status', 'escAttr', script.slice(start, end) + ';return failedRecallButton;');
+  const render = new Function('job', 'group', 'status', 'escAttr', 'isolationRecoveryButton', script.slice(start, end) + ';return failedRecallButton;');
   const job = { ...queue().plans[0].jobs[0], planId: 'original-workflow' };
   const html = render(job, { planFile: 'experiments/plans/comparison/aoept.yaml' }, 'failed', String);
   assert.match(html, /data-command="recallFailedJob"/);

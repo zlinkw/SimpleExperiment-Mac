@@ -4,6 +4,47 @@ const http = require("node:http");
 
 const { RequestBudget, defaultRequestBudgetConfig } = require("../../dist/tunnel/RequestBudget.js");
 const { HttpTunnelClient } = require("../../dist/tunnel/TunnelClient.js");
+test('low traffic reuses the exact fresh carried GPU sample, with stale/generation/manual reads still querying',async()=>{
+ const {RealtimeTunnelClient,defaultRealtimeRefreshPolicy}=require('../../dist/tunnel/RealtimeTunnelClient');
+ const originalNow=Date.now;let now=originalNow(),gpuReads=0;Date.now=()=>now;
+ const sample=()=>({generatedAt:new Date(now).toISOString(),status:'ok',gpu:[{index:'0',memoryTotalMb:81920,memoryUsedMb:1024,utilizationPercent:0}]});
+ const server=http.createServer((req,res)=>{res.setHeader('Content-Type','application/json');
+  if(req.url==='/api/gpu'){gpuReads++;return res.end(JSON.stringify(sample()));}
+  return res.end(JSON.stringify({queryComplete:true,executionOnly:true,capabilities:{taskLifecycle:2},tasks:[],gpuSample:sample()}));
+ });await listen(server);
+ const client=new RealtimeTunnelClient({id:'worker',role:'worker',localHost:'127.0.0.1',localPort:server.address().port,timeoutMs:1000},
+  new RequestBudget({...defaultRequestBudgetConfig,minIntervalByPurpose:{},disabledPurposes:[]}),{...defaultRealtimeRefreshPolicy,displayAutoRefresh:false});
+ try{
+  const inventory=await client.getWorkerTasks({executionOnly:true});
+  const carried=await client.getGpu({dispatch:true});assert.equal(carried.generatedAt,inventory.gpuSample.generatedAt);assert.equal(gpuReads,0);
+  await client.getGpu();assert.equal(gpuReads,1,'explicit refresh remains a real request');
+  now+=6000;await client.getGpu({dispatch:true});assert.equal(gpuReads,2,'expired samples cannot become fresh by reuse');
+  client.disconnect('display-auto');await client.getGpu({dispatch:true});assert.equal(gpuReads,3,'connection changes invalidate reuse');
+  client.updateRefreshPolicy({displayAutoRefresh:true});await client.getGpu({dispatch:true});assert.equal(gpuReads,4,'normal mode retains its original request path');
+ }finally{Date.now=originalNow;await client.disconnect('dispose');server.closeAllConnections();server.close();}
+});
+test('low-traffic response writer negotiates gzip for a 72-job normal workload without changing JSON or errors',()=>{
+ const path=require('node:path'),{spawnSync}=require('node:child_process');
+ const result=spawnSync(process.env.PYTHON||'python',['-B','-X','utf8',path.join(__dirname,'lowTrafficJson.fixture.py')],{encoding:'utf8',timeout:10000,windowsHide:true});
+ assert.equal(result.status,0,result.stderr||result.stdout||result.error?.message);
+ const sizes=JSON.parse(result.stdout);assert.equal(sizes.jobs,72);assert.ok(sizes.wireBytes<sizes.normalBytes);
+});
+test('client enables low-traffic compression explicitly, decodes gzip, and retains plain old-Agent compatibility',async()=>{
+ const zlib=require('node:zlib'),headers=[],payload={queryComplete:true,executionOnly:true,capabilities:{taskLifecycle:2},tasks:[]};
+ const server=http.createServer((req,res)=>{headers.push(req.headers);let data=Buffer.from(JSON.stringify(payload));
+  if(req.headers['x-simple-low-traffic']==='1'&&headers.length===2){data=zlib.gzipSync(data);res.setHeader('Content-Encoding','gzip');}
+  res.setHeader('Content-Length',data.length);res.end(data);
+ });await listen(server);
+ const client=new HttpTunnelClient({localHost:'127.0.0.1',localPort:server.address().port,timeoutMs:1000},new RequestBudget({...defaultRequestBudgetConfig,minIntervalByPurpose:{},disabledPurposes:[]}));
+ try{
+  await client.getWorkerTasks({executionOnly:true});assert.equal(headers[0]['x-simple-low-traffic'],undefined);
+  client.setLowTrafficMode(true);const compressed=await client.getWorkerTasks({executionOnly:true});
+  assert.equal(headers[1]['x-simple-low-traffic'],'1');assert.match(headers[1]['accept-encoding'],/gzip/);assert.equal(compressed.queryComplete,true);
+  assert.equal(compressed.localQueryTiming.contentEncoding,'gzip');assert.ok(compressed.localQueryTiming.wireResponseBytes>0);
+  assert.equal((await client.getWorkerTasks({executionOnly:true})).queryComplete,true,'plain response from old Agent remains valid');
+  client.setLowTrafficMode(false);await client.getWorkerTasks({executionOnly:true});assert.equal(headers[3]['x-simple-low-traffic'],undefined);
+ }finally{server.closeAllConnections();server.close();}
+});
 
 test("tunnel client only talks to localhost API with token and coalesces snapshot", async () => {
   const calls = [];

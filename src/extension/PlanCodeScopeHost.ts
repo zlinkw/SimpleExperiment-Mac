@@ -5,6 +5,21 @@ import type { ProjectFileIndex } from "../features/ProjectFileIndex";
 
 export type PlanExecutionSource = { digest: string; manifest: Record<string, { size: number; sha256: string }> };
 const resolving = new WeakMap<object, Promise<PlanExecutionSource | undefined>>();
+// Different Plans on one Worker share execution capacity, never their source facts.
+const workerReads = new WeakMap<object, Map<string, Promise<unknown>>>();
+function workerRead<T>(host: object, workerId: string, signal: AbortSignal | undefined, read: () => Promise<T>): Promise<T> {
+  let lanes = workerReads.get(host); if (!lanes) { lanes = new Map(); workerReads.set(host, lanes); }
+  const previous = lanes.get(workerId) || Promise.resolve();
+  const task = previous.catch(() => {}).then(() => { signal?.throwIfAborted(); return read(); });
+  lanes.set(workerId, task);
+  void task.catch(() => {}).finally(() => { if (lanes!.get(workerId) === task) lanes!.delete(workerId); });
+  if (!signal) return task;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason || Error("Plan source read cancelled"));
+    if (signal.aborted) abort(); else signal.addEventListener("abort", abort, { once: true });
+    task.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
 const digest = (manifest: PlanExecutionSource["manifest"]) => createHash("sha256").update(JSON.stringify(
   Object.keys(manifest).sort().map(key => [key, { size: manifest[key].size, sha256: manifest[key].sha256 }]))).digest("hex");
 /** Single source of truth for manifest self-verification (also consumed by the C3 HEAD binding). */
@@ -51,11 +66,13 @@ function response(plan: any, value: any): PlanExecutionSource {
   return source;
 }
 async function inspect(h: any, workerId: string, plan: any, source?: PlanExecutionSource, signal?: AbortSignal) {
-  const options = { signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000) };
+  // The HTTP client owns the user-approved 20s inactivity deadline after admission.
+  // A caller's cancellation still covers queueing; queue wait is not network inactivity.
+  const options = { signal };
   const target = h.workerActionTargets?.().find((row: any) => row.id === workerId);
   const index = target && h.projectFileObservationIndex?.(h.sftpServerOptions?.(target));
   const load = async () => {
-    const value = await h.client.getWorkerPlanCodeScope(workerId, query(plan, source), options);
+    const value = await workerRead(h, workerId, signal, () => h.client.getWorkerPlanCodeScope(workerId, query(plan, source), options));
     response(plan, value); // Invalid identity or digest is never published into the shared index.
     return value;
   };
@@ -114,6 +131,7 @@ export async function verifyLocalPlanSource(root: string, source: PlanExecutionS
 /** Admission checks cannot turn transfer inventory changes into execution version conflicts. */
 export async function inspectPlanCodeSlots(h: any, queue: any, workers: any[], signal?: AbortSignal) {
   const reads: Map<string,any> = h.planCodeScopeReads ||= new Map();
+  const wanted = new Set<string>();
   let accepting = true;
   const requests: Promise<any>[] = [];
   const pending = queue.plans.filter((p: any) => p.projectId && p.resultPathPolicy === "declared" && p.jobs.some((j: any) => j.status === "pending" && !j.commandId));
@@ -124,24 +142,30 @@ export async function inspectPlanCodeSlots(h: any, queue: any, workers: any[], s
       && (w.gpuSlots?.length || w.idleGpuIds?.length || plan.schedulingMode === "server_prequeue"));
     if (!ready.length) continue;
     for(const w of ready){
-      (w.codeScopeErrors ||= {})[plan.id] = w.workerId+"：源码核实进行中。";
+      (w.codeScopePending ||= {})[plan.id] = true;
       const target=h.workerActionTargets().find((r:any)=>r.id===w.workerId);
       const key=JSON.stringify([plan.projectId,plan.id,plan.revision,plan.codeFingerprint,w.workerId,target]);
+      wanted.add(key);
       let entry=reads.get(key);
-      if(!entry||entry.at&&Date.now()-entry.at>2000){
-        entry={at:0,promise:undefined};
+      // A read can finish after this round's bounded wait. Keep that result until
+      // a later round consumes it, even when polling exceeds the refresh TTL.
+      // The actual launch still verifies the frozen source again before sending.
+      if(!entry||entry.signal?.aborted||entry.consumed&&entry.at&&Date.now()-entry.at>2000){
+        entry={at:0,consumed:false,signal,promise:undefined};
         entry.promise=verifyWorkerPlanSource(h,w.workerId,plan,signal).then(source=>({source}),error=>({error})).then(value=>{entry.at=Date.now();return value;});
         reads.set(key,entry);
       }
       requests.push(entry.promise.then(({source,error}:any)=>{
-        if(!accepting)return;
-        if(error)w.codeScopeErrors[plan.id]=w.workerId+": "+String(error.message||error);
-        else{plan.executionSource=source;delete w.codeScopeErrors[plan.id];(w.compatiblePlans ||= []).push(plan.id);}
+        if(!accepting||signal?.aborted)return;
+        entry.consumed=true;
+        delete w.codeScopePending[plan.id];
+        if(error)(w.codeScopeErrors ||= {})[plan.id]=w.workerId+": "+String(error.message||error);
+        else{plan.executionSource=source;delete w.codeScopeErrors?.[plan.id];(w.compatiblePlans ||= []).push(plan.id);}
       }));
     }
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try { await Promise.race([Promise.allSettled(requests),new Promise(resolve=>{timer=setTimeout(resolve,350);})]); }
   finally { accepting=false;if(timer)clearTimeout(timer); }
-  for(const [key,entry] of reads)if(entry.at&&Date.now()-entry.at>2000)reads.delete(key);
+  for(const [key,entry] of reads)if(!wanted.has(key)||entry.consumed&&entry.at&&Date.now()-entry.at>2000)reads.delete(key);
 }

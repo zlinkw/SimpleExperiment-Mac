@@ -1,6 +1,6 @@
 import { taskLifecycle, type TaskObservation } from "./TaskLifecycle";
 
-export type ObservationTiming = { requestedAt?: string; networkStartedAt?: string; receivedAt: string; publishedAt?: string; failed?: boolean; requestBytes?: number; responseBytes?: number };
+export type ObservationTiming = { requestedAt?: string; networkStartedAt?: string; receivedAt: string; publishedAt?: string; failed?: boolean; requestBytes?: number; responseBytes?: number; wireResponseBytes?: number; contentEncoding?: string };
 export type EvidenceTimes = Partial<Record<"execution" | "artifacts" | "logs", ObservationTiming>>;
 export function observationTiming(value: any, startedAt: string, receivedAt = new Date().toISOString()): ObservationTiming {
   return value?.localQueryTiming || { requestedAt: startedAt, networkStartedAt: startedAt, receivedAt };

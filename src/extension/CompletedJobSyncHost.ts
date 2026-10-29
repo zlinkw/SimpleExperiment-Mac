@@ -1,3 +1,4 @@
+import { transferPreparedArtifacts, type PreparedArtifactCopy } from "../features/ArtifactBatchTransfer";
 import { newestJobOutputs, jobArtifactScopes, latestJobSyncKey } from "../features/LatestJobArtifacts";
 import { canonicalProjectId } from "../features/DistributedPlanQueue";
 import { loadSyncHolds } from "../features/SyncResolution";
@@ -37,6 +38,7 @@ export class CompletedJobSyncHost {
   constructor(private readonly h: any, private readonly root: string, private readonly current: () => boolean) {}
   async run(selected: string[], options: { force?: boolean; verifyOnly?: boolean; jobs?: JobSelection[] } = {}): Promise<{ synced: number; excluded: number; errors: string[] }> {
     const h = this.h;
+    if (h.workerCodeSyncTargets().length < 2) return { synced: 0, excluded: 0, errors: [] };
     const runs = h.completedJobSyncRuns ||= new Map();
     const key = JSON.stringify([selected, options.verifyOnly === true, options.jobs || null]);
     const active = runs.get(this.root);
@@ -115,6 +117,8 @@ export class CompletedJobSyncHost {
       pending = pending.filter(({ plan, job }) => options.jobs!.some(selection => plan.id === selection.planId
         && job.index === selection.index && job.commandId === selection.commandId));
     }
+    const copies: Array<{ copy: PreparedArtifactCopy; finish: (result: any) => Promise<void>; fail: (error: any) => Promise<void> }> = [];
+    try {
     for (const { plan, job } of pending) {
       if (!this.current()) throw Error("项目或连接已变化，产物操作已停止。");
       const scopes = jobArtifactScopes({ ...job, executionMode: plan.executionMode }, selected);
@@ -135,25 +139,7 @@ export class CompletedJobSyncHost {
       const patch = (fields: any) => h.patchDistributedJob(this.root, plan.id, job.index, job.attempt,
         { expectedCommandId: job.commandId, ...fields });
       if (!scopes.length) { await patch({ latestArtifactSync: { key, state: "excluded", scopes, checkedAt: new Date().toISOString() }, artifactError: undefined, artifactRetryAfter: undefined, artifactStageBlock: undefined }); report.excluded++; continue; }
-      try {
-        await assertCurrent();
-        // r10：本次已记录且落在选定 scope 内的 job.artifacts 必要项进入强校验（其它 scope 条目不强加）；
-        // 旧记录在此核"必要路径存在"：merge 侧要求当前来源有已校验版本，foreign-only/缺失仍 partial；
-        // 来源以本次明确的当前最新版为准（主控 r11 复审确认既有契约）——冻结后来源漂移照常开新代重传，
-        // 复制落地 SHA 与本次冻结清单不符仍逐文件阻断；专用链正式镜像冲突的原规则不受影响。
-        const samePath = (a: string, b: string) => a === b || a.startsWith(b + "/") || b.startsWith(a + "/");
-        const requiredArtifacts = Object.fromEntries(Object.entries<string>(job.artifacts || {}).filter(([file]) => scopes.some(scope => samePath(file, scope))));
-        // r10：merge 的阶段与 foreign-only 分类完整路径/原因进入既有操作日志通道（缺通道不影响操作）。
-        const result = await h.mergeLatestWorkerVersions(this.root, targets, scopes, ".",
-          (stage: string) => h.logOperationFact?.(`产物同步 ${plan.planFile} job ${job.index}：${stage}`), {
-          // r5 P2 身份块：从真实队列行透传五元组身份（与专用链逐字同构）与 plan.id/commandId；
-          // 队列行缺失身份时根本进不了 pending（L40 过滤），此处不臆造。
-          completedJob: {
-            sourceId: job.workerId, planId: plan.id, commandId: job.commandId,
-            retentionKey: jobArtifactRetentionKey(plan.planFile, job.index, job.case, job.seed),
-            requiredArtifacts,
-          }, assertCurrent, verifyOnly: options.verifyOnly,
-        });
+      const finish = async (result: any) => {
         if (!result || result.errors.length) throw Error(result?.errors?.join("；") || "同步未完成");
         await assertCurrent();
         await patch({ latestArtifactSync: { key, state: "synced", scopes, workerIds: targets.map((row: any) => row.id), checkedAt: new Date().toISOString(),
@@ -165,7 +151,8 @@ export class CompletedJobSyncHost {
           ...(scopes.includes(job.outputDir) && (!job.collectionResultCsv || job.actualExecutionMode === "train" || scopes.includes(job.collectionResultCsv))
             ? { mirroredWorkerIds: targets.map((row: any) => row.id), replaceMirroredWorkerIds: true } : {}) });
         report.synced++;
-      } catch (error: any) {
+      };
+      const fail = async (error: any) => {
         if (!this.current()) throw error;
         const detail = String(error.message || error), retryAfter = new Date(Date.now() + 30000).toISOString();
         report.errors.push(plan.planFile + " job " + job.index + "：" + detail);
@@ -197,8 +184,37 @@ export class CompletedJobSyncHost {
             h.showNativePanelMessage?.({ tone: "error", message: `产物同步 ${plan.planFile} job ${job.index} 未完成：${detail}。运行完成状态不变，可在该 Job 行重新同步。`
               + (recheckFailure ? `（队列复核暂不可用：${recheckFailure}）` : "") });
         }
-      }
+      };
+      try {
+        await assertCurrent();
+        // r10：本次已记录且落在选定 scope 内的 job.artifacts 必要项进入强校验（其它 scope 条目不强加）；
+        // 旧记录在此核"必要路径存在"：merge 侧要求当前来源有已校验版本，foreign-only/缺失仍 partial；
+        // 来源以本次明确的当前最新版为准（主控 r11 复审确认既有契约）——冻结后来源漂移照常开新代重传，
+        // 复制落地 SHA 与本次冻结清单不符仍逐文件阻断；专用链正式镜像冲突的原规则不受影响。
+        const samePath = (a: string, b: string) => a === b || a.startsWith(b + "/") || b.startsWith(a + "/");
+        const requiredArtifacts = Object.fromEntries(Object.entries<string>(job.artifacts || {}).filter(([file]) => scopes.some(scope => samePath(file, scope))));
+        // r10：merge 的阶段与 foreign-only 分类完整路径/原因进入既有操作日志通道（缺通道不影响操作）。
+        const result = await h.mergeLatestWorkerVersions(this.root, targets, scopes, ".",
+          (stage: string) => h.logOperationFact?.(`产物同步 ${plan.planFile} job ${job.index}：${stage}`), {
+          // r5 P2 身份块：从真实队列行透传五元组身份（与专用链逐字同构）与 plan.id/commandId；
+          // 队列行缺失身份时根本进不了 pending（L40 过滤），此处不臆造。
+          completedJob: {
+            sourceId: job.workerId, planId: plan.id, commandId: job.commandId,
+            retentionKey: jobArtifactRetentionKey(plan.planFile, job.index, job.case, job.seed),
+            requiredArtifacts,
+          }, assertCurrent, verifyOnly: options.verifyOnly, prepareOnly: pending.length > 1,
+        });
+        if (result?.preparedArtifactCopy) { copies.push({ copy: result.preparedArtifactCopy, finish, fail }); continue; }
+        await finish(result);
+      } catch (error: any) { await fail(error); }
     }
+    const outcomes = await transferPreparedArtifacts(copies.map(row => row.copy));
+    for (const [index, row] of copies.entries()) {
+      const result = outcomes[index];
+      if (result.errors.length) await row.fail(result.failure || Error(result.errors.join("；")));
+      else { try { await row.finish(result); } catch (error) { await row.fail(error); } }
+    }
+    } finally { for (const row of copies) row.copy.release(); }
     return report;
   }
 }

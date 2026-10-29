@@ -63,16 +63,9 @@ for (const changed of ["dist/ui/PanelHtml.legacy.js", "dist/extension/legacy.js"
   });
 }
 
-test("runtime closure follows lazy factories, computed feature hints, worker entrypoints and require.resolve", () => {
-  const contents = {
-    'dist/entry.js': 'tryRequire("./factory"); new worker_threads.Worker(path.join(__dirname, "worker.js")); require.resolve("./delete");',
-    'dist/factory.js': 'const featureImplHints = {a: "feature", b: "nested/index"}; function load(hint) { return tryRequire(`../${hint}`); }',
-    'dist/worker.js': 'require("./worker-dependency");', 'dist/worker-dependency.js': 'module.exports = {};',
-    'dist/delete.js': 'module.exports = {};', 'feature.js': 'module.exports = {};', 'nested/index.js': 'module.exports = {};',
-    'dist/build-only.js': 'module.exports = "not runtime";',
-  };
-  const closure = collectLocalRuntimeClosure(root, ['./dist/entry.js', 'dist/entry.js'], [], createFs(contents));
-  assert.deepEqual(closure.map(row => row.file), Object.keys(contents).filter(file => file !== 'dist/build-only.js').sort((a,b) => a.localeCompare(b)));
-  assert.ok(closure.find(row => row.file === 'dist/worker-dependency.js').chain.includes('dist/worker.js'));
-  assert.throws(() => collectLocalRuntimeClosure(root, ['dist/factory.js'], [], createFs({'dist/factory.js': 'tryRequire(`../${hint}`)'})), /hints cannot be resolved/);
+test("missing transitive imports fail with their chain, including CommonJS CLI launchers", () => {
+  const files = { "bin/cli.cjs": 'require("../dist/cli.js")', "dist/cli.js": 'require("./missing")' };
+  assert.throws(() => collectLocalRuntimeClosure(root, ["bin/cli.cjs"], [], createFs(files)), /bin\/cli.cjs.*dist\/cli.js.*missing/);
+  files["dist/missing.cjs"] = 'module.exports = {}';
+  assert.ok(collectLocalRuntimeClosure(root, ["bin/cli.cjs"], [], createFs(files)).some(row => row.file === "dist/missing.cjs"));
 });

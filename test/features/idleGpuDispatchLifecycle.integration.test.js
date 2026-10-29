@@ -36,7 +36,7 @@ function provider(names,extra={}) {
       mapLimited:async(rows,_limit,callback)=>Promise.all(rows.map(callback)),errorMessage:error=>error.message,...extra});
 }
 
-const endpoints={declaredJobPaths:true,formalJobIdentityEnv:1,taskShellEnvironment:1,projectManagedValidation:1,gpuQuotaScheduling:1};
+const endpoints={declaredJobPaths:true,formalJobIdentityEnv:1,taskShellEnvironment:1,projectManagedValidation:1,gpuQuotaScheduling:1,gpuMemoryBudgetScheduling:1};
 function gpu(id,free=24){return {index:String(id),memoryTotalMb:32768,memoryFreeMb:free*1024,memoryUsedMb:(32-free)*1024,utilizationPercent:free<22?99:0,processes:[]};}
 function nativeFixture(options={}){
   const projectRoot=options.projectRoot||root;
@@ -164,8 +164,10 @@ test('two code versions dispatch only to their independently verified Workers un
     schedulingMode:'local_idle',planFile:'next.yaml',revision:'r2',codeFingerprint:'g',executionMode:'train',
     jobs:[0,1].map(index=>({index,case:'pad',seed:index,outputDir:'next/'+index,collectionResultCsv:'tmp/result/next'+index+'.csv'}))},'next'));
   await f.p.tickDistributedQueueCore();
-  assert.deepEqual(f.sent.map(x=>({plan:x.plan,worker:x.worker})),[{plan:'p',worker:'a'},{plan:'p',worker:'a'},{plan:'next',worker:'b'},{plan:'next',worker:'b'}]);
-  assert.ok(f.stored().plans.every(p=>p.jobs.every(j=>j.status==='unknown')));assert.equal(f.p.distributedLaunchInFlight.size,0);
+  assert.deepEqual(f.sent.map(x=>({plan:x.plan,worker:x.worker})),[{plan:'p',worker:'a'},{plan:'next',worker:'b'}]);
+  assert.ok(f.stored().plans.every(p=>p.jobs.filter(j=>j.status==='unknown').length===1 && p.jobs.filter(j=>j.status==='pending').length===1), 'each unmeasured configuration must retain its other job locally');
+  assert.ok(f.stored().plans.every(p=>p.jobs.find(j=>j.status==='unknown').gpuMemoryReservation.probe));
+  assert.equal(f.p.distributedLaunchInFlight.size,0);
 });
 test('code upload holds allocation while native completion is still observed and persisted',async()=>{
   const f=nativeFixture();f.own(0,'running');f.publish(0,'completed');f.p.codeSyncInFlight=1;

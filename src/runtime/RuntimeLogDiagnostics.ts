@@ -18,6 +18,19 @@ def task_log_close(state):
     state["block"] = None
 
 def task_log_line(state, raw):
+    # Native libraries may write stderr without a newline before our marker.
+    # Keep byte offsets and physical line numbers while parsing both segments.
+    marker = b"[simple-experiment-runtime-log] "
+    start = 0
+    while True:
+        boundary = raw.find(marker, start + 1)
+        task_log_segment(state, raw[start:boundary] if boundary >= 0 else raw[start:])
+        if boundary < 0:
+            return
+        state["line"] -= 1
+        start = boundary
+
+def task_log_segment(state, raw):
     start, line = state["cursor"], state["line"]
     state["cursor"] += len(raw)
     state["line"] += 1
@@ -50,14 +63,15 @@ def task_log_line(state, raw):
     trace = re.match(r"^(?:\s*[+|]\s*)?Traceback \(most recent call last\):", text)
     thread = re.match(r"^Exception in thread ", text)
     terminal = re.match(r"^(?:\s*[+|]\s*)?([A-Za-z_][\w.]*(?:Error|Exception|Interrupt|Exit)|Exception|BaseException|ExceptionGroup|BaseExceptionGroup)(?::\s*(.*)|$)", text)
+    logged_error = re.match(r"^(?:\[(?:ERROR|FATAL|CRITICAL)\]\s*|(?:ERROR|FATAL|CRITICAL)[.:]\s*)\S", text, re.IGNORECASE)
     block = state.get("block")
-    if block and (ignored or thread or trace and block["complete"]):
+    if block and (ignored or thread or logged_error or trace and block["complete"]):
         task_log_close(state)
         block = None
     if block and block["complete"] and text and not text.startswith((" ", "\t", "|", "+")) and not terminal:
         task_log_close(state)
         block = None
-    if not block and (ignored or trace or thread or terminal):
+    if not block and (ignored or trace or thread or terminal or logged_error):
         key = state["commandId"] + ":" + state["logPath"] + ":" + str(start)
         block = {"id": hashlib.sha256(key.encode("utf-8")).hexdigest(), "type": "ctypes_callback" if ignored and "ctypes" in text else "ignored_exception" if ignored else "unhandled_exception",
                  "phase": state["phase"], "summary": "", "logPath": state["logPath"], "byteStart": start,
@@ -66,8 +80,8 @@ def task_log_line(state, raw):
     if block:
         block["byteEnd"], block["lineEnd"] = state["cursor"], line
         block["summary"] = (block["summary"] + ("\n" if block["summary"] else "") + text)[:4000]
-        if terminal:
-            block["type"] = terminal.group(1)
+        if terminal or logged_error:
+            block["type"] = terminal.group(1) if terminal else "LoggedError"
             block["complete"] = True
 
 def task_log_feed(state, data, final=False):

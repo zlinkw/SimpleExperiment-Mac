@@ -6,7 +6,7 @@ const { readSource } = require("../_helpers/sourceReader");
 
 const root = path.resolve(__dirname, "..", "..");
 
-test("active extension uses localhost clients and verified Xshell sessions instead of direct remote runners", () => {
+test("active extension uses localhost clients, a forward-only background manager and explicit Xshell sessions", () => {
   const extension = readSource("src/extension.ts");
   const launcher = fs.readFileSync(path.join(root, "src", "tunnel", "XshellSessionLauncher.ts"), "utf8");
   for (const item of ["RemoteExecutionService", "RuntimeService", "RemoteFileStore", "FakeRemoteCommandRunner", "runSsh(", "connectSshSessions", "closeControlMasterSessions"]) {
@@ -15,6 +15,11 @@ test("active extension uses localhost clients and verified Xshell sessions inste
   assert.doesNotMatch(extension, /(?:spawn|spawnSync|execFile|execFileSync)\s*\(\s*["'](?:ssh|scp|rsync)["']/i);
   assert.match(extension, /spawnSync\("gh", \["--version"\]/);
   assert.match(extension, /launchXshellSavedSession/);
+  assert.match(extension, /BackgroundSshTunnels/);
+  const background = fs.readFileSync(path.join(root, "src/tunnel/BackgroundSshTunnels.ts"), "utf8");
+  assert.match(background, /"-N", "-L", forwardSpec\(endpoint\)/);
+  assert.match(background, /windowsHide: true, stdio: \["ignore", "ignore", "pipe"\]/);
+  assert.doesNotMatch(background, /spawn\([^\n]+\{[^\n]*shell:\s*true/);
   assert.match(launcher, /path\.basename\(request\.exePath \|\| ""\)\.toLowerCase\(\) !== "xshell\.exe"/);
   assert.match(launcher, /spawn\(request\.exePath, \[request\.sessionPath\]/);
   assert.doesNotMatch(launcher, /spawn\(["'](?:ssh|scp|rsync)/i);
@@ -40,18 +45,18 @@ test("package UI does not expose direct fallback commands", () => {
   assert.equal(commandIds.some((id) => /LegacySsh|legacySsh/i.test(id)), false);
 });
 
-test("extension command registration exposes only Xshell tunnel command ids", () => {
-  // The Mac extension.ts is a facade; registration lives in the legacy activation module.
-  const text = readSource("src/extension/legacy.ts");
+test("extension retains compatible tunnel ids and adds the explicit manual Xshell entry", () => {
+  const text = readSource("src/extension.ts");
   const registered = Array.from(text.matchAll(/(?:registerCommand|hostCommand)\("([^"]+)"/g)).map((match) => match[1]);
   assert.equal(registered.filter((id) => /Tunnel/i.test(id)).every((id) => !/configure.*RealtimeTunnel/i.test(id) || /Xshell/i.test(id)), true);
   assert.equal(registered.some((id) => /LegacySsh|legacySsh/i.test(id)), false);
   assert.equal(registered.includes("simpleExperimentMac.configureXshellSavedSessions"), true);
   assert.equal(registered.includes("simpleExperimentMac.startAllXshellRealtimeTunnels"), true);
+  assert.equal(registered.includes("simpleExperimentMac.openXshellSessions"), true);
 });
 
 test("only the sanctioned -N -L forwarder references the system ssh binary", () => {
-  const sanctioned = path.join("src", "mac", "OpenSshTunnels.ts");
+  const sanctioned = [path.join("src", "mac", "OpenSshTunnels.ts"), path.join("src", "tunnel", "BackgroundSshTunnels.ts")];
   const hits = [];
   const walk = (dir) => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const file = path.join(dir, entry.name);
@@ -59,8 +64,9 @@ test("only the sanctioned -N -L forwarder references the system ssh binary", () 
     else if (entry.name.endsWith(".ts") && fs.readFileSync(file, "utf8").includes("/usr/bin/ssh")) hits.push(path.relative(root, file));
   } };
   walk(path.join(root, "src"));
-  assert.deepEqual(hits.sort(), [sanctioned], "no other source file may invoke the system ssh binary");
-  const forwarder = fs.readFileSync(path.join(root, sanctioned), "utf8");
+  assert.deepEqual(hits.sort(), sanctioned.slice().sort(), "no other source file may invoke the system ssh binary");
+  for (const entry of sanctioned) {
+  const forwarder = fs.readFileSync(path.join(root, entry), "utf8");
   const imports = [...forwarder.matchAll(/import\s*\{([^}]*)\}\s*from\s*"node:child_process"/g)].map(m => m[1]);
   assert.equal(imports.length, 1, "exactly one child_process import seam");
   assert.deepEqual(imports[0].split(",").map(t => t.trim()).sort(), ["spawn", "spawnSync"], "no exec/shell seam may exist");
@@ -69,6 +75,7 @@ test("only the sanctioned -N -L forwarder references the system ssh binary", () 
   assert.match(forwarder, /spawnSync\(\s*sshPath/, "the parse-only config probe binds the verified ssh path");
   assert.match(forwarder, /"-N"/, "the forward must stay non-interactive");
   assert.match(forwarder, /"-L"/, "the forward must be a local port forward");
-  assert.doesNotMatch(forwarder, /RemoteCommand|"-t"/, "the forwarder must never run remote commands or allocate a PTY");
+  assert.doesNotMatch(forwarder, /RemoteCommand=(?!none)|"-t"/, "the forwarder must never run remote commands or allocate a PTY");
   assert.doesNotMatch(forwarder, /(?:spawn|spawnSync|execFile|execFileSync)\s*\(\s*["'](ssh|scp|rsync)["']/i, "the ssh path must stay a verified single constant");
+  }
 });

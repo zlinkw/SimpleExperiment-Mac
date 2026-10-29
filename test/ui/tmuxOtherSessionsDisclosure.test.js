@@ -27,7 +27,9 @@ function harness() {
   });
   vm.runInContext(between("function esc(value)", "function cssEscape(") + between("function normalizeTmuxWindowFilter(", "function renderTmuxWorkersOverview("), context);
   vm.runInContext(between("function tmuxResolveCaptureTarget()", "function decodeCapturedText(")
-    + between("async function refreshTmuxCapture()", "function scheduleTmuxPoll()"), context);
+    // Low traffic mode reads this gate before any automatic display round; these cases are normal mode.
+    + between("async function refreshTmuxCapture(", "function scheduleTmuxPoll()"), context);
+  context.displayAutoAllowed = () => true;
   const render = () => vm.runInContext("renderTmuxOverview(tmuxListCache.sessions)", context);
   return { context, elements, render, requests };
 }

@@ -156,7 +156,9 @@ test("durable local admission requires a fresh capable ledger and an explicit id
   assert.match(admission, /snapshot\?\.capabilities\?\.idleGpuAdmission === true/);
   assert.match(admission, /codeFingerprint: workerFingerprint/);
   assert.match(admission, /sendDistributedJob\(plan, job, dispatch\.workerId, gpuId, dispatch\.commandId, sharedManifest\)/);
-  assert.match(admission, /allocateAvailable\(queue, workers, \{ requireIdleGpuAdmission: true, localIdleOnly: true \}\)/);
+  // 0.5.419：准入仍要求空闲 GPU + 仅本机空闲，且只在交接门放行的 Worker 上分配。
+  assert.match(admission, /allocateAvailable\(queue, dispatchableWorkers, \{ requireIdleGpuAdmission: true, localIdleOnly: true,\s*memoryBudget: GpuMemoryBudget\.memoryBudgetAdmission\(queue, dispatchableWorkers\) \}\)/);
+  assert.match(admission, /const dispatchableWorkers = workers\.filter\(\(worker: any\) => this\.dispatchHandoffAllowsWorkerLocal\?\.\(root, String\(worker\?\.workerId \|\| ""\)\) !== false\)/);
   assert.doesNotMatch(source.slice(source.indexOf("async tickDistributedQueueCore("), source.indexOf("async syncDistributedJobArtifacts(")),
     /catch\s*\{\s*snapshot\s*=\s*this\.lastRealtimeState\?\.gpu/);
 });

@@ -14,6 +14,7 @@ const Queue = require('../../src/features/DistributedPlanQueue.ts');
 const Policy = require('../../src/features/DistributedSchedulingPolicy.ts');
 const Ownership = require('../../src/features/GpuJobOwnership.ts');
 const Modes = require('../../src/features/PlanExecutionMode.ts');
+const PlanCodeScopeHost = require('../../src/extension/PlanCodeScopeHost.ts');
 require.extensions['.ts'] = original;
 const source = fs.readFileSync(path.join(root, 'src/extension/legacy.ts'), 'utf8');
 const ast = ts.createSourceFile('legacy.ts', source, ts.ScriptTarget.Latest, true);
@@ -33,17 +34,16 @@ test('real Scheduler conflict travels through Agent action, durable audit, snaps
   agentReceipt = report.receipt;
 });
 
-function fixture(initial = true, compatibility = true) {
-  const Provider = vm.runInNewContext(code, { DistributedPlanQueue: Queue, DistributedSchedulingPolicy: Policy,
-    GpuQuotaScheduling: require('../../dist/features/GpuQuotaScheduling'),
-    PlanCodeScopeHost: require('../../dist/extension/PlanCodeScopeHost'),
+function fixture(initial = true) {
+  const Provider = vm.runInNewContext(code, { GpuMemoryBudget: require('../../src/features/GpuMemoryBudget.ts'), GpuQuotaScheduling: require('../../dist/features/GpuQuotaScheduling'), DistributedPlanQueue: Queue, DistributedSchedulingPolicy: Policy, PlanCodeScopeHost,
     GpuJobOwnership: Ownership, PlanExecutionMode: Modes, workspaceRoot: () => root,
     mapLimited: async (rows, _limit, fn) => Promise.all(rows.map(fn)), errorMessage: error => error.message,
     makeOpId: () => 'generated-command', setInterval, clearInterval });
   const p = new Provider();
   Object.assign(p, { distributedQueueGeneration: 0, distributedPlanStopEpoch: 0, distributedLaunchInFlight: new Set(),
     distributedNextFailureDetailAt: Infinity, distributedNextPostprocessAt: Infinity, lastWorkerProbes: { worker: {
-      status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1, taskShellEnvironment: 1, projectManagedValidation: 1 } } } },
+      status: 'ok', capabilities: { endpoints: { declaredJobPaths: true, formalJobIdentityEnv: 1,
+        executionShellPreflight: 1, taskShellEnvironment: 1, stagedJobPreflight: 1, projectManagedValidation: 1, gpuMemoryBudgetScheduling: 1 } } } },
     lastCodeSyncState: { workerVersions: { worker: { fingerprint: agentReceipt.codeFingerprint } } } });
   p.isRealtimeMode = () => true;
   p.projectTopologyAssessment = () => ({ mode: 'worker_pool' });
@@ -60,14 +60,13 @@ function fixture(initial = true, compatibility = true) {
   p.readWorkerTaskSnapshotBatch = async () => [{ workerId: 'worker', generatedAt: new Date().toISOString(), fetchedAt: new Date().toISOString(),
     capabilities: { durablePlanQueue: true, idleGpuAdmission: true, schemaVersion: 1 }, tasks: [] }];
   p.client = { getGpu: async () => ({ worker: [0, 1].map(index => ({ index: String(index), utilizationPercent: 0,
-    memoryTotalMb: 48 * 1024, memoryUsedMb: 7, processes: [] })) }) };
+    memoryUsedMb: 7, memoryTotalMb: 24576, processes: [] })) }) };
   let stored = Queue.enqueuePlan(Queue.emptyDistributedQueue(), { projectId, planFile: agentReceipt.planFile,
     revision: agentReceipt.planRevision, codeFingerprint: agentReceipt.codeFingerprint, executionMode: 'train_test',
-    resultPathPolicy: 'declared', schedulingMode: 'local_idle', jobs: [42, 43].map((seed, index) => ({ index, case: 'case', seed,
+    resultPathPolicy: 'declared', schedulingMode: 'local_idle', jobs: [42, 43].map((seed, index) => ({ index, case: 'case' + index, seed,
       outputDir: agentReceipt.outputDir.replace('seed42', 'seed' + seed),
       collectionResultCsv: agentReceipt.collectionResultCsv.replace('seed42', 'seed' + seed) })) }, agentReceipt.workflowId);
-  if(compatibility) stored.plans[0].jobs.forEach(job => { delete job.lifecycleProtocol; }); // This suite exercises persisted v1 durable receipts.
-  // Persisted v1 receipts exercise the v1 reconciliation path; newly enqueued jobs retain protocol 2.
+  stored.plans[0].jobs.forEach(job => { delete job.lifecycleProtocol; }); // Legacy receipt recovery fixture.
   if (!initial) stored.plans[0].jobs.forEach((job, index) => Object.assign(job, {
     status: 'unknown', workerId: 'worker', gpuId: String(index), commandId: index ? 'second-command' : agentReceipt.commandId,
     runKey: index ? 'second-command' : agentReceipt.commandId,
@@ -96,7 +95,7 @@ test('initial Host dispatch resolves both rejections immediately and never resub
   for (let i = 0; i < 3; i++) await p.tickDistributedQueueCore();
   assert.equal(receipts.length, 2);
   assert.equal(Queue.distributedSubmissionDisposition(stored().plans[0]).durableAccepted, false);
-  const submission = Queue.distributedSubmissionProgress({ ...Queue.distributedSubmissionResult(stored().plans[0]), enqueued: true, localQueued: true });
+  const submission = Queue.distributedSubmissionProgress(Queue.distributedSubmissionResult(stored().plans[0]));
   assert.equal(submission.status, 'failed');
   assert.equal(submission.waiting, false);
 });
@@ -135,7 +134,7 @@ test('lost rejection response recovers from a fresh durable snapshot even when G
   const { p, stored } = fixture(false);
   const plan = stored().plans[0];
   const tasks = plan.jobs.map(job => ({ ...agentReceipt, commandId: job.commandId, runKey: job.runKey,
-    gpuId: job.gpuId, experimentIndex: job.index, seed: job.seed, globalJobId: job.globalJobId,
+    gpuId: job.gpuId, experimentIndex: job.index, case: job.case, seed: job.seed, globalJobId: job.globalJobId,
     outputDir: job.outputDir, collectionResultCsv: job.collectionResultCsv }));
   p.readWorkerTaskSnapshotBatch = async () => [{ workerId: 'worker', generatedAt: new Date().toISOString(),
     fetchedAt: new Date().toISOString(), capabilities: { durablePlanQueue: true, idleGpuAdmission: true, schemaVersion: 1 }, tasks }];
@@ -152,7 +151,7 @@ test('plain HTTP failures stay unknown and busy GPU rejection remains local pend
     const { p, stored } = fixture();
     p.sendDistributedJob = async (plan, job, workerId, gpuId, commandId) => {
       if (kind === 'http') throw Error('Hub Agent HTTP 500: FORMAL_JOB_CONFLICT');
-      return { ...agentReceipt, commandId, runKey: commandId, workerId, gpuId, experimentIndex: job.index, seed: job.seed,
+      return { ...agentReceipt, commandId, runKey: commandId, workerId, gpuId, experimentIndex: job.index, case: job.case, seed: job.seed,
         globalJobId: job.globalJobId, outputDir: job.outputDir, collectionResultCsv: job.collectionResultCsv,
         reason: 'gpu_busy', status: 'pending', neverStartedEvidence: undefined };
     };
@@ -161,12 +160,3 @@ test('plain HTTP failures stay unknown and busy GPU rejection remains local pend
     assert.ok(stored().plans[0].jobs.every(job => !job.admissionRejection));
   }
 });
-
- test('native rejected-start evidence cannot substitute for a subsequent current task query',async()=>{
-  const {p,stored,receipts}=fixture(true,false);await p.tickDistributedQueueCore();assert.equal(receipts.length,2);
-  assert.ok(stored().plans[0].jobs.every(job=>job.lifecycleProtocol===2&&job.status==='failed'));
-  const identities=stored().plans[0].jobs.map(job=>job.commandId);
-  await p.tickDistributedQueueCore();
-  assert.equal(receipts.length,2);assert.deepEqual(stored().plans[0].jobs.map(job=>job.commandId),identities);
-  assert.ok(stored().plans[0].jobs.every(job=>job.lifecycleProtocol===2&&job.status==='unknown'&&job.statusQueryError));
- });

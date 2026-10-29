@@ -351,6 +351,7 @@ function installStopClearHost(sandbox) {
   const workflowBinding = require("../../dist/features/WorkflowWorkspaceBinding.js");
   const workspaceProbe = root => ({ canonical: path.resolve(root), device: "fixture", inode: "fixture" });
   const context = {
+    DispatchHandoffGate: require("../../dist/features/DispatchHandoffGate.js"),
     require: name => name === "../updates/Bootstrap" ? { assertBusinessAllowed() {}, getUpdater: () => undefined }
       : require(name.startsWith(".") ? path.resolve(__dirname, "../../dist/extension", name) : name),
     WorkflowBinding: {
@@ -828,6 +829,7 @@ test("a tick that resumes after the timeout still cannot save or dispatch, and s
   const tickBody = tickSource.slice(tickStart, tickEnd);
   let continued = false;
   const tickHost = {
+    DispatchHandoffGate: require("../../dist/features/DispatchHandoffGate.js"),
     queuePlanArtifactSyncStatusCheck: () => undefined,
     distributedPlanStopEpoch: provider.distributedPlanStopEpoch,
     distributedQueueGeneration: provider.distributedQueueGeneration,
@@ -1319,6 +1321,7 @@ test("handleMessage posts the real stop-clear outcome for failed, cancelled, and
     completed: { status: "completed", message: "已清除 1 条运行进度", planStopClear: { planFile: "plans/a.yaml", outcome: "completed", phase: "cleared" } },
   };
   const context = {
+    DispatchHandoffGate: require("../../dist/features/DispatchHandoffGate.js"),
     require: name => name === "../updates/Bootstrap" ? { assertBusinessAllowed() {}, getUpdater: () => undefined } : require(name),
     OperationOutcome_1: OperationOutcome,
     getSafeCommand: (message) => message.command,
@@ -1411,6 +1414,7 @@ test("stop-clear and explicit job commands consume structured outcomes", async (
   const structured = { status: "failed", message: "未完成清除", planStopClear: { planFile: "plans/a.yaml" } };
   const run = async (command) => {
     const context = {
+    DispatchHandoffGate: require("../../dist/features/DispatchHandoffGate.js"),
       command,
       PLAN_SUBMISSION_COMMANDS: new Set(["runPlan", "reproducePlan"]),
       isLocalTrigger: false,

@@ -154,7 +154,7 @@ test("manual refresh re-probes Workers and retries artifact sync without waiting
   assert.ok(events.indexOf("retry-now") < events.indexOf("tick"));
 });
 
-test("successful artifact pass clears an old disconnected warning", async () => {
+test("single Worker skips an artifact pass and preserves unrelated job evidence", async () => {
   const compiled = compiledSource;
   const first = compiled.indexOf("async syncDistributedJobArtifacts(");
   const last = compiled.indexOf("async distributedOutputHashes(", first);
@@ -179,6 +179,6 @@ test("successful artifact pass clears an old disconnected warning", async () => 
     patchDistributedJob: async (_root, _plan, _index, _attempt, fields) => {patched.push(fields);Object.assign(job,fields);},
   };
   await context.sync.call(provider, "C:/project", { plans: [{ id: "plan-1",planJobCount:1, resultPathPolicy: "declared", planFile: "plans/p.yaml", jobs: [job] }] }, "bulk");
-  assert.equal(job.artifactError, undefined);
-  assert.ok(patched.some((row) => Object.hasOwn(row, "artifactError") && row.artifactError === undefined));
+  assert.equal(job.artifactError, "old disconnect");
+  assert.equal(patched.length, 0, "single-Worker mode performs no artifact synchronization follow-up writes");
 });

@@ -21,7 +21,7 @@ function extractFunction(name) {
 }
 
 function loadStateReadiness() {
-  const sandbox = {
+  const sandbox = { MAC_PLAN_IDENTITY: false,
     // Mac 适配：面板脚本顶层注入 nativeWorkerTransportConfigured=configuredWorkerTransport（Termius 转发端点判定），
     // 沙箱复用同一生产实现。
     nativeWorkerTransportConfigured: (worker) => require("../../dist/platform/Terminal.js").configuredWorkerTransport(worker),
@@ -54,7 +54,7 @@ function loadStateReadiness() {
 }
 
 function loadCapabilityReadiness() {
-  const sandbox = {
+  const sandbox = { MAC_PLAN_IDENTITY: false,
     EMPTY_CAPABILITY_SOURCE: Object.freeze({}),
     uiCapabilityMap: {
       runPlan: ["actions.run-plan"],
@@ -85,7 +85,7 @@ function loadCapabilityReadiness() {
 }
 
 function loadDisableReason() {
-  const sandbox = {
+  const sandbox = { MAC_PLAN_IDENTITY: false,
     // Mac 适配：面板脚本顶层注入 nativeWorkerTransportConfigured=configuredWorkerTransport（Termius 转发端点判定），
     // 沙箱复用同一生产实现。
     nativeWorkerTransportConfigured: (worker) => require("../../dist/platform/Terminal.js").configuredWorkerTransport(worker),
@@ -127,6 +127,15 @@ function loadDisableReason() {
   return sandbox;
 }
 
+test("background buttons work without an Xshell session while explicit Xshell opening requires one", () => {
+  const sandbox=loadDisableReason();vm.runInContext(extractFunction('hasAnyTunnelSession'),sandbox);
+  const state={setup:{workerTunnels:[{id:'w1',workerHost:'worker.example',workerUser:'research',enabled:true}]}};
+  for(const command of ['startAll','startAgents','startAllConnections'])assert.equal(sandbox.reason(state,command,{}),'');
+  assert.match(sandbox.reason(state,'openXshell',{}),/Xshell/);
+  state.setup.workerTunnels[0].savedSessionPath='worker.xsh';assert.equal(sandbox.reason(state,'openXshell',{}),'');
+  state.setup.workerTunnels[0].enabled=false;assert.match(sandbox.reason(state,'startAllConnections',{}),/启用 Worker/);
+});
+
 test("server, Worker, and Agent readiness reuse state-only derivations", () => {
   const sandbox = loadStateReadiness();
   let reads = 0;
@@ -135,10 +144,8 @@ test("server, Worker, and Agent readiness reuse state-only derivations", () => {
     get enabled() { reads += 1; return true; },
     get displayName() { reads += 1; return "Worker A"; },
     get savedSessionPath() { reads += 1; return "worker.xsh"; },
-    get workerHost() { reads += 1; return "10.0.0.2"; },
-    get workerUser() { reads += 1; return "zlk"; },
-    get localForwardPort() { reads += 1; return 18080; },
-    get remoteAgentPort() { reads += 1; return 8080; },
+    get workerHost() { reads += 1; return "worker.example"; },
+    get workerUser() { reads += 1; return "research"; },
     get agentProjectDir() { reads += 1; return "/srv/project"; },
   };
   const setup = { savedSessionPath: "hub.xsh", agentProjectDir: "/srv/project", workerTunnels: [worker] };
@@ -161,7 +168,7 @@ test("server, Worker, and Agent readiness reuse state-only derivations", () => {
 
 test("state-only readiness invalidates when setup, Worker, or blocker sources are replaced", () => {
   const sandbox = loadStateReadiness();
-  const worker = { enabled: true, displayName: "Worker A", savedSessionPath: "worker.xsh", agentProjectDir: "/srv/project" };
+  const worker = { enabled: true, displayName: "Worker A", workerHost: "worker.example", workerUser: "research", savedSessionPath: "worker.xsh", agentProjectDir: "/srv/project" };
   const firstState = { setup: { savedSessionPath: "hub.xsh", agentProjectDir: "/srv/project", workerTunnels: [worker] }, agentSessions: { preparationBlockers: ["旧阻断"] } };
   const firstServer = sandbox.serverReadiness(firstState);
   const firstWorker = sandbox.workerReadiness(firstState);

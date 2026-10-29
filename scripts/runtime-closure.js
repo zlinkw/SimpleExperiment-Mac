@@ -3,7 +3,7 @@ const path = require("node:path");
 
 function resolveLocalModule(directory, specifier, fsApi = fs) {
   const base = path.resolve(directory, specifier);
-  const candidates = [base, `${base}.js`, `${base}.json`, path.join(base, "index.js")];
+  const candidates = [base, `${base}.js`, `${base}.cjs`, `${base}.json`, path.join(base, "index.js"), path.join(base, "index.cjs")];
   return candidates.find((candidate) => {
     try { return fsApi.statSync(candidate).isFile(); } catch { return false; }
   });
@@ -18,9 +18,12 @@ function collectLocalRuntimeClosure(root, entrypoints, spawnCandidates = [], fsA
     if (visited.has(relative)) continue;
     visited.set(relative, item.chain);
     const absolute = path.join(root, relative);
-    if (path.extname(absolute) !== ".js") continue;
+    if (![".js", ".cjs"].includes(path.extname(absolute))) {
+      if (!fsApi.statSync(absolute).isFile()) throw new Error(`Runtime entry is not a file: ${relative}`);
+      continue;
+    }
     let source;
-    try { source = fsApi.readFileSync(absolute, "utf8"); } catch { continue; }
+    try { source = fsApi.readFileSync(absolute, "utf8"); } catch (error) { throw new Error(`Runtime entry unreadable: ${item.chain.join(" -> ")}: ${error.message}`); }
     // These are the actual lazy wrappers used by the compiled factories. Never
     // execute a module to discover its dependencies.
     const requires = [...source.matchAll(/\b(?:require(?:\.resolve)?|tryRequire)\(\s*["'](\.[^"']+)["']\s*\)/g)].map((match) => match[1]);
@@ -36,7 +39,7 @@ function collectLocalRuntimeClosure(root, entrypoints, spawnCandidates = [], fsA
     }
     for (const specifier of requires) {
       const resolved = resolveLocalModule(path.dirname(absolute), specifier, fsApi);
-      if (!resolved) continue;
+      if (!resolved) throw new Error(`Runtime dependency missing: ${item.chain.join(" -> ")} -> ${specifier}`);
       const child = path.relative(root, resolved).replace(/\\/g, "/");
       queue.push({ file: child, chain: [...item.chain, child] });
     }

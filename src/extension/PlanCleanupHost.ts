@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { PlanCleanup, cleanupDigest, cleanupError, type CleanupOperation, type CleanupPreview, type CleanupRemovedMetadata, type CleanupProgressSink, type CleanupJobSelection } from "../features/PlanCleanup";
+import { PlanCleanup, cleanupDigest, cleanupError, cleanupRelative, type CleanupOperation, type CleanupPreview, type CleanupRemovedMetadata, type CleanupProgressSink, type CleanupJobSelection } from "../features/PlanCleanup";
 import { collectPlanCleanupEvidence } from "../features/PlanCleanupEvidence";
 import { distributedQueuePath, legacyDistributedQueuePath, emptyDistributedQueue, canonicalProjectId, type DistributedQueue } from "../features/DistributedPlanQueue";
 import { cleanupTaskEvidence, replacementEvidenceQueue, replacementJobGroups, replacementLifecycleJob } from "../features/PlanOutputReplacement";
@@ -18,6 +18,7 @@ import { collectNodeTargets, nodesForTargets, bindMachineStateByNode, managedNod
 import { guardCleanupSftpCall } from "./PlanCleanupSftpGuard";
 import { assertIsolatedReviewBinding, recordIsolatedReviewEventFor, verifyIsolatedTargetsAbsence, openIsolatedBatchReviewFlow, type IsolatedReviewContext } from "./PlanCleanupIsolatedReviews";
 import { verifyDeclaredTargetsOnNodes } from "./PlanCleanupTargetVerification";
+import { reviewEmptyIsolationParents } from "./PlanCleanupEmptyParents";
 
 async function json(file: string, fallback: any): Promise<any> {
   const text = await fs.readFile(file, "utf8").catch((error: any) => { if (error.code === "ENOENT") return ""; throw error; });
@@ -98,6 +99,27 @@ export class PlanCleanupHost {
    */
   async verifyDeclaredTargets(params: { job: CleanupJobSelection; declared: Array<{ relativePath: string; type: string }>; nodes: any[] }) {
     return verifyDeclaredTargetsOnNodes({ host: this.host, assertWorkspace: () => this.assertWorkspace(), currentNode: id => this.currentNode(id) }, params);
+  }
+  async inspectPendingOutputTargets(job: { outputDir: string; collectionResultCsv?: string }) {
+    const nodes = this.managedNodes();
+    const declared = [{ relativePath: cleanupRelative(job.outputDir), type: "directory" },
+      ...(job.collectionResultCsv ? [{ relativePath: cleanupRelative(job.collectionResultCsv), type: "file" }] : [])];
+    if (!nodes.some(node => node.kind === "remote")) return {state:"unknown" as const,detail:"没有可核实的已启用 Worker。"};
+    const overlap = (value: unknown) => typeof value === "string" && declared.some(row=>value===row.relativePath || value.startsWith(row.relativePath+"/") || row.relativePath.startsWith(value+"/"));
+    const observations = await Promise.all(nodes.filter(node=>node.kind==="remote").map(async node=>{
+      if (node.error || typeof this.host.readWorkerTaskSnapshot !== "function") throw Error(node.error || "缺少本轮原生窗口观察入口。");
+      return this.host.readWorkerTaskSnapshot(node.id,{fresh:true,inventoryOnly:true,declarations:[]});
+    }));
+    if (observations.some(snapshot=>!snapshot || snapshot.error || snapshot.pending || snapshot.capabilities?.taskLifecycle!==2 || snapshot.queryComplete!==true || snapshot.controlIncomplete || snapshot.queryErrors?.length))
+      return {state:"unknown" as const,detail:"Worker 原生窗口或清理执行状态未核实，将自动重查。"};
+    if (observations.some(snapshot=>(snapshot.cleanupExecutors||[]).some((row:any)=>overlap(row.relativePath)||overlap(row.destination))
+      || (snapshot.tasks||[]).some((task:any)=>overlap(task.outputDir) && task.observation?.tmux?.dead!==true && task.dead!==true
+        && (task.observation?.tmux?.dead===false || task.dead===false || !["completed","failed","cancelled"].includes(String(task.status))))))
+      return {state:"unknown" as const,detail:"当前精确输出路径仍有关联运行窗口或清理执行器；等待其退出后自动核实。"};
+    const result = await verifyDeclaredTargetsOnNodes({host:this.host,assertWorkspace:()=>this.assertWorkspace(),currentNode:id=>this.currentNode(id)}, {declared,nodes});
+    if (result.blockers.length || result.verdicts.length !== declared.length * nodes.length || result.verdicts.some(row=>row.state==="error"))
+      return {state:"unknown" as const,detail:[...result.blockers.map(row=>row.detail),...result.verdicts.filter(row=>row.state==="error").map(row=>row.error)].filter(Boolean).join("；") || "精确路径观察不完整。"};
+    return {state:result.verdicts.every(row=>row.state==="absent") ? "absent" as const : "present" as const};
   }
   async replacementGroups(queue: DistributedQueue, file: string, declarations: any[], projectId: string, stablePlanId: string) {
     this.assertWorkspace();
@@ -205,11 +227,16 @@ export class PlanCleanupHost {
     this.assertWorkspace();
     // Retain the original config/reference graph, without importing cached task activity.
     const scope = await collectPlanCleanupEvidence({ root: this.root, planFile: file, queue: emptyDistributedQueue(), ledger,
-      registry, resultDir: this.host.resultCsvDirectory || "experiments/results", nodes, snapshots: [], operations: [],
+      registry, resultDir: this.host.resultCsvDirectory || "experiments/results", nodes: nodes.map(node => ({ ...node })), snapshots: [], operations: [],
       allowMissing: allowMissing || authorizationMode === "confirmed_paths", archivedFiles, removedMetadata, activityMode: "managed_tmux" });
     const configuration = scope.candidates.filter(row => ["PLAN 文件", "专用配置"].includes(row.category))
       .map(row => [row.relativePath, row.expectedSha256, row.dependencies, row.protectedReason]);
-    scope.nodes = [...nodes, ...scope.nodes.filter(node => !nodes.some(row => row.id === node.id))];
+    const currentNodes = new Set(nodes.map(node => node.id));
+    scope.notices ||= [];
+    scope.notices.push(...scope.blockers.filter(row => row.nodeId && !currentNodes.has(row.nodeId)));
+    scope.blockers = scope.blockers.filter(row => !row.nodeId || currentNodes.has(row.nodeId));
+    scope.nodes = [...nodes];
+    scope.candidates = scope.candidates.filter(row => currentNodes.has(row.nodeId));
     if (job) scope.candidates = [];
     else scope.candidates = scope.candidates.filter(row => ["PLAN 文件", "专用配置", "远端配置同步副本"].includes(row.category));
     for (const candidate of scope.candidates) {
@@ -420,11 +447,23 @@ export class PlanCleanupHost {
   /** r87 块4：后台清隔离副本的旁路提交——只走 service 的门（能力、回执齐备、job 级完成），
    * 与上面人工审核链的"目的地缺失证明"完全无关，也不共用它的授权。传输异常由 service 落 unknown，
    * 门拒绝（能力缺失/回执不全）由派发侧 fire-and-forget 的处理器落日志与通知，不影响已派发任务。 */
-  async autoDeleteIsolated(id: string) { await this.ensureOperationRecordsMigrated(); return this.service.autoDeleteIsolated(id); }
+  async autoDeleteIsolated(id: string, parents?: import("../features/IsolationEmptyParents").EmptyParentPreview[]) {
+    await this.ensureOperationRecordsMigrated(); return this.service.autoDeleteIsolated(id, parents);
+  }
   // r17-B anchor rule: every reader of the old operation-record location takes the migration
   // first — a fresh window opening the isolated-review bridge must still find (byte-import)
   // a legacy-only record instead of answering OPERATION_NOT_FOUND.
-  async openIsolatedBatchReviews() { await this.ensureOperationRecordsMigrated(); return openIsolatedBatchReviewFlow(this.isolatedReviewContext()); }
+  async openIsolatedBatchReviews() {
+    await this.ensureOperationRecordsMigrated(); this.assertWorkspace();
+    const choice = await vscode.window.showQuickPick([
+      { label: "审核隔离产物", value: "artifacts" },
+      { label: "审核已删除产物留下的空目录", value: "empty" }
+    ], { title: "选择永久删除审核范围", placeHolder: "下一页核对完整路径；永久删除仍需两次确认" });
+    if (choice?.value === "empty") return reviewEmptyIsolationParents({ askRunConfirmation: (payload: any) => this.host.askRunConfirmation(payload),
+      notifyWarn: (text: string) => vscode.window.showWarningMessage(text), notifyInfo: (text: string) => vscode.window.showInformationMessage(text)
+    }, this.service, () => this.assertWorkspace());
+    if (choice?.value === "artifacts") return openIsolatedBatchReviewFlow(this.isolatedReviewContext());
+  }
   open(file: string, operationId?: string, job?: CleanupJobSelection, isolatedOperationId?: string) { return openPlanCleanupPanel(this, file, operationId, job, isolatedOperationId); }
   openJob(file: string, job: CleanupJobSelection) { return this.open(file, undefined, job); }
 }
