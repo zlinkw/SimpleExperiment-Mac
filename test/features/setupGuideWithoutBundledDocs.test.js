@@ -63,8 +63,8 @@ test("extensionRepositoryUrl accepts string and object repository forms", () => 
 
 const legacyDist = fs.readFileSync(path.join(__dirname, "../../dist/extension/legacy.js"), "utf8");
 
-function extractMethodText(name) {
-  const start = legacyDist.indexOf(`async ${name}() {`);
+function extractMethodText(name, parameters = "") {
+  const start = legacyDist.indexOf(`async ${name}(${parameters}) {`);
   assert.ok(start >= 0, `compiled method ${name} missing in dist/extension/legacy.js`);
   let depth = 0;
   for (let i = legacyDist.indexOf("{", start); i < legacyDist.length; i += 1) {
@@ -229,4 +229,24 @@ test("openSetupGuide still runs the wizard loop unchanged after the guide displa
   for (const marker of ['choice === "打开服务器设置"', 'choice === "打开扩展管理"', 'choice === "添加 Worker"', 'choice === "选择项目并继续"', 'choice === "识别工作区"']) {
     assert.ok(body.indexOf(marker) > loopIndex, `wizard marker ${marker} must stay after the loop start`);
   }
+});
+
+test("AI integration entry is pinned in settings and its full multiline task reaches the clipboard", async () => {
+  const guides = require("../../dist/features/SetupGuideSource.js");
+  const repository = require("../../package.json").repository.url;
+  assert.equal(guides.experimentIntegrationGuideUrl("git@github.com:other/project.git"), "https://github.com/other/project/blob/master/docs/experiment-integration.md");
+  const html = require("../../dist/ui/PanelHtml.js").renderPanelHtml();
+  const start = html.indexOf('data-anchor="settings-integration-guide"');
+  assert.ok(start > 0 && start < html.indexOf('data-anchor="settings-layout"'));
+  const match = html.slice(start).match(/<button\b[^>]*data-command="copyText"[^>]*data-text="([^"]+)"/);
+  assert.ok(match, "one-click copy must use the existing clipboard command");
+  const payload = match[1].replace(/&#10;/g, "\n").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  assert.equal(payload, guides.experimentIntegrationAiTask(repository));
+  assert.ok(html.includes('href="' + guides.experimentIntegrationGuideUrl(repository) + '"'));
+  assert.match(payload, /MultiModal/); assert.match(payload, /不凭记忆/); assert.match(payload, /confirm\/pathConfirmed/);
+  const copied = [];
+  const vscode = { env: { clipboard: { writeText: async text => copied.push(text) } }, window: { showInformationMessage() {}, showWarningMessage: () => assert.fail("nonempty task") } };
+  const target = new Function("vscode", `return { ${extractMethodText("copyTextFromUi", "message")} };`)(vscode);
+  await target.copyTextFromUi({ text: payload });
+  assert.deepEqual(copied, [payload]);
 });

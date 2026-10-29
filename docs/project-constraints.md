@@ -15,7 +15,7 @@
 - **原则**：代码、配置、文档、测试、脚本中禁止出现任何写死的服务器标识，包括但不限于：主机名、IP、`workerId`/`serverId`（如 `nwpu3`）、`tmux` 会话名（如 `zlk-worker-nwpu3-agent`）、`Xshell` 会话文件名（如 `qgking.3.xsh`）、远端绝对路径（如 `/data/qgking/...`）、`conda` 环境名与用户名的硬编码组合。
 - **实现要求**：
   - 所有服务器相关逻辑必须通过配置与拓扑动态获取：`setup.workerTunnels[].id`、`setup.remoteTmuxSessionPrefix`/`sessionPrefix`、`topology.workers`、`workers.json`、`assignmentById`、`tunnelPortAssignments`、`agentProjectDir` 等。
-  - `tmux` 会话名统一由 `AgentTmuxPolicy.defaultAgentTmuxSessionName(role, endpointId, sessionPrefix)` 生成，形如 `${prefix}-worker-${endpointId}-agent` / `${prefix}-hub-agent` / `${prefix}_tb`，禁止在业务逻辑中拼接 `zlk-` 或具体 `nwpu3`。
+  - `tmux` 会话名统一由 `AgentTmuxPolicy.defaultAgentTmuxSessionName(role, endpointId, sessionPrefix)` 生成，当前执行目标使用 `${prefix}-worker-${endpointId}-agent` / `${prefix}_tb`；旧角色名称只可兼容识别，不创建对应窗口。禁止在业务逻辑中拼接 `zlk-` 或具体 `nwpu3`。
   - `cluster_scheduler.py` / `cluster_agent.py` 的 `--worker-id` 默认值保持通用 `worker`，实际值必须由 `workers.json` 或 `SIMPLE_EXPERIMENT_WORKER_ID` 环境变量注入，不得在源码中默认 `nwpu3`。
   - `extension.ts` 中 `tryIds`、`abort`、`prepareAgents` 等多端点重试必须遍历 `enabledWorkerConfigs()` 或 `clients.keys()`，禁止写死 `["hub","nwpu3"]`。
   - 新增 Worker 时自动沿用 `TunnelPortAllocator` 的 `assignment`，前端 `renderTensorBoardLinkRow` 的 URL 必须由 `localForwardPort+1000` 动态生成，不得写死 `19767/19768/6006`。

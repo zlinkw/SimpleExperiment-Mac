@@ -2,9 +2,9 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**本配套 preview 版本为 Experiment 0.5.317、SFTP 0.2.104，参考冻结 Windows 0.5.416 / 0.2.114。** 发行附件与校验值以 [preview-v0.5.317](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.317) 的实际清单为准。验收范围及 M5 真机边界见 [项目事实](docs/mac-project-facts.md)，冻结基线见 [源码对齐记录](docs/windows-alignment-2026-10-27.md)。
+**当前源码版本为 Experiment Mac 0.5.319，配套 SFTP Mac 0.2.105；冻结同步 Windows 0.5.440 / 0.2.117。** 已发布的配套 preview 仍为 [preview-v0.5.318](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.318)，0.5.319 本轮仅同步源码与生成安装包。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
 
-本轮同步 Windows 0.5.416 / 0.2.114 共同业务：多项目分支与创新分支（登记、worktree 创建、统一 GPU 配额派发、结果对比、HEAD 核对、科研 PR 与祖先快进）、暂存槽占用与用户确认提前释放、插件日志保留、操作完整日志入口和统一 CLI 命名动作。VSIX 内根 README 的上一版版本说明属于文档遗留，实际版本与校验值以本 Release 的 package/release 清单为准；最新说明以本仓库为准。
+本轮沿用 Windows 的 Worker 统一流程与 Hub 退役说明，新增 [AI 最小实验接入指南](docs/experiment-integration.md)、[MultiModal 实践](docs/multimodal-integration-best-practice.md) 及设置页的复制入口。Mac 身份、系统 SSH、独立认证和 preview 更新通道保留；Mac 真机尚未验证。
 
 ## 系统与安装
 
@@ -43,7 +43,7 @@ Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不�
 
 启动检查一次，此后每30分钟检查，同一配套版本仅主动提醒一次。通知 **查看更新** 展示说明，安装由上述安装入口显式确认。Mac 保留公开 preview 静态索引和同一 Release 分发，查询失败显示检查失败。安装事务、全部下载验证、SFTP先装、同版跳过、禁止降级、部分失败补装和等待本地传输使用 Windows 共同实现。
 
-共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套的 Experiment 0.5.317 / SFTP 0.2.104 满足该最低要求，请使用同一 Release 的两份 VSIX。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
+共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套的 Experiment 0.5.318 / SFTP 0.2.105 满足该最低要求，请使用同一 Release 的两份 VSIX。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
 
 ## Mac 数据与 CLI
 

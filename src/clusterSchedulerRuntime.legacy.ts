@@ -3964,7 +3964,7 @@ def launch_experiment(worker: dict[str, Any], plan: str, experiment_index: int, 
     _, declared_jobs = build_jobs(loaded, default_result_csv_dir)
     declared_job = next((job for job in declared_jobs if job.index == experiment_index), None)
     if not declared_job or declared_job.output_dir != output_dir_text:
-        raise ValueError("FORMAL_JOB_DECLARATION_CHANGED: Hub dispatch output")
+        raise ValueError("FORMAL_JOB_DECLARATION_CHANGED: retired cross-node dispatch output")
     enqueue_worker_command(worker, {
         "action": "start-worker-task",
         "commandId": command_id,

@@ -12078,7 +12078,7 @@ def scheduler_validate_json(root, scheduler, plan, default_result_csv_dir="exper
 def dry_run_preview_action(root, plan, workers, assigned_indices=None, default_result_csv_dir="experiments/results", operation_id=""):
     scheduler = cluster_scheduler_path(root)
     if not scheduler:
-        raise RuntimeError("Hub 上缺少 cluster_scheduler.py，请先部署最新版 Agent。")
+        raise RuntimeError("当前 Worker 缺少 cluster_scheduler.py，请准备最新版 Agent。")
     owner = str(operation_id or "").strip()
     if not owner:
         raise ValueError("Dry-run 缺少稳定 operationId，拒绝创建无归属暂存文件。")

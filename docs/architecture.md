@@ -3,7 +3,7 @@
 The extension is moving toward layered internals:
 
 - `core`: command bus, operation queue, error model, shared domain types.
-- `services`: SSH, Hub Agent, runtime, scheduler, sync, GPU, artifact, live output orchestration.
+- `services`: Worker connections, Agent, runtime, scheduler, sync, GPU, artifacts and live output orchestration.
 - `state`: `ClusterStore`, reducer, selectors, migrations.
 - `ui`: Webview bridge and UI state mapping.
 - `testing`: fake runtime and scenario runner.
@@ -47,19 +47,19 @@ SimpleExperiment owns plans, Agent lifecycle, run state, task control, result-an
 
 Three topologies are supported:
 
-- `single_worker`: one Worker schedules locally and stores its own state.
-- `worker_pool`: multiple Workers schedule deterministic shards without a Hub.
-- `hub_worker`: a Hub coordinates global state while Workers execute.
+- Legacy `single_worker` values normalize to the current Worker flow; they do not register a separate topology option.
+- `worker_pool`: one or multiple enabled Workers use the same execution flow.
+Hub execution has retired. Historical fields never supply current execution targets.
 
-No-Hub modes never create a Hub automatically and never rely on cross-node backup. Worker-local state is authoritative for that mode.
+Current execution targets are enabled Workers only. Each Worker owns its accepted queue, task windows and native artifacts. Worker-to-Worker synchronization follows the current selected scope and never invents a control-node destination.
 
 Runtime caches under `simple_cluster` are operational state. Plans, final results, archive manifests, deletion tombstones, transfer records, and user confirmations are project state and must survive runtime reloads.
 
-Final analysis sources are archived results only. `metrics_summary.csv`, statistics, paper evidence, and PPT plotting must not treat temporary preview rows as accepted evidence. PPT destination confirmation precedes automation.
+Scientific acceptance belongs to the consuming project. Fresh result collection verifies execution/file identity and may produce partial tables while a batch runs; those tables do not by themselves certify a paper claim. Explicit research-analysis and PPT entry points retain their own evidence and destination checks.
 
 Long-lived Webview payloads stay bounded. Scheduler states and experiment traces have explicit record limits; request budgets preserve per-request timeout fields, pending keys, sequence numbers, and heartbeat timestamps instead of dropping them silently.
 
-The transport boundary is Xshell local forwarding plus optional Hub/Worker Agents plus SimpleSFTP. No plugin code path uses direct SSH, SCP, or RSYNC as a substitute for those boundaries.
+The transport boundary is the configured per-Worker local forwarding endpoint and SimpleSFTP. Managed background OpenSSH tunnels and user-opened Xshell sessions are distinct. Experiment/file operations use the plugin APIs; no ad hoc SSH, SCP or RSYNC path substitutes for them. See the current [setup guide](simple-experiment-setup.md).
 
 ## 工厂模式重构 (v0.4.92) — 已落地验证（renderState 3 模块拆分完成）
 

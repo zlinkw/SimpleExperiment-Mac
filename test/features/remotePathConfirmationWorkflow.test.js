@@ -106,7 +106,7 @@ test("strong confirmation text shows expected directories and files", () => {
   assert.match(detail, /- \/srv\/simple_agent\/simple_cluster\/runtime\/cluster_agent\.py/);
   assert.match(detail, /Agent 项目工作目录：\/srv\/projects\/demo/);
   assert.match(detail, /其余 2 个预期文件均位于上述远端目录内/);
-  assert.equal(helpers.codeSyncConfirmationLabel("run"), "提交实验前上传 Hub/Worker 项目代码");
+  assert.equal(helpers.codeSyncConfirmationLabel("run"), "提交实验前上传 Worker 项目代码");
 });
 
 test("Agent startup strong confirmation always shows local and remote file locations", () => {

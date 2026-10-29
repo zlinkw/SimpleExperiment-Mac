@@ -2,7 +2,9 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-**当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，完整科研业务仍在适配。** M5 真机更新、独立认证传输和三拓扑尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
+**当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
+
+完整实验接入契约见 [AI 最小接入指南](experiment-integration.md)、[MultiModal 实践](multimodal-integration-best-practice.md) 和 [项目契约](plugin-project-contract.md)。面板 **设置 → 最小实验接入指南 · 交给 AI** 可打开指南或复制完整接入任务；这是本机复制，不会自动启动训练或传输。配置参考见 [共同设置字段](configuration-reference.md)。Hub 已退役，所有当前操作只使用明确启用的一台或多台 Worker，旧控制节点字段不补出目标。
 
 ## 1. 首次安装与打开说明
 

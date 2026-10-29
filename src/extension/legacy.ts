@@ -952,13 +952,13 @@ function setupGuideNextStep(options) {
     }
     if (!item.setupComplete) {
         return {
-            message: "配置说明已打开。下一步：在“设置 > 服务器”手动填写 Hub/Worker 会话和项目父目录。",
+            message: "配置说明已打开。下一步：在“设置 > 服务器”填写 Worker 连接和项目父目录。",
             action: "打开服务器设置",
         };
     }
     if (Number(item.workerCount || 0) < 1) {
         return {
-            message: "配置说明已打开。Hub 已配置；下一步：添加至少一个执行 Worker。",
+            message: "配置说明已打开。下一步：添加并启用至少一个执行 Worker。",
             action: "添加 Worker",
         };
     }
@@ -3658,7 +3658,7 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
                 },
             });
         if (!targets.length)
-            throw new Error("project.prepare 没有可用的服务器目标；请先选择已配置并启用的 Hub/Worker。");
+            throw new Error("project.prepare 没有可用的服务器目标；请先选择已配置并启用的 Worker。");
         const selectedWorkerIds = new Set(targets.filter((target) => target.role === "worker").map((target) => String(target.id)));
         this.assertExecutionCondaEnvReady(
             this.apiMergedWorkerConfigs(workerTunnels, setup)
@@ -5673,7 +5673,7 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
         const message = needsSftp
             ? `首次使用 SimpleExperiment：配套 SimpleSFTP 未就绪。${simpleSftp.message} 安装并重载窗口后再识别工作区。`
             : needsWorker
-                ? "首次使用 SimpleExperiment：Hub 已配置，但正式运行、复现和批量运行还缺少至少一个启用的执行 Worker。请在“设置 > 服务器”手动添加。"
+                ? "首次使用 SimpleExperiment：正式运行、复现和批量运行需要至少一个启用的 Worker。请在“设置 > 服务器”添加。"
                 : "首次使用 SimpleExperiment：服务器相关配置不会通过弹窗从零填写。请前往“设置 > 服务器”配置 Xshell 会话和项目父目录；工作区识别时只确认会话前缀等项目参数。";
         const choice = needsSftp
             ? await vscode.window.showInformationMessage(message, "打开配置说明", "打开扩展管理", "不再提示")
@@ -5775,11 +5775,11 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
         }
         let enabledWorkers = this.enabledWorkerConfigs();
         if (!enabledWorkers.length) {
-            void vscode.window.showWarningMessage("当前只配置了 Hub。请在“设置 > 服务器”手动添加并启用执行 Worker；插件不会在接入弹窗中初始化服务器。");
+            void vscode.window.showWarningMessage("当前尚无启用的 Worker。请在“设置 > 服务器”添加并启用执行服务器。");
             if (!enabledWorkers.length) {
                 const hubProfileResult = await this.writeSftpManagerServerProfiles();
                 this.postState();
-                void vscode.window.showInformationMessage(`Hub 配置已保存，并生成 ${hubProfileResult.targetCount} 个当前项目 SimpleSFTP 目标；添加并启用 Worker 后才能准备全部 Agent 和提交实验。`);
+                void vscode.window.showInformationMessage(`连接配置已保存，当前项目有 ${hubProfileResult.targetCount} 个 SimpleSFTP 目标；添加并启用 Worker 后才能准备 Agent 和提交实验。`);
                 return false;
             }
         }
@@ -5787,7 +5787,7 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
         const topology = this.projectTopologyAssessment();
         const expectedTargets = enabledWorkers.length;
         if (profileResult.targetCount < expectedTargets) {
-            const open = await vscode.window.showWarningMessage(`服务器配置尚未形成完整的 SimpleSFTP 目标：需要 ${expectedTargets} 个，当前 ${profileResult.targetCount} 个。请检查 Hub/Worker 的 Xshell 主机、用户名和项目父目录。`, "打开服务器设置", "稍后");
+            const open = await vscode.window.showWarningMessage(`服务器配置尚未形成完整的 SimpleSFTP 目标：需要 ${expectedTargets} 个，当前 ${profileResult.targetCount} 个。请检查 Worker 的主机、用户名和项目父目录。`, "打开服务器设置", "稍后");
             if (open === "打开服务器设置")
                 await this.openPanelAt("settings", "settings-servers", { userInitiated: true });
             this.postState();
@@ -5825,7 +5825,7 @@ return this.configureWorkerTunnels();
         this.assertTopologyActualWorkRoots("写入 Agent 自启动路径");
         const targets = AgentRuntimeScope_1.selectAgentRuntimeTargets(this.agentStartupTargets().filter((target) => target.filePath), serverIds);
         if (!targets.length) {
-            void vscode.window.showWarningMessage("没有可写入的 Xshell Agent 会话。请先配置或复用 Hub/Worker 会话。");
+            void vscode.window.showWarningMessage("没有可写入的 Xshell Agent 会话。请先配置或复用 Worker 会话。");
             return [];
         }
         if (requireConfirm) {
@@ -17965,11 +17965,11 @@ this.assertPlanTopologyReady("Plan 调度");
         const patch = recordField(message, "patch");
         const requestedMode = String(patch.mode || "").trim();
         if (!(0, TopologyMode_1.normalizeTopologyMode)(requestedMode))
-            throw new Error("请选择单 Worker、仅多 Worker或 Hub 可用模式。");
+            throw new Error("请选择 Worker 模式，通过启用一台或多台 Worker 决定执行范围。");
         const current = this.projectTopologyAssessment();
         const next = this.projectTopologyAssessment(requestedMode);
         const issueText = next.issues.length ? `\n\n当前配置仍需修复：${next.issues.join("；")} 保存后会阻止新运行，已有任务不受影响。` : "";
-        const backupText = "不会访问 Hub、同步到 Hub或创建跨节点自动备份；每台 Worker 保存自己的任务与结果。";
+        const backupText = "每台 Worker 保存自己的任务与结果；服务器间产物同步遵循当前勾选范围。";
         const answer = await vscode.window.showWarningMessage([
             `将当前项目拓扑从“${current.modeLabel}”改为“${next.modeLabel}”。`,
             `调度所有者：${next.schedulerOwner}`,
@@ -20170,7 +20170,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             "",
             `当前 Plan：${file}`,
             `归档包位置：${bundleRelative}`,
-            `结果证据来源：${false ? "Hub 当前项目，只读下载" : "当前本地项目"}`,
+            `结果证据来源：当前本地项目`,
             `最终有效结果：${archiveGate.includedCount} 条；未纳入：${archiveGate.excludedCount} 条`,
             `结果取舍清单：${path.posix.join(bundleRelative, resultSelectionFile)}`,
             `配置：迁移 ${configMigration.migrated.length} 个独占配置，保留 ${configMigration.retainedShared.length} 个共享配置`,
@@ -20258,7 +20258,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 excludedResults,
                 excludedResultsTotalCount: resultSelection.notIncludedCount,
                 excludedResultsOmittedCount: Math.max(0, resultSelection.notIncludedCount - excludedResults.length),
-                note: "本包保存可复用 Plan、关联配置、项目依赖环境清单、入口脚本与 CLI 默认参数快照，以及小型结果证据。参数只做静态读取，不导入或执行项目代码。大体积运行产物仍由既有 Hub/Worker 归档保存，路径见证据文件。",
+                note: "本包保存可复用 Plan、关联配置、项目依赖环境清单、入口脚本与 CLI 默认参数快照，以及小型结果证据。参数只做静态读取，不导入或执行项目代码。大体积运行产物仍由对应 Worker 保存，路径见证据文件。",
             }, null, 2) + "\n", "utf8");
             assertCurrent();
             const currentPlanText = await fs.readFile(source, "utf8");
@@ -22772,7 +22772,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             "只读内存查看，不保存或覆盖原始结果文件。",
             "大小上限：4 MB",
             "",
-            `通过 ${useWorker ? workerId + " Worker" : "Hub"} 的 SimpleSFTP 临时读取。`,
+            `通过 ${workerId + " Worker"} 的 SimpleSFTP 临时读取。`,
         ].join("\n"), { modal: true }, ...choices);
         if (!isCurrent())
             return;
@@ -30261,11 +30261,11 @@ function agentStartupWriteConfirmationDetail(startupTargets, runtimeTargets, inc
 }
 function codeSyncConfirmationLabel(scope) {
     if (scope === "plan-check")
-        return "校验或预演前上传 Hub 项目代码";
+        return "校验或预演前上传 Worker 项目代码";
     if (scope === "run")
-        return "提交实验前上传 Hub/Worker 项目代码";
+        return "提交实验前上传 Worker 项目代码";
     if (scope === "hub")
-        return "上传项目代码到 Hub";
+        return "旧上传入口已退役，请选择 Worker";
     if (scope === "workers")
         return "上传项目代码到 Worker";
     return "上传项目代码";
@@ -32189,7 +32189,7 @@ const HOST_OPERATION_LEASE_ACTION_LABELS = Object.freeze({
     writeAgentCommands: "写入 Agent 启动命令",
     startTunnelEndpoint: "启动隧道端点",
     startAgentEndpoint: "启动 Agent 端点",
-    startHub: "启动 Hub 隧道",
+    startHub: "旧启动入口已退役，请选择 Worker",
     startWorker: "启动 Worker 隧道",
     start: "启动后台隧道",
     startAll: "启动全部隧道",
@@ -32204,7 +32204,7 @@ const HOST_OPERATION_LEASE_ACTION_LABELS = Object.freeze({
     restoreArchivedPlan: "恢复归档计划",
     archiveArtifacts: "归档结果",
     deleteArtifacts: "删除结果",
-    uploadProjectToHub: "上传项目到 Hub",
+    uploadProjectToHub: "旧上传入口已退役，请选择 Worker",
     uploadProjectToWorkers: "上传项目到 Worker",
     distributeCodeToWorkers: "分发代码到 Worker",
     deployLatestAgent: "部署 Agent runtime",
@@ -33077,9 +33077,9 @@ function topologyModeLabel(value) {
     if (value === "single_worker")
         return "单 Worker模式";
     if (value === "worker_pool")
-        return "仅多 Worker模式";
+        return "Worker 模式（单台或多台）";
     if (value === "hub_worker")
-        return "Hub 可用模式";
+        return "已退役配置，请使用 Worker 模式";
     return "尚未确认";
 }
 function stringPatch(patch, key, fallback = "") {
@@ -33697,7 +33697,7 @@ function projectBootstrapNewProjectPrerequisite(options) {
     if (Number(item.workerCount || 0) <= 0) {
         return {
             state: "worker_required",
-            message: "当前项目还没有 Plan，服务器目前只有 Hub。请在“设置 > 服务器”手动添加并启用至少一个执行 Worker。",
+            message: "当前项目还没有 Plan，尚无启用的 Worker。请在“设置 > 服务器”手动添加并启用至少一个执行 Worker。",
             action: "打开服务器设置",
         };
     }
@@ -33976,7 +33976,7 @@ function projectBootstrapCompletion(options) {
     }
     return {
         state: "ready",
-        message: "当前 Plan 与 Hub/Worker 检测均已完成，可以使用“校验并提交运行”启动当前计划。",
+        message: "当前 Plan 与全部启用 Worker 检测均已完成，可以使用“校验并提交运行”启动当前计划。",
         action: "校验并提交运行",
     };
 }
@@ -35779,7 +35779,7 @@ function workerRemoteActionConfirmationDetail(command, action, body, workerIds) 
         remoteActionConfirmationDetail(command, action, body),
         "",
         route,
-        "不会改写 Hub 全局 plan 控制文件。",
+        "不会改写其他 Worker 的 plan 控制文件。",
     ].join("\n");
 }
 function isArtifactDeletionAction(action) {
@@ -36004,8 +36004,8 @@ function planRunConfirmationDetail(command, plan, remoteTargets) {
         "",
         "结果路径中的 {output_dir} 会按每个任务展开为实际任务输出目录；固定相对路径按 Plan 原样保留，并相对于远端项目执行目录解析。",
         "任务规模来自本地 Plan 的实验项（case）与随机种子（seed）展开；静态配置容量不代表当前空闲 GPU，实时分配和实际排队以预演和任务页为准。",
-        "结果先在执行 Worker 的项目目录生成；Hub 行仅表示同步后的预期汇总位置。“检查同步清单”不会传输文件，是否已到达 Hub 须以实际文件同步流程和“三方一致校验”结果为准。",
-        debugMode ? "确认后将同步代码、校验并预演，只提交首个任务；调试产物不能归档、解析为有效结果或用于统计、论文和 PPT。" : `确认后将同步${hasHubTarget ? " Hub/Worker" : "目标 Worker"}代码、核验代码指纹、校验 Plan、预演调度，全部通过后才提交正式任务。`,
+        "结果在执行 Worker 的项目目录生成；服务器间同步以当前勾选范围和实际文件为准。“检查同步清单”只查询事实，不传输文件。",
+        debugMode ? "确认后将同步代码、校验并预演，只提交首个任务；调试产物不能归档、解析为有效结果或用于统计、论文和 PPT。" : `确认后将同步目标 Worker代码、核验代码指纹、校验 Plan、预演调度，全部通过后才提交正式任务。`,
     ].join("\n");
 }
 function planBatchRunConfirmationDetail(plans, remoteTargets) {
@@ -36055,8 +36055,8 @@ function planBatchRunConfirmationDetail(plans, remoteTargets) {
         "",
         "{output_dir} 会按各任务展开为实际任务输出目录；固定相对路径按 Plan 原样保留，并相对于远端项目执行目录解析。",
         "任务规模来自本地 Plan 的实验项（case）与随机种子（seed）展开；静态配置容量不代表当前空闲 GPU，实时分配和实际排队以预演和任务页为准。",
-        "各 Plan 结果先写入执行 Worker；Hub 目录仅是同步后的预期汇总位置。“检查同步清单”不会传输文件，是否已到达 Hub 须以实际文件同步流程和“三方一致校验”结果为准。",
-        "确认后才会同步 Hub/Worker 代码并核验代码指纹；随后逐个校验和预演。任一 Plan 未通过时整批停止提交，全部通过后才按顺序进入 Hub 调度队列。",
+        "各 Plan 结果写入执行 Worker；服务器间同步遵循当前勾选范围。“检查同步清单”只查询实际文件，不传输文件。",
+        "确认后同步全部启用 Worker 的代码并核验代码指纹；随后逐个校验和预演。任一 Plan 未通过时整批停止提交，全部通过后进入 Worker 调度流程。",
     ].join("\n");
 }
 function guidedPlanStages(mode) {

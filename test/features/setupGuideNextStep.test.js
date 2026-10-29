@@ -29,7 +29,7 @@ function nextStep(options) {
 
 test("setup guide offers the only next action supported by current readiness", () => {
   assert.deepEqual(nextStep({ setupComplete: false }), {
-    message: "配置说明已打开。下一步：在“设置 > 服务器”手动填写 Hub/Worker 会话和项目父目录。",
+    message: "配置说明已打开。下一步：在“设置 > 服务器”填写 Worker 连接和项目父目录。",
     action: "打开服务器设置",
   });
   assert.equal(nextStep({ setupComplete: true, workerCount: 0, workspaceOpen: true }).action, "添加 Worker");

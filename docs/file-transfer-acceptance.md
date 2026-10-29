@@ -1,5 +1,7 @@
 # SimpleSFTP 文件传输验收清单
 
+> 历史设计/验收记录。涉及旧控制节点、旧端口、旧推送及旧运行策略的内容不作为当前操作说明；当前只使用单台或多台 Worker，请以 [配置说明](simple-experiment-setup.md) 和 [接入模板](experiment-integration.md) 为准。
+
 ## 固定边界
 
 - `SimpleExperiment` 不直接执行 SSH、SCP 或 RSYNC，也不使用 SFTP 传输实时状态。

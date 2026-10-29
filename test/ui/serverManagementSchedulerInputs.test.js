@@ -87,6 +87,9 @@ test("command help reuses one immutable map and preserves endpoint context", () 
   assert.equal(sandbox.commandHelp("snapshot"), "刷新快照");
   assert.equal(sandbox.commandHelp("snapshot", { dataset: { endpointId: "worker-a" } }), "端点：worker-a。刷新快照");
   assert.equal(sandbox.commandHelp("unknown"), "");
+  assert.equal(sandbox.commandHelp("configure"), "配置 Worker 连接");
+  assert.equal(sandbox.commandHelp("start"), "启动 Worker 后台隧道");
+  assert.match(sandbox.commandHelp("startHub"), /已退役/);
 });
 
 test("server management config fields receive Chinese hover explanations", () => {
@@ -94,10 +97,10 @@ test("server management config fields receive Chinese hover explanations", () =>
   const html = readSource("src/ui/PanelHtml.ts");
 
   assert.match(html, /function configHelp/);
-  assert.match(html, /hubDisplayName: "仅用于界面展示和识别 Hub/);
+  assert.match(html, /hubDisplayName: "旧显示名已退役，请使用 Worker 显示名/);
   assert.match(html, /agentProjectDir: "填写服务器上的绝对父目录/);
-  // Mac 适配：Mac 发行不读 Xshell 私有会话，savedSessionPath 悬停解释为 Termius 手动转发契约文案。
-  assert.match(html, /savedSessionPath: "Termius 转发由用户手动启动；插件保存本机与远端主机、端口，不读取 Termius 私有会话。/);
+  // Mac 适配：系统 OpenSSH 为后台入口，Termius 保留手动备份且不读取其私有会话。
+  assert.match(html, /savedSessionPath: "系统 OpenSSH 使用已保存的服务器地址和端口；Termius 转发由用户手动启动，插件不读取 Termius 私有会话。/);
   assert.match(html, /configSessionSelect\(scope, key, label, value\)[\s\S]*helpBadge\(help\)/);
   assert.match(html, /configPortPair\(scope, label, localKey, remoteKey[\s\S]*helpBadge\(pairHelp\)/);
   assert.match(html, /configSelect\(scope, key, label, value[\s\S]*helpBadge\(help\)/);

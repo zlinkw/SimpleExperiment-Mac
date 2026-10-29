@@ -43,6 +43,6 @@ Rich 解析限于本项目 `TerminalProgress` 的宽、窄布局，不承诺识�
 
 tmux pane 中仍能解析到旧训练文本，并不单独证明任务仍在运行。若同一物理 `worker_run` 已有 Worker Agent 的 `success`、`failed` 或 `cancelled` 终态，终态优先，残留的 runtime observation 不进入 `active`。
 
-Worker `/api/tmux/list` 若提供窗口 task 元数据，CLI 优先用该 task 的 stable `commandId` 作为运行对象 id；`run-<timestamp>` 窗口名只作为内部 runtime alias。明确标为终态的 task window 在 capture 前被忽略，Hub `tasks.list` 短暂缺失或限流也不应令 active id 退化为 alias。没有 task 元数据的窗口仍使用原有 runtime alias 和身份匹配逻辑。
+Worker `/api/tmux/list` 若提供窗口 task 元数据，CLI 优先用该 task 的 stable `commandId` 作为运行对象 id；`run-<timestamp>` 窗口名只作为内部 runtime alias。明确标为终态的 task window 在 capture 前被忽略，服务器任务列表短暂缺失也不应令 active id 退化为 alias。没有 task 元数据的窗口仍使用原有 runtime alias 和身份匹配逻辑；目标只取当前 Worker。
 
 `workflows` 每项为 `{ id, status, plan, worker, tmux }`，空字段省略。`--json --full` 额外保留 `created_at`、`health_status`、`children`、`model`、`dataset`。

@@ -1,3 +1,17 @@
+# Windows 0.5.440 增量同步
+
+本轮用户要求“win又更新了，同步更新到master”。GitHub master 与稳定 Release v0.5.440 均核实为 c6005169d6298d7713c653b34f909268de505bae，在前次 0.5.438 后新增两个提交：Worker 指引与 Hub 退役文档、AI 接入任务和 MultiModal 实践。Windows SFTP 仍为 0.2.117 / 7c136f209bf0fee8a1f98eebdececc02afca02bf，无新增提交，因此 Mac SFTP 0.2.105 不改源码或版号。
+
+Mac Experiment 升至 0.5.319，package、lock 与 runtime 一致。通过旧 Windows、当前 Mac、新 Windows 三方增量合并共同源码与相关测试；仅解决 Mac 平台参数、系统 OpenSSH / Termius 提示、扩展命名空间、simpleex-mac 与在线指南 URL 差异。保留 Mac 认证、Application Support、preview 更新、Darwin 路径/句柄和共同 Worker 调度；不导入 Windows 安装、发布或运行环境设置。设置页新增指南入口和复制任务沿用原 copyText 命令。
+
+构建与 npm run package 退出 0，350 模块 / 2 入口闭包通过；单文件串行原 20 秒上限不变。影响域 12 个文件退出 0、59 项通过，另有构建内置面板脚本 9 项通过；无超时或跳过。首次 serverManagementSchedulerInputs 失败为新增文案仍含 Xshell，已纠正 Mac 提示并复验通过，原始失败日志保留。编译及渲染后 Mac 脚本另以 vm.Script 解析。复用前轮未变范围的证据，不声称本轮全仓重跑或真机通过。
+
+候选包：D:/GitRepo/.worktrees/mac-sync-440/artifacts/simple-experiment-mac-0.5.319-darwin-arm64.vsix，2456226 字节，SHA256 b49a9baad4091e2750e4be20ef012c6e09d8a494c381f00a2184b9f3d54d3744。本轮不发布 Release、不更新 preview 索引、不安装扩展；在线配套仍为 preview-v0.5.318。完整日志与逐文件真实退出码保存在 D:/GitRepo/.worktrees/mac-sync-440/evidence/。不做额外包后验收，不操作真实服务器或科研数据。
+
+当前范围为源码同步、必要自动检查、候选打包和正常快进同步 master；提交及本地/远端一致性以实际 Git 记录为准。完整目标模式继续暂停，M5/macOS、真实 SSH 认证、libproc、Extension Host 重载与实际传输流程仍未验收。本段替代下方旧批次的当前状态描述，下方历史证据保留。
+
+---
+
 # Windows 0.5.438 最小 Mac 适配
 
 2026-10-29 从 GitHub 核实并冻结 Windows Experiment 0.5.438，提交 c1245215557d0860306190a900b60f685a7881be，正式标签 v0.5.438。配套 Windows SimpleSFTP 0.2.117，提交 7c136f209bf0fee8a1f98eebdececc02afca02bf。Mac 工作副本从刚 fetch 的 origin/master 创建，未使用原目录的未提交候选。

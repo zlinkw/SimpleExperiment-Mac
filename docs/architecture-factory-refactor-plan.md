@@ -1,5 +1,7 @@
 # SimpleExperiment 工厂模式重构方案（Factory Refactor Plan v0.4.92）
 
+> 历史设计/验收记录。涉及旧控制节点、旧端口、旧推送及旧运行策略的内容不作为当前操作说明；当前只使用单台或多台 Worker，请以 [配置说明](simple-experiment-setup.md) 和 [接入模板](experiment-integration.md) 为准。
+
 > 状态：架构设计稿（Architecture Design Proposal）——待评审后进入分阶段迁移  
 > 基线：71k 行 / 119 文件 / `src/extension.ts` 22260 行（592 函数）/ `src/ui/PanelHtml.ts` 14473 行（单函数 `renderPanelHtml()`，约 925 个内联函数）  
 > 已有分层：`core / state / services / tunnel / features / ui / runtime`，但 `extension.ts` 仍强耦合 30+ 模块，`PanelHtml.ts` 单模板吞吐全部 CSS+HTML+JS  

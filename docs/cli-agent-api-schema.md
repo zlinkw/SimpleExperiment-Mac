@@ -125,6 +125,6 @@ Rich 仅识别本项目 `TerminalProgress` 的已知宽、窄布局。标准 epo
 
 ## result 与 experiment results
 
-`result list/show/export` 汇聚本地结果注册表、本地结果文件、已连接 Worker 的 `/api/results/summary` 和 Hub `results.list`。相同 `resultId` 继续去重；Hub 记录优先于 Worker 直连记录。`stdout.log` 和 `stderr.log` 属于诊断及输出证据，不能产生结构化结果；CLI 过滤历史 Worker summary 和 Hub 结果中仅由这两类日志生成的伪结果。`result list` 展示已解析结果，不表示已通过最终证据审核。
+`result list/show/export` 使用当前项目的结果接口与可用本机导出；新的服务器结果来源只能是明确 Worker，不能用旧控制节点回退或覆盖当前身份。历史结构仍可用于显示旧记录。`stdout.log` 和 `stderr.log` 是诊断日志，不能单独当作结构化指标。已解析结果也不代表科学有效性已审核；当前主动汇总流程见 [使用说明](simple-experiment-setup.md#11-中途获取结果与弱连接)。
 
 `experiment results` 首先将结果的 `resultId`、`experimentId`、`runKey` 与 CLI 实验 ID 精确匹配。成功的 `worker_run` 若没有直接匹配，可以读取其真实 `job_config.yaml` 中的 `experiment_name`，与结果的 `experimentId` 完整相等时关联。plan、worker、case、seed 只用于冲突校验，不能单独建立关联。失败、取消、运行中或未知状态的 `worker_run` 不使用该逻辑身份回退，避免继承后续重试的结果。公开 JSON 字段保持 `{ experiment_id, result_ids, metrics, output_paths, reason }`。

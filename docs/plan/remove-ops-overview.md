@@ -1,5 +1,7 @@
 # 运行环境准备单链融合计划
 
+> 历史界面设计记录。旧 Hub 卡片、上传及三类拓扑内容已退役，不能据此配置当前插件；当前操作以 [配置说明](../simple-experiment-setup.md) 和 [接入模板](../experiment-integration.md) 为准。
+
 > 融合稿：服务器管理 + 发布同步两卡合一为运行环境准备单卡，旧两卡下线。本文件覆盖重写旧 14 项删运维内容，旧内容已全部替换，不再执行。
 > 项目：`D:\GitRepo\MCP\zlk-cluster-orchestrator`｜权威实现：`src/ui/PanelHtml.legacy.ts`（15805行）／`src/extension/legacy.ts`（22521行）
 

@@ -1,13 +1,12 @@
-# Xshell 本地隧道策略
+# Worker 隧道策略
 
-当前主链路是 `Xshell 本地隧道 + Hub/Worker Agent + SimpleSFTP`。
+当前只配置启用的 Worker。后台隐藏 OpenSSH 隧道和手动 Xshell 终端为不同入口；新增服务器可导入 Xshell 会话，后台连接使用保存的服务器配置与系统认证。
 
-- 插件只访问 `127.0.0.1:<localPort>`，不直接访问远端服务器地址。
-- 插件只打开用户已配置好的 Xshell `.xsh` 会话，不在插件内执行远端 shell 命令。
-- Hub 默认本地端口是 `18765`，Worker 本地端口从 `18766-18999` 分配。
-- 远端 Agent 可以统一监听各自服务器上的 `127.0.0.1:18765`。
-- 实时状态使用 Agent WebSocket/SSE/HTTP API，经 Xshell 本地端口转发访问。
-- 文件上传下载使用 SimpleSFTP，不用于心跳、GPU 状态、日志流或操作进度。
-- 自动轮询和可用性上报最小基础周期是 60 秒，并叠加正向随机抖动。
+- 每台 Worker 动态读取 localForwardHost/localForwardPort 与 remoteAgentHost/remoteAgentPort。
+- 各 Worker 的本机端口不能互相冲突；远端端口取各自实际服务配置，不强制所有机器一致。
+- Xshell 原登录行为保留；不以改写其登录命令作为后台隧道的默认前提。
+- Agent 健康、版本与项目身份按当前端点核实；旧控制节点字段不参与目标生成。
+- 已接收队列由各 Worker Scheduler 管理；当前状态依赖主动查询归并，不能用历史流事件覆盖真实终态。
+- 文件传输走 SimpleSFTP；不把旧上报周期、旧实时模式和固定端口当作新配置要求。
 
-诊断信息只展示本地端口、Agent 健康、实时流状态、重连状态和脱敏错误。token、密码、私钥完整路径不得出现在 UI、日志或报告中。
+安装、认证、端口排查与具体操作见 [完整使用说明](simple-experiment-setup.md)。本文件保留原文档入口，不再提供已退役架构的配置步骤。

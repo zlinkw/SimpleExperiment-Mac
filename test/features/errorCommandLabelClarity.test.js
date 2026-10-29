@@ -30,7 +30,7 @@ function commandLabel(command) {
 test("recent error commands use clear Chinese labels", () => {
   assert.equal(commandLabel("runPlan"), "校验并提交运行");
   assert.equal(commandLabel("parseResults"), "解析结果");
-  assert.equal(commandLabel("uploadProjectToHub"), "上传 Hub");
+  assert.match(commandLabel("uploadProjectToHub"), /已退役/);
 });
 
 test("unknown error command remains visible for compatibility", () => {

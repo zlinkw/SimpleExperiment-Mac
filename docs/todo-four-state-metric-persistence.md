@@ -1,5 +1,7 @@
 # 通用 wrapper 结果链路与紧凑详情
 
+> 历史设计/验收记录。涉及旧控制节点、旧端口、旧推送及旧运行策略的内容不作为当前操作说明；当前只使用单台或多台 Worker，请以 [配置说明](simple-experiment-setup.md) 和 [接入模板](experiment-integration.md) 为准。
+
 本批目标：保留既有端点与四态原始 CSV，校验 SHA256、运行/attempt/case/seed/Worker/来源及同一 checkpoint；完整三种子才正式发布，缺失或失败保留旧完整结果，未完成运行只预览。使用既有 Simple API 补收 DPL 已有文件，不重训、不改 MultiModal 模型。
 
 范围补充：默认读取 wrapper 的 `artifact_manifest.json` 和任务已记录的产物清单，收集所有声明的结果类型。CSV/TSV 按相对输出类型、数据集、方法合并，表头取并集，保留未知列、空值、不可计算原因。JSON/JSONL 原结构收录；YAML、文本和未知二进制原样保留并建索引。没有端点 CSV 的 wrapper 也可发布完整结构化产物包，不臆造科学统计。权重继续走既有完整产物同步，不进入指标解析器。四态只是一种可识别的增强校验 schema，不作为其它项目的接入要求；`distributedResults: true` 本身也不会强制要求四态文件。

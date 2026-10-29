@@ -3,12 +3,17 @@ import { normalizeMacResultCandidatePath } from "../mac/ResultCandidatePath";
 import { patchPanelProgressDom } from "../features/PanelProgressDom";
 import { configuredWorkerTransport } from "../platform/Terminal";
 import { composeLogicalPlans } from "../features/LogicalPlanProgress";
+import { experimentIntegrationGuideUrl, experimentIntegrationAiTask, extensionRepositoryUrl } from "../features/SetupGuideSource";
 export function renderPanelHtml(platform: string = process.platform): string {
     const nonce = String(Date.now());
     const PLUGIN_VERSION: string = (() => { try { const pkg = require("../../package.json"); return String((pkg && pkg.version) || "").trim() || "unknown"; } catch { return "unknown"; } })();
     const panelProgressDomPatchSource = "(" + patchPanelProgressDom.toString() + ")";
     const nativeWorkerTransportSource = "(" + configuredWorkerTransport.toString() + ")";
     const logicalPlansSource = "(" + composeLogicalPlans.toString() + ")";
+    const guideRepository = (() => { try { return extensionRepositoryUrl(require("../../package.json")); } catch { return undefined; } })();
+    const guideAttribute = (value: string) => value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "&#10;");
+    const integrationGuideHref = guideAttribute(experimentIntegrationGuideUrl(guideRepository));
+    const integrationAiTask = guideAttribute(experimentIntegrationAiTask(guideRepository));
     return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -1642,6 +1647,11 @@ export function renderPanelHtml(platform: string = process.platform): string {
           <button type="button" class="secondary settingsBackButton" data-main-view="workspace" title="关闭设置，返回主界面">关闭设置</button>
         </div>
       </div>
+      <div class="settingsCommandTools" data-anchor="settings-integration-guide">
+        <div><b>最小实验接入指南 · 交给 AI</b><div class="muted">完整契约、MultiModal 实践、终端进度、TensorBoard 与结果格式</div></div>
+        <a href="${integrationGuideHref}" title="打开官方完整接入指南">打开接入指南</a>
+        <button type="button" class="secondary" data-command="copyText" data-text="${integrationAiTask}" title="复制可直接交给 AI 的接入任务、完整指南链接和验收要求">复制接入任务给 AI</button>
+      </div>
       <div class="settingsLayoutTools" data-anchor="settings-layout">
         <b>界面布局</b>
         <button id="layoutEditToggle" title="进入布局编辑模式&#10;可调整面板宽度、列配置与区块顺序" class="secondary" type="button">管理布局</button>
@@ -3220,7 +3230,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       "run-quality-gate": "质量门禁", "run-statistics": "统计分析", "check-claim-evidence": "检查论文证据", "export-paper-table": "导出论文表格", "export-plotting-contract": "导出 PPT 绘图契约", "plot-results-to-ppt": "绘图到 PPT",
       "parse-case-level": "样本级解析", "run-leakage-check": "泄漏检查", "run-subgroup-analysis": "子组分析", "export-case-analysis": "导出样本级报告", "inspect-dataset": "检查数据集",
       "plan-checkpoint-retention": "检查点清理预案", "infer-config-from-run": "反推配置", "recover-plan-from-run": "恢复 Plan", "diagnose-result-anomaly": "异常诊断", "compare-with-best-config": "对比最优配置",
-      "publish-github": "发布 GitHub", "sync-github": "同步 GitHub", "overwrite-github": "覆盖 GitHub", "upload-project-to-hub": "上传到 Hub", "upload-project-to-workers": "上传到 Worker", "distribute-code-to-workers": "分发 Worker 代码", "deploy-latest-agent": "部署 Agent",
+      "publish-github": "发布 GitHub", "sync-github": "同步 GitHub", "overwrite-github": "覆盖 GitHub", "upload-project-to-hub": "旧上传入口（已退役）", "upload-project-to-workers": "上传到 Worker", "distribute-code-to-workers": "分发 Worker 代码", "deploy-latest-agent": "部署 Agent",
       "configure-download-scope": "设置下载文件范围", "prepare-agents": "准备 Agent", "test-all": "检测全部连接", "start-all-connections": "启动全部连接", "start-all": "启动全部隧道", "self-check": "运行自检", "create-debug-bundle": "生成调试包"
     });
     // RESOURCE_TREE_NEXT_STEPS removed (dead next-step hints).
@@ -7382,7 +7392,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         publishGithub: "发布到git并上传worker",
         syncGithub: "同步 GitHub",
         overwriteGithub: "GitHub 覆盖本机",
-        uploadProjectToHub: "上传到 Hub",
+        uploadProjectToHub: "旧上传入口（已退役）",
         uploadProjectToWorkers: "上传到 Worker",
         distributeCodeToWorkers: "分发到 Worker",
         deployLatestAgent: "部署 Agent runtime",
@@ -7462,8 +7472,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
         configureWorkers: "配置 Worker",
         configurePorts: "配置端口",
         repairPorts: "检查端口冲突并选择新的 Worker 端口范围；不会自动改写 Termius 会话",
-        configure: "配置 Hub 隧道",
-        startHub: "启动 Hub",
+        configure: "配置 Worker 连接",
+        startHub: "旧启动入口（已退役）",
         startWorker: "启动 Worker",
         abortScheduler: "中止调度器",
         stopAndClearPlan: "一键中止并清除 Plan",
@@ -7477,7 +7487,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         runCheckStatic: "检查项目配置",
         openLastCheckStaticReport: "打开静态检查报告",
         copyLastCheckStaticReport: "复制静态检查报告",
-        start: "启动 Hub",
+        start: "启动 Worker 后台隧道",
         startAll: "启动全部",
         showRegistry: "端点清单",
         restart: "重启实时流",
@@ -8307,7 +8317,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         return treeItem(section, label, title, icon, "", "", searchText, anchor, detail);
       };
       return {
-        servers: { label: "运行环境准备", node: withResourceTreeChildren(item("servers", "服务器管理", "服务器管理", "▦", "Worker/端口", "Hub Worker Termius 端口 调度"), serverTreeObjects()) },
+        servers: { label: "运行环境准备", node: withResourceTreeChildren(item("servers", "服务器管理", "服务器管理", "▦", "Worker/端口", "Worker Termius 端口 调度"), serverTreeObjects()) },
         gpu: { label: "GPU 状态", node: withResourceTreeChildren(item("gpu", "GPU 状态", "GPU 总览", "◫", "GPU 总览", "GPU 显卡 显存 温度 利用率 我的任务 进程"), gpuTreeObjects()) },
         tmux: { label: "TMUX 会话 / 窗口 / 窗格", icon: RESOURCE_TREE_SECTION_ICONS.tmux || "⬢", node: withResourceTreeChildren(item("tmux", "TMUX 会话 / 窗口 / 窗格", "TMUX 会话 / 窗口 / 窗格", RESOURCE_TREE_SECTION_ICONS.tmux || "⬢", "会话/窗口/窗格", "tmux 会话 窗口 窗格 会话总览"), tmuxTreeObjects()) },
         plans: { label: "实验准备", node: withResourceTreeChildren(item("plans", "实验准备", "实验计划", "◇", "计划/校验/运行", "计划 参数 校验 预演 运行"), planTreeObjects()) },
@@ -8507,7 +8517,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     function serverTreeObjects() {
       return [
         treeObjectItem("servers", "Termius 会话", "配置", "", "检查 Worker 隧道会话；Agent 由隧道会话登录后命令启动。", "servers-sessions", "", "Termius .xsh 隧道 Agent 自动启动"),
-        treeObjectItem("servers", "服务器状态", "入口", "", "查看 Worker、端口和通信拓扑。", "servers-list", "", "Hub Worker 端口 通信拓扑")
+        treeObjectItem("servers", "服务器状态", "入口", "", "查看 Worker、端口和通信拓扑。", "servers-list", "", "Worker 端口 通信拓扑")
       ];
     }
 
@@ -9303,7 +9313,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const workerStatus = indexes.workerStatus;
       const assignmentById = indexes.assignmentById;
       const conflictById = indexes.conflictById;
-      const hubName = setup.hubDisplayName || setup.sshConfigAlias || setup.hubHost || "Hub";
+      const hubName = setup.hubDisplayName || setup.sshConfigAlias || setup.hubHost || "旧连接（已退役）";
       const hubAssignment = assignmentById?.get("hub") || {};
       const hubLocalHost = tunnelHost(setup.localForwardHost || hubAssignment.localForwardHost);
       const hubRemoteHost = tunnelHost(setup.remoteAgentHost || hubAssignment.remoteBindHost);
@@ -9444,8 +9454,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function topologyModeLabel(mode) {
       if (mode === "single_worker") return "单 Worker模式";
-      if (mode === "worker_pool") return "仅多 Worker模式";
-      if (mode === "hub_worker") return "Hub 可用模式";
+      if (mode === "worker_pool") return "Worker 模式（单台或多台）";
+      if (mode === "hub_worker") return "已退役配置，请使用 Worker 模式";
       return "拓扑待确认";
     }
 
@@ -9599,7 +9609,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const workerStatus = indexes.workerStatus;
       const assignmentById = indexes.assignmentById;
       const conflictById = indexes.conflictById;
-      const hubName = setup.hubDisplayName || setup.sshConfigAlias || setup.hubHost || "Hub";
+      const hubName = setup.hubDisplayName || setup.sshConfigAlias || setup.hubHost || "旧连接（已退役）";
       const hubAssignment = assignmentById?.get("hub") || {};
       const hubAgent = agent.hub || {};
       const hubSession = sessionForPath(setup.savedSessionPath);
@@ -10309,7 +10319,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         ? "仅覆盖这张卡的最大并行 job 数；0 暂停后续派发，留空继承服务器默认值，不停止当前任务。"
         : "仅覆盖这张卡可继续派发所需的总剩余显存 GiB；留空继承服务器默认值。";
       const topologyHelp = {
-        mode: "选择调度架构：单 Worker 由一台执行服务器运行；仅多 Worker 由多台执行服务器运行；Hub 可用时由 Hub 统一调度。切换后需保存。"
+        mode: "统一 Worker 调度流程：启用一台为单 Worker，启用多台为多 Worker；各服务器维护自己的任务窗口和产物。启用范围变化不会迁移已有任务。"
       };
       const schedulerHelp = {
         gpuJobsPerCard: "本项目每张实际显卡最多并行多少个 job；实际派发还需通过显存预算检查。", gpuMinFreeMemoryGb: "派发前显卡总剩余显存须达到该值，并须覆盖已有任务未申请的预算与新任务预算。",
@@ -10336,7 +10346,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         workerUser: "登录该 Worker 的 SSH 用户名；SFTP 使用同一用户。",
         condaEnv: "必填完整路径，以 / 开头，如 /path/to/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾；留空使用系统 Python；仅环境名如 <env_name> 已废弃",
         agentProjectDir: "填写服务器上的绝对父目录，例如 /srv/projects；插件自动追加当前本地项目名作为代码目录，并在该父目录下计算 Agent 路径。不要填写单个文件或再次追加项目名。",
-        savedSessionPath: "导入服务器信息并保留手动打开 Xshell 的入口；后台连接使用已保存的服务器地址和端口。",
+        savedSessionPath: "系统 OpenSSH 使用已保存的服务器地址和端口；Termius 转发由用户手动启动，插件不读取 Termius 私有会话。",
         agentSessionPath: "Agent 会话",
         localForwardPort: "本机监听隧道的端口；插件通过当前 Worker 配置的本机主机地址和此端口访问 Agent。不是 SSH 登录端口。",
         remoteTelemetryPort: "Worker Agent 在远端配置主机地址上监听的端口；需与 Agent 的实际监听配置一致。不是 SSH 登录端口。",
@@ -10347,20 +10357,20 @@ export function renderPanelHtml(platform: string = process.platform): string {
         sessionCheckMinSeconds: "会话检测最小间隔（秒），越小越灵敏"
       };
       const hubHelp = {
-        hubDisplayName: "仅用于界面展示和识别 Hub，不用于网络连接。",
-        hubHost: "填写 Hub 的 IP 地址或可直接解析的域名，例如 compute.example.org；SSH 登录和 SFTP 文件传输共用此地址。这里不是文件路径，也不读取其他 SSH 配置文件。",
-        hubUser: "登录 Hub 的 SSH 用户名；SFTP 使用同一用户。",
+        hubDisplayName: "旧显示名已退役，请使用 Worker 显示名。",
+        hubHost: "旧顶层地址已退役，请使用 Worker 地址。",
+        hubUser: "旧顶层用户名已退役，请使用 Worker 用户名。",
         remoteTmuxSessionPrefix: "远端 tmux 会话名前缀；多用户共用服务器时建议用稳定用户名，旧 zlk 会话可填 zlk",
         condaEnv: "必填完整路径，以 / 开头，如 /path/to/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾；留空使用系统 Python；仅环境名如 <env_name> 已废弃",
         agentProjectDir: "填写服务器上的绝对父目录，例如 /srv/projects；插件自动追加当前本地项目名作为代码目录，并在该父目录下计算 Agent 路径。不要填写单个文件或再次追加项目名。",
-        savedSessionPath: "导入服务器信息并保留手动打开 Xshell 的入口；后台连接使用已保存的服务器地址和端口。",
+        savedSessionPath: "系统 OpenSSH 使用已保存的服务器地址和端口；Termius 转发由用户手动启动，插件不读取 Termius 私有会话。",
         agentSessionPath: "Agent 会话",
         localForwardPort: "本机监听隧道的端口；插件通过当前 Worker 配置的本机主机地址和此端口访问 Agent。不是 SSH 登录端口。",
         remoteAgentPort: "Worker Agent 在远端配置主机地址上监听的端口；需与 Agent 的实际监听配置一致。不是 SSH 登录端口。"
       };
       if (scope === "topology") return topologyHelp[key] || "";
       if (scope === "scheduler") return schedulerHelp[key] || "";
-      if (scope === "hub") return hubHelp[key] || "";
+      if (scope === "hub") return "旧顶层连接配置已退役；请在当前项目的 Worker 卡片中配置执行服务器。";
       if (String(scope || "").startsWith("worker:")) return workerHelp[key] || "";
       return "";
     }
@@ -10433,7 +10443,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
     function portAssignmentCard(state, item) {
       const status = probeStatus(state, item.endpointId);
       const cls = endpointEnabled(state, item.endpointId) ? endpointTone(status) : "disabled";
-      const role = String(item.role || "").toLowerCase() === "hub" ? "Hub" : "Worker";
+      const role = String(item.role || "").toLowerCase() === "hub" ? "历史节点（已退役）" : "Worker";
       const title = "端口分配";
       return '<article class="endpointStatusCard ' + cls + '" title="' + escAttr(title) + '">' +
         '<div class="endpointCardHead"><div><b>' + esc(role + " · " + item.endpointId) + '</b><div class="endpointCardSub">' + esc(item["s" + "shConfigAlias"] || "未填写登录别名") + '</div></div>' +
@@ -13359,7 +13369,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const endpoint = (meta || {}).endpointReadiness || projectEndpointReadiness(state);
       const outputGate = (meta || {}).outputGate || projectOutputGateDiagnostics(project, meta, selectedPlan);
       const infrastructureReady = simpleSftp.ready && server.ready && worker.ready;
-      const infrastructureDetail = !simpleSftp.ready ? simpleSftp.message : !server.ready ? server.summary : !worker.ready ? worker.summary : "SimpleSFTP、Hub 与执行 Worker 已就绪";
+      const infrastructureDetail = !simpleSftp.ready ? simpleSftp.message : !server.ready ? server.summary : !worker.ready ? worker.summary : "SimpleSFTP 与全部启用的 Worker 已就绪";
       const planReady = Boolean(selectedPlanFile) && outputGate.ok;
       const planDetail = !selectedPlanFile
         ? (asArray((meta || {}).plans || (project || {}).plans).length ? "先明确选择本次实验 Plan" : "识别工作区并创建首个 Plan")
@@ -14714,7 +14724,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
 
     function renderArchivedPlanCard(plan) {
       var bundleDir = String(plan.archivedFile || "").split("/").slice(0, -1).join("/");
-      var evidenceSource = plan.archiveEvidenceSourceMode === "hub_download" ? "Hub 只读同步" : plan.archiveEvidenceSourceMode === "local" ? "本地证据" : "";
+      var evidenceSource = plan.archiveEvidenceSourceMode === "hub_download" ? "历史只读同步证据" : plan.archiveEvidenceSourceMode === "local" ? "本地证据" : "";
       var resultSelectionMeta = plan.archiveResultSelectionFile ? '<span class="pill">有效结果 ' + esc(String(plan.archiveResultSelectionIncludedCount || 0)) + '</span><span class="pill">未纳入 ' + esc(String(plan.archiveResultSelectionNotIncludedCount || 0)) + '</span>' : '';
       var bundleMeta = plan.archiveBundle ? '<span class="pill">配置 ' + esc(String(plan.archiveConfigCount || 0)) + '</span><span class="pill">环境 ' + esc(String(plan.archiveEnvironmentCount || 0)) + '</span><span class="pill">参数 ' + esc(String(plan.archiveParameterCount || 0)) + '</span>' + (Number(plan.archiveParameterReviewCount || 0) > 0 ? '<span class="pill status-warning">参数待复核 ' + esc(String(plan.archiveParameterReviewCount)) + '</span>' : '') + '<span class="pill">参数源码 ' + esc(String(plan.archiveEntryScriptCount || 0)) + '</span>' + resultSelectionMeta + '<span class="pill">迁移配置 ' + esc(String(plan.archiveConfigMigratedCount || 0)) + '</span><span class="pill">迁移结果 ' + esc(String(plan.archiveResultMigratedCount || 0)) + '</span><span class="pill">证据 ' + esc(String(plan.archiveEvidenceCount || 0)) + '</span>' + (evidenceSource ? '<span class="pill">' + esc(evidenceSource) + '</span>' : '') : "";
       var restoreReason = debugModeDisableReason("restoreArchivedPlan");
@@ -14831,7 +14841,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
       const reason = disableReason(state, command, context);
       if (reason) return reason;
       if (ARTIFACT_SCOPE_COMMANDS?.has(command) && (!context.workerId || context.workerId === "-")) {
-        return "缺少 Worker 标识，只能处理 Hub 索引；请优先在任务区选择带 Worker 的任务。";
+        return "缺少 Worker 标识，不能确定操作服务器；请在任务区选择带 Worker 的任务。";
       }
       return "";
     }
@@ -17440,7 +17450,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         ...TARGET_MATRIX_BASELINE_ROWS,
         ["项目自动接入", project.adapterConfig ? "done" : "partial", project.adapterConfig ? "已接入" : "可生成", TARGET_MATRIX_PROJECT_EVIDENCE],
         ["真实 Agent 能力", endpoints.actions ? "done" : "partial", endpoints.actions ? "可用" : "待检测/升级", ["capabilities", health || "未检测", "Agent"]],
-        ["真实集群烟测", "partial", health === "agent_ok" ? "Hub 可达，待现场验收" : "待现场验收", TARGET_MATRIX_SMOKE_EVIDENCE],
+        ["真实集群烟测", "partial", health === "agent_ok" ? "旧连接记录，待现场验收" : "待现场验收", TARGET_MATRIX_SMOKE_EVIDENCE],
         ...TARGET_MATRIX_TRAILING_ROWS
       ];
       setHtmlIfChanged("targetCompletionMatrix",
@@ -17553,7 +17563,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         publishGithub: "一键发布",
         syncGithub: "同步 GitHub",
         overwriteGithub: "覆盖本机",
-        uploadProjectToHub: "上传 Hub",
+        uploadProjectToHub: "旧上传入口（已退役）",
         uploadProjectToWorkers: "上传 Worker",
         distributeCodeToWorkers: "分发 Worker",
         deployLatestAgent: "部署 Agent",
@@ -17625,7 +17635,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         configurePorts: "配置端口",
         repairPorts: "处理端口冲突",
         startTunnelEndpoint: "启动隧道",
-        startHub: "启动 Hub",
+        startHub: "旧启动入口（已退役）",
         startWorker: "启动 Worker",
         startAll: "启动全部隧道",
         startAgents: "启动全部隧道",
@@ -17852,8 +17862,7 @@ export function renderPanelHtml(platform: string = process.platform): string {
         if (needsWorker) {
           if (!context.workerId || context.workerId === "-") return "该任务缺少 Worker 标识，不能直发 Worker Agent";
           const workerMissing = missingWorkerActionCapabilities(state, context.workerId, workerAction);
-          const canHubProjectFallback = ARTIFACT_SCOPE_COMMANDS?.has(command) && Boolean(context.runKey || context.archiveKey);
-          if (workerMissing.length && !canHubProjectFallback) return "需要升级或检测 Worker Agent: " + workerMissing.join(", ");
+          if (workerMissing.length) return "需要升级或检测 Worker Agent: " + workerMissing.join(", ");
         }
       }
       if (ARTIFACT_SCOPE_COMMANDS?.has(command)) {
@@ -17894,8 +17903,8 @@ export function renderPanelHtml(platform: string = process.platform): string {
       let missing = capabilityReadiness.missing.slice();
       const workerMissing = missingNoHubWorkerResultCapabilities(state, command, keys, context);
       if (workerMissing) missing.splice(0, missing.length, ...workerMissing);
-      // 预演(dryRun)与校验(validate)同属 PLAN_PREFLIGHT_COMMANDS，共用同一 Hub 能力面
-      // （Hub 始终成对提供 validate-plan 与 dry-run-plan）。只要校验能力可用，不应因单独的
+      // 预演(dryRun)与校验(validate)同属 PLAN_PREFLIGHT_COMMANDS，共用当前 Worker 能力面
+      // （Worker 成对提供 validate-plan 与 dry-run-plan）。只要校验能力可用，不应因单独的
       // dry-run-plan 能力键缺失而把“预演”按钮置灰，否则会出现“校验可用、预演灰”的分裂现象。
       // LENIENT 宽松门禁：无条件过滤 dry-run-plan（避免缓存/键分裂导致校验蓝而预演灰），
       // 且所有 PLAN_PREFLIGHT 能力缺失改为软告警，保持 validate/dryRun 同色可点。

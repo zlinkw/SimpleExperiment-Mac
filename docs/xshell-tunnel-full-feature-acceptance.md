@@ -1,5 +1,7 @@
 # Xshell 隧道全功能手动验收
 
+> 历史设计/验收记录。涉及旧控制节点、旧端口、旧推送及旧运行策略的内容不作为当前操作说明；当前只使用单台或多台 Worker，请以 [配置说明](simple-experiment-setup.md) 和 [接入模板](experiment-integration.md) 为准。
+
 本清单用于确认插件只通过 `127.0.0.1:<localForwardPort>` 访问 Hub Agent，不直接连接 Hub 或 Worker。
 
 ## 前置条件

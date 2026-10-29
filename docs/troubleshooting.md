@@ -5,7 +5,7 @@
 常见状态：
 
 - `Agent stale`：实时流心跳超时。插件会保留 last-known-good 数据。请部署最新版 runtime 或重启 Agent。
-- `Hub offline`：Hub 本地隧道或 Agent 不可达。不会自动启动 Worker 扇出。
+- Worker 不可达：核对该 Worker 当前本机转发端点、远端 Agent 地址与端口、认证和项目身份；不创建或回退到旧控制节点。
 - `Worker degraded`：只有该 Worker 过期或离线，其他 Worker 继续工作。
 - `Runtime outdated`：runtime manifest 或 hash 不一致。请运行“部署最新版 Agent 到全部服务器”。
 - `Direct fallback disabled`：插件已禁用直接远端回退路径，所有访问必须走本机 Xshell 隧道。

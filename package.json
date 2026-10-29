@@ -2,7 +2,7 @@
   "name": "simple-experiment-mac",
   "displayName": "SimpleExperiment Mac",
   "description": "面向 Apple Silicon macOS 的科研实验编排面板，用户手动配置 Termius 本地隧道。",
-  "version": "0.5.318",
+  "version": "0.5.319",
   "publisher": "simple-local",
   "extensionKind": [
     "ui"
@@ -456,7 +456,7 @@
             "统一 Worker 流程，支持一台或多台服务器。"
           ],
           "scope": "resource",
-          "description": "当前项目的服务器拓扑。模式与启用端点数量不一致时阻止新运行；模式切换不会迁移已有任务或结果。"
+          "description": "统一 Worker 调度流程，启用一台或多台服务器均使用 worker_pool；旧 single_worker 只兼容读取，切换启用范围不会迁移任务和结果。"
         },
         "simpleExperimentMac.workspaceHostRoot": {
           "type": "string",
@@ -557,7 +557,7 @@
             "offline_import"
           ],
           "scope": "application",
-          "description": "连接模式。Xshell 实时隧道模式只访问 127.0.0.1 本地端点。"
+          "description": "通过每台 Worker 配置的本机转发端点访问 Agent；后台隧道与手动 系统 SSH / Termius 会话分开管理。"
         },
         "simpleExperimentMac.tunnel.localForwardPort": {
           "type": "number",
@@ -565,7 +565,7 @@
           "minimum": 1024,
           "maximum": 65535,
           "scope": "application",
-          "description": "Xshell 会话在 127.0.0.1 上监听的本地转发端口。"
+          "description": "旧版通用端口默认值，不生成独立服务器目标；当前连接使用每台 Worker 的 localForwardHost/localForwardPort。"
         },
         "simpleExperimentMac.tunnel.remoteAgentPort": {
           "type": "number",
@@ -573,7 +573,7 @@
           "minimum": 1024,
           "maximum": 65535,
           "scope": "application",
-          "description": "Worker Agent 监听的服务端口；每台服务器的端点配置优先。"
+          "description": "通用远端 Agent 端口默认值；每台 Worker 的 remoteAgentHost/remoteAgentPort 优先。"
         },
         "simpleExperimentMac.tunnel.agentToken": {
           "type": "string",
@@ -612,7 +612,7 @@
           "type": "string",
           "default": "",
           "scope": "application",
-          "description": "远端 Agent 和计划任务使用的 Conda 环境。必须为绝对路径（精确到环境文件夹，如 /data/<user>/conda_envs/<env_name> 或 /usr/local/anaconda3/envs/<env_name>，可选以 /bin/python 结尾，以 / 开头）；留空时不激活 Conda，使用系统 Python。仅环境名（如 <env_name>）已废弃，请填写完整环境路径。"
+          "description": "正式任务默认 Conda 环境绝对路径，可选以 /bin/python 结尾；留空使用系统 Python。每台 Worker 可覆盖。辅助 Agent 使用独立解释器，不以科研环境相同或依赖已安装作为就绪门禁。"
         },
         "simpleExperimentMac.tunnel.workerTunnels": {
           "type": "array",
@@ -775,7 +775,7 @@
               }
             }
           },
-          "description": "用于本地实时聚合的 Worker Xshell 隧道端点。"
+          "description": "Worker 连接模板数组。推荐在当前项目服务器卡片保存连接；面板配置按项目持久化，不写其他窗口的全局连接。"
         },
         "simpleExperimentMac.scheduler.dispatchMode": {
           "type": "string",

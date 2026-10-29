@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "recordedAt": "2026-10-29",
-  "scope": "Windows 0.5.438/0.2.117 frozen source, minimal Mac host adaptation. Fingerprints prove source relationships only; host tests and native Mac acceptance remain separate.",
+  "scope": "Windows 0.5.440/0.2.117 frozen source, minimal Mac host adaptation. Fingerprints prove source relationships only; host tests and native Mac acceptance remain separate.",
   "identityMapping": [
     "simple-local.simple-experiment -> simple-local.simple-experiment-mac",
     "simple-local.simple-sftp -> simple-local.simple-sftp-mac",
@@ -13,8 +13,8 @@
   "components": [
     {
       "name": "experiment",
-      "windowsVersion": "0.5.438",
-      "windowsCommit": "c1245215557d0860306190a900b60f685a7881be",
+      "windowsVersion": "0.5.440",
+      "windowsCommit": "c6005169d6298d7713c653b34f909268de505bae",
       "files": [
         {
           "path": ".gitignore",
@@ -32,29 +32,65 @@
         },
         {
           "path": "README.md",
-          "windowsSha256": "1a27f03b37a1ed5d134e0fc13b33e6a950dffc3c59634951078751356c4e5700",
-          "localSha256": "1823d6eb8eb0b46cc9412983312f5a2103b356b7b42891733c9391a7ab5dad7d",
+          "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
+          "localSha256": "924e415eb3409b8518544117464a81cbd31faaeb1625642a39a9e864fe7ffd58",
           "classification": "platform-overlay",
           "reason": "Mac README 面向 darwin 安装、Mac 数据目录与 preview 更新入口；本轮按 Windows 0.5.416 补入“多项目分支与工作树”共同业务章节，并把登记表路径改为 ~/Library/Application Support/SimpleExperimentMac/branch-projects.json，配套版本与 Release 链接改为 Mac 值。"
+        },
+        {
+          "path": "docs/configuration-reference.md",
+          "windowsSha256": "f695d17d78af09bf1ef9f5b54e07cc2ba17e41e4bfa16f8ba041d9671b9f5348",
+          "localSha256": "e26306469e7ced71184463d15fbd334c42af93de99dafdc8891a2f6452070ce5",
+          "classification": "platform-overlay",
+          "reason": "Mac namespace, CLI, host setup and preview identity; shared Worker behavior and guide contracts retained."
+        },
+        {
+          "path": "docs/experiment-integration.md",
+          "windowsSha256": "fd89ddaad7adb6955264cd8ef6bf9ce3d9ae5ec38c6d57c6e3ba84584783d6cf",
+          "localSha256": "5f664d3a2c79a80b489fb2d0cb65045bedb608c7900bcd7348830d2487984fc9",
+          "classification": "platform-overlay",
+          "reason": "Mac namespace, CLI, host setup and preview identity; shared Worker behavior and guide contracts retained."
+        },
+        {
+          "path": "docs/formal-job-execution.md",
+          "windowsSha256": "ad281e25a0933be4b9a90606e87763eaf2211add69c277cad15aefc54ac20fca",
+          "localSha256": "ad281e25a0933be4b9a90606e87763eaf2211add69c277cad15aefc54ac20fca",
+          "classification": "upstream-identical"
+        },
+        {
+          "path": "docs/hub-retirement-audit.md",
+          "windowsSha256": "0ad3a241506026c71884649d6f5a9a1bea17019798a4540583921ddedf793db1",
+          "localSha256": "0ad3a241506026c71884649d6f5a9a1bea17019798a4540583921ddedf793db1",
+          "classification": "upstream-identical"
         },
         {
           "path": "docs/mac-project-facts.md",
           "windowsSha256": null,
           "localSha256": "2aac42fdef2518669deda4376a70fa072508bdf214d0693535306005f0735512",
-          "classification": "retained-mac-source",
-          "reason": "Mac 专属事实清单（版本谱系、Mac 契约、宿主边界），Windows 无对应文件，保留 Mac 权威。"
+          "classification": "retained-mac-source"
+        },
+        {
+          "path": "docs/multimodal-integration-best-practice.md",
+          "windowsSha256": "a329d6fee3fceedbc2bf2da88c3d3713afa67f3e75837be372444b8aadb3ddcc",
+          "localSha256": "a329d6fee3fceedbc2bf2da88c3d3713afa67f3e75837be372444b8aadb3ddcc",
+          "classification": "upstream-identical"
         },
         {
           "path": "docs/target-mode-plan.md",
           "windowsSha256": null,
           "localSha256": "56546479b82327eda2c7f51c47a5f5818b67a369116945d1931599ec309c0e98",
-          "classification": "retained-mac-source",
-          "reason": "Mac 专属当前活动目标计划（含字符上限与压缩契约），Windows 无对应文件，保留 Mac 权威。"
+          "classification": "retained-mac-source"
+        },
+        {
+          "path": "docs/tmux-lifecycle-implementation.md",
+          "windowsSha256": "42aea77c8d979335bfc1b3e31421e3ea2a001257d172cb561aef05029e13ab67",
+          "localSha256": "42aea77c8d979335bfc1b3e31421e3ea2a001257d172cb561aef05029e13ab67",
+          "classification": "upstream-identical"
         },
         {
           "path": "docs/unified-cli-coverage.md",
-          "windowsSha256": "52a76e0e430f2fdf2d95d10d90b222f5a59bead45fff6ec484de4890a18672f0",
-          "localSha256": "e8c5be1ecdd5b5c595d6e88e2e51507ee8b63db01152fc4a248fd9d493c3bb8c",
+          "windowsSha256": "e14ab1558bd6e108413e524614d648714ee0eaaf5fdba4ebc0a45ede2bac4c2d",
+          "localSha256": "75290ff9aadc353d4c04e098e968360da02669a1b5bcfa296141c747007b4a00",
           "classification": "platform-overlay",
           "reason": "Windows 统一 CLI 覆盖率文档整体采纳为 Mac 记录，仅可执行名改为 simpleex-mac、候选版本行改为 Mac 配套版本说明，覆盖率表逐字保留。"
         },
@@ -62,20 +98,19 @@
           "path": "docs/windows-alignment-2026-10-27.md",
           "windowsSha256": null,
           "localSha256": "5f58da7c9243e98d1db54ad174b15ab2c296d0f00f4602261998fb65f145c0f0",
-          "classification": "retained-mac-source",
-          "reason": "Mac 专属对齐记录（本批 087 证据、合并清单、真机缺口），Windows 无对应文件。"
+          "classification": "retained-mac-source"
         },
         {
           "path": "package-lock.json",
-          "windowsSha256": "4e2c3661ac23613590813fa5fe6410f8d97385f72d5b873d8232ed4093f46d2e",
-          "localSha256": "eb792e2709f7d327493b3b5c82425c0445ebafff196096d440228d79f3bf3655",
+          "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
+          "localSha256": "a47255f57c29d298ca923b0e6b55d9217f265fb2dc3d76e5e74b6e6b33af066a",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
-          "windowsSha256": "ffc3871ca642aab690f4167370017565059fb7fe9b348225fe963fdb20b20b37",
-          "localSha256": "47082139dec32ad3f9418c1d7abbe1abf2458b7e8d93e795feaec58b8eda81d9",
+          "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
+          "localSha256": "5c5516eb54b7663b5df7f5354c1c44d32f545b1acd89dabdaabe50a2fb8abdda",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -83,22 +118,19 @@
           "path": "scripts/mac-release-prepare.js",
           "windowsSha256": null,
           "localSha256": "3aa4c143e6a4ded1809a8aeac80d38307f00031b3dedd49fbef58a3458dc1e55",
-          "classification": "retained-mac-source",
-          "reason": "Mac 发布前置脚本（Windows 侧由 test-workflow 编排，无对应实现）：Mac 包投影 + 逐文件串行回归；本轮为跨仓用例注入 SIMPLE_TEST_SFTP_ROOT 前置条件。"
+          "classification": "retained-mac-source"
         },
         {
           "path": "scripts/mac-release-preview-deferral.json",
           "windowsSha256": null,
           "localSha256": "d1751fa0355a158547bf55907b8d856716bd1661b46249f2aae3e1345d73342c",
-          "classification": "retained-mac-source",
-          "reason": "Mac 有限预览延迟清单（Windows 侧无对应实现）：绑定本轮两仓版本号，逐条写明未在本机执行的用例与原因；只登记不执行，默认严格发布路径不受影响。"
+          "classification": "retained-mac-source"
         },
         {
           "path": "scripts/mac-release-regressions.json",
           "windowsSha256": null,
           "localSha256": "ff5cdd62064edf717890328128708c99097f0c9615e6a5115eb0c9eddb1fc45b",
-          "classification": "retained-mac-source",
-          "reason": "Mac 逐文件门禁清单（替代 Windows 的 test-workflow 登记）：本轮登记 35 个 Experiment 与 4 个 SimpleSFTP 新测试，并排除 Windows 发行工具用例与需要 POSIX 宿主绝对路径的跨机对账用例。"
+          "classification": "retained-mac-source"
         },
         {
           "path": "scripts/package-content-policy.js",
@@ -387,10 +419,9 @@
         },
         {
           "path": "src/clusterAgentRuntime.legacy.ts",
-          "windowsSha256": "1ebf7adfc1b29d5a502c6972991fd46e41d22e2d3da1d6272d505c52549c317a",
-          "localSha256": "1ebf7adfc1b29d5a502c6972991fd46e41d22e2d3da1d6272d505c52549c317a",
-          "classification": "upstream-identical",
-          "reason": "083 strict POSIX filename identity and physical launch-path adapters; reject typed/conflicting aliases, links and changed Plan parents without trimming legal spaces. Frozen current admission/control and protocol-2 state remain; 1MiB original Plan cap retained. Common used-log root and credential deny policy remains in force before directory creation."
+          "windowsSha256": "4156e98fd2d40e6e5e4e2d21ea75d7e9cf0998415e3530a6d5898cf8571408f5",
+          "localSha256": "4156e98fd2d40e6e5e4e2d21ea75d7e9cf0998415e3530a6d5898cf8571408f5",
+          "classification": "upstream-identical"
         },
         {
           "path": "src/clusterAgentRuntime.ts",
@@ -400,10 +431,9 @@
         },
         {
           "path": "src/clusterSchedulerRuntime.legacy.ts",
-          "windowsSha256": "27a424dff27cc2f5df24f5b96f4794ad7b4e9ef3b94f377c64a7d01b9e90f7cc",
-          "localSha256": "27a424dff27cc2f5df24f5b96f4794ad7b4e9ef3b94f377c64a7d01b9e90f7cc",
-          "classification": "upstream-identical",
-          "reason": "083 preserve raw POSIX path spelling for declared output/cwd/inputs/default result directories and Plan runtime keys; reject malformed types/paths before runtime preparation. Current declared-output binding, retired-attempt rejection and scheduling business remain."
+          "windowsSha256": "034cc237211e209cbf8739033d175d58fb4ebecf9aab3e77c2cc1304e89c9652",
+          "localSha256": "034cc237211e209cbf8739033d175d58fb4ebecf9aab3e77c2cc1304e89c9652",
+          "classification": "upstream-identical"
         },
         {
           "path": "src/clusterSchedulerRuntime.ts",
@@ -774,8 +804,8 @@
         },
         {
           "path": "src/extension/legacy.ts",
-          "windowsSha256": "0fab41dd35d7415d0d0bcb7d4aecd2bdbdb817e76e9cc59e75746c018e50e1c1",
-          "localSha256": "0b2f6963b25a633dc39d2fcb915afb67d3d71a58e5ef6b9a516969022a89a83a",
+          "windowsSha256": "674a98dd695dc768f9152dcfa461eceb2a6daf7c5db4aa5382f2250e6c5b3b59",
+          "localSha256": "80256f2e625eb9814addfe4b3bc54c9fbb0c39848165774cdaff6f9b84a8896f",
           "classification": "platform-overlay",
           "reason": "Preserves Mac identity, worker-only entrypoints, strict POSIX spelling, independent authentication and paired preview updates while merging .403 GPU/root-map/isolated-review behavior. Runtime templates no longer read packaged project documentation."
         },
@@ -1473,8 +1503,8 @@
         },
         {
           "path": "src/features/SetupGuideSource.ts",
-          "windowsSha256": "10d88b1514efb7d1685061f4a22cd0266d003fbad17109d1651e6e133341e3cc",
-          "localSha256": "33d0efb88da2c4ef9f4def9cba93a6268b28959e4b9cbed7adc3e620a2fb5c68",
+          "windowsSha256": "e6e6aa3a8e29ecf6d1d382bb1aa3abe0417acf84c7fc02da238097c7509e8cdf",
+          "localSha256": "8184102b9f80e5d2adccf142c5cf95157c8217ac283a22d49442db411ced49ad",
           "classification": "platform-overlay",
           "reason": "Mac repository fallback URL; shared file-or-online resolution unchanged."
         },
@@ -1670,141 +1700,121 @@
           "path": "src/mac/Bootstrap.ts",
           "windowsSha256": null,
           "localSha256": "7549d176b6fb899df91af7b51ebf1c244afeca33fcd810c3db31153bd1ddb8b2",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/CacheDelete.ts",
           "windowsSha256": null,
           "localSha256": "0f4f342b35bba26ae7964870a70acfa378dca4b70368c8412385b6540350f24c",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/CliLauncher.ts",
           "windowsSha256": null,
           "localSha256": "e5f8ea4a20335021c686d4d9ae0ffe548c3e56e80889aede4aeda2cd90f95df2",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/MacAgentStartup.ts",
           "windowsSha256": null,
           "localSha256": "271a1871c83b14f7dd918bbc487c118b16df60ee54e5dc28b5dc212e55218e34",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-parity fingerprinting."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/MacPaths.ts",
           "windowsSha256": null,
           "localSha256": "2803dada781fa7171e198cecc5e5ba9d55c08b88e9afb4efe942a7400018875e",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/ManualTunnel.ts",
           "windowsSha256": null,
           "localSha256": "a7b6ff46dc6b45abbec6e4eff8f44c119462119cf6917f19b1704ce9d3fe2cc2",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/MetricInput.ts",
           "windowsSha256": null,
           "localSha256": "3282643281c745bc48b0dc8be25a747c6650e61d93162c7490fbda7ff38ef4a9",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/OpenSshTunnels.ts",
           "windowsSha256": null,
           "localSha256": "387772798408af1fa4fafc74c9dc9a8cae254a14cdfeb7003583bfa622722ceb",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-parity fingerprinting."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/PlanFiles.ts",
           "windowsSha256": null,
           "localSha256": "cb1ed2774956868983978d55b8a1486e4036bb2ba90ffcf9c011ec9a4fe371f2",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/PosixPath.ts",
           "windowsSha256": null,
           "localSha256": "1abc956dced18eb3b472180cead4ec17832ad48dc833b1ad5bd8a13e05eeba03",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/PreviewRelease.ts",
           "windowsSha256": null,
           "localSha256": "211a41fa67b109f47b74f08043250acb485cc9bf21c12469284119aa7361aa51",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/ResultCandidatePath.ts",
           "windowsSha256": null,
           "localSha256": "adbbf4a550421e1d73bf2d7bee37d42b39194e9eb7afd94f21d8f71aae3afb00",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/ResultCandidateYaml.ts",
           "windowsSha256": null,
           "localSha256": "5bf0dfc13cddb93c9b60543c804db811d3907b646b81158f2565991caa57bda8",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/ResultFiles.ts",
           "windowsSha256": null,
           "localSha256": "bd2eb981b8171dd6e6d7ad118716c101fe5fd473627cf7e32f7f4fc1fc066fd2",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/ResultOperationScope.ts",
           "windowsSha256": null,
           "localSha256": "f56690fbcff05c6062db25c860280c8f26b6b15b74d99f6656ac8ef3a8dfced2",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/ResultSummaryScope.ts",
           "windowsSha256": null,
           "localSha256": "78149dd021c0adeea4b4c3adb91f38af7c636d675c27fbe9f24b8af50d336083",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/UpdateGate.ts",
           "windowsSha256": null,
           "localSha256": "0fe5b4b0e1e5936e7856f80bb805918029dec30a77d25128082ee769629bed24",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/UpdateTransaction.ts",
           "windowsSha256": null,
           "localSha256": "051c9a91e9f3b0a8b9e83bce2f33b927041b0c7a53667720843dfa3412a8dcb9",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/Vsix.ts",
           "windowsSha256": null,
           "localSha256": "c3325e59d350625a3c32130cba2e358171833f9bfd668f0e20224d17b7011586",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/mac/WorkflowBinding.ts",
           "windowsSha256": null,
           "localSha256": "66c3c0dfcc8fb574a41b4eb5b6a8b3dceae838e384920675c153b1810cfc5441",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/panel.ts",
@@ -1816,50 +1826,43 @@
           "path": "src/platform/CleanupHandles.ts",
           "windowsSha256": null,
           "localSha256": "d22a14ebac9ba4e7e087b1d4faf8fb1cbf9c5015a23206fcc8d9dffb95d45bac",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/platform/Filesystem.ts",
           "windowsSha256": null,
           "localSha256": "c208c711fea0b6d14b6626759a2cae2d60bce066500da8f6d68d9826287cb7ae",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/platform/HostPaths.ts",
           "windowsSha256": null,
           "localSha256": "033e53bf443112fa6f90f0e81a99db0a03024d59ecfaf22fda38ad0a40f57846",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/platform/MacHostAdapter.ts",
           "windowsSha256": null,
           "localSha256": "c2831f583c562acfbc8f66c4a9dbe621fb9d0770563a85bdbb988bb12880510f",
-          "classification": "retained-mac-source",
-          "reason": "Native adapter reviewed: exact live tunnel states, no Agent ensure without verified tunnels, truthful stop outcome, paired authentication release and disposal. Isolated manual/OpenSSH tests are not native M5 proof."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/platform/MacReleaseClient.ts",
           "windowsSha256": null,
           "localSha256": "9aeb3915cbc45fdb90ab5362ef9e9b01ea5bbf6cbf640c5ecdf1271301296f6c",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/platform/Terminal.ts",
           "windowsSha256": null,
           "localSha256": "f9bbb25b4d7dd0d7f8e1dab41e99aa71a61e8147d8a148817e8e6eef6cee1bb0",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/platform/UpdateDistribution.ts",
           "windowsSha256": null,
           "localSha256": "2cfb72925b227b0c1cd79b05eb775a0527f09ebd073554e7a90162e80c48120e",
-          "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/project/BranchHeadBinding.ts",
@@ -2007,22 +2010,19 @@
           "path": "src/runtime/ArchiveEvidenceRead.ts",
           "windowsSha256": null,
           "localSha256": "9db964e7dae03df146069e3bfba30cf07f5ded84f609c98c4dfb42dbe8a1a620",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/CaseAnalysisRead.ts",
           "windowsSha256": null,
           "localSha256": "2fab2ef76a28e26bcb80a3ee95e374190455c3492a1766a43136a3bcbe5ed3f5",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/ClaimEvidenceRead.ts",
           "windowsSha256": null,
           "localSha256": "700b32957efb6315da92f6b098162b967cc5c46c90de97a8613ff3463e736483",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/GpuCollector.ts",
@@ -2046,15 +2046,13 @@
           "path": "src/runtime/OutputContractFiles.ts",
           "windowsSha256": null,
           "localSha256": "3240415fb88b22c1691656a7bdb8ff3907e623482ef12f68728495f350e54dea",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/PlanAnalysisRead.ts",
           "windowsSha256": null,
           "localSha256": "d5a8a9010992170db3a9614b0d78aae13ea88e1789419776a2158ad0b5f938af",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/PlanCodeScope.ts",
@@ -2072,15 +2070,13 @@
           "path": "src/runtime/ProjectAggregateRead.ts",
           "windowsSha256": null,
           "localSha256": "2b66e85b80d50c5abbe2713769f7c8bf83740a22375e0507dadb3c81ecef8bde",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/ResultParseInputs.ts",
           "windowsSha256": null,
           "localSha256": "66c2d900e56f27cd41459f542c8554ed1ca678aa6cfba92c13354bb604cf7da7",
-          "classification": "retained-mac-source",
-          "reason": "Native POSIX result IO only: reconnected existing checked read helpers under result_io names; no dependency on the obsolete durable Plan queue. Input mutation and exact identity regressions retained."
+          "classification": "retained-mac-source"
         },
         {
           "path": "src/runtime/RuntimeLogDiagnostics.ts",
@@ -2090,8 +2086,8 @@
         },
         {
           "path": "src/runtime/RuntimeManifest.ts",
-          "windowsSha256": "668fe4f9d0cd3c799c448d48280aa53de456649d8264154616b5ee40cdb692fe",
-          "localSha256": "49e4238f674ae46c5a9e7b7b70aa8925999912894e3a37162c9a12fa7bdbb0b3",
+          "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
+          "localSha256": "15a2a02b492e12a84e39498fef24d32fe935f2c2be9a237c75cb0beb328ccf18",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -2111,8 +2107,7 @@
           "path": "src/runtime/TmuxTaskLifecycle.ts",
           "windowsSha256": "8624a69a9c8c33ece0acf8b5982897e8736078446adbe00c185d10ded58a3bce",
           "localSha256": "8624a69a9c8c33ece0acf8b5982897e8736078446adbe00c185d10ded58a3bce",
-          "classification": "upstream-identical",
-          "reason": "Retained Mac POSIX/path, identity and runtime boundary from the reviewed three-way adaptation; common .403/.107 behavior retained. Changes require the complete paired regression inventory."
+          "classification": "upstream-identical"
         },
         {
           "path": "src/security/RemotePathPolicy.ts",
@@ -2200,8 +2195,8 @@
         },
         {
           "path": "src/templates/ProjectAdapterTemplates.legacy.ts",
-          "windowsSha256": "5c51e247d871beca98c635449684ddf651f2e94acd1ae3aa6461266146150dce",
-          "localSha256": "5c51e247d871beca98c635449684ddf651f2e94acd1ae3aa6461266146150dce",
+          "windowsSha256": "f7352a1173223c08f4d2b38c38fd5b2d332ee8e5e4c767c5b2cde527407e455c",
+          "localSha256": "f7352a1173223c08f4d2b38c38fd5b2d332ee8e5e4c767c5b2cde527407e455c",
           "classification": "upstream-identical"
         },
         {
@@ -2605,8 +2600,8 @@
         },
         {
           "path": "src/ui/PanelHtml.legacy.ts",
-          "windowsSha256": "ad1d997ff764c850636717256c0bc6addbb87c6169ab41bf98cc0b6a21b5b623",
-          "localSha256": "132faf49e7ad12bc920d9f9a88573a1acac28b81a2522a13f6b90af01db37ac9",
+          "windowsSha256": "39e27175acad2b12abfbd3b9996c2e845691da75a307d13ae77f845bdbcd34de",
+          "localSha256": "2d5e7c5265905a4181aef6fd27c74338d39ded2312b9595d831fbad2d5d59608",
           "classification": "platform-overlay",
           "reason": "Retain current frozen Windows business script and layout; adapt only VS Code system theme palette, high-contrast borders and focus colors. Real Chromium light/dark/high-contrast contrast assertions pass unchanged; current script and non-color layout bytes preserved."
         },
@@ -3155,8 +3150,13 @@
           "path": "test/features/formalJobPreflightProgress.fixture.py",
           "windowsSha256": "2aeb11ec3235593e808ea113c4e06d73eb93d1aabc6d3a0118db541dd1b50826",
           "localSha256": "2aeb11ec3235593e808ea113c4e06d73eb93d1aabc6d3a0118db541dd1b50826",
-          "classification": "upstream-identical",
-          "reason": "Mac 适配：grow/cancel 变体加入最小 sleep，以适配 macOS 调度抖动下的进度观察，阈值未降低。"
+          "classification": "upstream-identical"
+        },
+        {
+          "path": "test/features/hubRuntimeRemoval.test.js",
+          "windowsSha256": "8515c24ad1a69cadae7a443bd539348f45f4d2046082ea954e0c13d87f24a8ea",
+          "localSha256": "d91622b2e9c9a046adfa998da0522404df5fab5b62cb49dc0ef0b832f5fb7886",
+          "classification": "identity-mapping"
         },
         {
           "path": "test/features/idleGpuDispatchLifecycle.integration.test.js",
@@ -3204,15 +3204,13 @@
           "path": "test/features/macCliApi.test.js",
           "windowsSha256": null,
           "localSha256": "9ae20b028907875b5a601583d304dff8a579fe0b9698f5e762fb016bf1e896b0",
-          "classification": "retained-mac-source",
-          "reason": "Mac 专属统一 CLI 契约测试（校验 Mac 发现文件身份），Windows 无对应文件。"
+          "classification": "retained-mac-source"
         },
         {
           "path": "test/features/macPreviewRelease.test.js",
           "windowsSha256": null,
           "localSha256": "5f4854b4470c40283f1da982c91342e9ea2de3630405fa4c997fa3756f60d282",
-          "classification": "retained-mac-source",
-          "reason": "Mac 静态 preview 索引专属测试；本轮把带限流证据的 403/429 断言改为 Windows 0.5.416 的“延后而非检查失败”语义。"
+          "classification": "retained-mac-source"
         },
         {
           "path": "test/features/manualDistributedResultSync.test.js",
@@ -4404,6 +4402,7 @@
   "validation": {
     "nativeMac": "not run",
     "stagedSlotLifecycle": "User authorized one unchanged 20-second rerun; passed in 16328 ms. Original timeout retained.",
-    "applicationClaims": "none"
+    "applicationClaims": "none",
+    "sync440": "Targeted serial host regression; native Mac not run. Full evidence in mac-sync-440/evidence."
   }
 }
