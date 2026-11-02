@@ -2,7 +2,7 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**当前源码版本为 Experiment Mac 0.5.319，配套 SFTP Mac 0.2.105；冻结同步 Windows 0.5.440 / 0.2.117。** 已发布的配套 preview 仍为 [preview-v0.5.318](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.318)，0.5.319 本轮仅同步源码与生成安装包。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
+**当前已发布配套为 Experiment Mac 0.5.319、SFTP Mac 0.2.105；冻结同步 Windows 0.5.440 / 0.2.117。** 两个安装包及 release.json 见 [preview-v0.5.319](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.319)。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
 
 本轮沿用 Windows 的 Worker 统一流程与 Hub 退役说明，新增 [AI 最小实验接入指南](docs/experiment-integration.md)、[MultiModal 实践](docs/multimodal-integration-best-practice.md) 及设置页的复制入口。Mac 身份、系统 SSH、独立认证和 preview 更新通道保留；Mac 真机尚未验证。
 
@@ -25,6 +25,8 @@ Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linu
 
 GPU 会话只在置顶 GPU 卡片展示；选中后展开任务与终端，名称为日志入口。停止、关闭和保留会话的清空使用精确绑定。正式产物只保留最新版；每个 job 完成后的同步取该 job 最新产物与当前勾选范围的交集。操作失败后按实际查询重查，不用历史回执推断成功。
 
+面板顶栏的 **低流量：关 / 开** 可切换低流量模式。开启后关闭展示区自动刷新，按需点击 **刷新窗口列表**、**刷新当前日志**、**刷新运行状态**；缓存内容旁显示采样或手动刷新时间。它不停止实验，也不等于暂停全部网络；必要队列协调与完成确认仍按后台策略运行。偏好保存后本窗口立即应用，其他已打开窗口需重载。完整操作见 [低流量模式与手动刷新](docs/simple-experiment-setup.md#低流量模式与手动刷新)。
+
 本版支持 **批量选择 PLAN → 运行所选计划**：只提交显式勾选项，逐个沿用单PLAN校验和覆盖确认；失败、取消或结果未知后停止后续项，空选择不会运行全部。任务卡分开展示执行、产物完整及日志复核状态，**重新分析运行日志**不会重跑；异常job使用 **覆盖产物并重跑此 job**，保留原有路径双确认。结果汇总主动读取当前声明和Worker实际产物，仅保存最新汇总JSON及CSV/Markdown。
 
 Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不等于失败。产物复制不再全局阻止PLAN提交，真实重叠路径仍保护。清理保留PLAN及共享配置，Worker重连不重复弹历史清理提醒。这些流程已完成隔离回归，Mac真机尚未验证。
@@ -43,7 +45,7 @@ Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不�
 
 启动检查一次，此后每30分钟检查，同一配套版本仅主动提醒一次。通知 **查看更新** 展示说明，安装由上述安装入口显式确认。Mac 保留公开 preview 静态索引和同一 Release 分发，查询失败显示检查失败。安装事务、全部下载验证、SFTP先装、同版跳过、禁止降级、部分失败补装和等待本地传输使用 Windows 共同实现。
 
-共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套的 Experiment 0.5.318 / SFTP 0.2.105 满足该最低要求，请使用同一 Release 的两份 VSIX。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
+共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套的 Experiment 0.5.319 / SFTP 0.2.105 满足该最低要求，请使用同一 Release 的两份 VSIX；已安装同版 SFTP 时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
 
 ## Mac 数据与 CLI
 

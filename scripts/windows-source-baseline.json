@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "924e415eb3409b8518544117464a81cbd31faaeb1625642a39a9e864fe7ffd58",
+          "localSha256": "c1448dda208090bf17b62263ad131ae972a397624c10ac0c95a9948d983d53e0",
           "classification": "platform-overlay",
-          "reason": "Mac README 面向 darwin 安装、Mac 数据目录与 preview 更新入口；本轮按 Windows 0.5.416 补入“多项目分支与工作树”共同业务章节，并把登记表路径改为 ~/Library/Application Support/SimpleExperimentMac/branch-projects.json，配套版本与 Release 链接改为 Mac 值。"
+          "reason": "Mac 安装、认证、数据目录和 preview 指引；当前发布 0.5.319/0.2.105，低流量入口及单台/多台 Worker 说明。仅更新文档，Windows 冻结源码和已发布包保持不变。"
         },
         {
           "path": "docs/configuration-reference.md",

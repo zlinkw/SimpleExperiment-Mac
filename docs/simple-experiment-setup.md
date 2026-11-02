@@ -2,6 +2,8 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
+当前公开配套为 **Experiment Mac 0.5.319 / SimpleSFTP Mac 0.2.105**，下载见 [preview-v0.5.319](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.319)。本文说明该已发布版本，不代表 Windows 后续版本或未发布 Mac 候选的能力。
+
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
 完整实验接入契约见 [AI 最小接入指南](experiment-integration.md)、[MultiModal 实践](multimodal-integration-best-practice.md) 和 [项目契约](plugin-project-contract.md)。面板 **设置 → 最小实验接入指南 · 交给 AI** 可打开指南或复制完整接入任务；这是本机复制，不会自动启动训练或传输。配置参考见 [共同设置字段](configuration-reference.md)。Hub 已退役，所有当前操作只使用明确启用的一台或多台 Worker，旧控制节点字段不补出目标。
@@ -39,6 +41,18 @@
 点击更新后，插件阻止新业务操作，等待已有本地传输结束，下载并验证全部待更新包，再按 **SimpleSFTP Mac → SimpleExperiment Mac** 安装并重载。相同或更高的已安装版本跳过，不自动降级；不会停止远端实验。
 
 **检查失败** 表示网络、限流或清单读取失败，不能当作“已是最新”。网络恢复后手动检查。部分安装失败会显示已完成和待完成组件，选择 **重载后补装**，重载后只补装剩余组件。混合版本期间暂停新业务操作。
+
+## 低流量模式与手动刷新
+
+入口在 SimpleExperiment 面板顶栏，按钮显示 **低流量：关** 或 **低流量：开**。默认关闭；点击切换并等待保存回执。显示“读取中”或“提交中”时等待实际状态，不把灰色按钮当作功能缺失。
+
+- 开启后，tmux、日志、GPU 历史等展示区停止自动刷新；已有缓存仍可显示，不代表服务器刚刚采样。
+- 按需使用 **刷新窗口列表**、**刷新当前日志**、**刷新运行状态** 及各区域的手动刷新入口。提示会区分“尚未手动刷新”、缓存采样时间和上次手动刷新时间；请求尚未完成或失败时不当作取得新数据。
+- 低流量不停止训练，不等于暂停全部网络。必要的队列协调、远端任务完成确认等后台流程继续按实际策略运行；用户提交、停止、手动刷新和受确认门禁保护的操作保留原流程。
+- 这是 Mac 扩展的全局偏好，保存后本窗口立即生效，重启后保留；其他已打开窗口需执行 **Developer: Reload Window** 后应用。它不自动改写 Windows 插件的偏好。
+- 已暂停网络、仅手动刷新或后台通信暂停等更强限制继续生效。关闭低流量开关不会替用户解除这些限制，具体状态以按钮提示和实际查询为准。
+
+如果顶栏没有开关，先在扩展页确认完整名称为 **SimpleExperiment Mac**、版本为 **0.5.319**，再执行 **Developer: Reload Window** 并重新打开面板。仍缺失时保留实际版本和面板诊断，不能仅凭安装成功断定 Extension Host 已加载新版本。上述行为来自源码与自动检查，Mac 真机显示和网络行为尚未验收。
 
 ## 3. 本机工作区与路径配置
 
@@ -158,7 +172,7 @@
 
 | 字段 | 应填写的内容 |
 | --- | --- |
-| `id` / `role` | Worker ID 唯一，含小写字母、数字、点、下划线或连字符；Hub 固定为 `id: "hub"`、`role: "hub"` |
+| `id` / `role` | Worker ID 唯一，含小写字母、数字、点、下划线或连字符；当前执行角色使用 `worker`，旧 Hub 字段不创建执行目标 |
 | `host` / `user` / `sshPort` | 真实 SSH 主机、登录用户和 SSH 端口；HTTP 检测只请求下方转发端点，不用这些字段自动登录 |
 | `localForwardHost` / `localForwardPort` | Termius 在 Mac 上实际监听的地址和端口；每个启用端点的端口唯一，可使用 `::1` |
 | `remoteAgentHost` / `remoteAgentPort` | Termius 转发目标及对应远端 Agent 的实际监听地址和端口 |
@@ -171,13 +185,9 @@
 
 ### 选择拓扑并检测
 
-在面板 **设置 → 服务器 → Mac 服务器拓扑** 选择模式，点击 **保存拓扑**；也可在当前项目工作区设置写 `simpleExperimentMac.topologyMode`：
+当前统一使用 `simpleExperimentMac.topologyMode: "worker_pool"`，支持一台或多台明确启用的 Worker，没有至少两台的要求。旧 `single_worker` 仅兼容读取；`hub_worker` 和 Hub 执行已退役，不新增 Hub，也不使用旧字段补出目标。
 
-- `single_worker`：启用一个 Worker，当前模式不使用 Hub。
-- `worker_pool`：启用至少两个 Worker，当前模式不使用 Hub。
-- `hub_worker`：配置并启用 Hub，加至少一个 Worker。
-
-模式保存在当前项目；手动端点保存在用户设置。新增 Worker 时复制数组中的 Worker 对象，修改 ID、主机、账号、路径和本机端口。Hub 使用相同字段结构，ID/角色改为 `hub`，使用独立本机端口。停用端点可设 `enabled: false`。
+在当前项目的服务器卡片保存连接，停用端点可设 `enabled: false`。新增 Worker 时核对唯一 ID、主机、账号、路径及独立本机端口。旧手动端点设置保留兼容读取；当前项目保存的连接不作为其他窗口的全局连接配置。
 
 远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份；Termius 的凭据不会被读取。
 
@@ -206,19 +216,18 @@ SSH 登录、转发打开和 Agent 可用分别核对；没有运行 Agent 时�
 
 Mac 的版本/哈希检查只读，不会自动部署或重启。检查不一致或不可达时，Plan 前置校验会报告缺项，即使以前的连接状态显示正常也不能视为已就绪。需要升级 runtime 时主动点击 **准备项目与 Agent** 确认上传，在 Termius 核对任务后处理 Agent；不要终止训练 tmux。
 
-## 6. 科研主流程与三种拓扑
+## 6. 科研主流程与单台或多台 Worker
 
 | 模式 | 使用方式 |
 | --- | --- |
-| 单 Worker `single_worker` | 一台执行机，无 Hub |
-| 多 Worker `worker_pool` | 多台 Worker 分片执行，无 Hub |
-| Hub/Worker `hub_worker` | Hub 调度与汇总，Worker 执行 |
+| 单台 Worker | `worker_pool`，只启用一台 Worker，由该 Worker 执行 |
+| 多台 Worker | `worker_pool`，只使用明确启用的 Worker，按当前计划与配额派发 |
 
 业务适配完成后按以下顺序接入：确认服务器与端点 → 部署并检测 Agent → 接入本地项目 → 在 `experiments/plans/` 写 Plan → 校验 `validatePlan` → 预演 `dryRunPlan` → 确认后 `runPlan` → 监控 → 结果预览与归档。业务 API 方法和 Plan 格式沿用现有契约，项目结构与结果约定见 [科研项目契约](plugin-project-contract.md)。
 
 运行前核对最终远端项目路径、Plan revision、拓扑、启用 Worker、执行环境、GPU 限制与结果位置。文件传输由 SimpleSFTP 完成；正式实验不直接调用训练脚本代替 Plan。远端删除仍要求路径规范化、直接父目录核验及两次明确确认。
 
-这三种拓扑、认证上传下载、中文路径和断连恢复仍需 M5 真机验收。首阶段更新成功不代表完整科研功能验收通过。
+单台和多台 Worker、认证上传下载、中文路径和断连恢复仍需 M5 真机验收。首阶段更新成功不代表完整科研功能验收通过。
 
 ### 使用 project.bootstrap API
 
@@ -337,7 +346,7 @@ Plan CLI 先在终端进入与当前 VS Code 窗口相同的项目目录，然�
 
 在线检查读取当前工作区与 `workflow.plan` 路由；未就绪、Plan 选择不符或工作区变化会阻止运行。离线只预览本地信息，输出 `validation: local_only`、`ready: false`，不能证明服务器或科研任务就绪。此 CLI 检查不执行完整远端预演；正式插件路线仍负责 validate → dry-run → upload → submit。
 
-去掉 `--check --dry-run` 才申请 `workflow.run`，随后在 VS Code 确认。初始 `requested: true`、`submitted: false`、`waiting_confirmation` 和 `operationId` 是等待确认的本地回执，不表示实验已在远端运行；使用实时契约中的 `operations.list` 核对后续操作状态与提交证据，取消或失败时不要盲目重复运行。项目外或链接逃逸的 Plan 拒绝，中文/真实首尾空格保留。旧 `run --name … -- command` 入口继续保留为手工本地记录器，正式科研使用配置和 Plan；真实科研三拓扑仍待后续验证。
+去掉 `--check --dry-run` 才申请 `workflow.run`，随后在 VS Code 确认。初始 `requested: true`、`submitted: false`、`waiting_confirmation` 和 `operationId` 是等待确认的本地回执，不表示实验已在远端运行；使用实时契约中的 `operations.list` 核对后续操作状态与提交证据，取消或失败时不要盲目重复运行。项目外或链接逃逸的 Plan 拒绝，中文/真实首尾空格保留。旧 `run --name … -- command` 入口继续保留为手工本地记录器，正式科研使用配置和 Plan；真实科研的单台或多台 Worker 流程仍待后续验证。
 
 Mac API 的 `workspace` 必须指向当前窗口已打开的同一个真实项目目录。服务端在准备、校验与提交的关键异步边界复核目录身份；切换窗口项目或替换目录后会拒绝继续，请重新打开正确项目并预检。晚到的运行回执不写入另一个项目。若检测到已有活动 Plan，会阻止新提交；Mac 路线不通过旧自动停止 fallback 停止原实验，用户主动选择“停止并重新运行”仍保留人工确认。
 
