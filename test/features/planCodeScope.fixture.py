@@ -331,6 +331,78 @@ open_case("from pathlib import Path\nPath('inputs/中文 空格.txt').open(mode=
 open_case("from pathlib import Path\nPath('inputs/中文 空格.txt').open('a', mode='r')", error="PLAN_SOURCE_OPEN_ARGUMENT_INVALID")
 open_case("from io import open as file_open\nfile_open('inputs/中文 空格.txt', 'a', mode='r')", error="PLAN_SOURCE_OPEN_ARGUMENT_INVALID")
 open_case("def open(path, mode):\n    return 1\nopen('not-a-file', 'r')")
+# Sequential reaching definitions: unknown parameters converted to Path have a
+# known receiver type even when their concrete path remains dynamic.
+reassignment_cases = 0
+def reassignment_case(code, **expect):
+    global reassignment_cases
+    open_case(code, **expect)
+    reassignment_cases += 1
+
+wrapper_header = 'from pathlib import Path\nfrom typing import Sequence, Any\n'
+wrapper_header += '\n' * (82-len(wrapper_header.splitlines()))
+wrapper_header += ('def run_wrapped_command(\n    command: Sequence[str],\n    output_dir: str | Path,\n'
+                   '    config_path: str | Path = "",\n    checkpoint_path: str | Path = "",\n'
+                   '    context: dict[str, Any] | None = None,\n    force_progress: bool = False,\n) -> int:\n\n'
+                   '    output_dir = Path(output_dir)\n')
+assert wrapper_header.splitlines()[91].strip() == 'output_dir = Path(output_dir)'
+wrapper_header += '\n' * (99-len(wrapper_header.splitlines()))
+wrapper_header += '    stdout_path = output_dir / "stdout.log"\n    stderr_path = output_dir / "stderr.log"\n'
+wrapper_header += '\n' * (180-len(wrapper_header.splitlines()))
+wrapper_code = wrapper_header + '    ' + reported_line.replace('\n    pass','\n        pass') + '\nrun_wrapped_command([], runtime_output)\n'
+assert wrapper_code.splitlines()[180].strip().startswith('with stdout_path.open')
+write(wrapper, wrapper_code)
+write(open_plan, 'train_command: python '+wrapper+'\n')
+assert set(scope['plan_source_scope'](str(root),open_plan,sha(open_plan))[0]) == {open_plan,wrapper}
+assert not (root/'logs').exists() and not (root/'experiments/simple_adapter/a').exists()
+
+for imports, setup in [
+    ('from pathlib import Path', "output_dir = Path(output_dir)\n    log = output_dir / 'stdout.log'"),
+    ('from pathlib import Path', "directory = Path(output_dir)\n    log = directory / 'stdout.log'"),
+    ('from pathlib import Path as P', "output_dir = P(output_dir)\n    log = output_dir.joinpath('stdout.log')"),
+    ('import pathlib as paths', "output_dir = paths.Path(output_dir)\n    directory = output_dir\n    log = directory.joinpath('stdout.log')"),
+]:
+    for mode in ["'a'", "mode='a'", "'w'", "mode='x'"]:
+        reassignment_case(imports+'\ndef f(output_dir):\n    '+setup+'\n    log.open('+mode+")\nf(runtime_output)\n")
+
+for mode in ['', "'r'", "'r+'", "mode='a+'"]:
+    reassignment_case("from pathlib import Path\ndef f(p):\n    p = Path(p)\n    p.open("+mode+")\nf('inputs/中文 空格.txt')\n",reads=True)
+    reassignment_case("from pathlib import Path\ndef f(output_dir):\n    output_dir = Path(output_dir)\n    (output_dir / 'data.txt').open("+mode+")\nf(runtime_output)\n",error='UNDECLARED')
+    reassignment_case("from pathlib import Path\ndef f(output_dir):\n    output_dir = Path(output_dir)\n    (output_dir / 'data.txt').open("+mode+")\nf(runtime_output)\n",reads=True,declarations=declared_input,conservative=True)
+    reassignment_case("from pathlib import Path\np = 'inputs'\np = Path(p)\np = p.joinpath('中文 空格.txt')\np.open("+mode+")",reads=True)
+
+for setup in [
+    "p = Path(p)\n    p = custom",
+    "if condition:\n        p = Path(p)",
+    "if condition:\n        p = Path(p)\n    else:\n        p = custom",
+    "p = Path(p)\n    if condition:\n        p = custom",
+    "p = Path(p)\n    for item in items:\n        p = custom",
+    "p = Path(p)\n    for item in items:\n        p.open('a')\n        p = custom",
+    "p = Path(p)\n    try:\n        p = custom\n        may_raise()\n    except Exception:\n        pass",
+    "p = Path(p)\n    p += suffix",
+    "p = Path(p)\n    with context() as p:\n        pass",
+]: reassignment_case("from pathlib import Path\ndef f(p):\n    "+setup+"\n    p.open('a')\nf(runtime_receiver)\n",error='UNDECLARED')
+
+for setup in [
+    "if condition:\n        p = Path(p)\n    else:\n        p = Path(other)",
+    "if condition:\n        p = custom\n    p = Path(p)",
+    "p = Path(p)\n    log = p / 'stdout.log'\n    p = custom\n    log.open('a')\n    p = Path(p)",
+    "p = Path(p)\n    p.open('a')\n    p = custom\n    p = Path(p)",
+    "try:\n        p = Path(p)\n    except Exception:\n        p = Path(other)",
+    "factory = unknown\n    factory = Path\n    p = factory(p)",
+]: reassignment_case("from pathlib import Path\ndef f(p):\n    "+setup+"\n    p.open(mode='a')\nf(runtime_receiver)\n")
+
+reassignment_case("from pathlib import Path\nclass Custom:\n    def open(self, mode): return None\ndef f(p):\n    p=Path(p)\n    p=Custom()\n    p.open('a')\nf(runtime_receiver)",error='UNDECLARED')
+reassignment_case("def f(p):\n    p.open('a')\nf(runtime_receiver)",error='UNDECLARED')
+# A receiver's definition is captured at its use, not retroactively overwritten.
+reassignment_case("from pathlib import Path\np = Path('inputs/中文 空格.txt')\np.open()\np = custom",reads=True)
+reassignment_case("from pathlib import Path\np = custom\np.open('a')\np = Path('logs/absent')",error='UNDECLARED')
+reassignment_case("open('inputs/中文 空格.txt')\ndef open(path): return None",reads=True)
+reassignment_case("from pathlib import Path\ndef f(p):\n    p = Path(p)\n    def nested():\n        p.open('a')\n    p = custom\n    nested()\nf(runtime_receiver)",error='UNDECLARED')
+reassignment_case("from pathlib import Path\ndef f(p):\n    p = Path('inputs/中文 空格.txt')\n    p.open()\nf('inputs/not-an-input.txt')",reads=True)
+reassignment_case("from pathlib import Path\ndef f(p):\n    p = Path(dynamic_input)\n    p.open()\nf('inputs/中文 空格.txt')",error='UNDECLARED')
+reassignment_case("from pathlib import Path\ndef f(p):\n    p = Path(p)\n    for p in receivers:\n        Path(p).open()\nf('inputs/中文 空格.txt')",error='UNDECLARED')
+
 # Alias-aware Path forwarding retains actual input and digest verification.
 open_case("from pathlib import Path as P\ndef read(path):\n    return P(path).read_bytes()\nread('inputs/中文 空格.txt')", reads=True)
 open_case("import hashlib\nfrom pathlib import Path as P\nhashlib.sha256(P('inputs/中文 空格.txt').read_bytes())", reads=True)
@@ -343,4 +415,4 @@ try:
     raise AssertionError("changed Path alias integrity input accepted")
 except ValueError as exc:
     assert "inputs/中文 空格.txt" in str(exc), str(exc)
-print(json.dumps(dict(ok=True, files=len(paths), generatedChangesIgnored=6, sourceChangesRejected=3, metadataChainExcluded=True, actualInputsVerified=True, historyPreserved=True, pathOpenCases=open_cases, wrapperLine181=True)))
+print(json.dumps(dict(ok=True, files=len(paths), generatedChangesIgnored=6, sourceChangesRejected=3, metadataChainExcluded=True, actualInputsVerified=True, historyPreserved=True, pathOpenCases=open_cases, wrapperLine181=True,parameterReassignmentCases=reassignment_cases,parameterWrapperLine181=True)))

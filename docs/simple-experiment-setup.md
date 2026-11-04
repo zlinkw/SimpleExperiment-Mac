@@ -2,11 +2,17 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.331 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.332 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
 完整实验接入契约见 [AI 最小接入指南](experiment-integration.md)、[MultiModal 实践](multimodal-integration-best-practice.md) 和 [项目契约](plugin-project-contract.md)。面板 **设置 → 最小实验接入指南 · 交给 AI** 可打开指南或复制完整接入任务；这是本机复制，不会自动启动训练或传输。配置参考见 [共同设置字段](configuration-reference.md)。Hub 已退役，所有当前操作只使用明确启用的一台或多台 Worker，旧控制节点字段不补出目标。
+
+## Path 重赋值与文件访问
+
+0.5.332 修复函数参数经 Path() 转换后同名重赋值仍被旧未知绑定污染的问题。按每个使用位置记录顺序有效定义，赋值右侧先使用旧定义，再覆盖该变量；分支合并保留所有可能类型，循环与异常路径保守处理。Path 对象类型已确定但具体路径未知时，确认的纯追加/写入仍是输出，不要求提前存在；读取和含 + 的混合模式继续核验真实输入，无法确定时仍须有限依赖声明。构造别名、/、joinpath() 及路径值求解使用同一有效定义，参数被覆盖后不再拿旧实参核验错误文件，调用解析不回退到未来定义。保留 all()，不以 any()、追加模式字符串或虚假 inputs 放行。模块/闭包外层可变绑定及未精确建模的路径保持保守；静态分析不是完整运行时解释器。本次桌面与包内 Agent/Scheduler 为 0.5.332，SFTP 仍为 0.2.107。Mac 真机及实际 Agent 尚未验收，本轮没有连接服务器、执行项目模块、写日志或启动训练。
+
+无需为日志输出填写 source_dependencies.inputs 或提前创建文件。确定的 Path.open("a")、Path.open(mode="a") 等纯写访问跳过输入存在性检查；Path.open()、r、r+、a+ 等保留输入检查，自定义对象或未知接收者的同名 open 不套用 Path 契约。当前可见调用中的读取、源码及资产摘要检查仍保留；被引用嵌套函数按限定符名称追踪，不因普通导入而执行式展开无关函数。这里只解析 AST，不运行训练或科研检查。
 
 ## PLAN 选择与长源码核验
 

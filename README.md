@@ -2,7 +2,7 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**当前源码补丁为 Experiment Mac 0.5.331，配套 SFTP Mac 0.2.107；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
+**当前源码补丁为 Experiment Mac 0.5.332，配套 SFTP Mac 0.2.107；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
 
 本轮沿用 Windows 的 Worker 统一流程与 Hub 退役说明，新增 [AI 最小实验接入指南](docs/experiment-integration.md)、[MultiModal 实践](docs/multimodal-integration-best-practice.md) 及设置页的复制入口。Mac 身份、系统 SSH、独立认证和 preview 更新通道保留；Mac 真机尚未验证。
 
@@ -13,6 +13,8 @@ Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linu
 0.5.321 的 `stopMacSystemTunnels` 漏绑修复已核实包含于发布包；本次根因不是该历史遗漏，也不是 Agent 的规则同步错误。此前可写上下文夹具漏掉了只读属性约束，现已修正，不能把此前隔离通过当作真机启动通过。
 
 0.5.320 修复运行前同步接入规则失败：发送给 Agent 的规则副本仅排除本机结果目录使用的 `planDatasetMapping`，不删除本机映射或用户设置；合法字段保留，未知字段和各 Worker 的真实失败继续报错。该修法参考 Windows 0.5.484 的同一协议边界，不表示整体同步到该 Windows 版本。安装 Mac 补丁后重载 VS Code 应用客户端修复；Agent 接收协议不变，既有版本和就绪检查继续按实际结果处理。本轮未部署或重启 Agent，真实服务器运行仍未验收。
+
+0.5.332 修复函数参数经 Path() 转换后同名重赋值仍被旧未知绑定污染的问题。按每个使用位置记录顺序有效定义，赋值右侧先使用旧定义，再覆盖该变量；分支合并保留所有可能类型，循环与异常路径保守处理。Path 对象类型已确定但具体路径未知时，确认的纯追加/写入仍是输出，不要求提前存在；读取和含 + 的混合模式继续核验真实输入，无法确定时仍须有限依赖声明。构造别名、/、joinpath() 及路径值求解使用同一有效定义，参数被覆盖后不再拿旧实参核验错误文件，调用解析不回退到未来定义。保留 all()，不以 any()、追加模式字符串或虚假 inputs 放行。模块/闭包外层可变绑定及未精确建模的路径保持保守；静态分析不是完整运行时解释器。本次桌面与包内 Agent/Scheduler 为 0.5.332，SFTP 仍为 0.2.107。Mac 真机及实际 Agent 尚未验收，本轮没有连接服务器、执行项目模块、写日志或启动训练。
 
 0.5.331 统一 API/UI 的 PLAN 选择：planFile、file、options.planFile、selectedPlanId、planId 指向同一计划，冲突明确拒绝，按实际文件填入 revision，身份缺失指出具体字段。源码核验改为只读异步 operationId；20 秒网络无响应或无真实处理进展后保留原操作，后续查询不重复启动核验，更不提交训练。记录依赖解析、源码核验、资产解析、流式摘要和结果准备耗时，客户端另记结果请求往返时间；真实文件、函数根及摘要字节推进才更新进度。现场耗时瓶颈尚未确定，不能归因于权重、网络或 GPU。桌面与包内 runtime 同为 0.5.331，需原受管流程部署目标实例；本轮未连接或重启服务器，Mac 真机与用户服务器仍未验收。
 
@@ -69,7 +71,7 @@ Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不�
 
 启动检查一次，此后每30分钟检查，同一配套版本仅主动提醒一次。通知 **查看更新** 展示说明，安装由上述安装入口显式确认。Mac 保留公开 preview 静态索引和同一 Release 分发，查询失败显示检查失败。安装事务、全部下载验证、SFTP先装、同版跳过、禁止降级、部分失败补装和等待本地传输使用 Windows 共同实现。
 
-共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套为 Experiment 0.5.331 / SFTP 0.2.107，请使用同一 Release 的两份 VSIX；已安装同版时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
+共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套为 Experiment 0.5.332 / SFTP 0.2.107，请使用同一 Release 的两份 VSIX；已安装同版时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
 
 ## Mac 数据与 CLI
 

@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "5228309be5504f828a7ccb8b97b6361f7c77d81b071c12cc47fe1bb3bb1120be",
+          "localSha256": "76c76c972f38011dd6ccf33d37d362e4f8bb6b685ea285c57b4f7e093e6c01bf",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
+          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "7722863e8cbd0eb0b735984285742cd432a86a521ca033851c745225b8270e16",
+          "localSha256": "18e68f1dd805c2098c6256a1ddeca91421ac3b9acc4d47321d99d9068382f513",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
+          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "6269ef95f0d95d50a5ef8fafa6adf3253cf62bfa04ed774106ea30fd06411241",
+          "localSha256": "81d66ac46d58e46d823280e0b7661b5a0cc5aff932b9b4c8d7ebce691bfde2a3",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
+          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -2074,9 +2074,9 @@
         {
           "path": "src/runtime/PlanCodeScope.ts",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "localSha256": "9a5d93d66bdf34a1af265be2844307168d28be0fa9e894a9797f8e9bb6f011cf",
+          "localSha256": "a542a9128f43d1c9e8e096220e1b871d0c9b2484f5f258504da2612d9054dddd",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
+          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
         },
         {
           "path": "src/runtime/PlanExistingArtifacts.ts",
@@ -2105,9 +2105,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "2af47eb0c863b1fdb06089512a74167d4b2b96b563ea7f5eb0826cb6e891fec6",
+          "localSha256": "5619cba76182ecb63f3146ac3ad31f6a3deeb9ad39d3ea5aec5c57477eb98066",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
+          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",

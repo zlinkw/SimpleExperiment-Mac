@@ -35,8 +35,10 @@ def plan_scope_python_access(tree, module_name=""):
         node = parents.get(node)
         while node is not None and not isinstance(node, frames): node = parents.get(node)
         return node
-    names = {}
-    def bind(frame, name, value): names.setdefault(frame, {}).setdefault(name, []).append(value)
+    names, definitions = {}, {}
+    def bind(frame, name, value):
+        names.setdefault(frame, {}).setdefault(name, []).append(value)
+        definitions.setdefault(node, []).append((frame, name, value))
     for node in ast.walk(tree):
         frame = enclosing(node)
         if isinstance(node, ast.Import):
@@ -66,7 +68,109 @@ def plan_scope_python_access(tree, module_name=""):
                     for child in ast.walk(item.optional_vars):
                         if isinstance(child, ast.Name): bind(frame, child.id, None)
         elif isinstance(node, ast.ExceptHandler) and node.name: bind(frame, node.name, None)
+        elif isinstance(node, ast.Delete):
+            for target in node.targets:
+                if isinstance(target, ast.Name): bind(frame, target.id, None)
+        elif isinstance(node, (ast.MatchAs, ast.MatchStar)) and node.name: bind(frame, node.name, None)
+        elif isinstance(node, ast.MatchMapping) and node.rest: bind(frame, node.rest, None)
+    # Local loads see reaching definitions, not every assignment in the function.
+    # Outer/closure bindings remain conservative: a function may run after a later
+    # outer assignment. RHS loads are recorded before their assignment takes effect.
+    reaching = {}
+    def merge(*states):
+        keys = set().union(*(state.keys() for state in states))
+        return {key: tuple(dict.fromkeys(value for state in states for value in state.get(key, (None,)))) for key in keys}
+    def analyse(frame):
+        local = names.get(frame, {})
+        untracked = {name for item in ast.walk(frame) if enclosing(item) is frame and isinstance(item, (ast.Global, ast.Nonlocal)) for name in item.names}
+        def apply(node, env):
+            for owner, name, value in definitions.get(node, ()):
+                if owner is frame: env[name] = (value,)
+        def possible(env, node):
+            result = dict(env)
+            for item in ast.walk(node):
+                for owner, name, value in definitions.get(item, ()):
+                    if owner is frame: result[name] = tuple(dict.fromkeys((*result.get(name, (None,)), value)))
+            return result
+        def expression(node, env):
+            if isinstance(node, frames): return
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in local and node.id not in untracked:
+                reaching[node] = env.get(node.id, None if isinstance(frame, ast.Module) else (None,))
+            if isinstance(node, ast.NamedExpr):
+                expression(node.value, env); apply(node, env); return
+            if isinstance(node, ast.IfExp):
+                expression(node.test, env)
+                yes, no = dict(env), dict(env)
+                expression(node.body, yes); expression(node.orelse, no)
+                env.update(merge(yes, no)); return
+            if isinstance(node, ast.BoolOp):
+                expression(node.values[0], env)
+                states = [dict(env)]
+                for value in node.values[1:]: expression(value, env); states.append(dict(env))
+                env.update(merge(*states)); return
+            for child in ast.iter_child_nodes(node): expression(child, env)
+        def block(statements, env):
+            env = dict(env)
+            for statement in statements:
+                if isinstance(statement, ast.If):
+                    expression(statement.test, env)
+                    env = merge(block(statement.body, env), block(statement.orelse, env))
+                elif isinstance(statement, (ast.For, ast.AsyncFor, ast.While)):
+                    if isinstance(statement, ast.While):
+                        loop = possible(env, statement); expression(statement.test, loop)
+                    else:
+                        expression(statement.iter, env); loop = possible(env, statement); apply(statement, loop)
+                    # Include zero iterations and back-edge writes, even when a
+                    # type-changing assignment occurs after a load in the body.
+                    env = block(statement.orelse, merge(env, block(statement.body, loop)))
+                elif isinstance(statement, (ast.Try, getattr(ast, 'TryStar', ast.Try))):
+                    success = block(statement.orelse, block(statement.body, env))
+                    outcomes = [success]
+                    for handler in statement.handlers:
+                        caught = possible(env, statement)
+                        if handler.type: expression(handler.type, caught)
+                        apply(handler, caught)
+                        caught = block(handler.body, caught)
+                        if handler.name: caught[handler.name] = (None,)  # Python clears exception targets.
+                        outcomes.append(caught)
+                    # finally also runs on exceptions which leave the block;
+                    # otherwise unhandled exceptions cannot reach the next load.
+                    env = block(statement.finalbody, merge(possible(env, statement), *outcomes)) if statement.finalbody else merge(*outcomes)
+                elif isinstance(statement, (ast.With, ast.AsyncWith)):
+                    for item in statement.items:
+                        expression(item.context_expr, env)
+                        if item.optional_vars:
+                            for target in ast.walk(item.optional_vars):
+                                if isinstance(target, ast.Name): env[target.id] = (None,)
+                    env = block(statement.body, env)
+                elif isinstance(statement, ast.Match):
+                    expression(statement.subject, env)
+                    outcomes = [dict(env)]
+                    for case in statement.cases:
+                        branch = dict(env)
+                        for pattern in ast.walk(case.pattern): apply(pattern, branch)
+                        if case.guard: expression(case.guard, branch)
+                        outcomes.append(block(case.body, branch))
+                    env = merge(*outcomes)
+                else:
+                    # Nested bodies have their own local analysis; decorators,
+                    # bases and defaults still evaluate in the defining scope.
+                    if isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        for child in ast.iter_child_nodes(statement):
+                            if child not in statement.body: expression(child, env)
+                    else:
+                        for child in ast.iter_child_nodes(statement): expression(child, env)
+                    apply(statement, env)
+            return env
+        initial = {}
+        if isinstance(frame, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for arg in [*frame.args.posonlyargs, *frame.args.args, *frame.args.kwonlyargs, frame.args.vararg, frame.args.kwarg]:
+                if arg: initial[arg.arg] = (arg,)  # Unknown value, but an identifiable entry parameter.
+        block(frame.body, initial)
+    for frame in ast.walk(tree):
+        if isinstance(frame, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)): analyse(frame)
     def lookup(node):
+        if node in reaching: return reaching[node]
         frame = enclosing(node)
         while frame is not None:
             if node.id in names.get(frame, {}): return names[frame][node.id]
@@ -121,28 +225,29 @@ def plan_scope_python_access(tree, module_name=""):
 def plan_scope_active_nodes(tree, roots):
     import ast
     active = set()
-    def visit(node, class_live=False):
+    def visit(node, class_live=False, scope=()):
         active.add(node)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for child in [*node.decorator_list, node.args, *([node.returns] if node.returns else [])]: visit(child)
+            for child in [*node.decorator_list, node.args, *([node.returns] if node.returns else [])]: visit(child, scope=scope)
             # A decorator may invoke the function while defining it; do not drop
             # those possible definition-time inputs just because no call is visible.
-            if "*" in roots or node.name in roots or class_live or node.decorator_list:
-                for statement in node.body: visit(statement)
+            qualified = ".".join((*scope, node.name))
+            if "*" in roots or node.name in roots or qualified in roots or any(root.startswith(qualified + ".") for root in roots) or class_live or node.decorator_list:
+                for statement in node.body: visit(statement, scope=(*scope, node.name))
             return
         if isinstance(node, ast.ClassDef):
-            for child in [*node.decorator_list, *node.bases, *node.keywords]: visit(child)
-            for statement in node.body: visit(statement, "*" in roots or node.name in roots)
+            for child in [*node.decorator_list, *node.bases, *node.keywords]: visit(child, scope=scope)
+            for statement in node.body: visit(statement, "*" in roots or node.name in roots, (*scope, node.name))
             return
         if isinstance(node, ast.If) and isinstance(node.test, ast.Compare) and len(node.test.ops) == 1:
             left, right = node.test.left, node.test.comparators[0]
             main_test = (isinstance(left, ast.Name) and left.id == "__name__" and isinstance(right, ast.Constant) and right.value == "__main__") or (isinstance(right, ast.Name) and right.id == "__name__" and isinstance(left, ast.Constant) and left.value == "__main__")
             if main_test and isinstance(node.test.ops[0], (ast.Eq, ast.NotEq)):
-                visit(node.test)
+                visit(node.test, scope=scope)
                 yes = ("__main__" in roots) != isinstance(node.test.ops[0], ast.NotEq)
-                for statement in node.body if yes else node.orelse: visit(statement)
+                for statement in node.body if yes else node.orelse: visit(statement, scope=scope)
                 return
-        for child in ast.iter_child_nodes(node): visit(child, class_live)
+        for child in ast.iter_child_nodes(node): visit(child, class_live, scope)
     visit(tree)
     return active
 
@@ -395,7 +500,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
                 for candidate in (prefix + ".py", prefix + "/__init__.py"):
                     if not os.path.isfile(os.path.join(root, candidate)): continue
                     module(".".join(parts[:length]), parent, "referenced Python symbol line " + str(line))
-                    return activate(candidate, parts[length]) if length < len(parts) else False
+                    return activate(candidate, ".".join(parts[length:])) if length < len(parts) else False
             return False
         changed = True
         while changed:
@@ -458,21 +563,11 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
     def resource_reads():
         active = python_dependencies()
         if active is None: return
-        functions, bindings, effects = {}, {}, {}
+        functions, effects = {}, {}
         for file, (tree, evaluate, parents, assignments) in python_contexts.items():
-            package = file.split("/")[:-1]
-            names = {}
             for node in tree.body:
                 if isinstance(node, ast.FunctionDef):
                     functions[(file, node.name)] = node
-                    names[node.name] = (file, node.name)
-                elif isinstance(node, ast.ImportFrom):
-                    base = package[:len(package)-node.level+1] if node.level else []
-                    base += node.module.split(".") if node.module else []
-                    for alias in node.names: names[alias.asname or alias.name] = ".".join(base + [alias.name])
-                elif isinstance(node, ast.Import):
-                    for alias in node.names: names[alias.asname or alias.name.split(".")[0]] = alias.name if alias.asname else alias.name.split(".")[0]
-            bindings[file] = names
         qualified = {}
         for key in functions:
             file, name = key
@@ -480,14 +575,8 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
             if prefix.endswith(".__init__"): prefix = prefix[:-9]
             qualified[prefix + "." + name] = key
         def called(file, node):
-            canonical = python_access[file][0](node)
-            if canonical in qualified: return qualified[canonical]
-            if isinstance(node, ast.Name): value = bindings[file].get(node.id)
-            elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-                base = bindings[file].get(node.value.id)
-                value = base + "." + node.attr if isinstance(base, str) else None
-            else: value = None
-            return qualified.get(value) if isinstance(value, str) else value
+            # Do not replace a use-position binding with a later module definition.
+            return qualified.get(python_access[file][0](node))
         def call_argument(node, index, function):
             if index < len(node.args): return node.args[index]
             parameters = function.args.posonlyargs + function.args.args
@@ -495,12 +584,12 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
                 return next((keyword.value for keyword in node.keywords if keyword.arg == parameters[index].arg), None)
             return None
         def parameter(file, node, function, seen=()):
+            if node in seen: return None
+            if isinstance(node, ast.arg):
+                return next((i for i, arg in enumerate(function.args.posonlyargs + function.args.args) if arg is node), None)
             if isinstance(node, ast.Name):
-                parameters = function.args.posonlyargs + function.args.args
-                direct = next((i for i, arg in enumerate(parameters) if arg.arg == node.id), None)
-                if direct is not None or node.id in seen: return direct
-                values = [item.value for item in ast.walk(function) if isinstance(item, ast.Assign) and any(isinstance(target, ast.Name) and target.id == node.id for target in item.targets)]
-                forwarded = {parameter(file, value, function, seen + (node.id,)) for value in values}
+                values = python_access[file][2](node) or []
+                forwarded = {parameter(file, value, function, seen + (node,)) for value in values}
                 return next(iter(forwarded)) if len(forwarded) == 1 else None
             if isinstance(node, ast.Call):
                 name = python_access[file][0](node.func)
@@ -701,9 +790,9 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
             if isinstance(node, ast.Constant) and isinstance(node.value, str): return [node.value]
             if isinstance(node, ast.Name):
                 if node.id == "__file__": return [source_file]
-                if node.id in seen: return []
+                if node in seen: return []
                 values = python_access[source_file][2](node) or []
-                choices = [strings(item, seen + (node.id,), source_file, names, expand) for item in values]
+                choices = [strings(item, seen + (node,), source_file, names, expand) for item in values]
                 return [value for values in choices for value in values] if choices and all(choices) else []
             if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Div, ast.Add)):
                 left, right = strings(node.left,seen,source_file,names,expand), strings(node.right,seen,source_file,names,expand)
