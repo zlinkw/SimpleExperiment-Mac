@@ -21477,6 +21477,9 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     async syncProjectAdapterRulesToAgents(rules) {
         if (!this.isRealtimeMode())
             return ["离线模式"];
+        // PLAN 数据集映射仅供本机结果目录使用，不属于 Agent 结果接入协议。
+        const agentRules = { ...rules };
+        delete agentRules.planDatasetMapping;
         const topology = this.projectTopologyAssessment();
         const endpoints = [
             ...([]),
@@ -21485,7 +21488,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         const errors = [];
         for (const endpointId of uniqueStrings(endpoints)) {
             try {
-                const result = await this.postTensorboardAction(endpointId, "save-result-policy", { options: { projectAdapterRules: rules } });
+                const result = await this.postTensorboardAction(endpointId, "save-result-policy", { options: { projectAdapterRules: agentRules } });
                 if (result?.status === "failed")
                     throw new Error(String(result.message || result.error || "Agent 保存失败"));
             }

@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-当前公开配套为 **Experiment Mac 0.5.319 / SimpleSFTP Mac 0.2.105**，下载见 [preview-v0.5.319](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.319)。本文说明该已发布版本，不代表 Windows 后续版本或未发布 Mac 候选的能力。
+本文适用于 **Experiment Mac 0.5.320 / SimpleSFTP Mac 0.2.105**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.320 是运行前接入规则同步的客户端补丁，保持 preview。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -52,7 +52,7 @@
 - 这是 Mac 扩展的全局偏好，保存后本窗口立即生效，重启后保留；其他已打开窗口需执行 **Developer: Reload Window** 后应用。它不自动改写 Windows 插件的偏好。
 - 已暂停网络、仅手动刷新或后台通信暂停等更强限制继续生效。关闭低流量开关不会替用户解除这些限制，具体状态以按钮提示和实际查询为准。
 
-如果顶栏没有开关，先在扩展页确认完整名称为 **SimpleExperiment Mac**、版本为 **0.5.319**，再执行 **Developer: Reload Window** 并重新打开面板。仍缺失时保留实际版本和面板诊断，不能仅凭安装成功断定 Extension Host 已加载新版本。上述行为来自源码与自动检查，Mac 真机显示和网络行为尚未验收。
+如果顶栏没有开关，先在扩展页确认完整名称为 **SimpleExperiment Mac**、版本为 **0.5.319 或更高**，再执行 **Developer: Reload Window** 并重新打开面板。仍缺失时保留实际版本和面板诊断，不能仅凭安装成功断定 Extension Host 已加载新版本。上述行为来自源码与自动检查，Mac 真机显示和网络行为尚未验收。
 
 ## 3. 本机工作区与路径配置
 
@@ -217,6 +217,8 @@ SSH 登录、转发打开和 Agent 可用分别核对；没有运行 Agent 时�
 Mac 的版本/哈希检查只读，不会自动部署或重启。检查不一致或不可达时，Plan 前置校验会报告缺项，即使以前的连接状态显示正常也不能视为已就绪。需要升级 runtime 时主动点击 **准备项目与 Agent** 确认上传，在 Termius 核对任务后处理 Agent；不要终止训练 tmux。
 
 ## 6. 科研主流程与单台或多台 Worker
+
+若 0.5.319 在运行前报“插件接入规则尚未同步到 Agent：invalid projectAdapterRules field”，可更新到 Mac 0.5.320 并重载窗口。该补丁发送规则副本时仅排除本机 `planDatasetMapping`，不删除已保存映射，不放宽 Agent 白名单，也不跳过运行前检查。Agent 接收协议保持不变，既有版本及就绪检查仍按实际结果处理；本轮未部署或重启 Agent。其他非法字段、离线或 Worker 失败仍须按实际反馈处理，更新不自动重跑计划或传输产物。
 
 | 模式 | 使用方式 |
 | --- | --- |

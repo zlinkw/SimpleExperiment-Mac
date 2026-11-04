@@ -2,9 +2,11 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**当前已发布配套为 Experiment Mac 0.5.319、SFTP Mac 0.2.105；冻结同步 Windows 0.5.440 / 0.2.117。** 两个安装包及 release.json 见 [preview-v0.5.319](https://github.com/zlinkw/SimpleExperiment-Mac/releases/tag/preview-v0.5.319)。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
+**当前源码补丁为 Experiment Mac 0.5.320，配套沿用 SFTP Mac 0.2.105；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
 
 本轮沿用 Windows 的 Worker 统一流程与 Hub 退役说明，新增 [AI 最小实验接入指南](docs/experiment-integration.md)、[MultiModal 实践](docs/multimodal-integration-best-practice.md) 及设置页的复制入口。Mac 身份、系统 SSH、独立认证和 preview 更新通道保留；Mac 真机尚未验证。
+
+0.5.320 修复运行前同步接入规则失败：发送给 Agent 的规则副本仅排除本机结果目录使用的 `planDatasetMapping`，不删除本机映射或用户设置；合法字段保留，未知字段和各 Worker 的真实失败继续报错。该修法参考 Windows 0.5.484 的同一协议边界，不表示整体同步到该 Windows 版本。安装 Mac 补丁后重载 VS Code 应用客户端修复；Agent 接收协议不变，既有版本和就绪检查继续按实际结果处理。本轮未部署或重启 Agent，真实服务器运行仍未验收。
 
 ## 系统与安装
 

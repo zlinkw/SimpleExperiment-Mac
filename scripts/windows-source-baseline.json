@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "c1448dda208090bf17b62263ad131ae972a397624c10ac0c95a9948d983d53e0",
+          "localSha256": "e791fe60b3badc1fb7bd78a0c57c27b94f10dd9d8a8349fa4a27fb6f4f4d5acf",
           "classification": "platform-overlay",
-          "reason": "Mac 安装、认证、数据目录和 preview 指引；当前发布 0.5.319/0.2.105，低流量入口及单台/多台 Worker 说明。仅更新文档，Windows 冻结源码和已发布包保持不变。"
+          "reason": "Mac install, preview identity and 0.5.320 policy-sync usage; SFTP remains 0.2.105 and native Mac/server verification remains disclosed as not run."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,14 +103,14 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "a47255f57c29d298ca923b0e6b55d9217f265fb2dc3d76e5e74b6e6b33af066a",
+          "localSha256": "01c801976889cf52ea78063c64cfa4c687bfbcc76bd961a72ecb9235c28ce431",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "5c5516eb54b7663b5df7f5354c1c44d32f545b1acd89dabdaabe50a2fb8abdda",
+          "localSha256": "9a6c6767f8e7b657e1f674c03a2b8b9849a4cbc93caf6f5e8e29d18e06256189",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -805,9 +805,9 @@
         {
           "path": "src/extension/legacy.ts",
           "windowsSha256": "674a98dd695dc768f9152dcfa461eceb2a6daf7c5db4aa5382f2250e6c5b3b59",
-          "localSha256": "80256f2e625eb9814addfe4b3bc54c9fbb0c39848165774cdaff6f9b84a8896f",
+          "localSha256": "362dff9c1ec1917b84e1f3b8dd53febed613c62e7192e5134cdc261fd536fd2a",
           "classification": "platform-overlay",
-          "reason": "Preserves Mac identity, worker-only entrypoints, strict POSIX spelling, independent authentication and paired preview updates while merging .403 GPU/root-map/isolated-review behavior. Runtime templates no longer read packaged project documentation."
+          "reason": "Mac host/identity adapters retained on frozen Windows 0.5.440; selective Windows e0409fce sender fix excludes only local planDatasetMapping from a copied Agent policy. No Agent whitelist or preflight bypass changes."
         },
         {
           "path": "src/factories/CommandFactory.ts",
@@ -2087,7 +2087,7 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "15a2a02b492e12a84e39498fef24d32fe935f2c2be9a237c75cb0beb328ccf18",
+          "localSha256": "754e81ced99f261110f12f3aaf94e1d139baaf9a505a9006078f6e272f052456",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
