@@ -11,14 +11,26 @@ const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(process.env.SIMPLE_POLICY_SENDER || path.join(root, 'src/extension/legacy.ts'), 'utf8');
 const agent = process.env.SIMPLE_POLICY_AGENT || path.join(root, 'dist/runtime/cluster_agent.py');
 let seq = 0;
+const configurations = new Map();
+const helperNames = ['pluginProjectAdapterRules', 'recordField', 'normalizeProjectAdapterRulesPatch', 'stringPatchValue', 'splitUiList', 'splitUiMap'];
+const ast = ts.createSourceFile('legacy.ts', source, ts.ScriptTarget.Latest, true);
+const helpers = helperNames.map(name => {
+  const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
+  assert.ok(declaration, name); return declaration.getText(ast);
+});
 const Host = vm.runInNewContext(ts.transpileModule(
-  'class Host {' + method(source, 'syncProjectAdapterRulesToAgents(') + method(source, 'postTensorboardAction(') + '} Host;',
+  helpers.join('\n') + '\nclass Host {' + ['syncProjectAdapterRulesToAgents(', 'postTensorboardAction(', 'saveProjectAdapterRulesFromUi(', 'saveResultColumnMappingFromUi('].map(name => method(source, name)).join('\n') + '} Host;',
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
 ).outputText, {
   uniqueStrings: values => [...new Set(values)],
   errorMessage: error => error.message,
   makeOpId: action => action + '-' + ++seq,
   setTimeout,
+  vscode: { Uri: { file: fsPath => ({ fsPath }) }, ConfigurationTarget: { WorkspaceFolder: 3 }, window: { showInformationMessage() {} },
+    workspace: { getConfiguration: (_section, uri) => ({
+      get: (_key, fallback) => configurations.get(uri.fsPath) || fallback,
+      update: async (key, value, target) => { assert.equal(key, 'projectAdapterRules'); assert.equal(target, 3); configurations.set(uri.fsPath, value); },
+    }) } },
 });
 const plain = value => JSON.parse(JSON.stringify(value));
 function freeze(value) {
@@ -37,6 +49,11 @@ function host(workerIds, transport, projectRoot = '/Users/研究/项目 A') {
   value.isRealtimeMode = () => true;
   value.projectTopologyAssessment = () => ({ mode: 'worker_pool' });
   value.enabledWorkerConfigs = () => workerIds.map(id => ({ id }));
+  value.captureProjectContext = () => ({ root: projectRoot });
+  value.projectContextIsCurrent = () => true;
+  value.refreshLocalPlanMetadata = async () => {};
+  value.postState = () => {};
+  value.queueResultParseAfterProjectChange = () => {};
   // Only the wire transport is replaced. Both production sending methods run.
   value.client = { postWorkerAction: async (workerId, action, payload) => {
     assert.equal(action, 'save-result-policy');
@@ -58,16 +75,22 @@ const policy = {
   metricAliases: { auc: 'AUC' },
   derivedMetric: { metric: 'AUC', leftEndpoint: 'clean', rightEndpoint: 'corrupt', scale: 100, outputName: 'auc_drop' },
 };
+const desktop = { planGlobs: ['experiments/plans/**/*.yaml', '计划 空间/**/*.yml'],
+  configGlobs: ['configs/**/*.yaml'], resultGlobs: ['结果 目录/**/*.csv'] };
 
 test('isolated real Mac receiver accepts valid policy and rejects local or unknown fields', () => {
-  const inputs = [{}, policy, { planDatasetMapping: {} }, { planDatasetMapping: { plan: { datasets: ['中文 数据集'] } } },
-    { unknownField: 'must remain visible' }, { csvColumnMapping: { case: 'invalid\ncolumn' } },
-    { derivedMetric: { ...policy.derivedMetric, scale: 7 } }];
-  const got = receive(inputs.map(rules => ({ payload: { options: { projectAdapterRules: rules } } })));
-  assert.deepEqual(got.results.slice(0, 2).map(r => r.status), ['completed', 'completed']);
-  for (const r of got.results.slice(2, 5)) assert.match(r.message, /invalid projectAdapterRules field/);
-  assert.match(got.results[5].message, /invalid csvColumnMapping field/);
-  assert.match(got.results[6].message, /invalid derivedMetric configuration/);
+  const cases = [ [{}, null], [policy, null],
+    ...Object.entries({ ...desktop, planDatasetMapping: {} }).map(([key, value]) => [{ [key]: value }, /invalid projectAdapterRules field/]),
+    [{ planDatasetMapping: { plan: { datasets: ['中文 数据集'] } } }, /invalid projectAdapterRules field/],
+    [{ unknownField: 'must remain visible' }, /invalid projectAdapterRules field/],
+    [{ csvColumnMapping: { case: 'invalid\ncolumn' } }, /invalid csvColumnMapping field/],
+    [{ derivedMetric: { ...policy.derivedMetric, scale: 7 } }, /invalid derivedMetric configuration/],
+  ];
+  const got = receive(cases.map(([rules]) => ({ payload: { options: { projectAdapterRules: rules } } })));
+  got.results.forEach((result, index) => {
+    if (cases[index][1]) { assert.equal(result.status, 'failed'); assert.match(result.message, cases[index][1]); }
+    else assert.equal(result.status, 'completed');
+  });
   assert.equal(got.writes.length, 2);
 });
 
@@ -77,8 +100,10 @@ test('real Mac sender preserves all valid fields and local configuration across 
     { rules: { planDatasetMapping: {} }, expected: {} },
     { rules: policy, expected: policy },
     { rules: { ...policy, planDatasetMapping: {} }, expected: policy },
+    ...Object.entries(desktop).map(([key, value]) => ({ rules: { ...policy, [key]: value }, expected: policy })),
+    { rules: { ...policy, ...desktop, planDatasetMapping: {} }, expected: policy },
     ...['C:\\研究 工作区\\项目 A', '/Users/研究 工作区/项目 A', '/srv/团队 空间/项目 A'].map(directory => ({
-      rules: { ...policy, candidateCsv: [directory + '/结果.csv'], planDatasetMapping: {
+      rules: { ...policy, ...desktop, candidateCsv: [directory + '/结果.csv'], planDatasetMapping: {
         [directory + '/experiments/plans/计划.yaml']: { datasets: ['中文 数据集'], source: 'manual' },
       } }, expected: { ...policy, candidateCsv: [directory + '/结果.csv'] },
     })),
@@ -99,11 +124,14 @@ test('real Mac sender preserves all valid fields and local configuration across 
 });
 
 test('single, duplicate and missing Workers and offline mode keep their real routing behavior', async () => {
+  const calls = [];
   for (const ids of [[], ['only'], ['one', 'two', 'one']]) {
     const h = host(ids);
-    assert.deepEqual(Array.from(await h.value.syncProjectAdapterRulesToAgents({ planDatasetMapping: {} })), []);
+    assert.deepEqual(Array.from(await h.value.syncProjectAdapterRulesToAgents({ ...policy, ...desktop, planDatasetMapping: {} })), []);
     assert.deepEqual(h.calls.map(r => r.workerId), [...new Set(ids)]);
+    calls.push(...h.calls);
   }
+  for (const result of receive(calls).results) assert.equal(result.status, 'completed', result.message);
   const offline = host(['must-not-send']);
   offline.value.isRealtimeMode = () => false;
   assert.deepEqual(Array.from(await offline.value.syncProjectAdapterRulesToAgents(policy)), ['离线模式']);
@@ -111,10 +139,17 @@ test('single, duplicate and missing Workers and offline mode keep their real rou
 });
 
 test('unknown fields and malformed legal fields still return each Worker actual Agent failure', async () => {
-  for (const invalid of [{ unknownField: true }, { csvColumnMapping: { metric: 'bad\ncolumn' } },
-    { derivedMetric: { ...policy.derivedMetric, outputName: 'not valid' } }]) {
-    const h = host(['a', 'b'], row => receive([row]).results[0]);
-    const rules = freeze({ ...invalid, planDatasetMapping: {} });
+  const invalids = [{ unknownField: true }, { csvColumnMapping: { metric: 'bad\ncolumn' } },
+    { derivedMetric: { ...policy.derivedMetric, outputName: 'not valid' } }];
+  // Reuse one isolated receiver process; every actual outgoing rules object must
+  // exactly equal the receiver input before its real response is returned.
+  const received = receive(invalids.map(rules => ({ payload: { options: { projectAdapterRules: rules } } })));
+  for (const [caseIndex, invalid] of invalids.entries()) {
+    const h = host(['a', 'b'], row => {
+      assert.deepEqual(row.payload.options.projectAdapterRules, invalid);
+      return received.results[caseIndex];
+    });
+    const rules = freeze({ ...invalid, ...desktop, planDatasetMapping: {} });
     const errors = Array.from(await h.value.syncProjectAdapterRulesToAgents(rules));
     assert.equal(errors.length, 2);
     for (const [index, id] of ['a', 'b'].entries()) {
@@ -122,6 +157,26 @@ test('unknown fields and malformed legal fields still return each Worker actual 
       assert.deepEqual(h.calls[index].payload.options.projectAdapterRules, invalid);
     }
   }
+});
+
+test('both result-rule settings entry points retain desktop discovery and use the common Agent boundary', async () => {
+  const all = [];
+  for (const entry of ['saveProjectAdapterRulesFromUi', 'saveResultColumnMappingFromUi']) {
+    const root = '/Users/科研/' + entry, original = freeze(plain({ ...policy, ...desktop, planDatasetMapping: { p: { datasets: ['中文'] } } }));
+    configurations.set(root, original);
+    const h = host(['worker-a', 'worker-b'], undefined, root);
+    const patch = entry === 'saveProjectAdapterRulesFromUi' ? { ...policy, metricAliases: 'auc = AUC' } : { metric: 'score' };
+    await h.value[entry]({ patch });
+    const saved = configurations.get(root);
+    for (const key of Object.keys(desktop)) assert.deepEqual(plain(saved[key]), desktop[key]);
+    assert.deepEqual(plain(saved.planDatasetMapping), plain(original.planDatasetMapping));
+    assert.deepEqual(plain(original), { ...policy, ...desktop, planDatasetMapping: { p: { datasets: ['中文'] } } });
+    assert.deepEqual(plain(saved.metricAliases), policy.metricAliases);
+    assert.deepEqual(h.calls.map(row => row.workerId), ['worker-a', 'worker-b']);
+    for (const row of h.calls) for (const key of [...Object.keys(desktop), 'planDatasetMapping']) assert.equal(key in row.payload.options.projectAdapterRules, false);
+    all.push(...h.calls);
+  }
+  for (const result of receive(all).results) assert.equal(result.status, 'completed', result.message);
 });
 
 test('one failed or unreachable Worker does not hide other Worker responses', async () => {

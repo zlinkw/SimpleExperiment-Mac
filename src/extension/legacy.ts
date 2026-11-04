@@ -21374,8 +21374,9 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         const root = projectContext.root;
         if (!root)
             throw new Error("需要先打开工作区。");
-        const patch = normalizeProjectAdapterRulesPatch(recordField(message, "patch"));
         const existingRules = pluginProjectAdapterRules(root);
+        // Editing result rules must retain desktop discovery and unrelated settings.
+        const patch = { ...existingRules, ...normalizeProjectAdapterRulesPatch(recordField(message, "patch")) };
         patch.csvColumnMapping = existingRules.csvColumnMapping || {};
         patch.derivedMetric = existingRules.derivedMetric || {};
         patch.planDatasetMapping = existingRules.planDatasetMapping || {};
@@ -21477,9 +21478,10 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     async syncProjectAdapterRulesToAgents(rules) {
         if (!this.isRealtimeMode())
             return ["离线模式"];
-        // PLAN 数据集映射仅供本机结果目录使用，不属于 Agent 结果接入协议。
+        // Desktop discovery and dataset mappings are not Agent result-policy fields.
         const agentRules = { ...rules };
-        delete agentRules.planDatasetMapping;
+        for (const key of ["planDatasetMapping", "planGlobs", "configGlobs", "resultGlobs"])
+            delete agentRules[key];
         const topology = this.projectTopologyAssessment();
         const endpoints = [
             ...([]),

@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.323 / SimpleSFTP Mac 0.2.106**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.323 修复真实日志定位的冻结上下文 Proxy 错误；保留此前面板入口隔离、SFTP 通知、命令绑定和接入规则同步修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.324 / SimpleSFTP Mac 0.2.106**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.324 修复桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -45,6 +45,10 @@
 若报 `command 'simpleExperimentMac.openPanel' not found` 或激活日志出现 `'get' on proxy: property 'globalState' is a read-only and non-configurable data property`，更新到 **Experiment 0.5.323** 并执行 **Developer: Reload Window**。SFTP 已为 0.2.106 时无需重复安装；仍为 0.2.105 时先更新 SFTP，旧错误通知可能阻止依赖激活。不清空任何设置，也不操作训练服务器。
 
 新版命令和侧栏先注册，再初始化业务；失败时打开启动诊断页。请复制 **输出 → SimpleExperiment Startup** 的加载 ID、版本、代码/注册路径、运行平台、SFTP 状态及首条异常栈。同时用 **Developer: Show Running Extensions** 确认是否运行在本机，及 **Developer: Show Logs… → Extension Host** 保留重载后的第一处异常。如果连 Startup 输出也没有，优先检查扩展是否禁用、装错 Profile、旧 Extension Host 或依赖导入失败；不要据此清理配置。0.5.323 已对照用户提供的 globalState Proxy 激活错误复现并修复，但本机包级回归不替代 macOS 真机重载验收。
+
+## 规则同步失败
+
+若“校验并提交运行”报 `invalid projectAdapterRules field`，请更新到 **Experiment 0.5.324** 并重载。桌面使用的 `planDatasetMapping`、`planGlobs`、`configGlobs`、`resultGlobs` 保留在工作区，只从发往 Agent 的副本排除；无需删除发现配置。结果路径、CSV 映射和指标别名照常同步，其他未知字段、非法映射或真实 Worker 失败仍须修正，不能当作隧道故障一概重试。本补丁不部署 Agent，也不自动再次提交训练。
 
 ## 低流量模式与手动刷新
 

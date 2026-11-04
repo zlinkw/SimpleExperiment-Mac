@@ -62,7 +62,7 @@ function fixture() {
   const disk = filesystem();
   const files = loadCompiled('dist/mac/PlanFiles.js', { 'node:fs': disk.api, 'node:path': path.posix });
   const contract = loadCompiled('dist/features/DistributedProjectContract.js');
-  const source = fs.readFileSync(path.join(root, 'src/extension/legacy.ts'), 'utf8');
+  const source = fs.readFileSync(process.env.SIMPLE_POLICY_SENDER || path.join(root, 'src/extension/legacy.ts'), 'utf8');
   const ast = ts.createSourceFile('extension.ts', source, ts.ScriptTarget.Latest, true), functions = new Map(), methods = new Map();
   function visit(node) {
     if (ts.isFunctionDeclaration(node) && node.name) functions.set(node.name.text, node.getText(ast));
@@ -71,14 +71,19 @@ function fixture() {
   }
   visit(ast);
   const sandbox = vm.createContext({ process: { platform: 'darwin' }, path: path.posix, fs: disk.api.promises, crypto, Buffer,
-    MacPlanFiles_1: files, normalizePosixRelativePath: require('../../dist/mac/PosixPath').normalizePosixRelativePath,
+    MacPlanFiles_1: files, PosixPath_1: require('../../dist/mac/PosixPath'), normalizePosixRelativePath: require('../../dist/mac/PosixPath').normalizePosixRelativePath,
     localPlanSummaryReadBudgetBytes: 512 * 1024, localPlanSummaryConcurrency: 8,
     defaultYamlScanBudget: { maxFiles: 500, maxDirs: 800, maxDepth: 8 }, isHeavyProjectDir: () => false,
     PlanBuilder_1: require('../../dist/features/PlanBuilder'),
     normalizePlanArchiveEvidencePath: value => value || '',
     normalizeDistributedProjectContract: contract.normalizeDistributedProjectContract,
+    DistributedProjectContract_1: contract,
+    PlanArchive_1: { planRuntimeConfigReferences: (...args) => sandbox.planRuntimeConfigReferences(...args) },
+    PlanRunHost_1: require('../../dist/extension/PlanRunHost'),
+    PlanIsolatedBatchLedger_1: require('../../dist/features/PlanIsolatedBatchLedger'),
     workspaceRoot: () => workspace, makeOpId: () => 'distributed-mock',
     planValidationFromResult: value => value,
+    uniqueStrings: values => [...new Set(values)], errorMessage: error => error.message, setTimeout,
     PlanCleanupEvidence_1: require("../../dist/features/PlanCleanupEvidence"),
     cleanupStablePlanId: require("../../dist/features/PlanCleanupEvidence").cleanupStablePlanId,
     PlanExecutionMode: require('../../dist/features/PlanExecutionMode'),
@@ -95,12 +100,12 @@ function fixture() {
         bindWorkflowWorkspace: (requested, current) => binding.bindWorkflowWorkspace(requested, current, probe),
         assertWorkflowWorkspace: (record, current) => binding.assertWorkflowWorkspace(record, current, probe) };
     })(),
-    vscode: { workspace: { getConfiguration: () => ({ get: (_key, fallback) => sandbox.planDirConfig ?? fallback }) },
+    vscode: { Uri: { file: fsPath => ({ fsPath }) }, workspace: { getConfiguration: () => ({ get: (key, fallback) => key === 'projectAdapterRules' ? sandbox.adapterRules ?? fallback : sandbox.planDirConfig ?? fallback }) },
       window: { showInformationMessage: () => { throw Error('unexpected UI'); } } } });
-  const functionNames = ['readLocalPlans', 'readLocalPlanSummary', 'readArchivedLocalPlans', 'readPlanArchiveBundle', 'archiveManifestFileList', 'walkYaml', 'isArchivedPlanFile', 'mapLimited', 'parseLocalPlanText',
+  const functionNames = ['pluginProjectAdapterRules', 'readLocalPlans', 'readLocalPlanSummary', 'readArchivedLocalPlans', 'readPlanArchiveBundle', 'archiveManifestFileList', 'walkYaml', 'isArchivedPlanFile', 'mapLimited', 'parseLocalPlanText',
     'sha256Text', 'safeWorkspacePlanPath', 'projectBootstrapPlanSelection', 'operationResultPlanFile', 'planDirSafe', 'normalizePlanSelectionKey', 'stringField'];
   // 入队路径新增的 Git 溯源收敛方法按同样方式取生产实现（含其剥凭证依赖），不写替身。
-  const methodNames = ['distributedPlanEligible', 'distributedProjectContract', 'enqueueDistributedPlan', 'commitIsolatedEnqueueLocal', 'assertPlanLocalConfigFiles', 'queueGitProvenance', 'stripGitUrlCredentials'];
+  const methodNames = ['syncProjectAdapterRulesToAgents', 'postTensorboardAction', 'distributedPlanEligible', 'distributedProjectContract', 'enqueueDistributedPlan', 'commitIsolatedEnqueueLocal', 'assertPlanLocalConfigFiles', 'queueGitProvenance', 'stripGitUrlCredentials'];
   vm.runInContext(ts.transpileModule(functionNames.map(name => { assert.ok(functions.has(name), name); return functions.get(name); }).join('\n') +
     '\nclass Subject { ' + methodNames.map(name => methods.get(name)).join('\n') + '\n}\nthis.Subject = Subject;',
   { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, sandbox);
@@ -148,6 +153,26 @@ test('actual Mac scanner and summary reader select case, Unicode, percent and tr
   }
   assert.equal(disk.opened, disk.closed);
   assert.throws(() => sandbox.safeWorkspacePlanPath(workspace, 'experiments/PLANS/A.yaml', planDir), /实验计划目录/);
+});
+
+test('syncing desktop discovery settings leaves actual local Plan discovery and workspace rules unchanged', async () => {
+  const { sandbox } = fixture(), subject = new sandbox.Subject(), sent = [];
+  const rules = Object.freeze({ planGlobs: Object.freeze(['experiments/plans/**/*.yaml']), configGlobs: Object.freeze(['configs/**/*.yaml']),
+    resultGlobs: Object.freeze(['结果 目录/**/*.csv']), planDatasetMapping: Object.freeze({}), primaryMetric: 'AUC' });
+  sandbox.adapterRules = rules;
+  const before = await sandbox.readLocalPlans(workspace, planDir);
+  Object.assign(subject, { isRealtimeMode: () => true, projectTopologyAssessment: () => ({ mode: 'worker_pool' }),
+    enabledWorkerConfigs: () => [{ id: 'a' }, { id: 'b' }], client: { postWorkerAction: async (id, action, payload) => {
+      assert.equal(action, 'save-result-policy'); sent.push({ id, rules: JSON.parse(JSON.stringify(payload.options.projectAdapterRules)) }); return { status: 'completed' };
+    } } });
+  assert.equal(sandbox.pluginProjectAdapterRules(workspace), rules);
+  assert.deepEqual(Array.from(await subject.syncProjectAdapterRulesToAgents(rules)), []);
+  assert.deepEqual(sent, [{ id: 'a', rules: { primaryMetric: 'AUC' } }, { id: 'b', rules: { primaryMetric: 'AUC' } }]);
+  assert.equal(sandbox.pluginProjectAdapterRules(workspace), rules);
+  assert.deepEqual(Array.from((await sandbox.readLocalPlans(workspace, planDir)).map(p => p.planFile)), Array.from(before.map(p => p.planFile)));
+  assert.equal(before.length, names.length);
+  assert.deepEqual(rules.planGlobs, ['experiments/plans/**/*.yaml']);
+  assert.deepEqual(rules.configGlobs, ['configs/**/*.yaml']); assert.deepEqual(rules.resultGlobs, ['结果 目录/**/*.csv']);
 });
 
 test('actual bootstrap selection rejects a wrong explicit path and never defaults to another sole Plan', () => {

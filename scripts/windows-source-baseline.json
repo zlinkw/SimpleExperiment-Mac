@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "0df48d7f4fb740a1a60e72e2ca92bfe51f4757501ba43e4dd88003d537204dbd",
+          "localSha256": "85e7e34c64021175c5724810b84302271d264b03aa212c29b697fd7566f64133",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.323 frozen-context startup root cause and paired install guidance, with native-Mac acceptance explicitly pending."
+          "reason": "Mac 0.5.324 desktop/Agent policy boundary, paired version and explicit native/server verification limits."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,14 +103,14 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "cea230276f5eea649b419524f0b05d44c1401d11da57d0f9b338417e47cdfbca",
+          "localSha256": "199a9e651c063faa43dcc762a9270d6b2faaea7ed57a95de97fa54be50ddb0de",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "9471f284a6ea3d7592bebe59f4528acb06563eee86b3c191e14cfff07b9e0185",
+          "localSha256": "602892c8cc6707eb54052eabed697003e05b42cc20d81f898076d36b351b1052",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -807,9 +807,9 @@
         {
           "path": "src/extension/legacy.ts",
           "windowsSha256": "674a98dd695dc768f9152dcfa461eceb2a6daf7c5db4aa5382f2250e6c5b3b59",
-          "localSha256": "362dff9c1ec1917b84e1f3b8dd53febed613c62e7192e5134cdc261fd536fd2a",
+          "localSha256": "efd3da2590ee22d67fd666518e2d8784f2d73cd31cd171781d59546bb9820baa",
           "classification": "platform-overlay",
-          "reason": "Mac host/identity adapters retained on frozen Windows 0.5.440; selective Windows e0409fce sender fix excludes only local planDatasetMapping from a copied Agent policy. No Agent whitelist or preflight bypass changes."
+          "reason": "Mac 0.5.324: preserve desktop discovery settings locally and omit only planDatasetMapping/planGlobs/configGlobs/resultGlobs at the shared Agent policy send boundary; existing strict Agent validation and per-Worker errors retained."
         },
         {
           "path": "src/factories/CommandFactory.ts",
@@ -2098,7 +2098,7 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "c71049e048ca955bc29ca54acc269433c657f53f72641b5a95e9de8bdd56619a",
+          "localSha256": "24f38653c0abb1e42ee6c921e6ae65b2a976acef95c835ecd6755adb3ff641a9",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
