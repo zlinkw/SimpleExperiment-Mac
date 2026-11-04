@@ -37,6 +37,9 @@ export function resolveCommandHandlerMap(provider: Record<string, (...args: unkn
   bind("simpleExperimentMac.startAllXshellRealtimeTunnels", "startAllXshellRealtimeTunnels");
   bind("simpleExperimentMac.startAllXshellAgentSessions", "startAllXshellAgentSessions");
   bind("simpleExperimentMac.startAllXshellConnections", "startAllXshellConnections");
+  bind("simpleExperimentMac.stopMacSystemTunnels", "stopMacSystemTunnels");
+  bind("simpleExperimentMac.configureManualEndpoints", "configureManualEndpoints");
+  bind("simpleExperimentMac.showManualAgentGuide", "showManualAgentGuide");
   bind("simpleExperimentMac.testAllTunnels", "testTunnel");
   bind("simpleExperimentMac.showTunnelEndpointRegistry", "showTunnelEndpointRegistry");
   bind("simpleExperimentMac.testXshellTunnel", "testTunnel");

@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "e791fe60b3badc1fb7bd78a0c57c27b94f10dd9d8a8349fa4a27fb6f4f4d5acf",
+          "localSha256": "0ed8033d05fc9de2fad04e900d5da1ad2a6f281c858ac09e71f1bd17dd619753",
           "classification": "platform-overlay",
-          "reason": "Mac install, preview identity and 0.5.320 policy-sync usage; SFTP remains 0.2.105 and native Mac/server verification remains disclosed as not run."
+          "reason": "Mac 0.5.321 startup command binding fix, retained 0.5.320 policy fix, preview identity and native-Mac verification disclosure."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,14 +103,14 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "01c801976889cf52ea78063c64cfa4c687bfbcc76bd961a72ecb9235c28ce431",
+          "localSha256": "57466ba311417919e5c171c72feeed0f1c13cdd640badb4ccc0af0fd016fa25d",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "9a6c6767f8e7b657e1f674c03a2b8b9849a4cbc93caf6f5e8e29d18e06256189",
+          "localSha256": "93bd9cc3ce3b69a6b3084e969cc5e07b8e3a330673787098e6a8e4bfce348f66",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -745,8 +745,9 @@
         {
           "path": "src/extension/ProviderCommands.ts",
           "windowsSha256": "5128193e7cec8d7b52c604de87c77e9bb9851d7158cf6a76428474a02799950b",
-          "localSha256": "98e4c7b37f9503a5b718831f32e571820e3b69ee7471d9b738dbc68f7b3bcec7",
-          "classification": "identity-mapping"
+          "localSha256": "f4f120ea1ecae6669d2a2f4eda01a38130b4a08c89a393ffedba6dac72267cf1",
+          "classification": "platform-overlay",
+          "reason": "Mac command namespace and retained platform commands: bind system-tunnel stop plus manual endpoint/settings guide in the shared factory path. Strict missing-handler rejection, rollback and lease behavior preserved."
         },
         {
           "path": "src/extension/ProviderRealtime.ts",
@@ -812,9 +813,9 @@
         {
           "path": "src/factories/CommandFactory.ts",
           "windowsSha256": "8dbcf9828cc5b9fcb95895145592e5aec11b89fbaf44e6f262722ab95f0a43a5",
-          "localSha256": "cc3506660112d6481bbba4a83b697fde664c93e337714aebec7cdca649836ff1",
+          "localSha256": "81a50ec2cfd4588da49380a3c812023cb9c4c63592eac1053ee31f684f20e1c0",
           "classification": "platform-overlay",
-          "reason": "Retained Mac POSIX/path, identity and runtime boundary from the reviewed three-way adaptation; common .403/.107 behavior retained. Changes require the complete paired regression inventory."
+          "reason": "Mac command namespace and retained platform commands: bind system-tunnel stop plus manual endpoint/settings guide in the shared factory path. Strict missing-handler rejection, rollback and lease behavior preserved."
         },
         {
           "path": "src/factories/FeatureFactory.ts",
@@ -2087,7 +2088,7 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "754e81ced99f261110f12f3aaf94e1d139baaf9a505a9006078f6e272f052456",
+          "localSha256": "96b6f9243c45f7005d5e28a9836eab6a1a345ab3bfbc59bae13c6f3b08c54ce5",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },

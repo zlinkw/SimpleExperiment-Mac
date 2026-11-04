@@ -61,6 +61,8 @@ export const COMMAND_MANIFEST: ReadonlyArray<Omit<CommandDescriptor, "handler">>
   { id: "simpleExperimentMac.startAllXshellRealtimeTunnels", title: "SimpleExperiment：启动全部 Xshell 会话" },
   { id: "simpleExperimentMac.startAllXshellConnections", title: "SimpleExperiment：启动全部 Xshell 连接" },
   { id: "simpleExperimentMac.stopMacSystemTunnels", title: "SimpleExperiment：停止本插件启动的系统隧道" },
+  { id: "simpleExperimentMac.configureManualEndpoints", title: "SimpleExperiment：配置 Termius 手动端点" },
+  { id: "simpleExperimentMac.showManualAgentGuide", title: "SimpleExperiment：显示 Agent/tmux 指引" },
   { id: "simpleExperimentMac.testAllTunnels", title: "SimpleExperiment：检测全部隧道", withLease: false },
   { id: "simpleExperimentMac.showTunnelEndpointRegistry", title: "SimpleExperiment：显示隧道端点清单", withLease: false },
   { id: "simpleExperimentMac.testXshellTunnel", title: "SimpleExperiment：检测 Xshell 隧道", withLease: false },

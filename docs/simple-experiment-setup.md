@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.320 / SimpleSFTP Mac 0.2.105**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.320 是运行前接入规则同步的客户端补丁，保持 preview。
+本文适用于 **Experiment Mac 0.5.321 / SimpleSFTP Mac 0.2.105**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.321 修复 Mac 启动命令的工厂注册，包含 0.5.320 的运行前接入规则同步修复，保持 preview。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -41,6 +41,8 @@
 点击更新后，插件阻止新业务操作，等待已有本地传输结束，下载并验证全部待更新包，再按 **SimpleSFTP Mac → SimpleExperiment Mac** 安装并重载。相同或更高的已安装版本跳过，不自动降级；不会停止远端实验。
 
 **检查失败** 表示网络、限流或清单读取失败，不能当作“已是最新”。网络恢复后手动检查。部分安装失败会显示已完成和待完成组件，选择 **重载后补装**，重载后只补装剩余组件。混合版本期间暂停新业务操作。
+
+若旧版报 `command 'simpleExperimentMac.openPanel' not found`，可更新到 Mac 0.5.321 后执行 **Developer: Reload Window**。该补丁补齐命令工厂与实际处理器的绑定，不需要清理设置或操作训练服务器。若仍持续加载，请保留 Extension Host 中的实际激活错误及 macOS、VS Code 版本；命令缺失本身也可能是其他激活失败的后续表现，不能据此跳过诊断。
 
 ## 低流量模式与手动刷新
 
