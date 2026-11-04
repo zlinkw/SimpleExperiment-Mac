@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "a4147919ea80bbe7a76cbefaf22319c0fb7a99c405ecc909a7042988b0935515",
+          "localSha256": "345d9bca614a7d7c70623494483a9d3ddbfb41934ab05ffa1f41edbd6b1a5e40",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.328: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "da98852b5dc10516e0d46837b111a05a22f16399ef43f1212a5bdcc7bd154748",
+          "localSha256": "46bf003fd957a2ec7279daa6cba2fef514a3647352b5a3210173192c0d4f3086",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.328: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "db846b612b6c99724064074eab6f1750bbb05194a9d63bcc0e9a75d6227aa95a",
+          "localSha256": "2d67e2454ffaaff4bd9fac77eefcb10e5237145b5c615b372cf9f7d06771bda4",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.328: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -2072,9 +2072,9 @@
         {
           "path": "src/runtime/PlanCodeScope.ts",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "localSha256": "c697d1cb0c63431c872165d564ddf212b7032fd1853689123ac65c80334a36f3",
+          "localSha256": "1406b48aea9a28488ab3bffdaf3c7055cb457ed9c584f080a3c2f890b0bf13e7",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.325: usage-based PLAN dependency roles and provenance; original proof and size limits retained; remote/native verification pending."
+          "reason": "Mac 0.5.328: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
         },
         {
           "path": "src/runtime/PlanExistingArtifacts.ts",
@@ -2103,9 +2103,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "fb87c84452c53208ab0f8d4ed03487c3f358ee2b43f703b156eb60214e4611a3",
+          "localSha256": "c44acf30848aaa6763898450be55f2688d34362108929b6b8d2a6f90dfeaf02f",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.328: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",

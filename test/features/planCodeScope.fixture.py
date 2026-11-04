@@ -238,4 +238,99 @@ dynamic_paths, dynamic_scope = scope["plan_source_scope"](str(root), plan, sha(p
 assert "plugins/needed.py" in dynamic_paths and "plugins/unrelated.py" not in dynamic_paths
 assert "experiments/active_registry.py" in dynamic_paths and "comparison_methods/simmlm/publication.py" not in dynamic_paths
 assert dynamic_scope
-print(json.dumps(dict(ok=True, files=len(paths), generatedChangesIgnored=6, sourceChangesRejected=3, metadataChainExcluded=True, actualInputsVerified=True, historyPreserved=True)))
+
+# API-specific file access contracts. Never execute the wrapper or its log writes.
+root = original_root / "open-contracts"
+root.mkdir()
+wrapper = "experiments/simple_adapter/run_wrapper.py"
+open_plan = "experiments/plans/comparison/open_contract.yaml"
+write("inputs/中文 空格.txt", "original input")
+write("inputs/other.txt", "other input")
+header = "from pathlib import Path\nstdout_path = Path('logs/stdout.log')\nstderr_path = Path('logs/stderr.log')\n"
+reported_line = 'with stdout_path.open("a", encoding="utf-8") as stdout_log, stderr_path.open("a", encoding="utf-8") as stderr_log:\n    pass\n'
+wrapper_source = header + "\n" * (180 - len(header.splitlines())) + reported_line
+assert wrapper_source.splitlines()[180].startswith("with stdout_path.open")
+write(wrapper, wrapper_source)
+write(open_plan, "runner:\n  command: python " + wrapper + "\n")
+wrapper_paths, _ = scope["plan_source_scope"](str(root), open_plan, sha(open_plan))
+assert set(wrapper_paths) == {open_plan, wrapper}, wrapper_paths
+assert not (root / "logs").exists() and not (root / "experiments/simple_adapter/a").exists()
+
+open_cases = 1
+def open_case(code, reads=False, error=None, declarations="", conservative=False):
+    global open_cases
+    write("train.py", code)
+    write(open_plan, "runner:\n  command: python train.py\n" + declarations)
+    try:
+        actual, notes = scope["plan_source_scope"](str(root), open_plan, sha(open_plan))
+    except ValueError as exc:
+        assert error and error in str(exc), (code, str(exc))
+        assert "dependency chain" in str(exc), str(exc)
+        open_cases += 1
+        return
+    assert error is None, (code, "expected " + str(error))
+    expected = {open_plan, "train.py"} | ({"inputs/中文 空格.txt"} if reads else set())
+    assert set(actual) == expected, (code, actual)
+    if conservative: assert notes, (code, notes)
+    open_cases += 1
+
+for expression in ["p.open('a')", "p.open(mode='a')", "p.open('w')", "p.open(mode='x')"]:
+    open_case("from pathlib import Path\np = Path('logs/not-yet-created.log')\n" + expression)
+for expression in ["p.open()", "p.open('r')", "p.open(mode='r')", "p.open('rb')", "p.open('r+')", "p.open(mode='a+')", "p.read_text()", "p.read_bytes()"]:
+    open_case("from pathlib import Path\np = Path('inputs/中文 空格.txt')\n" + expression, reads=True)
+for imports, expression in [
+    ("", "open('inputs/中文 空格.txt')"),
+    ("", "open(file='inputs/中文 空格.txt', mode='r')"),
+    ("import io", "io.open('inputs/中文 空格.txt', 'r+')"),
+    ("import io as stream", "stream.open(file='inputs/中文 空格.txt', mode='a+')"),
+    ("from io import open as file_open", "file_open('inputs/中文 空格.txt', mode='r')"),
+    ("from builtins import open as builtin_open", "builtin_open('inputs/中文 空格.txt')"),
+    ("import builtins as core", "core.open('inputs/中文 空格.txt')"),
+    ("from pathlib import Path as P", "P('inputs', '中文 空格.txt').open()"),
+    ("import pathlib as paths", "paths.Path('inputs/中文 空格.txt').open()"),
+    ("import pathlib", "pathlib.Path('inputs/中文 空格.txt').read_text()"),
+    ("from pathlib import Path as P", "base=P('inputs')\np=base/'中文 空格.txt'\np.open()"),
+    ("", "def reader():\n    from io import open as read_file\n    return read_file('inputs/中文 空格.txt')\n"),
+]: open_case(imports + "\n" + expression, reads=True)
+for imports, expression in [
+    ("", "open('logs/absent', 'a')"),
+    ("import io as stream", "stream.open('logs/absent', mode='a')"),
+    ("from io import open as file_open", "file_open('logs/absent', 'w')"),
+    ("from pathlib import Path as P", "P('logs/absent').open(mode='a')"),
+]: open_case(imports + "\n" + expression)
+
+declared_input = "source_dependencies:\n  inputs:\n    - 'inputs/中文 空格.txt'\n"
+for expression in ["Path(runtime_path).open()", "unknown.open('a')", "Path('inputs/中文 空格.txt').open(runtime_mode)", "Path('inputs/中文 空格.txt').open(**options)"]:
+    code = "from pathlib import Path\n" + expression
+    open_case(code, error="UNDECLARED")
+    open_case(code, reads=True, declarations=declared_input, conservative=True)
+# Mixed known/unknown receiver origins and a shadowed import must not masquerade as Path.
+open_case("from pathlib import Path\np = other\np.open('a')", error="UNDECLARED")
+open_case("from pathlib import Path as P\ndef reader(P):\n    return P('logs/absent').open('a')\nreader(factory)", error="UNDECLARED")
+open_case("from pathlib import Path\nmode='a'\ndef reader(mode):\n    return Path('inputs/中文 空格.txt').open(mode)\nreader(runtime_mode)", error="UNDECLARED")
+open_case("from pathlib import Path\nPath = factory\nPath('logs/absent').open('a')", error="UNDECLARED")
+open_case("import other_api as io\nio.open('a')", error="UNDECLARED")
+open_case("import other_api as io\nio.open('a')", reads=True, declarations=declared_input, conservative=True)
+open_case("from pathlib import Path\np = Path('inputs/中文 空格.txt')\nfor p in runtime_receivers:\n    p.open('a')", error="UNDECLARED")
+open_case("from pathlib import Path\np = Path(runtime_path)\np.open('a')")
+open_case("from pathlib import Path\nmode='a'\nmode='r'\nPath('inputs/中文 空格.txt').open(mode)", reads=True)
+open_case("from io import open as file_open\nfile_open('inputs/missing.txt', 'r+')", error="PLAN_SOURCE_MISSING")
+open_case("from pathlib import Path\nPath('inputs/missing.txt').open('a+')", error="PLAN_SOURCE_MISSING")
+open_case("from pathlib import Path\nPath('../outside.txt').open()", error="PLAN_SOURCE_PATH_INVALID")
+open_case("from pathlib import Path\nPath('inputs/中文 空格.txt').open(mode='invalid')", error="PLAN_SOURCE_OPEN_MODE_INVALID")
+open_case("from pathlib import Path\nPath('inputs/中文 空格.txt').open('a', mode='r')", error="PLAN_SOURCE_OPEN_ARGUMENT_INVALID")
+open_case("from io import open as file_open\nfile_open('inputs/中文 空格.txt', 'a', mode='r')", error="PLAN_SOURCE_OPEN_ARGUMENT_INVALID")
+open_case("def open(path, mode):\n    return 1\nopen('not-a-file', 'r')")
+# Alias-aware Path forwarding retains actual input and digest verification.
+open_case("from pathlib import Path as P\ndef read(path):\n    return P(path).read_bytes()\nread('inputs/中文 空格.txt')", reads=True)
+open_case("import hashlib\nfrom pathlib import Path as P\nhashlib.sha256(P('inputs/中文 空格.txt').read_bytes())", reads=True)
+final_paths, _ = scope["plan_source_scope"](str(root), open_plan, sha(open_plan))
+final_manifest = {p: dict(size=(root/p).stat().st_size, sha256=sha(p)) for p in final_paths}
+final_row = dict(projectId="open-contract", planFile=open_plan, planRevision=sha(open_plan))
+write("inputs/中文 空格.txt", "changed input")
+try:
+    scope["verify_plan_execution_source"](str(root), final_row, dict(manifest=final_manifest, digest=scope["plan_source_digest"](final_manifest)))
+    raise AssertionError("changed Path alias integrity input accepted")
+except ValueError as exc:
+    assert "inputs/中文 空格.txt" in str(exc), str(exc)
+print(json.dumps(dict(ok=True, files=len(paths), generatedChangesIgnored=6, sourceChangesRejected=3, metadataChainExcluded=True, actualInputsVerified=True, historyPreserved=True, pathOpenCases=open_cases, wrapperLine181=True)))

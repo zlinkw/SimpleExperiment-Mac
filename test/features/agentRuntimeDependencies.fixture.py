@@ -155,7 +155,15 @@ assert failed['code']=='AGENT_RUNTIME_DEPENDENCY_FAILED' and str(python) in fail
 # guards, never imports models or starts training. Run inside clean Python AFTER
 # the exact same bootstrap (not a host-installed yaml dependency).
 scope_probe = root/'scope.py'
-scope_probe.write_text(header+agent+'\n__file__='+repr(str(probe))+'\nruntime_dependency_prepare()\nimport yaml\ntry:\n    yaml.safe_load("!!python/object/apply:os.system [echo forbidden]")\n    raise AssertionError("unsafe YAML accepted")\nexcept yaml.constructor.ConstructorError:\n    pass\nimport runpy\nsys.argv=['+repr(config['scopeFixture'])+','+repr(config['agent'])+']\nrunpy.run_path(sys.argv[0],run_name="__main__")\n',encoding='utf-8')
+# Reuse the already parsed immutable Agent for the clean child's source fixture.
+# Keep every actual scope/admission validator; avoid reparsing the full unrelated
+# HTTP/runtime implementation a second time merely to select these same nodes.
+scope_agent = root/'scope-agent-functions.py'
+scope_names = [node.name for node in syntax(config['agent']).body if isinstance(node, ast.FunctionDef) and
+               (node.name.startswith(('plan_scope_', 'plan_source_')) or node.name in
+                ('verify_plan_execution_source', 'inspect_plan_code_scope', '_code_sync_stat_record', 'resolve_durable_code_sync_proof', 'task_queue_job'))]
+scope_agent.write_text(selected(config['agent'], scope_names), encoding='utf-8')
+scope_probe.write_text(header+agent+'\n__file__='+repr(str(probe))+'\nruntime_dependency_prepare()\nimport yaml\ntry:\n    yaml.safe_load("!!python/object/apply:os.system [echo forbidden]")\n    raise AssertionError("unsafe YAML accepted")\nexcept yaml.constructor.ConstructorError:\n    pass\nimport runpy\nsys.argv=['+repr(config['scopeFixture'])+','+repr(str(scope_agent))+']\nrunpy.run_path(sys.argv[0],run_name="__main__")\n',encoding='utf-8')
 assert run(scope_probe)['actualInputsVerified']
 assert {p.name:p.read_bytes() for p in project.iterdir()} == preserved
 print(json.dumps(dict(fresh=True,upgrade=True,repair=True,failureBeforeStop=True,sameInterpreter=True,safeLoad=True,sourcePreflight=True,noTrainingOrProjectMutation=True,yamlVersion=initial['version'],python=initial['python'],executable=initial['executable'],module=initial['module'],fixture=str(root))))

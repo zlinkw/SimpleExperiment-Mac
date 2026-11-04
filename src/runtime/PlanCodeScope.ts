@@ -27,6 +27,76 @@ def plan_scope_reason(relative, provenance):
         item = parent
     return " -> ".join(reversed(chain))
 
+def plan_scope_python_access(tree):
+    import ast
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    frames = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+    def enclosing(node):
+        node = parents.get(node)
+        while node is not None and not isinstance(node, frames): node = parents.get(node)
+        return node
+    names = {}
+    def bind(frame, name, value): names.setdefault(frame, {}).setdefault(name, []).append(value)
+    for node in ast.walk(tree):
+        frame = enclosing(node)
+        if isinstance(node, ast.Import):
+            for alias in node.names: bind(frame, alias.asname or alias.name.split(".")[0], alias.name if alias.asname else alias.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names: bind(frame, alias.asname or alias.name, (node.module + "." + alias.name) if node.module and not node.level else None)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bind(frame, node.name, None)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs: bind(node, arg.arg, None)
+            for arg in (node.args.vararg, node.args.kwarg):
+                if arg: bind(node, arg.arg, None)
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.NamedExpr, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                for child in ast.walk(target):
+                    if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store): bind(frame, child.id, node.value if isinstance(target, ast.Name) and not isinstance(node, ast.AugAssign) else None)
+        elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
+            for child in ast.walk(node.target):
+                if isinstance(child, ast.Name): bind(frame, child.id, None)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items:
+                if item.optional_vars is not None:
+                    for child in ast.walk(item.optional_vars):
+                        if isinstance(child, ast.Name): bind(frame, child.id, None)
+        elif isinstance(node, ast.ExceptHandler) and node.name: bind(frame, node.name, None)
+    def lookup(node):
+        frame = enclosing(node)
+        while frame is not None:
+            if node.id in names.get(frame, {}): return names[frame][node.id]
+            frame = enclosing(frame)
+            # Method globals do not resolve through a class's attribute namespace.
+            while isinstance(frame, ast.ClassDef): frame = enclosing(frame)
+        return None
+    def symbol(node, seen=()):
+        if node in seen: return None
+        if isinstance(node, ast.Name):
+            values = lookup(node)
+            if values is None: return {"open": "builtins.open", "str": "builtins.str"}.get(node.id)
+            resolved = [value if isinstance(value, str) else symbol(value, seen + (node,)) for value in values]
+            return resolved[0] if resolved and all(value == resolved[0] for value in resolved) else None
+        if isinstance(node, ast.Attribute):
+            base = symbol(node.value, seen + (node,))
+            return base + "." + node.attr if base else None
+        return None
+    def is_path(node, seen=()):
+        if node in seen: return False
+        seen = seen + (node,)
+        if isinstance(node, ast.Name):
+            values = lookup(node)
+            return bool(values) and all(is_path(value, seen) for value in values)
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div): return is_path(node.left, seen)
+        if isinstance(node, ast.Attribute) and node.attr == "parent": return is_path(node.value, seen)
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute) and node.value.attr == "parents": return is_path(node.value.value, seen)
+        if isinstance(node, ast.Call):
+            if symbol(node.func) in ("pathlib.Path", "pathlib.PosixPath", "pathlib.WindowsPath"): return True
+            return isinstance(node.func, ast.Attribute) and node.func.attr in ("resolve", "absolute", "expanduser", "joinpath", "with_name", "with_suffix") and is_path(node.func.value, seen)
+        return False
+    return symbol, is_path, lookup
+
 def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
     import ast
     import itertools
@@ -47,7 +117,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
     processed, declared = {}, {"code": set(), "configs": set(), "inputs": set(), "integrity": set()}
     config_inputs = set()
     ranks = {"integrity": 0, "input": 1, "code": 2, "config": 2}
-    python_contexts, resources_dirty, input_documents = {}, True, {}
+    python_contexts, python_access, resources_dirty, input_documents = {}, {}, True, {}
     declared_outputs = set()
     config_suffixes = (".yaml", ".yml", ".json", ".toml", ".ini", ".cfg")
     def add(relative, required=False, kind="code", parent=None, reason="import"):
@@ -189,30 +259,28 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
             if index < len(parameters):
                 return next((keyword.value for keyword in node.keywords if keyword.arg == parameters[index].arg), None)
             return None
-        def parameter(node, function, seen=()):
+        def parameter(file, node, function, seen=()):
             if isinstance(node, ast.Name):
                 parameters = function.args.posonlyargs + function.args.args
                 direct = next((i for i, arg in enumerate(parameters) if arg.arg == node.id), None)
                 if direct is not None or node.id in seen: return direct
                 values = [item.value for item in ast.walk(function) if isinstance(item, ast.Assign) and any(isinstance(target, ast.Name) and target.id == node.id for target in item.targets)]
-                forwarded = {parameter(value, function, seen + (node.id,)) for value in values}
+                forwarded = {parameter(file, value, function, seen + (node.id,)) for value in values}
                 return next(iter(forwarded)) if len(forwarded) == 1 else None
             if isinstance(node, ast.Call):
-                name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else ""
-                if name in ("Path", "str") and node.args: return parameter(node.args[0], function, seen)
+                name = python_access[file][0](node.func)
+                if name in ("pathlib.Path", "pathlib.PosixPath", "pathlib.WindowsPath", "builtins.str") and node.args: return parameter(file, node.args[0], function, seen)
             return None
+        unknown_access = {}
         def reader(file, node):
             if not isinstance(node, ast.Call): return None
             if called(file, node.func) in functions: return None
             name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else ""
-            if name not in ("open", "read_text", "read_bytes", "load_config", "read_config", "fromfile", "read_json", "read_csv"): return None
-            bound = isinstance(node.func, ast.Attribute) and name in ("read_text", "read_bytes")
-            input_node = node.func.value if bound else node.args[0] if node.args else next((keyword.value for keyword in node.keywords if keyword.arg in ("file", "path", "filename", "config_file")), None)
-            if input_node is None: return None
+            symbol, is_path = python_access[file][:2]
+            file_open = symbol(node.func) in ("builtins.open", "io.open")
+            if not file_open and name not in ("open", "read_text", "read_bytes", "load_config", "read_config", "fromfile", "read_json", "read_csv"): return None
+            bound = isinstance(node.func, ast.Attribute) and name in ("open", "read_text", "read_bytes") and is_path(node.func.value)
             evaluate, parents = python_contexts[file][1:3]
-            modes = evaluate(node.args[1]) if name == "open" and len(node.args) > 1 else ["r"]
-            modes += [v for keyword in node.keywords if keyword.arg == "mode" for v in evaluate(keyword.value)]
-            if name == "open" and any(value.startswith(("w", "a", "x")) for value in modes): return None
             kind, structured, cursor = ("config" if name in ("load_config", "read_config", "fromfile") else "input"), name in ("read_json", "read_csv"), node
             while cursor in parents and not isinstance(parents[cursor], ast.FunctionDef):
                 cursor = parents[cursor]
@@ -220,12 +288,38 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     outer = cursor.func.attr if isinstance(cursor.func, ast.Attribute) else cursor.func.id if isinstance(cursor.func, ast.Name) else ""
                     if outer in ("sha256", "sha512", "sha1", "md5", "blake2b", "blake2s"): kind = "integrity"
                     if outer in ("load", "loads", "safe_load"): structured = True
+            if not file_open and name in ("open", "read_text", "read_bytes") and not bound:
+                unknown_access[(file, node.lineno)] = (kind, "unresolved file API/receiver")
+                return None
+            path_keywords = ("file",) if file_open else ("file", "path", "filename", "config_file")
+            input_node = node.func.value if bound else node.args[0] if node.args else next((keyword.value for keyword in node.keywords if keyword.arg in path_keywords), None)
+            if file_open or name == "open":
+                offset = 0 if bound else 1
+                positional = node.args[offset] if len(node.args) > offset else None
+                keyword = next((item.value for item in node.keywords if item.arg == "mode"), None)
+                if positional is not None and keyword is not None or file_open and node.args and any(item.arg == "file" for item in node.keywords):
+                    fail("PLAN_SOURCE_OPEN_ARGUMENT_INVALID (line " + str(node.lineno) + ")", file)
+                dynamic_arguments = any(isinstance(arg, ast.Starred) for arg in node.args) or any(item.arg is None for item in node.keywords)
+                mode = positional if positional is not None else keyword
+                modes = [] if dynamic_arguments else evaluate(mode) if mode is not None else ["r"]
+                if not modes:
+                    unknown_access[(file, node.lineno)] = (kind, "unresolved open mode/arguments")
+                else:
+                    for value in modes:
+                        if not value or set(value) - set("rwaxbt+") or len(set(value)) != len(value) or sum(char in value for char in "rwax") != 1 or "b" in value and "t" in value:
+                            fail("PLAN_SOURCE_OPEN_MODE_INVALID (line " + str(node.lineno) + ")", file)
+                    # '+' may consume existing bytes (notably a+); retain input checking.
+                    if all("r" not in value and "+" not in value for value in modes): return None
+                if dynamic_arguments: input_node = None
+            if input_node is None:
+                unknown_access[(file, node.lineno)] = (kind, "unresolved file path/arguments")
+                return None
             return input_node, kind, structured
         for key, function in functions.items():
             effects[key] = set()
             for node in ast.walk(function):
                 read = reader(key[0], node)
-                index = parameter(read[0], function) if read else None
+                index = parameter(key[0], read[0], function) if read else None
                 if index is not None: effects[key].add((index, read[1], read[2]))
         changed = True
         while changed:
@@ -235,7 +329,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     if not isinstance(node, ast.Call): continue
                     for index, kind, structured in effects.get(called(key[0], node.func), ()):
                         callee = functions[called(key[0], node.func)]
-                        forwarded = parameter(call_argument(node, index, callee), function)
+                        forwarded = parameter(key[0], call_argument(node, index, callee), function)
                         effect = (forwarded, kind, structured)
                         if forwarded is not None and effect not in effects[key]: effects[key].add(effect); changed = True
         unresolved, results, digest_calls = [], {}, {}
@@ -251,7 +345,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     cursor = node
                     while cursor in parents and not isinstance(cursor, ast.FunctionDef): cursor = parents[cursor]
                     values = evaluate(argument)
-                    if not values and isinstance(cursor, ast.FunctionDef) and parameter(argument, cursor) is not None: continue
+                    if not values and isinstance(cursor, ast.FunctionDef) and parameter(file, argument, cursor) is not None: continue
                     for value in values:
                         target = reference(value, kind, file, kind + " read line " + str(node.lineno))
                         if kind == "input" and structured and target: results.setdefault((file, node), set()).add(target)
@@ -286,6 +380,10 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     for path in value: add(path, True, "integrity", origin, "consumed path-to-digest manifest at " + file + ":" + str(loop.lineno))
                     manifest_calls.update((file, node.lineno) for node in consumers)
         if pending: return
+        for (file, line), (kind, reason) in unknown_access.items():
+            group = "integrity" if kind == "integrity" else "inputs"
+            if not declared[group]: fail("PLAN_SOURCE_DYNAMIC_DEPENDENCY_UNDECLARED (" + reason + " line " + str(line) + "; declare source_dependencies." + group + ")", file)
+            conservative.add(file + ": " + reason + " line " + str(line) + " bounded by source_dependencies." + group)
         for file, line, kind in unresolved:
             covered = (declared["integrity"] or (file, line) in manifest_calls) if kind == "integrity" else (declared["inputs"] if kind == "input" else declared["configs"] or config_inputs)
             if not covered: fail("PLAN_SOURCE_DYNAMIC_DEPENDENCY_UNDECLARED (declare source_dependencies." + ("integrity" if kind == "integrity" else "inputs/configs") + ")", file)
@@ -338,6 +436,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         if not relative.endswith(".py"):
             continue
         tree = ast.parse(text, filename=relative)
+        python_access[relative] = plan_scope_python_access(tree)
         package = relative.split("/")[:-1]
         assignments = {}
         parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
@@ -352,7 +451,8 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
             if isinstance(node, ast.Name):
                 if node.id == "__file__": return [source_file]
                 if node.id in seen: return []
-                choices = [strings(item, seen + (node.id,), source_file, names, expand) for item in names.get(node.id, [])]
+                values = python_access[source_file][2](node) or []
+                choices = [strings(item, seen + (node.id,), source_file, names, expand) for item in values]
                 return [value for values in choices for value in values] if choices and all(choices) else []
             if isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Div, ast.Add)):
                 left, right = strings(node.left,seen,source_file,names,expand), strings(node.right,seen,source_file,names,expand)
@@ -366,8 +466,9 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                 return values
             if isinstance(node, ast.Call):
                 called = node.func.attr if isinstance(node.func,ast.Attribute) else node.func.id if isinstance(node.func,ast.Name) else ""
+                path_constructor = python_access[source_file][0](node.func) in ("pathlib.Path", "pathlib.PosixPath", "pathlib.WindowsPath")
                 path_join = called == "joinpath" or called == "join" and isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "path"
-                if called == "Path" and len(node.args) > 1 or path_join:
+                if path_constructor and len(node.args) > 1 or path_join:
                     arguments = ([node.func.value] if called == "joinpath" else []) + list(node.args)
                     choices = [strings(value,seen,source_file,names,expand) for value in arguments]
                     combinations = 1
@@ -375,7 +476,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     if choices and all(choices) and combinations <= 256:
                         return [os.path.normpath(os.path.join(*values)).replace(os.sep,"/") for values in itertools.product(*choices)]
                     return []
-                if called in ("Path","str","resolve","absolute","as_posix"):
+                if path_constructor or called in ("str","resolve","absolute","as_posix"):
                     return strings(node.args[0],seen,source_file,names,expand) if node.args else strings(node.func.value,seen,source_file,names,expand) if isinstance(node.func,ast.Attribute) else []
             if isinstance(node, ast.JoinedStr):
                 choices = [[part.value] if isinstance(part, ast.Constant) else strings(part.value,seen,source_file,names,expand) or (sorted(tokens) if expand else []) for part in node.values]

@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.327 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.328 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -414,7 +414,7 @@ Agent 持久队列的 Plan/outputDir 身份、接收回执、旧队列派发及 
 
 手动诊断可使用“同一绝对解释器 -I -S 实际 cluster_agent.py 路径 runtime-check”；所有路径从当前配置/进程读取，不照搬示例机器或端口。此命令只准备受管依赖并返回 JSON，不连接 Agent、不启动训练。Agent /health 的 runtimeDependencies 字段报告实际解释器、sys.prefix、yaml 模块来源、版本、摘要和 safeLoad 能力。能力检查实际解析含锚点、列表及多行命令的 YAML，计划仍使用 yaml.safe_load，不改回正则。
 
-本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.327，再只做依赖核验与提交前检查。
+本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.328，再只做依赖核验与提交前检查。
 
 ## Scheduler 协议探测
 
@@ -427,3 +427,13 @@ Mac 0.5.327 对实际 Scheduler 文件作完整 AST 静态解析，只接受顶�
 更新至 0.5.327 后，仍须通过原受管流程部署配对 Agent/Scheduler 并重启指定实例。首次准备的延迟核验路径和单独 ensure/restart 路径都会清除所选 Worker 的旧能力记录，其他 Worker 不受影响。之后“检测/刷新”从当前配置端点读取新能力。应核对 schedulerProtocol.status、schedulerVersion 与七项能力，不只看桌面版本号。停止/重启不自动提交训练，不清空配置、历史或结果。
 
 本机回归仅使用最终打包文件、隔离 HTTP 端点和受控生命周期回执；真实用户服务器的在线能力、目标进程及缓存刷新仍需在授权的 Mac 受管更新后核验。
+
+## 文件打开与源码输入
+
+0.5.328 修正 Path.open 模式被当作文件路径的问题。内置 open(file, mode)、io.open 及其导入别名从 file/第一个位置参数取路径，从 mode/第二个位置参数取模式；已确认的 Path 实例从接收对象取路径，从 mode/第一个位置参数取模式。默认模式为 r；read_text/read_bytes 从接收对象读取。导入别名和词法作用域内遮蔽会参与识别，不把其他对象的 .open 一律认作 Path。
+
+纯 w/a/x 模式是输出访问，不要求日志文件提交前存在，即使输出 Path 的值是动态的。r、默认读取以及含 + 的读写模式保守要求核验已有输入，包括 a+ 可能读取的既有字节；不会只要看到 a 就忽略 a+。若同一个模式变量有多个已知值，只要可能读取，就保留输入核验。摘要读取仍作为完整性依赖，未消费的发布元数据不展开。
+
+未知接收对象/文件 API、未知模式或展开的 *args/**kwargs 不会被猜成文件路径或纯输出。错误包含源码文件、行号、依赖链及 source_dependencies.inputs（摘要访问用 integrity）声明指引；已知读取路径依旧收集，动态部分只能在明确声明输入后保守通过，并在 conservative 中说明。动态读取路径沿用同一显式声明契约，不自动改用户 PLAN 或代码。声明的文件仍须存在、位于项目内且通过原字节核验与大小限制。
+
+桌面、包内 Agent/Scheduler 均为 0.5.328，SFTP 沿用 0.2.107。安装和重载后，实际服务器仍须按原受管流程更新配对运行时。本轮只验证隔离依赖核验和提交前分支，不连接服务器、不启动训练，保留全部配置及历史产物。
