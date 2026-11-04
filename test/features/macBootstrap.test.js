@@ -1,14 +1,59 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const path = require("node:path");
+const packageRoot = process.env.SIMPLE_STARTUP_PACKAGE_ROOT || path.resolve(__dirname, "../..");
 // Mac paired-update bootstrap, aligned to the Windows-authoritative updates/Bootstrap chain
 // (frozen pairedUpdateBootstrap call chain): the updater registers before business code, journals
 // are reconciled without ever auto-installing, and the SFTP wait-protocol floor blocks the gate.
-const { registerUpdater, activateWithBusiness, deactivate, getUpdateStatus, CHECK_COMMAND, INSTALL_COMMAND } = require("../../dist/updates/Bootstrap");
-const { getPreviewUpdater } = require("../../dist/mac/Bootstrap");
-const { TRANSACTION_KEY } = require("../../dist/updates/UpdateTransaction");
-const { SFTP_EXTENSION_ID, EXPERIMENT_EXTENSION_ID, SFTP_UPDATE_REPO, EXPERIMENT_UPDATE_REPO } = require("../../dist/features/ExtensionUpdates");
-const { assetRepository } = require("../../dist/platform/UpdateDistribution");
+const { registerUpdater, activateWithBusiness, deactivate, getUpdateStatus, CHECK_COMMAND, INSTALL_COMMAND } = require(path.join(packageRoot, "dist/updates/Bootstrap"));
+const { getPreviewUpdater } = require(path.join(packageRoot, "dist/mac/Bootstrap"));
+const { TRANSACTION_KEY } = require(path.join(packageRoot, "dist/updates/UpdateTransaction"));
+const { SFTP_EXTENSION_ID, EXPERIMENT_EXTENSION_ID, SFTP_UPDATE_REPO, EXPERIMENT_UPDATE_REPO } = require(path.join(packageRoot, "dist/features/ExtensionUpdates"));
+const { assetRepository } = require(path.join(packageRoot, "dist/platform/UpdateDistribution"));
+const { macUpdateContext } = require(path.join(packageRoot, "dist/platform/MacReleaseClient"));
+
+test("Mac update view accepts frozen host context and Memento without changing host receivers or stored data", async () => {
+  const current = "simpleExperimentMac.update.transaction.v1", legacy = "simpleExperimentMac.preview.transaction.v1";
+  const consumed = "simpleExperimentMac.platform.legacyUpdateReceiptConsumed.v1";
+  const data = new Map([["server", { path: "/srv/研究 项目" }], [legacy, { manifest: { broken: true }, completed: ["retained"] }]]);
+  const synced = [];
+  const state = Object.freeze({
+    get(key, fallback) { assert.equal(this, state); return data.has(key) ? data.get(key) : fallback; },
+    async update(key, value) { assert.equal(this, state); value === undefined ? data.delete(key) : data.set(key, value); },
+    keys() { assert.equal(this, state); return [...data.keys()]; },
+    setKeysForSync(keys) { assert.equal(this, state); synced.push(keys); },
+  });
+  const subscriptions = [], workspaceState = Object.freeze({ get() {}, update() {} });
+  const context = Object.freeze({ globalState: state, workspaceState, subscriptions,
+    asAbsolutePath(value) { assert.equal(this, context); return "/extension/" + value; } });
+  const descriptors = Object.getOwnPropertyDescriptors(context), stateDescriptors = Object.getOwnPropertyDescriptors(state);
+  const adapted = macUpdateContext(context, "1.100.0");
+  assert.equal(adapted.workspaceState, workspaceState); assert.equal(adapted.subscriptions, subscriptions);
+  assert.equal(adapted.asAbsolutePath("dist"), "/extension/dist");
+  assert.equal(adapted.globalState.get("server"), data.get("server"));
+  assert.equal(adapted.globalState.get("missing", "fallback"), "fallback");
+  assert.equal(adapted.globalState.get(current).status, "failed", "uncertain old receipts stay visibly blocked");
+  assert.equal(data.has(current), false, "reading does not rewrite or erase old receipts");
+  const tag = "preview-v0.1.2", prefix = "https://github.com/zlinkw/SimpleExperiment-Mac/releases/download/" + tag + "/";
+  const manifest = { protocolVersion: 1, channel: "preview", releaseTag: tag, publishedAt: "2026-10-09T12:00:00Z",
+    components: [SFTP_EXTENSION_ID, EXPERIMENT_EXTENSION_ID].map(extensionId => ({ extensionId, version: "0.1.2", sourceCommit: "a".repeat(40), targetPlatform: "darwin-arm64", vscodeEngine: "^1.100.0",
+      downloadUrl: prefix + extensionId.split(".")[1] + "-0.1.2-darwin-arm64.vsix", size: 100, sha256: "b".repeat(64) })) };
+  const old = { manifest, completed: [SFTP_EXTENSION_ID], status: "reload_required" }; data.set(legacy, old);
+  const converted = adapted.globalState.get(current);
+  assert.equal(converted.status, "reload_required"); assert.deepEqual(converted.completed, [SFTP_EXTENSION_ID]);
+  assert.equal(converted.components.length, 2); assert.equal(converted.installationRequested, true);
+  assert.equal(data.get(legacy), old); assert.equal(data.has(current), false);
+  adapted.globalState.setKeysForSync(["server"]); assert.deepEqual(synced, [["server"]]);
+  assert.deepEqual(adapted.globalState.keys(), [...data.keys()]);
+  await adapted.globalState.update("other", 7); assert.equal(data.get("other"), 7); assert.equal(data.has(consumed), false);
+  const journal = { schemaVersion: 1, status: "failed", components: [] };
+  await adapted.globalState.update(current, journal); assert.equal(data.get(current), journal); assert.equal(data.get(consumed), true);
+  assert.equal(adapted.globalState.get(current), journal); assert.ok(data.has(legacy));
+  assert.deepEqual(data.get("server"), { path: "/srv/研究 项目" });
+  assert.deepEqual(Object.getOwnPropertyDescriptors(context), descriptors);
+  assert.deepEqual(Object.getOwnPropertyDescriptors(state), stateDescriptors);
+});
 
 function fixture(client, options = {}) {
   const state = new Map(options.state || []), calls = [], commands = new Map(), subscriptions = [];
@@ -122,7 +167,7 @@ test("old SFTP without the shared wait protocol cannot enter an update gate that
 test("Mac entry registers updates before business, polls every thirty minutes, and keeps the OS shim", () => {
   const mac = fs.readFileSync(require("node:path").join(__dirname, "../../src/mac/Bootstrap.ts"), "utf8");
   assert.ok(mac.indexOf("updates.activateWithBusiness") < mac.indexOf('return require("../extension")'));
-  assert.equal(typeof require("../../dist/mac/Bootstrap").registerPreviewUpdater, "function");
+  assert.equal(typeof require(path.join(packageRoot, "dist/mac/Bootstrap")).registerPreviewUpdater, "function");
   assert.match(mac, /context\.subscriptions\.push\(\s*vscode\.commands\.registerCommand\(CHECK_COMMAND/);
   const shared = fs.readFileSync(require("node:path").join(__dirname, "../../src/updates/Bootstrap.ts"), "utf8");
   assert.match(shared, /30 \* 60 \* 1000/);
@@ -130,5 +175,5 @@ test("Mac entry registers updates before business, polls every thirty minutes, a
   const provider = fs.readFileSync(require("node:path").join(__dirname, "../../src/extension/legacy.ts"), "utf8");
   assert.match(provider, /if \(updater\) return updater\.check\(manual\)/); assert.match(provider, /if \(updater\) return updater\.install\(\)/);
   assert.match(provider, /getUpdater\(\)\?\.blocked\) return/);
-  assert.equal(require("../../package.json").main, "./dist/mac/Bootstrap.js");
+  assert.equal(require(path.join(packageRoot, "package.json")).main, "./dist/mac/Bootstrap.js");
 });

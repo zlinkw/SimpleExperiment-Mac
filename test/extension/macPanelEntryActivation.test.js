@@ -11,7 +11,7 @@ function run(scenario){
 test('panel command and sidebar exist before any business imports or initialization',()=>{
  const r=run('pending-startup');assert.equal(r.registeredBeforeBusiness,true);assert.equal(r.realConstructorReached,false);assert.match(r.html,/正在启动/);assert.match(r.html,/Loaded extension: simple-local.simple-experiment-mac/);
 });
-for(const scenario of ['fresh-offline','upgrade-offline'])test('real Provider from package opens command and sidebar: '+scenario,()=>{
+for(const scenario of ['fresh-offline','upgrade-offline'])test('frozen VS Code context reaches real Provider and opens command/sidebar: '+scenario,()=>{
  const r=run(scenario);assert.equal(r.commandError,undefined);assert.equal(r.realConstructorReached,true);
  assert.match(r.commandHtml,/panelBootstrapStatus/);assert.match(r.sidebarHtml,/panelBootstrapStatus/);
  assert.ok(r.logs.some(line=>line.includes('Loaded code: '+root)));

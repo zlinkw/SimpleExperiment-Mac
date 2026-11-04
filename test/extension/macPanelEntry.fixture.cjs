@@ -17,6 +17,8 @@ function state(){const data=new Map(scenario.startsWith('upgrade')?Object.entrie
 const config={get:(key,otherwise)=>key in settings?settings[key]:otherwise,inspect:()=>undefined,update:async()=>{throw Error('unexpected configuration write');}};
 const context={extensionPath:root,extensionUri:{fsPath:root},extension:{id:pkg.publisher+'.'+pkg.name,extensionPath:root,packageJSON:pkg},globalState:state(),workspaceState:state(),subscriptions:[],globalStorageUri:{fsPath:path.join(process.cwd(),'private-storage')},logUri:{fsPath:path.join(process.cwd(),'private-logs')},secrets:{get:async()=>undefined,store:async()=>{throw Error('unexpected secret write');}}};
 if(scenario==='constructor-failure')context.workspaceState.get=()=>{throw Error('fixture stored-state read failed');};
+// VS Code exposes a frozen context. A mutable object misses Proxy get invariants.
+Object.freeze(context.globalState);Object.freeze(context.workspaceState);Object.freeze(context);
 const output={appendLine:line=>logs.push(String(line)),dispose(){}};
 let currentView;
 function makeView(){return {viewType:'simpleExperimentMac.panel',visible:true,webview:{options:{},html:'',onDidReceiveMessage:event,postMessage:async()=>true},onDidChangeVisibility:event,onDidDispose:event};}

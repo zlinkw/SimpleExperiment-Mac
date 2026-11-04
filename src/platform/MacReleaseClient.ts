@@ -33,9 +33,13 @@ export class MacReleaseClient extends ReleaseClient {
 export function macUpdateContext(context: any, vscodeVersion: string): any {
   const key = "simpleExperimentMac.update.transaction.v1", legacy = "simpleExperimentMac.preview.transaction.v1";
   const receiptKey = "simpleExperimentMac.platform.legacyUpdateReceiptConsumed.v1", state = context.globalState;
-  return new Proxy(context, { get(target, property) {
+  // VS Code may freeze both objects. Proxy separate views, never replace values
+  // on their non-configurable own properties; keep host methods bound to the host.
+  return new Proxy(Object.create(context), { get(_view, property) {
+    const target = context;
     if (property !== "globalState") { const value = Reflect.get(target, property); return typeof value === "function" ? value.bind(target) : value; }
-    return new Proxy(state, { get(storage, name) {
+    return new Proxy(Object.create(state), { get(_storageView, name) {
+      const storage = state;
       if (name === "get") return (wanted: string, fallback?: any) => {
         const value = storage.get(wanted);
         if (wanted !== key || value !== undefined || storage.get(receiptKey, false)) return value === undefined ? fallback : value;

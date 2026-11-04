@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "aa3d6c88f0d2a1d1b684641249537f68c675892f7fb30382bc3845c597cf90e9",
+          "localSha256": "0df48d7f4fb740a1a60e72e2ca92bfe51f4757501ba43e4dd88003d537204dbd",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.322/0.2.106 startup diagnostics, paired install instructions and explicit native-Mac verification limits; source guides retained."
+          "reason": "Mac 0.5.323 frozen-context startup root cause and paired install guidance, with native-Mac acceptance explicitly pending."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,14 +103,14 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "c2cc2136575265377f4e790ebd97534ab8c565fefca56d945513be9df956a8d5",
+          "localSha256": "cea230276f5eea649b419524f0b05d44c1401d11da57d0f9b338417e47cdfbca",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "c0a422c3c23949274758102dae4a52549fca7d4407c55c7f47f8b71b6390a1ba",
+          "localSha256": "9471f284a6ea3d7592bebe59f4528acb06563eee86b3c191e14cfff07b9e0185",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -1859,8 +1859,9 @@
         {
           "path": "src/platform/MacReleaseClient.ts",
           "windowsSha256": null,
-          "localSha256": "9aeb3915cbc45fdb90ab5362ef9e9b01ea5bbf6cbf640c5ecdf1271301296f6c",
-          "classification": "retained-mac-source"
+          "localSha256": "3f99f1c3aba68f9a39093cb3f4545be9c351a25211fb29d52e79ac45a830069a",
+          "classification": "retained-mac-source",
+          "reason": "Mac 0.5.323: isolated Proxy views support frozen VS Code context and Memento; host receivers and existing receipt semantics preserved."
         },
         {
           "path": "src/platform/Terminal.ts",
@@ -2097,7 +2098,7 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "ff19650dfa9ba1f780d4f75d407bacc748bf10a6c21a73a22ed57cc53c5e8ef9",
+          "localSha256": "c71049e048ca955bc29ca54acc269433c657f53f72641b5a95e9de8bdd56619a",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
