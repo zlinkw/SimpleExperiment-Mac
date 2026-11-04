@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.321 / SimpleSFTP Mac 0.2.105**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.321 修复 Mac 启动命令的工厂注册，包含 0.5.320 的运行前接入规则同步修复，保持 preview。
+本文适用于 **Experiment Mac 0.5.322 / SimpleSFTP Mac 0.2.106**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。新版隔离面板入口与业务启动失败，并修复 SFTP 错误通知阻塞依赖激活；保留此前命令绑定和接入规则同步修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -42,7 +42,9 @@
 
 **检查失败** 表示网络、限流或清单读取失败，不能当作“已是最新”。网络恢复后手动检查。部分安装失败会显示已完成和待完成组件，选择 **重载后补装**，重载后只补装剩余组件。混合版本期间暂停新业务操作。
 
-若旧版报 `command 'simpleExperimentMac.openPanel' not found`，可更新到 Mac 0.5.321 后执行 **Developer: Reload Window**。该补丁补齐命令工厂与实际处理器的绑定，不需要清理设置或操作训练服务器。若仍持续加载，请保留 Extension Host 中的实际激活错误及 macOS、VS Code 版本；命令缺失本身也可能是其他激活失败的后续表现，不能据此跳过诊断。
+若报 `command 'simpleExperimentMac.openPanel' not found`，依次安装本 Release 的 **SFTP 0.2.106、Experiment 0.5.322**，执行 **Developer: Reload Window**。旧 SFTP 0.2.105 的启动错误通知可能一直阻止依赖激活，不能只换 Experiment 包。不清空任何设置，也不操作训练服务器。
+
+新版命令和侧栏先注册，再初始化业务；失败时打开启动诊断页。请复制 **输出 → SimpleExperiment Startup** 的加载 ID、版本、代码/注册路径、运行平台、SFTP 状态及首条异常栈。同时用 **Developer: Show Running Extensions** 确认是否运行在本机，及 **Developer: Show Logs… → Extension Host** 保留重载后的第一处异常。如果连 Startup 输出也没有，优先检查扩展是否禁用、装错 Profile、旧 Extension Host 或依赖导入失败；不要据此清理配置。0.5.321 包已包含历史漏绑修复，本次实际 Mac 触发原因仍需真实日志确认。
 
 ## 低流量模式与手动刷新
 

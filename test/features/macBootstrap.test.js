@@ -121,8 +121,8 @@ test("old SFTP without the shared wait protocol cannot enter an update gate that
 
 test("Mac entry registers updates before business, polls every thirty minutes, and keeps the OS shim", () => {
   const mac = fs.readFileSync(require("node:path").join(__dirname, "../../src/mac/Bootstrap.ts"), "utf8");
-  assert.ok(mac.indexOf("shared.activateWithBusiness") < mac.indexOf('return require("../extension")'));
-  assert.match(mac, /export const registerPreviewUpdater = shared\.registerUpdater/);
+  assert.ok(mac.indexOf("updates.activateWithBusiness") < mac.indexOf('return require("../extension")'));
+  assert.equal(typeof require("../../dist/mac/Bootstrap").registerPreviewUpdater, "function");
   assert.match(mac, /context\.subscriptions\.push\(\s*vscode\.commands\.registerCommand\(CHECK_COMMAND/);
   const shared = fs.readFileSync(require("node:path").join(__dirname, "../../src/updates/Bootstrap.ts"), "utf8");
   assert.match(shared, /30 \* 60 \* 1000/);

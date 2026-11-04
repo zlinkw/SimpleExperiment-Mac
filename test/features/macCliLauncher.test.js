@@ -58,8 +58,8 @@ test("CLI command is registered independently of business code and startup failu
   assert.ok(commands.has(CLI_COMMAND)); assert.equal(subscriptions.length, 1);
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")); assert.ok(pkg.contributes.commands.some(item => item.command === CLI_COMMAND));
   const bootstrap = fs.readFileSync(path.join(root, "src/mac/Bootstrap.ts"), "utf8");
-  const cli=bootstrap.indexOf('registerMacCli(context, vscode)'),shared=bootstrap.indexOf('shared.activateWithBusiness('),business=bootstrap.indexOf('return require("../extension")');
-  assert.ok(cli>=0&&shared>cli&&business>shared);
+  // Entry ordering is exercised against the actual package in macPanelEntryActivation;
+  // this fixture checks the CLI's independent public registration.
   const updater=fs.readFileSync(path.join(root,'src/updates/Bootstrap.ts'),'utf8');
   const activate=updater.slice(updater.indexOf('export async function activateWithBusiness('));
   assert.ok(activate.indexOf('service = registerUpdater(')>=0&&activate.indexOf('service = registerUpdater(')<activate.indexOf('business = loadBusiness()'));

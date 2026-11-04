@@ -8,12 +8,14 @@ import { DefaultServiceFactory } from "../factories/ServiceFactory";
 import { toFactoryContext } from "./ExtensionContext";
 import { registerProviderCommands } from "./ProviderCommands";
 import { maybeAutoInstallGitBackup, registerGitBackupCommands, registerGitHubSyncCommands } from "./GitBackupSetup";
+import { panelEntryFor, MacPanelEntry } from "../mac/PanelEntry";
 
 let _provider: unknown | undefined;
 let _activationDisposables: Array<{ dispose(): unknown }> = [];
 let _deactivationPromise: Promise<void> | undefined;
 let _activationGeneration = 0;
 let _reportedActivationFailures = new Set<string>();
+let _panelEntry: MacPanelEntry | undefined;
 
 function ownTimeout(context: { subscriptions: { push(...args: unknown[]): unknown } }, delayMs: number, callback: () => unknown): void {
   const generation = _activationGeneration;
@@ -40,6 +42,7 @@ function reportActivationFailure(stage: string, error: unknown): void {
     _reportedActivationFailures.delete(oldest);
   }
   console.error(`[Activation] ${stage} failed`, error);
+  _panelEntry?.fail(stage, error);
   const vscode = tryRequire<any>("vscode");
   void Promise.resolve(vscode?.window?.showErrorMessage?.(`SimpleExperiment 启动失败（${stage}）：${message}`)).catch(() => undefined);
 }
@@ -58,6 +61,7 @@ export async function activateExtension(context: Record<string, unknown> & { sub
   _activationDisposables = [];
   _deactivationPromise = undefined;
   _reportedActivationFailures = new Set<string>();
+  _panelEntry = panelEntryFor(context);
   console.log("[Activation] enter", new Date().toISOString(), "process.env.FEATURE_FACTORY_PANEL", process.env.FEATURE_FACTORY_PANEL);
   const mod = tryRequire<{ migrateRenamedExtensionState: (c: unknown) => Promise<void> }>("../config/RenamedExtensionStateMigration");
   await mod?.migrateRenamedExtensionState(context).catch(() => undefined);
@@ -74,6 +78,7 @@ export async function activateExtension(context: Record<string, unknown> & { sub
     if (provider && typeof (provider as any).resolveWebviewView !== "function") throw new Error("not real provider");
   } catch (e) {
     console.error("[Activation] factory failed", e);
+    _panelEntry?.fail("factory provider creation", e);
     provider = undefined;
   }
   if (!provider || typeof (provider as any).resolveWebviewView !== "function") {
@@ -92,7 +97,9 @@ export async function activateExtension(context: Record<string, unknown> & { sub
   if (provider && typeof (provider as any).resolveWebviewView === "function") {
     try {
       const vscode = tryRequire<any>("vscode");
-      if (vscode && vscode.window && typeof vscode.window.registerWebviewViewProvider === "function") {
+      if (_panelEntry) {
+        _panelEntry.ready(provider);
+      } else if (vscode && vscode.window && typeof vscode.window.registerWebviewViewProvider === "function") {
         console.log("[Activation] registerWebviewViewProvider", "simpleExperimentMac.panel");
         const retainContextWhenHidden = (provider as any).retainPanelContextWhenHidden === true;
         context.subscriptions.push(

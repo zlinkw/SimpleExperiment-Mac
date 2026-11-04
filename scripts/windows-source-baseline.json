@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "0ed8033d05fc9de2fad04e900d5da1ad2a6f281c858ac09e71f1bd17dd619753",
+          "localSha256": "aa3d6c88f0d2a1d1b684641249537f68c675892f7fb30382bc3845c597cf90e9",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.321 startup command binding fix, retained 0.5.320 policy fix, preview identity and native-Mac verification disclosure."
+          "reason": "Mac 0.5.322/0.2.106 startup diagnostics, paired install instructions and explicit native-Mac verification limits; source guides retained."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,14 +103,14 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "57466ba311417919e5c171c72feeed0f1c13cdd640badb4ccc0af0fd016fa25d",
+          "localSha256": "c2cc2136575265377f4e790ebd97534ab8c565fefca56d945513be9df956a8d5",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "93bd9cc3ce3b69a6b3084e969cc5e07b8e3a330673787098e6a8e4bfce348f66",
+          "localSha256": "c0a422c3c23949274758102dae4a52549fca7d4407c55c7f47f8b71b6390a1ba",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -629,8 +629,9 @@
         {
           "path": "src/extension/Activation.ts",
           "windowsSha256": "58b3b6fab983b4d5f5c94d9dfe224fdec12339ac4b9a128783070558989408ea",
-          "localSha256": "4eb470e88e14404232fa8196801a099432f5395d310ad5c847ac224cbc2395b0",
-          "classification": "identity-mapping"
+          "localSha256": "60a1285934ccfa2f47468fa6cce9de06ab00ae0738f3258f98454699711abe94",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.322/0.2.106 early panel entry, preserved command admission, original startup diagnostics and non-blocking dependency error notification; no Agent protocol or research configuration change."
         },
         {
           "path": "src/extension/CacheCleanupPanel.ts",
@@ -745,9 +746,9 @@
         {
           "path": "src/extension/ProviderCommands.ts",
           "windowsSha256": "5128193e7cec8d7b52c604de87c77e9bb9851d7158cf6a76428474a02799950b",
-          "localSha256": "f4f120ea1ecae6669d2a2f4eda01a38130b4a08c89a393ffedba6dac72267cf1",
+          "localSha256": "109a66762bd8ab30426f590432d9d0620ce47f0e745979ac112847985a950678",
           "classification": "platform-overlay",
-          "reason": "Mac command namespace and retained platform commands: bind system-tunnel stop plus manual endpoint/settings guide in the shared factory path. Strict missing-handler rejection, rollback and lease behavior preserved."
+          "reason": "Mac 0.5.322/0.2.106 early panel entry, preserved command admission, original startup diagnostics and non-blocking dependency error notification; no Agent protocol or research configuration change."
         },
         {
           "path": "src/extension/ProviderRealtime.ts",
@@ -813,9 +814,9 @@
         {
           "path": "src/factories/CommandFactory.ts",
           "windowsSha256": "8dbcf9828cc5b9fcb95895145592e5aec11b89fbaf44e6f262722ab95f0a43a5",
-          "localSha256": "81a50ec2cfd4588da49380a3c812023cb9c4c63592eac1053ee31f684f20e1c0",
+          "localSha256": "7e75bf1db805e302dbe68ae917eacace907ac1428464ba1fd3e4e46058a4602b",
           "classification": "platform-overlay",
-          "reason": "Mac command namespace and retained platform commands: bind system-tunnel stop plus manual endpoint/settings guide in the shared factory path. Strict missing-handler rejection, rollback and lease behavior preserved."
+          "reason": "Mac 0.5.322/0.2.106 early panel entry, preserved command admission, original startup diagnostics and non-blocking dependency error notification; no Agent protocol or research configuration change."
         },
         {
           "path": "src/factories/FeatureFactory.ts",
@@ -1700,8 +1701,16 @@
         {
           "path": "src/mac/Bootstrap.ts",
           "windowsSha256": null,
-          "localSha256": "7549d176b6fb899df91af7b51ebf1c244afeca33fcd810c3db31153bd1ddb8b2",
-          "classification": "retained-mac-source"
+          "localSha256": "48dc00ac6f7e19b5b8f9412cb90aaed7e25cda93c6f754f30d6bbb4b21cc4d29",
+          "classification": "retained-mac-source",
+          "reason": "Mac 0.5.322/0.2.106 early panel entry, preserved command admission, original startup diagnostics and non-blocking dependency error notification; no Agent protocol or research configuration change."
+        },
+        {
+          "path": "src/mac/PanelEntry.ts",
+          "windowsSha256": null,
+          "localSha256": "70431c7724c6c6b2d69edf1911b4572f5679cbefd74eedfd46122accb9a2a851",
+          "classification": "retained-mac-source",
+          "reason": "Existing Mac panel navigation registered before business imports; identity and original exception shown without modifying user configuration."
         },
         {
           "path": "src/mac/CacheDelete.ts",
@@ -2088,7 +2097,7 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "96b6f9243c45f7005d5e28a9836eab6a1a345ab3bfbc59bae13c6f3b08c54ce5",
+          "localSha256": "ff19650dfa9ba1f780d4f75d407bacc748bf10a6c21a73a22ed57cc53c5e8ef9",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -2765,9 +2774,9 @@
         {
           "path": "src/updates/Bootstrap.ts",
           "windowsSha256": "22d0a748225376c76ddc03d4864f228dde7863d56e4656f56cd7af10009b5e5d",
-          "localSha256": "04d65a1d11a048ae492e90a875031e149a0831ac4bf71911b70b208d30c80c7e",
+          "localSha256": "8d1a4bb7c15197ce47018c9f3aa376829b9aa623c2a01ac2998cb5cd68d8ee48",
           "classification": "platform-overlay",
-          "reason": "Mac preview metadata client, old receipt/lease compatibility and minimum paired-gate SFTP Mac version; common transaction unchanged."
+          "reason": "Mac 0.5.322/0.2.106 early panel entry, preserved command admission, original startup diagnostics and non-blocking dependency error notification; no Agent protocol or research configuration change."
         },
         {
           "path": "src/updates/ReleaseClient.ts",
@@ -3705,9 +3714,9 @@
         {
           "path": "mac-bootstrap.js",
           "windowsSha256": null,
-          "localSha256": "1acd759e10eedba08166ba76bbe22b757f6984905532a66bf0da643b56950513",
+          "localSha256": "1d38e3766fdbe09f6d471fbd9ec87b3250df7c8af60c170f45acaada1f96f39b",
           "classification": "retained-mac-source",
-          "reason": "Existing or new native adapter/entry; excluded from Windows business-policy ownership."
+          "reason": "Mac 0.5.322/0.2.106 early panel entry, preserved command admission, original startup diagnostics and non-blocking dependency error notification; no Agent protocol or research configuration change."
         },
         {
           "path": "mac-cli.js",
@@ -3761,14 +3770,14 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "261128a37fad87aab21e71ff4a248bbad3134c81822158032a81620c991ad797",
-          "localSha256": "5aed7a8f219fca24ffa5cd7c14b7a0c96c52a91b1b7ae75c0dc87e655a9c98f7",
+          "localSha256": "786011a5924aa301666a79639fdb2c043edcb44aa0353b6913934112bdfb63b0",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "164f4dc923d8c8bd2129bb3e03cf54f304c4c3df3752e0b222875590bf0f7ac0",
-          "localSha256": "2b34c8c5a6cc7392b5085ebdf4d676756e2376dc999c1f911f92424a1a43af0c",
+          "localSha256": "6a9ea43fab58cb170b9ecab2f3d7e60dcb1ab4c9407e46c689ea6ecc0c9aa0c1",
           "classification": "platform-overlay",
           "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
         },
@@ -3781,9 +3790,9 @@
         {
           "path": "readme.md",
           "windowsSha256": "4241f44f173bb15aed4b36e28740c784141a77cd6e849f746c39f7b7f2d9dca4",
-          "localSha256": "3073f42f99cc7d445ff85e4720300163eff6a4e3c9d083b50d1ae7e6010e0379",
+          "localSha256": "f43ce679c099552a779a0acdf3907550680a6d315c065d482f1d7e28d1cd17dc",
           "classification": "platform-overlay",
-          "reason": "Mac 说明保留 darwin 安装与 Mac 数据/认证路径结构（不采纳 Windows 的 simpleex 段与 %APPDATA% 段），补配套版本、交接标记新位置与暂存槽两代保留/忙时 fail-closed 说明。"
+          "reason": "Mac 0.5.322/0.2.106 startup diagnostics, paired install instructions and explicit native-Mac verification limits; source guides retained."
         },
         {
           "path": "resource-operation-lease.js",

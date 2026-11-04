@@ -6,6 +6,7 @@
  */
 
 import type { FactoryContext } from "./types";
+import { panelEntryFor } from "../mac/PanelEntry";
 
 function tryRequire<T>(id: string): T | undefined {
   try {
@@ -46,6 +47,7 @@ export interface CommandDescriptor {
 export const COMMAND_MANIFEST: ReadonlyArray<Omit<CommandDescriptor, "handler">> = [
   { id: "simpleExperimentMac.openPanel", title: "SimpleExperiment：打开面板", withLease: false },
   { id: "simpleExperimentMac.copyPanelDiagnostics", title: "SimpleExperiment：复制 Panel 诊断", withLease: false },
+  { id: "simpleExperimentMac.showOperationLog", title: "SimpleExperiment：查看操作日志", withLease: false },
   { id: "simpleExperimentMac.restorePanel", title: "SimpleExperiment：恢复 Panel", withLease: false },
   { id: "simpleExperimentMac.quickSetup", title: "SimpleExperiment：检查服务器配置" },
   { id: "simpleExperimentMac.bootstrapProject", title: "SimpleExperiment：接入当前项目" },
@@ -60,6 +62,7 @@ export const COMMAND_MANIFEST: ReadonlyArray<Omit<CommandDescriptor, "handler">>
   { id: "simpleExperimentMac.startXshellRealtimeTunnel", title: "SimpleExperiment：启动 Worker Xshell 会话" },
   { id: "simpleExperimentMac.startAllXshellRealtimeTunnels", title: "SimpleExperiment：启动全部 Xshell 会话" },
   { id: "simpleExperimentMac.startAllXshellConnections", title: "SimpleExperiment：启动全部 Xshell 连接" },
+  { id: "simpleExperimentMac.openXshellSessions", title: "SimpleExperiment：打开已有会话" },
   { id: "simpleExperimentMac.stopMacSystemTunnels", title: "SimpleExperiment：停止本插件启动的系统隧道" },
   { id: "simpleExperimentMac.configureManualEndpoints", title: "SimpleExperiment：配置 Termius 手动端点" },
   { id: "simpleExperimentMac.showManualAgentGuide", title: "SimpleExperiment：显示 Agent/tmux 指引" },
@@ -155,7 +158,10 @@ export class DefaultCommandFactory implements CommandFactory {
     if (unbound.length) throw new Error(`SimpleExperiment 命令没有实际处理器，拒绝注册不工作的命令：${unbound.slice(0, 12).join("、")}${unbound.length > 12 ? "…" : ""}`);
     if (!ctx.subscriptions || typeof ctx.subscriptions.push !== "function") throw new Error("Extension subscriptions are unavailable.");
     const failures: string[] = [];
+    const panelEntry = panelEntryFor(ctx);
     for (const d of descriptors) {
+      // The Mac bootstrap owns navigation before business activation; do not register it twice.
+      if (panelEntry?.ownsCommand(d.id)) continue;
       try {
         const wrapped = d.withLease ? withLeaseWrapper(d) : d.handler;
         const disposable = vscode.commands.registerCommand(d.id, wrapped);

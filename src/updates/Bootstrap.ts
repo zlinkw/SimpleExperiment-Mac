@@ -8,6 +8,7 @@ import { UpdateJournal, UpdateTransaction, TRANSACTION_KEY } from "./UpdateTrans
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { defaultHostOperationLeasePath } from "../core/HostOperationLease";
+import { panelEntryFor } from "../mac/PanelEntry";
 
 export const CHECK_COMMAND = "simpleExperimentMac.checkPluginUpdates";
 export const INSTALL_COMMAND = "simpleExperimentMac.installPluginUpdates";
@@ -175,7 +176,11 @@ export async function activateWithBusiness(context: any, vscode: any, loadBusine
   service = registerUpdater(context, vscode, client, options);
   void service.check(false).catch(() => undefined);
   try { business = loadBusiness(); await business.activate(context); }
-  catch (error: any) { void vscode.window.showErrorMessage(`业务面板启动失败，独立更新命令仍可用：${error.message}`); }
+  catch (error: any) {
+    panelEntryFor(context)?.fail("business activation", error);
+    console.error("[SimpleExperiment] business activation failed", error);
+    void vscode.window.showErrorMessage(`业务面板启动失败，独立更新命令仍可用：${error.message}`);
+  }
 }
 export async function activate(context: any): Promise<void> { await activateWithBusiness(context, require("vscode"), () => require("../extension")); }
 export async function deactivate(): Promise<void> { try { await business?.deactivate?.(); } finally { await service?.dispose(); service = undefined; } }

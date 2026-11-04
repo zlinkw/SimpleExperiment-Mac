@@ -23,6 +23,7 @@ export function resolveCommandHandlerMap(provider: Record<string, (...args: unkn
   };
   bind("simpleExperimentMac.openPanel", "openPanel");
   bind("simpleExperimentMac.copyPanelDiagnostics", "copyPanelDiagnosticsFromUi");
+  bind("simpleExperimentMac.showOperationLog", "showOperationLogFromUi");
   bind("simpleExperimentMac.restorePanel", "restorePanelFromUi");
   bind("simpleExperimentMac.quickSetup", "quickSetup");
   bind("simpleExperimentMac.configureXshellSavedSessions", "configureXshellSavedSessions");
@@ -37,6 +38,7 @@ export function resolveCommandHandlerMap(provider: Record<string, (...args: unkn
   bind("simpleExperimentMac.startAllXshellRealtimeTunnels", "startAllXshellRealtimeTunnels");
   bind("simpleExperimentMac.startAllXshellAgentSessions", "startAllXshellAgentSessions");
   bind("simpleExperimentMac.startAllXshellConnections", "startAllXshellConnections");
+  bind("simpleExperimentMac.openXshellSessions", "openAllXshellSessions");
   bind("simpleExperimentMac.stopMacSystemTunnels", "stopMacSystemTunnels");
   bind("simpleExperimentMac.configureManualEndpoints", "configureManualEndpoints");
   bind("simpleExperimentMac.showManualAgentGuide", "showManualAgentGuide");
