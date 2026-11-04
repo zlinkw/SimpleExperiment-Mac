@@ -356,6 +356,22 @@ def lifecycle_python(contract):
     return sys.executable
 
 
+def lifecycle_dependencies(contract, params):
+    if params.get("runtimeDependenciesProtocol") != 1:
+        return None
+    python = lifecycle_python(contract)
+    script = os.path.join(contract["installDir"], "simple_cluster", "runtime", "cluster_agent.py")
+    repair = "Redeploy the paired Mac runtime through Prepare project and Agent; the offline PyYAML bundle is embedded. Do not install into system or training Python."
+    try:
+        check = subprocess.run([python, "-I", "-S", script, "runtime-check"], capture_output=True, text=True, encoding="utf-8", timeout=10)
+        report = json.loads(check.stdout)
+    except (OSError, subprocess.TimeoutExpired, ValueError) as error:
+        raise AgentLifecycleError("AGENT_RUNTIME_DEPENDENCY_FAILED", "interpreter=" + python + "; dependency=PyYAML; " + str(error) + "; " + repair) from error
+    if check.returncode or not isinstance(report, dict) or report.get("ok") is not True or report.get("protocol") != 1 or report.get("python") != os.path.realpath(python) or report.get("safeLoad") is not True:
+        raise AgentLifecycleError("AGENT_RUNTIME_DEPENDENCY_FAILED", {"python": python, "dependency": "PyYAML", "report": report, "stderr": check.stderr, "repair": repair})
+    return report
+
+
 def lifecycle_files(contract, params):
     hashes = params.get("files") or {}
     runtime = os.path.join(contract["installDir"], "simple_cluster", "runtime")
@@ -447,7 +463,10 @@ def lifecycle_inspect(params):
             raise AgentLifecycleError("AGENT_TMUX_WINDOW_MISSING", lifecycle_tmux_config(params)["session"])
         lifecycle_verify_running(contract, health, {})
     active = lifecycle_active_tasks(contract["stateDir"])
-    return {"ok": True, "status": "running" if health else "unhealthy" if window else "absent", "contract": contract, "tmuxWindow": window, "activeTasks": active, "activeTasksBlockRestart": False,
+    dependencies = health.get("runtimeDependencies")
+    unhealthy = isinstance(dependencies, dict) and dependencies.get("ok") is not True
+    return {"ok": True, "status": "unhealthy" if health and unhealthy else "running" if health else "unhealthy" if window else "absent", "contract": contract, "tmuxWindow": window, "activeTasks": active, "activeTasksBlockRestart": False,
+            "runtimeDependencies": dependencies,
             "identity": health.get("agentIdentity"), "runningVersion": health.get("runtimeVersion"), "files": files,
             "schedulerRuntime": {key: health["schedulerRuntime"][key] for key in ("protocol", "status", "workerId", "windowId", "paneId", "dead", "runningVersion", "runtimeFiles", "error") if key in health["schedulerRuntime"]} if isinstance(health.get("schedulerRuntime"), dict) else None,
             "schedulerUpdateError": str(health.get("schedulerUpdateError") or "")[:500]}
@@ -480,6 +499,7 @@ def lifecycle_control(params):
             proofs = lifecycle_files(contract, params)
             if not version or any(not proofs.get(name) or proofs[name] != (params.get("files") or {}).get(name) for name in proofs):
                 raise AgentLifecycleError("AGENT_RUNTIME_PROOF_REQUIRED")
+            lifecycle_dependencies(contract, params)
         if before["status"] in ("running", "unhealthy"):
             identity = before["identity"]
             if action == "ensure" and before["status"] == "running" and before["runningVersion"] == version:
@@ -519,7 +539,8 @@ def lifecycle_control(params):
         os.makedirs(os.path.join(contract["installDir"], "logs"), exist_ok=True)
         log = os.path.join(contract["installDir"], "logs", "agent-lifecycle.log")
         command = "unset SIMPLE_EXPERIMENT_AGENT_STATE_DIR SIMPLE_EXPERIMENT_HUB_UPLINK_URL CUDA_VISIBLE_DEVICES NVIDIA_VISIBLE_DEVICES TMUX_TMPDIR; exec env " + " ".join(shlex.quote(key + "=" + value) for key, value in env.items())
-        command += " " + " ".join(shlex.quote(value) for value in [python, script, "serve", "--project-dir", contract["projectDir"], "--mode", contract["mode"],
+        isolation = ["-I", "-S"] if params.get("runtimeDependenciesProtocol") == 1 else []
+        command += " " + " ".join(shlex.quote(value) for value in [python, *isolation, script, "serve", "--project-dir", contract["projectDir"], "--mode", contract["mode"],
                                 "--worker-id", contract["workerId"], "--host", contract["host"], "--port", str(contract["port"])])
         command += " >> " + shlex.quote(log) + " 2>&1"
         target = lifecycle_tmux_config(params)

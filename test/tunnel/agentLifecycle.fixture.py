@@ -45,7 +45,7 @@ health_scope = dict(scheduler_dependency_health=forbidden_environment_probe,
     iso_age_seconds=lambda value:0, now_iso=lambda:'fixture-time', agent_install_dir=lambda root:'runtime', agent_dir=lambda root:'state',
     gpu_collector_state_root=lambda root:'/fixture/worker-state',
     SCHEMA_VERSION=1, AGENT_VERSION='fixture', API_VERSION='1', RUNTIME_VERSION='fixture', PLUGIN_VERSION='fixture',
-    AGENT_LIFECYCLE_IDENTITY={}, TASK_SCHEDULER_UPDATE_ERROR='',
+    AGENT_LIFECYCLE_IDENTITY={}, TASK_SCHEDULER_UPDATE_ERROR='', RUNTIME_DEPENDENCIES={'ok':True,'safeLoad':True,'offline':True},
     task_scheduler_runtime_report=lambda root, worker: {'protocol': 1, 'status': 'absent', 'workerId': worker}, os=os)
 # Extract only the real health function; never import/execute the production module.
 exec('def api_health(root, mode="realtime"):'+health_source, health_scope)

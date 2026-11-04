@@ -122,6 +122,7 @@ dist/runtime/IncrementalScopeMetadata.js
 dist/runtime/OutputContractFiles.js
 dist/runtime/PlanAnalysisRead.js
 dist/runtime/PlanCodeScope.js
+dist/runtime/RuntimeDependencies.js
 dist/runtime/PlanExistingArtifacts.js
 dist/runtime/ProjectAggregateRead.js
 dist/runtime/ResultParseInputs.js

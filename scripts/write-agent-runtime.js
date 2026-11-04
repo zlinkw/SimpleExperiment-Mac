@@ -55,7 +55,7 @@ for (const [modulePath, exportName, targetPath, expectedPrefix] of runtimes) {
   if (typeof content !== "string" || !content.startsWith(expectedPrefix)) {
     throw new Error(`[agent-runtime] invalid ${exportName} from ${modulePath}`);
   }
-  const patched = patchVersionHeader(content, unifiedVersion);
+  const patched = require("./runtime-dependency-bundle").embedRuntimeDependencies(patchVersionHeader(content, unifiedVersion));
   const target = path.join(root, targetPath);
   const previous = fs.existsSync(target) ? fs.readFileSync(target, "utf8") : "";
   if (previous === patched) {

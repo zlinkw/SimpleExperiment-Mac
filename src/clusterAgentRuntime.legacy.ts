@@ -7,6 +7,7 @@ import { GPU_COLLECTOR_PYTHON } from "./runtime/GpuCollector";
 import { RUNTIME_LOG_DIAGNOSTICS_PYTHON } from "./runtime/RuntimeLogDiagnostics";
 import { PLAN_CODE_SCOPE_PYTHON } from "./runtime/PlanCodeScope";
 import { SYNC_SCOPE_INDEX_PYTHON } from "./runtime/SyncScopeIndex";
+import { RUNTIME_DEPENDENCIES_PYTHON } from "./runtime/RuntimeDependencies";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
 from __future__ import annotations
 import argparse, base64, calendar, copy, csv, errno, fnmatch, glob, hashlib, http.client, importlib.util, io, ipaddress, json, math, os, pathlib, random, re, shutil, shlex, signal, socket, statistics, stat, struct, subprocess, sys, threading, time, traceback, urllib.request, uuid, zipfile
@@ -17,6 +18,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 ${RESULT_LAYOUT_PYTHON}
 ${PLAN_EXISTING_ARTIFACTS_PYTHON}
 ${SYNC_SCOPE_INDEX_PYTHON}
+${RUNTIME_DEPENDENCIES_PYTHON}
 
 # 版本由 build 动态注入（单源：package.json#version -> PLUGIN_VERSION，src/runtime/RuntimeManifest.ts#CURRENT_RUNTIME_VERSION -> 其他），禁止手改；占位值仅用于类型检查，落盘以 dist/runtime/cluster_agent.py 为准
 SCHEMA_VERSION = 1
@@ -6786,6 +6788,7 @@ def api_health(root, mode="realtime"):
         "projectRoot": os.path.abspath(root),
         "agentIdentity": AGENT_LIFECYCLE_IDENTITY,
         "agentLifecycleProtocol": 1,
+        "runtimeDependencies": RUNTIME_DEPENDENCIES,
         "schedulerRuntime": task_scheduler_runtime_report(root, os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker"),
         "schedulerUpdateError": TASK_SCHEDULER_UPDATE_ERROR,
         "agentInstallDir": agent_install_dir(root),
@@ -15735,6 +15738,7 @@ def manage_tmux_session_response(payload):
 
 def serve_http(args):
     global AGENT_LIFECYCLE_LOCK, AGENT_LIFECYCLE_IDENTITY, TASK_SCHEDULER_UPDATE_ERROR
+    runtime_dependency_prepare()
     AGENT_LIFECYCLE_LOCK, AGENT_LIFECYCLE_IDENTITY = lifecycle_service_guard(args, RUNTIME_VERSION)
     bind_host = str(getattr(args, "host", "") or "127.0.0.1").strip()
     if bind_host.startswith("[") and bind_host.endswith("]"):
@@ -17025,6 +17029,13 @@ def add_state_args(parser):
 
 def main():
     global AGENT_STATE_DIR, MAX_EVENTS, MAX_JOURNAL_BYTES, STATE_RETENTION_SECONDS, TMP_RETENTION_SECONDS, MAX_AGENT_STATE_BYTES
+    if len(sys.argv) == 2 and sys.argv[1] == "runtime-check":
+        report = runtime_dependency_check()
+        # ASCII JSON is independent of the controller's terminal locale.
+        print(json.dumps(report, ensure_ascii=True))
+        return 0 if report["ok"] else 1
+    if len(sys.argv) > 1 and sys.argv[1] in ("run", "task-queue", "task-runner"):
+        runtime_dependency_prepare()
     if len(sys.argv) > 1 and sys.argv[1] in ("task-queue", "task-runner"):
         parser = argparse.ArgumentParser()
         parser.add_argument("cmd")

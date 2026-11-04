@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.325 / SimpleSFTP Mac 0.2.106**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.326 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -197,7 +197,7 @@
 
 在当前项目的服务器卡片保存连接，停用端点可设 `enabled: false`。新增 Worker 时核对唯一 ID、主机、账号、路径及独立本机端口。旧手动端点设置保留兼容读取；当前项目保存的连接不作为其他窗口的全局连接配置。
 
-远端需要 Linux、可写项目父目录、Python 3、tmux，实际执行环境还需 PyYAML。SimpleSFTP 单独配置每台服务器的 SSH 身份；Termius 的凭据不会被读取。
+远端需要 Linux、可写 runtime 目录、Python 3.8+ 和 tmux。Agent 所需 PyYAML 随 runtime 离线分发，不要求系统或训练环境预装。SimpleSFTP 单独配置每台服务器的 SSH 身份；Termius 的凭据不会被读取。
 
 ### 准备项目与 Agent
 
@@ -267,7 +267,7 @@ expectedResults:
 
 引号内空格属于文件名；YAML 引号解码一次，单引号内的 `'` 写成 `''`。终端传递完整路径时同样加引号。不要使用 Windows 反斜杠、`./`、`..`、连续 `/` 或绝对路径作为 Plan/结果相对路径。
 
-配套 Agent 的指定 Plan 输出契约与解析使用真实 YAML，支持列表、锚点和多行 scalar/命令，并依赖科研 Python 环境的 PyYAML。轻量预览不等同于 Agent 全文检查；出现预览差异时核对原 Plan 并运行 **检查输出契约**。`*`、`?`、`**` 按路径段区分大小写匹配，具体目录只匹配其声明范围。
+配套 Agent 的指定 Plan 输出契约与解析使用真实 YAML，支持列表、锚点和多行 scalar/命令，并使用插件独立管理的 PyYAML，不依赖科研 Python 环境。轻量预览不等同于 Agent 全文检查；出现预览差异时核对原 Plan 并运行 **检查输出契约**。`*`、`?`、`**` 按路径段区分大小写匹配，具体目录只匹配其声明范围。
 
 #### 旧摘要与归档证据
 
@@ -316,7 +316,7 @@ expectedResults:
 
 #### 读取失败与验证边界
 
-指定 Plan、jobs、结果和归档状态使用受检普通文件描述符读取，单个 Agent 输入最多 5 MiB，必须是有效 UTF8；解析与来源核验使用同一份内容。本机轻量结果/wrapper 读取预算为 4 MiB。扫描、条目、路径深度均有预算。缺失 PyYAML、损坏 YAML/JSON、文件变更或超限时，核对环境和原文件后重试。
+指定 Plan、jobs、结果和归档状态使用受检普通文件描述符读取，单个 Agent 输入最多 5 MiB，必须是有效 UTF8；解析与来源核验使用同一份内容。本机轻量结果/wrapper 读取预算为 4 MiB。扫描、条目、路径深度均有预算。依赖部署失败时按“Agent 离线依赖”修复受管 runtime；损坏 YAML/JSON、文件变更或超限时核对原文件，不跳过源码核验。
 
 结果映射按原始来源核对路径、实际大小和 SHA-256。遇到“本机映射路径拼写与已有磁盘条目不一致”、来源/hash 冲突或文件身份变化时，查看实际目录和文件名，再重新确认映射；不要删空格、改大小写或强制覆盖来借用别的文件。这同样适用于默认不区分大小写的 Mac 磁盘。
 
@@ -401,3 +401,17 @@ Agent 持久队列的 Plan/outputDir 身份、接收回执、旧队列派发及 
 新正式任务不创建`attempts/…`子目录，不直接覆盖已有正式产物；旧attempt只用于历史读取，旧draft真实执行会明确拒绝。目录冲突需先人工核对原运行/产物，不能通过改名伪造新的身份。macOS尚无可靠打开文件句柄证明，清理执行报`HANDLE_CHECK_UNAVAILABLE`时保持阻断；永久删除的两次确认及物理直接父目录检查仍然必要。
 
 参考提交和本地测试见[Windows功能同步说明](windows-sync-2026-10-12.md)。发布及验证规则见 [Mac 发布与验收](mac-release-guide.md)。本地验证与 M5 真机验证分别记录；真机测试由用户安排，未执行的项目不标记通过。
+
+## Agent 离线依赖
+
+自 Experiment Mac 0.5.326 / SFTP Mac 0.2.107 起，辅助 Agent 与 Scheduler 使用固定的 PyYAML 6.0.3。依赖锁、上游源包摘要、未修改的纯 Python 包与 MIT LICENSE 保存在源码 vendor/python；构建验证锁定摘要后将离线 zip 内嵌到 cluster_agent.py、cluster_scheduler.py，原有 runtime 哈希和上传核验同时覆盖依赖内容。没有额外联网安装步骤，不需要 pip、ensurepip、venv 系统包或编译器。
+
+运行环境为机器现有 Python 标准库加插件自己的版本化依赖目录，不是训练 Conda 环境，也不在系统 site-packages 安装。受管启动使用解析到的绝对 sys.executable，加 -I -S 隔离标志，忽略终端激活、PYTHONPATH、用户及系统 site-packages。检查、依赖发布和启动使用同一解释器；训练命令和所选训练环境保持原配置。依赖文件位于实际 runtime 所在目录的 .python-dependencies，仅发布固定摘要的 zip，不展开项目或历史产物。损坏的受管 zip 从同一已验内嵌包原子修复，历史版本目录不自动清理。
+
+首次安装、从 0.5.325 升级或修复部署：安装本 Release 两份 Mac VSIX 并 Reload Window，按现有“准备项目与 Agent”确认目标后上传 runtime。配套 SFTP 在停止旧 Agent 的指定窗口前先检查离线依赖；失败时保留旧 Agent，返回 AGENT_RUNTIME_DEPENDENCY_FAILED，包含解释器、PyYAML 版本、受管路径、原始原因和修复指引。正常受管 ensure/restart 继续核对完整 runtime 文件哈希，不采纳未知依赖、不更改研究环境。停止和只读 inspect 不安装依赖；旧协议调用不强制启用新依赖检查。
+
+服务器离线时仍使用同样的两份脚本，不需要连接 PyPI。若 runtime 不完整、校验失败、目标是链接或目录不可写，请先通过原准备流程重新部署已验证脚本，或修正该受管 runtime 目录权限后重试；不要删除配置、计划、结果或任务历史，不要给训练环境重复安装 PyYAML。
+
+手动诊断可使用“同一绝对解释器 -I -S 实际 cluster_agent.py 路径 runtime-check”；所有路径从当前配置/进程读取，不照搬示例机器或端口。此命令只准备受管依赖并返回 JSON，不连接 Agent、不启动训练。Agent /health 的 runtimeDependencies 字段报告实际解释器、sys.prefix、yaml 模块来源、版本、摘要和 safeLoad 能力。能力检查实际解析含锚点、列表及多行命令的 YAML，计划仍使用 yaml.safe_load，不改回正则。
+
+本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.326，再只做依赖核验与提交前检查。

@@ -9739,8 +9739,8 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     }
     async agentLifecycleForTarget(target, action, manifest?, confirmed = false, migrationDigest?: string) {
         const installed = vscode.extensions.getExtension(SIMPLE_SFTP_EXTENSION_ID);
-        if (require("../features/ExtensionUpdates").compareSemanticVersions(String(installed?.packageJSON?.version || "0.0.0"), "0.2.78") < 0)
-            throw new Error("AGENT_LIFECYCLE_CAPABILITY_REQUIRED: 需要 SimpleSFTP 0.2.78，未修改远端或自定义登录命令。");
+        if (require("../features/ExtensionUpdates").compareSemanticVersions(String(installed?.packageJSON?.version || "0.0.0"), "0.2.107") < 0)
+            throw new Error("AGENT_LIFECYCLE_CAPABILITY_REQUIRED: 需要配套 SimpleSFTP Mac 0.2.107 的离线依赖启动检查，未修改远端或自定义登录命令。");
         const config = target.id === "hub" ? this.setupConfig : this.setupConfig.workerTunnels.find(row => row.id === target.id);
         if (!config) throw new Error(`AGENT_CONFIG_MISSING: ${target.id}`);
         if (config.agentStateDir || config.workerStateDir) {
@@ -9762,6 +9762,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
             tmuxWindow: "agent",
             agentToken: this.tunnelConfig?.token || "",
             expectedVersion: manifest?.runtimeVersion || RuntimeManifest_1.CURRENT_RUNTIME_VERSION, files: manifest?.files,
+            runtimeDependenciesProtocol: 1,
             migrationDigest,
             confirm: confirmed, pathConfirmed: confirmed,
         }); }

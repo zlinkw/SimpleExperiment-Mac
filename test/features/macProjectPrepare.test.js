@@ -125,11 +125,11 @@ test("Mac managed-lifecycle receipts proceed while genuine blocked receipts stil
   assert.ok(!adapterSource.includes("non_simple_remote_command"), "Mac adapter must not fabricate blocked Windows receipts");
   assert.equal(BLOCKED.has("mac_openssh_managed_lifecycle"), false);
   const f = fixture("single_worker");
-  const result = await f.provider.apiProjectPrepare({ confirm: true });
+  const result = await f.provider.apiProjectPrepare({ confirm: true, applyXshell: true });
   assert.equal(result.ok, true);
   assert.deepEqual(f.calls.map(call => call.method), ["commands", "deploy"]);
   const blocked = fixture("single_worker", { blockedCommands: true });
-  await assert.rejects(blocked.provider.apiProjectPrepare({ confirm: true }), /project\.prepare 未修改 Xshell 自启动命令/);
+  await assert.rejects(blocked.provider.apiProjectPrepare({ confirm: true, applyXshell: true }), /project\.prepare 未修改 Xshell 自启动命令/);
   assert.deepEqual(blocked.calls.map(call => call.method), ["commands"], "blocked receipts must stop before any deployment");
 });
 
@@ -184,7 +184,7 @@ test("prepareAgentsForFirstRun cancels without any side effect and completes onl
   assert.equal(cancelled.calls.some(call => call.method === "deploy"), false, "cancellation never deploys");
   const ready = fixture("single_worker");
   assert.equal(await ready.provider.prepareAgentsForFirstRun(), true);
-  assert.deepEqual(ready.calls.map(call => call.method), ["sync", "commands", "deploy", "start"]);
+  assert.deepEqual(ready.calls.map(call => call.method), ["sync", "deploy", "start"], "default prepare must not opt into changing startup commands");
   assert.ok(ready.events.some(item => item[0] === "confirm" && String(item[1]).includes("worker-a")));
   const unverified = fixture("single_worker", { disconnected: true });
   await assert.rejects(unverified.provider.prepareAgentsForFirstRun(), /健康检测未通过/);

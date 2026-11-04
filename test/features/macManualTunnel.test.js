@@ -40,7 +40,9 @@ test("tmux guide quotes Chinese paths and preserves existing Agent sessions with
   const setup = manual.setupFromManualEndpoints([{ ...endpoint(), projectParentDir: "/data/研究 '项目", condaEnv: "/opt/环境 A" }]);
   const guide = manual.manualAgentGuide(setup, "single_worker", "实验 A", true);
   assert.match(guide, /tmux has-session/); assert.match(guide, /tmux attach-session/); assert.match(guide, /worker_telemetry/);
-  assert.ok(guide.includes("'/data/研究 '\\''项目/实验 A'")); assert.ok(guide.includes("'/opt/环境 A/bin/python'"));
+  assert.ok(guide.includes("'/data/研究 '\\''项目/实验 A'"));
+  assert.ok(guide.includes("'SIMPLE_EXPERIMENT_CONDA_ENV=/opt/环境 A'"));
+  assert.ok(guide.includes("'python3' -I -S"));
   assert.ok(guide.includes('--port 29200')); assert.ok(guide.includes('--token "$SIMPLE_EXPERIMENT_AGENT_TOKEN"'));
   assert.doesNotMatch(guide, /kill-session|kill-server|\.xsh|password=/); assert.throws(() => manual.manualAgentGuide(setup, "single_worker", "../bad"));
 });

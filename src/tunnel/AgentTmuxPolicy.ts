@@ -53,7 +53,7 @@ export function agentTmuxStartupCommand(options: AgentTmuxStartupOptions): strin
   const session = defaultAgentTmuxSessionName(role, options.endpointId, sessionPrefix);
   const condaEnv = normalizeCondaEnvName(options.condaEnv);
   const requireCondaEnv = condaEnv ? "1" : "0";
-  const config = JSON.stringify({projectDir: options.workDir || options.installDir || "", installDir: options.installDir || "", stateDir: options.stateDir, workerStateDir: options.workerStateDir, mode, workerId: options.endpointId || "", host, port, condaEnv, sessionPrefix, tmuxSession: session, tmuxWindow: "agent"});
+  const config = JSON.stringify({projectDir: options.workDir || options.installDir || "", installDir: options.installDir || "", stateDir: options.stateDir, workerStateDir: options.workerStateDir, mode, workerId: options.endpointId || "", host, port, condaEnv, sessionPrefix, tmuxSession: session, tmuxWindow: "agent", runtimeDependenciesProtocol: 1});
   return [simpleAgentTmuxCommandVersion, "unset TMUX",
     `SESSION=${shellQuote(session)}`, `SIMPLE_EXPERIMENT_CONDA_ENV=${shellQuote(condaEnv)}`,
     `SIMPLE_EXPERIMENT_REQUIRE_CONDA_ENV=${shellQuote(requireCondaEnv)}`,

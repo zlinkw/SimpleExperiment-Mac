@@ -1,6 +1,7 @@
 import { PLAN_EXISTING_ARTIFACTS_PYTHON } from "./runtime/PlanExistingArtifacts";
 import { TASK_SHELL_ENVIRONMENT_PYTHON } from "./runtime/TaskShellEnvironment";
 import { RUNTIME_LOG_DIAGNOSTICS_PYTHON } from "./runtime/RuntimeLogDiagnostics";
+import { RUNTIME_DEPENDENCIES_PYTHON } from "./runtime/RuntimeDependencies";
 export const CLUSTER_SCHEDULER_RUNTIME = String.raw`from __future__ import annotations
 
 import argparse
@@ -31,6 +32,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+${RUNTIME_DEPENDENCIES_PYTHON}
+runtime_dependency_prepare()
 
 try:
     import yaml
