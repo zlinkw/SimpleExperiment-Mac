@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "85e7e34c64021175c5724810b84302271d264b03aa212c29b697fd7566f64133",
+          "localSha256": "cd28ae1dec4c0abc8ecaa74740eecbd3d858c8be0956c5b0d93916eab5fb0740",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.324 desktop/Agent policy boundary, paired version and explicit native/server verification limits."
+          "reason": "Mac 0.5.325: usage-based PLAN dependency roles and provenance; original proof and size limits retained; remote/native verification pending."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "199a9e651c063faa43dcc762a9270d6b2faaea7ed57a95de97fa54be50ddb0de",
+          "localSha256": "c7f08a4b16eba856169670d620a023a3c3e0c8684d625f5807af517efae25f1d",
           "classification": "platform-overlay",
-          "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
+          "reason": "Mac 0.5.325: usage-based PLAN dependency roles and provenance; original proof and size limits retained; remote/native verification pending."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "602892c8cc6707eb54052eabed697003e05b42cc20d81f898076d36b351b1052",
+          "localSha256": "88ebdde8016dc0902e09ba5a84ada6a37752528b03055469489d23d50ccac360",
           "classification": "platform-overlay",
-          "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
+          "reason": "Mac 0.5.325: usage-based PLAN dependency roles and provenance; original proof and size limits retained; remote/native verification pending."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -2068,8 +2068,9 @@
         {
           "path": "src/runtime/PlanCodeScope.ts",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "localSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "classification": "upstream-identical"
+          "localSha256": "c697d1cb0c63431c872165d564ddf212b7032fd1853689123ac65c80334a36f3",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.325: usage-based PLAN dependency roles and provenance; original proof and size limits retained; remote/native verification pending."
         },
         {
           "path": "src/runtime/PlanExistingArtifacts.ts",
@@ -2098,9 +2099,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "24f38653c0abb1e42ee6c921e6ae65b2a976acef95c835ecd6755adb3ff641a9",
+          "localSha256": "87cb68095010d75282a4c8f2e94e1dc04d053fba7f37a0de4c6de597fa99d7f1",
           "classification": "platform-overlay",
-          "reason": "Independent Mac package identity, version, platform entrypoints and preview distribution; upstream runtime/feature contributions retained."
+          "reason": "Mac 0.5.325: usage-based PLAN dependency roles and provenance; original proof and size limits retained; remote/native verification pending."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",

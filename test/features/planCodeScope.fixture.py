@@ -6,10 +6,19 @@ import pathlib
 import re
 import sys
 import tempfile
+import shutil
 
 root = pathlib.Path(tempfile.mkdtemp(prefix="simpleex-plan-source-"))
 source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-embedded = source.split("String.raw`", 1)[1].rsplit("`;", 1)[0]
+if "String.raw`" in source:
+    embedded = source.split("String.raw`", 1)[1].rsplit("`;", 1)[0]
+    agent = pathlib.Path(sys.argv[1]).parent.parent.joinpath("clusterAgentRuntime.legacy.ts").read_text(encoding="utf-8")
+else:
+    agent = source
+    definitions = ast.parse(source)
+    selected = [node for node in definitions.body if isinstance(node, ast.FunctionDef) and
+                (node.name.startswith(("plan_scope_", "plan_source_")) or node.name in ("verify_plan_execution_source", "inspect_plan_code_scope"))]
+    embedded = ast.unparse(ast.Module(body=selected, type_ignores=[]))
 scope = dict(os=os, pathlib=pathlib, re=re, hashlib=hashlib, json=json, now_iso=lambda: "now")
 def check(base, relative, expected, verify_content=False):
     data = (pathlib.Path(base)/relative).read_bytes()
@@ -63,14 +72,13 @@ for file in ("work_dirs/a/job_config.yaml", "experiments/results/old.csv", "util
 scope["verify_plan_execution_source"](str(root), row, baseline)
 report = scope["inspect_plan_code_scope"](str(root), row)
 assert report["executionSource"] == baseline and report["compatible"] is True and report["readOnly"] is True
-agent = pathlib.Path(sys.argv[1]).parent.parent.joinpath("clusterAgentRuntime.legacy.ts").read_text(encoding="utf-8")
 def function(text, name):
     match = re.search(r"(?m)^def " + name + r"\([^\n]*\):\n[\s\S]*?(?=\n(?:def |class |[A-Z][A-Z_]+\s*=)|\Z)", text)
     assert match, name
     return match.group(0)
 exec(compile(function(agent, "resolve_durable_code_sync_proof"), "source-admission", "exec"), scope)
 assert scope["resolve_durable_code_sync_proof"](str(root), dict(row, executionSource=baseline))["fileCount"] == len(paths)
-native = pathlib.Path(sys.argv[1]).parent.joinpath("TmuxTaskLifecycle.ts").read_text(encoding="utf-8")
+native = pathlib.Path(sys.argv[1]).parent.joinpath("TmuxTaskLifecycle.ts").read_text(encoding="utf-8") if "String.raw`" in source else source
 scope.update(task_safe_path=scope["plan_scope_path"], task_inventory=lambda _: [])
 exec(compile(function(native, "task_queue_job"), "native-source-admission", "exec"), scope)
 command = dict(row, commandId="synthetic", workflowId="w", globalJobId="w:0", experimentIndex=0, workerId="worker", outputDir="work_dirs/a", collectionResultCsv="tmp/a.csv", resultPathPolicy="declared", executionSource=baseline)
@@ -102,4 +110,132 @@ try:
     raise AssertionError("escape accepted")
 except ValueError:
     pass
-print(json.dumps(dict(ok=True, files=len(paths), generatedChangesIgnored=6, sourceChangesRejected=3)))
+# Reproduce the reported multi-method metadata chain without importing any project code.
+original_root = root
+root = original_root / "multi-method"
+root.mkdir()
+plan = "experiments/plans/comparison/cross_encoder_completion_bus_cot_lesion_P0_v1.yaml"
+history = "experiments/results/simmlm_original_final_20261026/results.json"
+write(plan, "runner:\n  command: python train.py --config configs/train.json\n")
+write("train.py", "from experiments.cli_config import build\nfrom models.core import train\nimport json\nfrom pathlib import Path\nDATA = Path('inputs/current.json')\njson.loads(DATA.read_text())\n")
+write("experiments/cli_config.py", "from comparison_methods.osiris.study import study\n")
+write("models/core.py", "def train(): raise RuntimeError('must never execute')\n")
+write("comparison_methods/osiris/study.py", "from pathlib import Path\nfrom .final_history import actual_digest as frozen_digest\nROOT = Path(__file__).resolve().parents[2]\ndef verify_definitions():\n    if maintenance_needed:\n        frozen_digest(ROOT / 'comparison_methods/osiris_ovr/design.json')\ndef study(): pass\n")
+write("comparison_methods/osiris/final_history.py", "import hashlib\nfrom pathlib import Path\ndef actual_digest(path):\n    return hashlib.sha256(Path(path).read_bytes()).hexdigest()\n")
+write("experiments/active_registry.py", "from comparison_methods.simmlm.publication import published\n")
+write("comparison_methods/osiris_ovr/design.json", json.dumps({"definitions_sha256": {"experiments/active_registry.py": sha("experiments/active_registry.py")}}))
+write("comparison_methods/simmlm/publication.py", "PUBLISHED = 'comparison_methods/simmlm/published_original.json'\ndef published(): pass\n")
+write("comparison_methods/simmlm/published_original.json", json.dumps({"record": history}))
+write(history, " " * 2365305)
+write("configs/train.json", json.dumps({"base_config": "configs/base.yaml", "metadata": {"record": history}}))
+write("configs/base.yaml", "batch: 4\n")
+write("inputs/current.json", json.dumps({"rows": [1, 2], "record": history}))
+before_history = sha(history)
+resource_paths, _ = scope["plan_source_scope"](str(root), plan, sha(plan))
+expected = {plan, "train.py", "experiments/cli_config.py", "models/core.py", "comparison_methods/osiris/study.py", "comparison_methods/osiris/final_history.py", "comparison_methods/osiris_ovr/design.json", "configs/train.json", "configs/base.yaml", "inputs/current.json"}
+assert set(resource_paths) == expected, resource_paths
+assert history not in resource_paths and sha(history) == before_history
+assert (root / history).stat().st_size == 2365305
+
+# Verify the actual Agent file/hash validator too, not a substitute validator.
+exec(compile(function(agent, "_code_sync_stat_record"), "source-file-validator", "exec"), scope)
+resource_manifest = {p: dict(size=(root/p).stat().st_size, sha256=sha(p)) for p in resource_paths}
+resource_row = dict(projectId="resource-project", planFile=plan, planRevision=sha(plan), codeFingerprint="original")
+resource_source = dict(manifest=resource_manifest, digest=scope["plan_source_digest"](resource_manifest))
+scope["verify_plan_execution_source"](str(root), resource_row, resource_source)
+assert scope["task_queue_job"](str(root), "worker", dict(command, **resource_row, executionSource=resource_source))["executionSource"] == resource_source
+for changed in ("models/core.py", "configs/base.yaml", "inputs/current.json", "comparison_methods/osiris_ovr/design.json"):
+    original = (root/changed).read_text(encoding="utf-8")
+    write(changed, original + " ")
+    try:
+        scope["verify_plan_execution_source"](str(root), resource_row, resource_source)
+        raise AssertionError("real dependency change accepted: " + changed)
+    except ValueError as exc:
+        assert changed in str(exc), str(exc)
+    write(changed, original)
+
+missing_root = original_root / "missing-source"
+shutil.copytree(root, missing_root, ignore=lambda directory, names: ["core.py"] if pathlib.Path(directory) == root / "models" else [])
+try:
+    scope["verify_plan_execution_source"](str(missing_root), resource_row, resource_source)
+    raise AssertionError("missing imported source accepted")
+except ValueError as exc:
+    assert "models/core.py" in str(exc) and "dependency chain" in str(exc), str(exc)
+
+# A consumed path -> digest map adds byte-only integrity dependencies, not code imports.
+original_train = (root/"train.py").read_text(encoding="utf-8")
+write("train.py", original_train + "\njson.loads(Path('comparison_methods/osiris_ovr/design.json').read_text())\n")
+unconsumed_paths, _ = scope["plan_source_scope"](str(root), plan, sha(plan))
+assert "experiments/active_registry.py" not in unconsumed_paths, "reading a document is not consuming its digest map"
+write("train.py", original_train + "\nfrom comparison_methods.osiris.final_history import actual_digest\ndefinitions = json.loads(Path('comparison_methods/osiris_ovr/design.json').read_text())\nfor file, expected in definitions['definitions_sha256'].items():\n    actual_digest(file)\n")
+integrity_paths, _ = scope["plan_source_scope"](str(root), plan, sha(plan))
+assert "experiments/active_registry.py" in integrity_paths
+assert "comparison_methods/simmlm/publication.py" not in integrity_paths and history not in integrity_paths
+integrity_manifest = {p: dict(size=(root/p).stat().st_size, sha256=sha(p)) for p in integrity_paths}
+integrity_source = dict(manifest=integrity_manifest, digest=scope["plan_source_digest"](integrity_manifest))
+registry_original = (root/"experiments/active_registry.py").read_text(encoding="utf-8")
+write("experiments/active_registry.py", registry_original + "\n# integrity change\n")
+try:
+    scope["verify_plan_execution_source"](str(root), resource_row, integrity_source)
+    raise AssertionError("byte-only integrity dependency change accepted")
+except ValueError as exc:
+    assert "experiments/active_registry.py" in str(exc) and "digest manifest" in str(exc), str(exc)
+write("experiments/active_registry.py", registry_original)
+# Even genuinely importing publication.py must not consume its unused MANIFEST constant.
+write("train.py", original_train + "\nfrom comparison_methods.simmlm.publication import published\n")
+publication_paths, _ = scope["plan_source_scope"](str(root), plan, sha(plan))
+assert "comparison_methods/simmlm/publication.py" in publication_paths
+assert "comparison_methods/simmlm/published_original.json" not in publication_paths and history not in publication_paths
+write("train.py", original_train)
+
+# Explicit actual inputs may be JSON under a result directory; never exclude by directory alone.
+write("experiments/results/当前 输入.json", '{"input": 1}')
+write("train.py", original_train + "\njson.loads(Path('experiments/results/当前 输入.json').read_text())\n")
+assert "experiments/results/当前 输入.json" in scope["plan_source_scope"](str(root), plan, sha(plan))[0]
+write("train.py", original_train)
+write("inputs/current.bin", "actual binary input")
+write("train.py", original_train + "\nPath('inputs/current.bin').read_bytes()\n")
+assert "inputs/current.bin" in scope["plan_source_scope"](str(root), plan, sha(plan))[0]
+write("train.py", original_train)
+write(plan, "runner:\n  command: python train.py --config configs/train.json\nsource_dependencies:\n  inputs:\n    - 'experiments/results/当前 输入.json'\n")
+assert "experiments/results/当前 输入.json" in scope["plan_source_scope"](str(root), plan, sha(plan))[0]
+write(plan, "runner:\n  command: python train.py\nsource_dependencies:\n  inputs:\n    - " + history + "\n")
+try:
+    scope["plan_source_scope"](str(root), plan, sha(plan))
+    raise AssertionError("oversized actual input accepted")
+except ValueError as exc:
+    assert "PLAN_SOURCE_FILE_TOO_LARGE" in str(exc) and history in str(exc), str(exc)
+    assert plan in str(exc) and "source_dependencies" in str(exc), str(exc)
+write(plan, "source_dependencies:\n  inputs:\n    - inputs/missing.json\n")
+try:
+    scope["plan_source_scope"](str(root), plan, sha(plan))
+    raise AssertionError("missing declared input accepted")
+except ValueError as exc:
+    assert "inputs/missing.json" in str(exc), str(exc)
+write(plan, "source_dependencies:\n  inputs:\n    - ../outside.json\n")
+try:
+    scope["plan_source_scope"](str(root), plan, sha(plan))
+    raise AssertionError("escaping declared input accepted")
+except ValueError as exc:
+    assert "PATH_INVALID" in str(exc) or "ESCAPE" in str(exc), str(exc)
+
+# Unknown dynamic reads must not silently disappear. Explicit dependency declarations
+# bind the input bytes without changing project training code or executing its loaders.
+write("train.py", "from pathlib import Path\ndef read(path):\n    return Path(path).read_bytes()\nread(runtime_input)\n")
+write(plan, "runner:\n  command: python train.py\n")
+try:
+    scope["plan_source_scope"](str(root), plan, sha(plan))
+    raise AssertionError("unbounded dynamic input accepted")
+except ValueError as exc:
+    assert "UNDECLARED" in str(exc) and "source_dependencies" in str(exc), str(exc)
+write(plan, "runner:\n  command: python train.py\nsource_dependencies:\n  inputs:\n    - inputs/current.json\n")
+assert "inputs/current.json" in scope["plan_source_scope"](str(root), plan, sha(plan))[0]
+write("train.py", "import importlib\nimportlib.import_module(runtime_module)\n")
+write("plugins/needed.py", "VALUE = 1\n")
+write("plugins/unrelated.py", "VALUE = 2\n")
+write(plan, "runner:\n  command: python train.py\nsource_dependencies:\n  code:\n    - plugins/needed.py\n  integrity:\n    - experiments/active_registry.py\n")
+dynamic_paths, dynamic_scope = scope["plan_source_scope"](str(root), plan, sha(plan))
+assert "plugins/needed.py" in dynamic_paths and "plugins/unrelated.py" not in dynamic_paths
+assert "experiments/active_registry.py" in dynamic_paths and "comparison_methods/simmlm/publication.py" not in dynamic_paths
+assert dynamic_scope
+print(json.dumps(dict(ok=True, files=len(paths), generatedChangesIgnored=6, sourceChangesRejected=3, metadataChainExcluded=True, actualInputsVerified=True, historyPreserved=True)))

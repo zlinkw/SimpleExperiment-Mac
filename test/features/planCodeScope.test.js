@@ -2,8 +2,8 @@ const test=require('node:test'),assert=require('node:assert/strict'),path=requir
 require('../_helpers/registerTsRequire');
 const H=require('../../src/extension/PlanCodeScopeHost.ts'),Q=require('../../src/features/DistributedPlanQueue.ts'),P=require('../../src/features/DistributedSchedulingPolicy.ts');
 test('actual Python scope ignores generated files and unrelated plans, but verifies imported source and inherited config',()=>{
- const r=require('node:child_process').spawnSync(process.platform==='win32'?'python':'python3',['-B','-X','utf8',path.join(__dirname,'planCodeScope.fixture.py'),path.resolve('src/runtime/PlanCodeScope.ts')],{encoding:'utf8',timeout:10000,windowsHide:true});
- assert.equal(r.status,0,r.stderr||r.stdout);assert.equal(JSON.parse(r.stdout).files,13);
+ const r=require('node:child_process').spawnSync(process.platform==='win32'?'python':'python3',['-B','-X','utf8',path.join(__dirname,'planCodeScope.fixture.py'),process.env.SIMPLE_SCOPE_RUNTIME||path.resolve('src/runtime/PlanCodeScope.ts')],{encoding:'utf8',timeout:10000,windowsHide:true});
+ assert.equal(r.status,0,r.stderr||r.stdout);const report=JSON.parse(r.stdout);assert.equal(report.files,13);assert.equal(report.metadataChainExcluded,true);assert.equal(report.actualInputsVerified,true);assert.equal(report.historyPreserved,true);
 });
 const hash=content=>crypto.createHash('sha256').update(content).digest('hex');
 const source=()=>{const manifest={'plans/p.yaml':{size:4,sha256:hash('plan')},'train.py':{size:4,sha256:hash('code')}};return {manifest,digest:hash(JSON.stringify(Object.entries(manifest).map(([k,v])=>[k,v])))};};
