@@ -68,6 +68,8 @@ paper:
 
 ### PLAN 依赖核验
 
+Mac 0.5.331 的 API/UI 选择字段共用一致性校验；顶层 planFile、file、options.planFile 与 selectedPlanId/planId 不可指向不同计划。revision 来自实际计划元数据，codeFingerprint 来自实际同步凭据，缺失项分别报错，不伪造。只读源码核验采用同一 operationId 查询恢复；处理进度和阶段耗时见[配置说明](simple-experiment-setup.md#plan-选择与长源码核验)。只读核验待确认不代表已提交训练，projectScience 仍为 project_owned_not_executed。
+
 Mac 0.5.325 起的 Agent 区分执行源码、配置、运行输入和字节完整性依赖。模块初始化及入口/引用符号所需 Python 导入继续递归；配置只按命令、继承及输入字段展开；实际读取的输入保留原始字节核验。仅计算摘要的文件不因扩展名为 .py 而继续展开导入。读取 JSON 本身不执行其中的路径；确有消费者遍历“路径 → 摘要”清单计算摘要时，清单目标按完整性依赖核验。未被读取的常量和发布 record/report 链接不单独构成训练输入。
 
 静态分析不执行项目代码，也不证明某个条件分支在当前训练中可达。已识别的条件文件读取保守纳入；无法解析的动态读取明确报出文件和行号，不能静默漏验。PLAN 可用以下项目根相对路径声明动态依赖，不使用目录或通配符：

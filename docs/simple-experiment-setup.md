@@ -2,11 +2,21 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.330 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.331 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
 完整实验接入契约见 [AI 最小接入指南](experiment-integration.md)、[MultiModal 实践](multimodal-integration-best-practice.md) 和 [项目契约](plugin-project-contract.md)。面板 **设置 → 最小实验接入指南 · 交给 AI** 可打开指南或复制完整接入任务；这是本机复制，不会自动启动训练或传输。配置参考见 [共同设置字段](configuration-reference.md)。Hub 已退役，所有当前操作只使用明确启用的一台或多台 Worker，旧控制节点字段不补出目标。
+
+## PLAN 选择与长源码核验
+
+0.5.331 统一 API/UI 的 PLAN 选择：planFile、file、options.planFile、selectedPlanId、planId 指向同一计划，冲突明确拒绝，按实际文件填入 revision，身份缺失指出具体字段。源码核验改为只读异步 operationId；20 秒网络无响应或无真实处理进展后保留原操作，后续查询不重复启动核验，更不提交训练。记录依赖解析、源码核验、资产解析、流式摘要和结果准备耗时，客户端另记结果请求往返时间；真实文件、函数根及摘要字节推进才更新进度。现场耗时瓶颈尚未确定，不能归因于权重、网络或 GPU。桌面与包内 runtime 同为 0.5.331，需原受管流程部署目标实例；本轮未连接或重启服务器，Mac 真机与用户服务器仍未验收。
+
+公共 plan.validate 不必重复填写同一路径，优先传顶层 planFile 或 options.planFile 之一；一致重复允许，不一致明确报 PLAN_SELECTION_CONFLICT。Mac 文件名保留大小写、中文和空格，不使用界面旧选项覆盖明确传入的 ID。只读核验返回 PLAN_SOURCE_VERIFICATION_PENDING 时并非“训练结果待确认”：未提交训练，保留 operationId，恢复后仅查询同一核验；真实校验失败仍明确拒绝。重启 Agent 会丢失内存中的只读操作，查询失败不会自动重发。
+
+配对 Agent 的 POST /api/code-sync/plan-scope 携带 operationId 后返回 202；GET /api/operations/{operationId} 返回 queued/running/completed/failed、progressSequence、progress 和 timings。端点仅验证源码，不派发训练；同一实例中相同输入的活动操作共享实际核验，完成后新的核验会重新读文件。每阶段开始/完成、真正读取文件/激活函数根/摘要分块才增加序号，查询本身不更新进度。原 20 秒网络不活跃限制保留，观察到真实进展才继续等待；挂起时显示原操作待确认，不制造心跳。旧 Agent 的同步快速成功仍核对身份，但长操作须部署本版配对 runtime。
+
+耗时字段 dependencyAnalysisMs、sourceVerificationMs、assetResolutionMs、assetHashReadMs、resultPreparationMs 来自实际阶段；resultFetchMs 是客户端最终状态请求往返和解析，并非纯服务器网络耗时。panel.diagnostics 的 planCodeScope 保存各 Worker 最近一次成功/失败及操作诊断，可据此定位真实瓶颈。没有有效数据时不猜测原因，不改变摘要、链接目标或正式身份核验。
 
 ## 1. 首次安装与打开说明
 

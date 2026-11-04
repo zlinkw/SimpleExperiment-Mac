@@ -2,7 +2,7 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**当前源码补丁为 Experiment Mac 0.5.330，配套 SFTP Mac 0.2.107；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
+**当前源码补丁为 Experiment Mac 0.5.331，配套 SFTP Mac 0.2.107；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
 
 本轮沿用 Windows 的 Worker 统一流程与 Hub 退役说明，新增 [AI 最小实验接入指南](docs/experiment-integration.md)、[MultiModal 实践](docs/multimodal-integration-best-practice.md) 及设置页的复制入口。Mac 身份、系统 SSH、独立认证和 preview 更新通道保留；Mac 真机尚未验证。
 
@@ -13,6 +13,8 @@ Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linu
 0.5.321 的 `stopMacSystemTunnels` 漏绑修复已核实包含于发布包；本次根因不是该历史遗漏，也不是 Agent 的规则同步错误。此前可写上下文夹具漏掉了只读属性约束，现已修正，不能把此前隔离通过当作真机启动通过。
 
 0.5.320 修复运行前同步接入规则失败：发送给 Agent 的规则副本仅排除本机结果目录使用的 `planDatasetMapping`，不删除本机映射或用户设置；合法字段保留，未知字段和各 Worker 的真实失败继续报错。该修法参考 Windows 0.5.484 的同一协议边界，不表示整体同步到该 Windows 版本。安装 Mac 补丁后重载 VS Code 应用客户端修复；Agent 接收协议不变，既有版本和就绪检查继续按实际结果处理。本轮未部署或重启 Agent，真实服务器运行仍未验收。
+
+0.5.331 统一 API/UI 的 PLAN 选择：planFile、file、options.planFile、selectedPlanId、planId 指向同一计划，冲突明确拒绝，按实际文件填入 revision，身份缺失指出具体字段。源码核验改为只读异步 operationId；20 秒网络无响应或无真实处理进展后保留原操作，后续查询不重复启动核验，更不提交训练。记录依赖解析、源码核验、资产解析、流式摘要和结果准备耗时，客户端另记结果请求往返时间；真实文件、函数根及摘要字节推进才更新进度。现场耗时瓶颈尚未确定，不能归因于权重、网络或 GPU。桌面与包内 runtime 同为 0.5.331，需原受管流程部署目标实例；本轮未连接或重启服务器，Mac 真机与用户服务器仍未验收。
 
 0.5.330 修复依赖分析将导入模块的无关函数和 __main__ 验收入口执行式展开的问题。按实际脚本入口及已引用符号闭合依赖；无法确定的动态加载/调用要求有限的 source_dependencies.code，不再按顶层目录递归扫入所有 Python。条件分支和被引用类仍保守处理，不执行项目代码。共享外部模型资产须逐文件声明用户确认、允许目录、精确目标和可信/用户批准 SHA256；以独立 assets 凭据流式核验，普通源码链接拒绝及原限额不放宽。真实模型目录不能因剪掉验收链就跳过，详见[共享外部资产](docs/simple-experiment-setup.md#共享外部资产)。本轮没有授权实际权重、修改用户链接或连接服务器，Mac 和用户服务器仍未验收。
 
@@ -67,7 +69,7 @@ Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不�
 
 启动检查一次，此后每30分钟检查，同一配套版本仅主动提醒一次。通知 **查看更新** 展示说明，安装由上述安装入口显式确认。Mac 保留公开 preview 静态索引和同一 Release 分发，查询失败显示检查失败。安装事务、全部下载验证、SFTP先装、同版跳过、禁止降级、部分失败补装和等待本地传输使用 Windows 共同实现。
 
-共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套为 Experiment 0.5.330 / SFTP 0.2.107，请使用同一 Release 的两份 VSIX；已安装同版时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
+共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套为 Experiment 0.5.331 / SFTP 0.2.107，请使用同一 Release 的两份 VSIX；已安装同版时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
 
 ## Mac 数据与 CLI
 

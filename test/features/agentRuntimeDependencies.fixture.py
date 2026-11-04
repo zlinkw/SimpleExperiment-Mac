@@ -1,6 +1,8 @@
 import ast, hashlib, json, os, pathlib, re, runpy, shlex, subprocess, sys, tempfile, time, uuid, venv
 
 config = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))
+started = time.monotonic()
+preparation_ms, subprocess_ms = {}, []
 root = pathlib.Path(tempfile.mkdtemp(prefix='agent-dependency-clean-'))
 sources = root/'sources'
 sources.mkdir()
@@ -17,7 +19,9 @@ trees = {}
 
 def syntax(filename):
     if filename not in trees:
+        before = time.monotonic()
         trees[filename] = ast.parse(pathlib.Path(filename).read_text(encoding='utf-8'), filename=str(filename))
+        preparation_ms[pathlib.Path(filename).name] = (time.monotonic()-before)*1000
     return trees[filename]
 
 def selected(filename, functions=(), constants=(), classes=()):
@@ -32,7 +36,9 @@ constants = ['RUNTIME_PYYAML_VERSION','RUNTIME_PYYAML_SHA256','RUNTIME_PYYAML_BU
 functions = ['runtime_dependency_prepare','runtime_dependency_check','main']
 agent = selected(config['agent'], functions, constants)
 assert all(name in agent for name in functions), 'missing actual production dependency/check entry'
+before_venv = time.monotonic()
 venv.EnvBuilder(with_pip=False).create(root/'python')
+preparation_ms['venv'] = (time.monotonic()-before_venv)*1000
 python = root/'python'/('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
 runtime = root/'install'/'simple_cluster'/'runtime'
 runtime.mkdir(parents=True)
@@ -48,7 +54,9 @@ for name in ['config.yaml','history.json','plan.yaml','results.json']:
 preserved = {p.name:p.read_bytes() for p in project.iterdir()}
 
 def run(script, *args):
+    before = time.monotonic()
     result = subprocess.run([str(python),'-I','-S','-B',str(script),*args], capture_output=True, text=True, encoding='utf-8', timeout=8)
+    subprocess_ms.append(dict(script=script.name,args=args,elapsedMs=(time.monotonic()-before)*1000))
     assert result.returncode == 0, result.stderr + result.stdout
     return json.loads(result.stdout)
 
@@ -166,4 +174,4 @@ scope_agent.write_text(selected(config['agent'], scope_names), encoding='utf-8')
 scope_probe.write_text(header+agent+'\n__file__='+repr(str(probe))+'\nruntime_dependency_prepare()\nimport yaml\ntry:\n    yaml.safe_load("!!python/object/apply:os.system [echo forbidden]")\n    raise AssertionError("unsafe YAML accepted")\nexcept yaml.constructor.ConstructorError:\n    pass\nimport runpy\nsys.argv=['+repr(config['scopeFixture'])+','+repr(str(scope_agent))+']\nrunpy.run_path(sys.argv[0],run_name="__main__")\n',encoding='utf-8')
 assert run(scope_probe)['actualInputsVerified']
 assert {p.name:p.read_bytes() for p in project.iterdir()} == preserved
-print(json.dumps(dict(fresh=True,upgrade=True,repair=True,failureBeforeStop=True,sameInterpreter=True,safeLoad=True,sourcePreflight=True,noTrainingOrProjectMutation=True,yamlVersion=initial['version'],python=initial['python'],executable=initial['executable'],module=initial['module'],fixture=str(root))))
+print(json.dumps(dict(fresh=True,upgrade=True,repair=True,failureBeforeStop=True,sameInterpreter=True,safeLoad=True,sourcePreflight=True,noTrainingOrProjectMutation=True,yamlVersion=initial['version'],python=initial['python'],executable=initial['executable'],module=initial['module'],fixture=str(root),preparationMs=preparation_ms,subprocessMs=subprocess_ms,totalMs=(time.monotonic()-started)*1000)))

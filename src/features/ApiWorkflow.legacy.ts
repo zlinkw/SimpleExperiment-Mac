@@ -1,4 +1,4 @@
-import { normalizePosixAbsolutePath, posixProjectName } from "../mac/PosixPath";
+import { normalizePosixAbsolutePath, normalizePosixRelativePath, posixProjectName } from "../mac/PosixPath";
 
 export const FLOW_STEPS = [
   "select_servers",
@@ -154,6 +154,8 @@ export interface WorkflowPlanSelection {
   total: number;
   needsChoice: boolean;
   missing: MissingStep[];
+  requestedFile?: string;
+  requestedId?: string;
 }
 
 function planIdentityValues(plan: Record<string, unknown>, platform: string): string[] {
@@ -170,16 +172,27 @@ export function selectWorkflowPlan(
   const list = Array.isArray(plans) ? plans.filter((item) => item && typeof item === "object") : [];
   // Platform overlay (released Mac contract): macOS Plan files may legitimately end in a space, so the
   // selection must be matched byte-exactly there; Windows keeps trimming (one trailing separator form only).
-  const requestedFile = platform === "darwin" ? String(selection.planFile || selection.file || "") : String(selection.planFile || selection.file || "").trim();
-  const requestedId = platform === "darwin" ? String(selection.planId || "") : String(selection.planId || "").trim();
-  let plan: Record<string, unknown> | undefined;
-  if (requestedFile) {
-    plan = list.find((item) => planIdentityValues(item, platform).includes(requestedFile));
-  } else if (requestedId) {
-    plan = list.find((item) => planIdentityValues(item, platform).includes(requestedId));
-  } else if (list.length === 1) {
-    plan = list[0];
-  }
+  const options=selection.options==null?{}:selection.options;
+  if(typeof options!=="object" || Array.isArray(options)) throw Error("PLAN_SELECTION_INVALID: options 必须是对象");
+  const raw: Array<[string,unknown,boolean]>=[["planFile",selection.planFile,true],["file",selection.file,true],
+    ["options.planFile",(options as Record<string,unknown>).planFile,true],["selectedPlanId",selection.selectedPlanId,false],["planId",selection.planId,false]];
+  const hints=raw.flatMap(([field,value,file])=>{
+    if(value==null || value==="" || value==="-") return [];
+    if(typeof value!=="string") throw Error("PLAN_SELECTION_INVALID: "+field+" 必须是字符串");
+    const text=platform==="darwin"?value:value.trim();
+    if(!text) return [];
+    if(file && platform==="darwin") normalizePosixRelativePath(text,"API/UI PLAN 路径");
+    return [{field,value:text,file}];
+  });
+  const paths=hints.filter(hint=>hint.file), ids=hints.filter(hint=>!hint.file);
+  const requestedFile=paths[0]?.value || "", requestedId=ids[0]?.value || "";
+  const conflict=()=>{throw Error("PLAN_SELECTION_CONFLICT: "+hints.map(hint=>hint.field+"="+hint.value).join("；"));};
+  if(new Set(paths.map(hint=>hint.value)).size>1) conflict();
+  const matches=hints.map(hint=>list.filter(item=>planIdentityValues(item,platform).includes(hint.value)));
+  if(matches.some(rows=>rows.length>1)) throw Error("PLAN_SELECTION_AMBIGUOUS: 选择匹配多个 PLAN");
+  let plan=matches.find(rows=>rows.length)?.[0];
+  if(plan && matches.some(rows=>rows[0]!==plan) || !plan && new Set(ids.map(hint=>hint.value)).size>1) conflict();
+  if(!hints.length && list.length===1) plan=list[0];
 
   const missing: MissingStep[] = [];
   if (!plan) {
@@ -214,6 +227,8 @@ export function selectWorkflowPlan(
     total: list.length,
     needsChoice: !plan && list.length > 1,
     missing,
+    requestedFile,
+    requestedId,
   };
 }
 

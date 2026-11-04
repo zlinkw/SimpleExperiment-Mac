@@ -11,6 +11,7 @@ function host(names, globals = {}) {
 const Q = require('../../src/features/DistributedPlanQueue.ts');
 const ExecutionMode = require('../../src/features/PlanExecutionMode.ts');
 const globals = { stringField:(row,key)=>row[key] || '', stringArrayField:(row,key)=>Array.isArray(row[key])?row[key]:[],
+  ApiWorkflow_1:require('../../src/features/ApiWorkflow.ts'),
   numberField:(row,key)=>row[key], booleanField:(row,key)=>row[key], usableSelectionKey:value=>value || '', uniqueStrings:rows=>[...new Set(rows)], taskActionTargetsField:()=>[] };
 
 test('only a provably unsent native preparation can release its original intent, including a stale tick', async()=>{
@@ -81,7 +82,7 @@ test('the real scheduling tick commits a preparation timeout back to local pendi
 });
 test('the real UI request carries the same selected PLAN at both host and wire boundaries', () => {
   const h = host(['actionBody','actionPlanTarget'],globals);
-  Object.assign(h,{planFileInput:'plans/current.yaml',selectedPlanId:'plans/other.yaml',selectedRunKeys:new Set(),selectedExperimentIds:new Set(),selectedArchiveKeys:new Set(),selectedTaskUiKeys:new Set(),
+  Object.assign(h,{localPlanMetadata:{plans:[{planFile:'plans/current.yaml'},{planFile:'plans/other.yaml'}]},planFileInput:'plans/current.yaml',selectedPlanId:'plans/other.yaml',selectedRunKeys:new Set(),selectedExperimentIds:new Set(),selectedArchiveKeys:new Set(),selectedTaskUiKeys:new Set(),
     resolveWorkerEndpointId:value=>value,schedulerSettings:()=>({}),workerActionTargets:()=>[]});
   const body=h.actionBody({command:'runPlan',planFile:'plans/current.yaml'});
   assert.equal(body.planFile,'plans/current.yaml');

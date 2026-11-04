@@ -35,7 +35,8 @@ test('a queued Plan source check keeps its network deadline until actual request
  t.mock.method(global,'fetch',async(_url,options)=>{fetches++;assert.equal(options.signal.aborted,false);
   if(stall)return new Promise((_resolve,reject)=>options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true}));
   const query=JSON.parse(options.body);return new Response(JSON.stringify({ok:true,compatible:true,readOnly:true,...query,executionSource:f.s}));});
- f.host.client.getWorkerPlanCodeScope=(_worker,query,options)=>http.getPlanCodeScope(query,options);
+ // Exercise the actual per-request deadline independently of operation recovery.
+ f.host.client.getWorkerPlanCodeScope=(_worker,query,options)=>http.executeRequestJson('/api/code-sync/plan-scope','manual_refresh',query,{...options,method:'POST',userInitiated:true,timeoutMs:20000});
  const pending=H.resolvePlanExecutionSource(f.host,f.plan);pending.then(()=>settled=true,()=>settled=true);
  try{
   await new Promise(setImmediate);t.mock.timers.tick(15001);await new Promise(setImmediate);
@@ -57,7 +58,7 @@ test('caller cancellation still removes a queued Plan source check without sendi
  const budget=new RequestBudget({...defaultRequestBudgetConfig,maxConcurrentRequestsGlobal:1,maxConcurrentRequestsPerWorker:1});
  const f=fixture(),http=new HttpTunnelClient({localHost:'localhost',localPort:1},budget),controller=new AbortController();let release;
  const occupied=budget.run('manual_refresh',()=>new Promise(resolve=>release=resolve),{userInitiated:true});await new Promise(setImmediate);
- f.host.client.getWorkerPlanCodeScope=(_worker,query,options)=>http.getPlanCodeScope(query,options);
+ f.host.client.getWorkerPlanCodeScope=(_worker,query,options)=>http.executeRequestJson('/api/code-sync/plan-scope','manual_refresh',query,{...options,method:'POST',userInitiated:true,timeoutMs:20000});
  const pending=H.resolvePlanExecutionSource(f.host,f.plan,controller.signal);const rejected=assert.rejects(pending,/abort|cancel/i);
  controller.abort(new Error('cancel source check'));await rejected;release();await occupied;
  assert.equal(f.plan.executionSource,undefined);

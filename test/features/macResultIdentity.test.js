@@ -60,6 +60,7 @@ function backend() {
   const names = ['normalizePlanSelectionKey', 'normalizeResultCsvDir', 'resultCsvDirSafe', 'normalizeRemoteResultInspectionPath',
     'remoteResultInspectionLocalRelativePath', 'methodResultArtifactLocalRelativePath', 'safePlanToken', 'stringField', 'canonicalResultPlanFile'];
   const memberNames = ['apiResolveSelectedPlan', 'notifyPlanFailureOnce', 'downloadRemoteResultFromUi', 'openResultArtifactFromUi'];
+  sandbox.ApiWorkflow_1=require('../../dist/features/ApiWorkflow');
   vm.runInContext(names.map(name => { assert.ok(functions.has(name), name); return functions.get(name); }).join('\n') +
     '\nclass Subject { ' + memberNames.map(name => { assert.ok(methods.has(name), name); return methods.get(name); }).join('\n') +
     '\n}\nthis.Subject = Subject;', sandbox);

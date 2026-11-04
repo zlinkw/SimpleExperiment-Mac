@@ -3,6 +3,8 @@ import { assertLocalhost, localBaseUrl } from "./TunnelGateway";
 import { TunnelHealth } from "./TunnelHealth";
 import { ProgressInactivity } from "../core/ProgressInactivity";
 import { readBoundedResponseText } from "./BoundedResponse";
+import { randomUUID } from "node:crypto";
+import { waitForPlanCodeScopeOperation } from "../features/PlanCodeScopeOperation";
 
 export const tunnelActions = [
   "run-plan", "stop-experiment", "retry-experiment", "reproduce-plan", "validate-plan", "dry-run-plan",
@@ -167,6 +169,7 @@ export class HttpTunnelClient implements TunnelClient {
   setLowTrafficMode(enabled: boolean): void { this.lowTrafficMode = enabled === true; }
   private snapshotPromise?: Promise<ClusterSnapshot>;
   private readonly reads = new Map<string, { promise: Promise<unknown>; controller: AbortController; subscribers: number; settled: boolean }>();
+  private readonly sourceOperations = new Map<string, { operationId: string; submitted: Promise<any> }>();
 
   constructor(
     private readonly endpoint: TunnelEndpointConfig,
@@ -266,8 +269,22 @@ export class HttpTunnelClient implements TunnelClient {
   }
 
   getPlanCodeScope(query: unknown, options: { signal?: AbortSignal } = {}): Promise<any> {
-    return this.requestJson("/api/code-sync/plan-scope", "manual_refresh", query,
-      { method: "POST", userInitiated: true, signal: options.signal, timeoutMs: 20000 });
+    options.signal?.throwIfAborted();
+    if(!query || typeof query!=="object" || Array.isArray(query))throw Error("PLAN_SOURCE_QUERY_INVALID");
+    const key=JSON.stringify(query), frozen=JSON.parse(key);
+    let record=this.sourceOperations.get(key);
+    if(!record){
+      const operationId="plan-source-"+randomUUID();
+      const submitted=this.requestJson("/api/code-sync/plan-scope","manual_refresh",{...frozen,operationId},
+        {method:"POST",userInitiated:true,signal:options.signal,timeoutMs:20000});
+      record={operationId,submitted};this.sourceOperations.set(key,record);
+    }
+    const current=record;
+    return waitForPlanCodeScopeOperation({operationId:current.operationId,query:frozen,signal:options.signal,
+      submit:()=>current.submitted,
+      observe:()=>this.requestJson(`/api/operations/${encodeURIComponent(current.operationId)}`,"operation_status",undefined,
+        {method:"GET",userInitiated:true,signal:options.signal,timeoutMs:20000}),
+      terminal:()=>{if(this.sourceOperations.get(key)===current)this.sourceOperations.delete(key);}});
   }
   getSyncScopeIndex(query: unknown, options: { signal?: AbortSignal } = {}): Promise<any> {
     return this.requestJson("/api/sync-scope/index", "manual_refresh", query,
@@ -433,7 +450,7 @@ export class HttpTunnelClient implements TunnelClient {
                 const message = failure?.message || failure?.error?.message || failure?.error;
                 if (typeof message === "string" && message.trim()) detail = message;
               } catch { /* Keep a bounded plain-text reason for non-JSON responses. */ }
-              throw new Error(`Worker Agent HTTP ${response.status}: ${detail.slice(0, 2000)}`);
+              throw Object.assign(new Error(`Worker Agent HTTP ${response.status}: ${detail.slice(0, 2000)}`),{httpStatus:response.status});
             }
             if (!text.trim()) return {} as T;
             const value = JSON.parse(text);

@@ -5,6 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createRequire } = require('node:module');
 const ts = require('typescript');
+require('../_helpers/registerTsRequire');
 
 const root = path.resolve(__dirname, '../..');
 function astParts(source) {
@@ -19,31 +20,35 @@ function astParts(source) {
   return { functions, methods };
 }
 function host(platform = 'darwin') {
-  const { functions, methods } = astParts(fs.readFileSync(path.join(root, 'src/extension/legacy.ts'), 'utf8'));
+  const packageRoot=process.env.SIMPLE_IDENTITY_PACKAGE_ROOT;
+  const { functions, methods } = astParts(fs.readFileSync(packageRoot?path.join(packageRoot,'dist/extension/legacy.js'):path.join(root, 'src/extension/legacy.ts'), 'utf8'));
   const names = ['usableSelectionKey', 'uniqueStrings', 'normalizePlanSelectionKey', 'planFileEquivalenceKeys',
     'samePlanSelection', 'planIdentityKeys', 'resolvePlanFileFromPlanList', 'operationResultPlanFile',
     'stringField', 'stringArrayField', 'mergeRecentPlans', 'readProjectPlanSelectionState', 'writeProjectPlanSelectionState'];
   let persisted;
   const sandbox = vm.createContext({ process: { platform }, path,
+    ApiWorkflow_1:require(packageRoot?path.join(packageRoot,'dist/features/ApiWorkflow'):path.join(root,'src/features/ApiWorkflow.ts')),
+    normalizePosixRelativePath:require('../../src/mac/PosixPath.ts').normalizePosixRelativePath,
+    PosixPath_1:require('../../src/mac/PosixPath.ts'),
     PROJECT_PLAN_SELECTION_PATH: 'simple_cluster/ui/plan_selection.json',
     fs: { mkdir: async () => {}, readFile: async () => JSON.stringify(persisted) },
     writeAtomicPluginStateJson: async (_file, payload) => { persisted = payload; },
   });
   const code = names.map(name => { assert.ok(functions.has(name), name); return functions.get(name); }).join('\n') +
-    '\nclass Subject { ' + ['actionPlanTarget', 'localPlanForActionBody', 'planVersionForFile', 'planSubmissionPlanFile', 'selectPlanFromUi']
+    '\nclass Subject { ' + ['actionPlanTarget', 'localPlanForActionBody', 'apiPlanValidate', 'apiResolveSelectedPlan', 'stampPlanRevision', 'planVersionForFile', 'planSubmissionPlanFile', 'selectPlanFromUi']
       .map(name => methods.get(name)).join('\n') + '\n}\nthis.Subject = Subject;';
   vm.runInContext(ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, sandbox);
   return sandbox;
 }
 function compiledQueue(platform) {
-  const file = path.join(root, 'dist/features/DistributedPlanQueue.js');
+  const file = path.join(process.env.SIMPLE_IDENTITY_PACKAGE_ROOT || root, 'dist/features/DistributedPlanQueue.js');
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(file, 'utf8'), { module, exports: module.exports,
     require: createRequire(file), process: { platform }, Buffer, console }, { filename: file });
   return module.exports;
 }
 function panel(platform = 'darwin') {
-  const html = require('../../dist/ui/PanelHtml.legacy.js').renderPanelHtml(platform);
+  const html = require(path.join(process.env.SIMPLE_IDENTITY_PACKAGE_ROOT || root,'dist/ui/PanelHtml.legacy.js')).renderPanelHtml(platform);
   const script = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
     .map(match => match[1]).find(code => code.includes('function samePlanSelection('));
   assert.ok(script);
@@ -84,6 +89,61 @@ test('Mac backend, compiled queue and rendered panel preserve distinct POSIX spe
     assert.equal(queue.planFileIdentityKey(spelling), spelling);
     assert.equal(ui.planFileOf({ file: spelling }), spelling);
   }
+});
+
+test('API and UI supported PLAN selectors stamp the same real revision without duplicate paths',()=>{
+ const backend=host(),subject=new backend.Subject(),file=files[0];
+ const plan={planFile:file,planId:'chosen-id',revision:'actual-file-revision'};
+ subject.localPlanMetadata={plans:[plan,{planFile:files[1],planId:'other-id',revision:'other-revision'}]};
+ subject.planFileInput=files[1];subject.selectedPlanId='other-id';
+ for(const fields of [{planFile:file},{options:{planFile:file}},{selectedPlanId:'chosen-id'},{planId:'chosen-id'},
+   {planFile:file,options:{planFile:file},selectedPlanId:'chosen-id'}]){
+   const body=structuredClone(fields);
+   assert.equal(subject.apiResolveSelectedPlan(fields).revision,plan.revision);
+   subject.stampPlanRevision(body);
+   assert.equal(body.planRevision,plan.revision,JSON.stringify(fields));
+   assert.equal(body.options.planRevision,plan.revision);
+   const target=subject.actionPlanTarget(fields);
+   assert.equal(subject.localPlanForActionBody({...target,options:{planFile:target.planFile}}).revision,plan.revision);
+   assert.equal(fields.planRevision,undefined,'caller input is not mutated by resolving selection');
+ }
+ for(const fields of [{planFile:file,options:{planFile:files[1]}},{planFile:file,selectedPlanId:'other-id'},
+   {planId:'chosen-id',selectedPlanId:'other-id'},{planFile:file,file:files[1]}]){
+   assert.throws(()=>subject.apiResolveSelectedPlan(fields),/PLAN_SELECTION_CONFLICT/);
+   assert.throws(()=>subject.localPlanForActionBody(fields),/PLAN_SELECTION_CONFLICT/);
+   assert.throws(()=>subject.actionPlanTarget(fields),/PLAN_SELECTION_CONFLICT/);
+ }
+});
+
+test('formal admission identifies exactly which real PLAN identity field is missing',()=>{
+ const queue=compiledQueue('darwin'),valid={planFile:files[0],revision:'revision',codeFingerprint:'fingerprint',jobs:[]};
+ for(const[key,label]of [['revision','planRevision'],['codeFingerprint','codeFingerprint'],['planFile','planFile']]){
+   assert.throws(()=>queue.enqueuePlan(queue.emptyDistributedQueue(),{...valid,[key]:''},'plan-id'),error=>error.message.includes('PLAN_IDENTITY_MISSING')&&error.message.includes(label));
+ }
+ assert.throws(()=>queue.enqueuePlan(queue.emptyDistributedQueue(),valid,''),/PLAN_IDENTITY_MISSING.*planId/);
+});
+
+test('actual public plan.validate passes one selector through real stamping and formal enqueue',async()=>{
+ const backend=host(),subject=new backend.Subject(),file=files[0],plan={planFile:file,planId:'id',revision:'file-revision'};
+ const workflow=backend.ApiWorkflow_1;
+ backend.ApiWorkflow_1={...workflow,structuredMissingInventory:()=>[]};
+ backend.workspaceRoot=()=>'/private/研究 工作区';
+ backend.WorkflowBinding={bindWorkflowWorkspace:()=>({}),assertWorkflowContext(){},assertWorkflowWorkspace(){}};
+ backend.errorMessage=error=>error.message;
+ backend.simpleSftpIntegrationReadiness=()=>({ready:true});backend.projectOutputGateDiagnostics=()=>({rows:[]});
+ backend.planValidationFromResult=value=>value.validation;
+ backend.fs.stat=async()=>{throw Error('no project checker fixture');};
+ Object.assign(subject,{localPlanMetadata:{plans:[plan]},setupConfig:{},lastWorkerProbes:{},projectContextGeneration:1,
+  isMacVariant:()=>true,ensureRemoteAgentVersionConsistent:async()=>{},refreshLocalPlanMetadataForAction:async()=>{},
+  projectTopologyAssessment:()=>({}),agentRuntimeDirs:()=>({workDir:'/remote'}),enabledWorkerConfigs:()=>[],
+  assertPlanLocalConfigFiles:async()=>{},ensureWorkerPoolPlanTarget:async()=>{},assertPlanSchedulerAgentReady(){},
+  ensureWorkerCodeReadyForPlanCheck:async body=>{body.codeFingerprint='persisted-fingerprint';},apiPublicTopology:value=>value,
+  runPlanPreflight:async body=>{const q=compiledQueue('darwin');q.enqueuePlan(q.emptyDistributedQueue(),{planFile:body.planFile,revision:body.planRevision,codeFingerprint:body.codeFingerprint,jobs:[{index:0,case:'fixture',seed:42,outputDir:'work_dirs/fixture'}]},'fixture-run');return {validation:{ok:true}};}});
+ for(const fields of [{planFile:file},{options:{planFile:file}},{selectedPlanId:'id'},{planFile:file,options:{planFile:file},selectedPlanId:'id'}]){
+  const input={workspace:'/private/研究 工作区',...fields},before=JSON.stringify(input),answer=await subject.apiPlanValidate(input);
+  assert.equal(answer.ok,true,JSON.stringify(answer));assert.equal(answer.checks.remoteExecution,'not_started');assert.equal(answer.checks.projectScience,'project_owned_not_executed');assert.equal(JSON.stringify(input),before);
+ }
+ await assert.rejects(subject.apiPlanValidate({planFile:file,options:{planFile:files[1]}}),/PLAN_SELECTION_CONFLICT/);
 });
 
 test('Mac payload selection, receipts and saved selection retain real edge spaces', async () => {

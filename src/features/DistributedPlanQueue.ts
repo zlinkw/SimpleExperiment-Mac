@@ -1098,7 +1098,8 @@ export function legacyDistributedQueuePath(storageRoot: string, projectRoot: str
 }
 
 export function enqueuePlan(queue: DistributedQueue, plan: Omit<QueuedPlan, "id" | "enqueuedAt" | "jobs"> & { jobs: Array<Pick<QueuedJob, "index" | "case" | "seed" | "outputDir" | "collectionResultCsv" | "checkpointSource" | "outputIsolationBlocked">> }, id: string, enqueuedAt = new Date().toISOString()): DistributedQueue {
-  if (!plan.revision || !plan.codeFingerprint || !plan.planFile || !id) throw new Error("Plan identity and code fingerprint are required.");
+  const missing=[["planRevision",plan.revision],["codeFingerprint",plan.codeFingerprint],["planFile",plan.planFile],["planId",id]].filter(([,value])=>!value).map(([field])=>field);
+  if(missing.length) throw new Error("PLAN_IDENTITY_MISSING: "+missing.join(", "));
   const registered = queue.plans.find(item => item.id === id);
   if (registered) {
     if (registered.planFile !== plan.planFile || registered.revision !== plan.revision || registered.codeFingerprint !== plan.codeFingerprint

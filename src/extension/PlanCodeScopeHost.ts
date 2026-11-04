@@ -78,15 +78,23 @@ function response(plan: any, value: any): PlanExecutionSource {
   return source;
 }
 async function inspect(h: any, workerId: string, plan: any, source?: PlanExecutionSource, signal?: AbortSignal) {
-  // The HTTP client owns the user-approved 20s inactivity deadline after admission.
+  // Each HTTP request keeps the 20s inactivity deadline; long read-only checks use operation status.
   // A caller's cancellation still covers queueing; queue wait is not network inactivity.
   const options = { signal };
   const target = h.workerActionTargets?.().find((row: any) => row.id === workerId);
   const index = target && h.projectFileObservationIndex?.(h.sftpServerOptions?.(target));
   const load = async () => {
-    const value = await workerRead(h, workerId, signal, () => h.client.getWorkerPlanCodeScope(workerId, query(plan, source), options));
-    response(plan, value); // Invalid identity or digest is never published into the shared index.
-    return value;
+    const diagnostics = h.planCodeScopeDiagnostics ||= {};
+    try {
+      const value:any = await workerRead(h, workerId, signal, () => h.client.getWorkerPlanCodeScope(workerId, query(plan, source), options));
+      response(plan, value); // Invalid identity or digest is never published into the shared index.
+      diagnostics[workerId] = {planFile:plan.planFile,checkedAt:new Date().toISOString(),...value.sourceOperation,timings:value.sourceOperation?.timings || value.timings};
+      return value;
+    } catch(error:any) {
+      diagnostics[workerId] = {planFile:plan.planFile,checkedAt:new Date().toISOString(),operationId:error.operationId,
+        readOnly:true,remoteExecution:"not_started",error:String(error.message||error),timings:error.timings,progress:error.progress};
+      throw error;
+    }
   };
   const value = index ? await index.read({ method: "plan.source", paths: source ? Object.keys(source.manifest) : [plan.planFile],
     binding: { projectId: plan.projectId, runId: plan.id || "", revision: plan.revision, sourceDigest: source?.digest || "" }, signal: options.signal }, load) : await load();

@@ -200,28 +200,42 @@ def plan_scope_asset_snapshot(root, declaration):
     if not stat.S_ISREG(info.st_mode): raise ValueError("PLAN_ASSET_NOT_REGULAR: " + relative)
     return {"path": relative, "allowedRoot": allowed, "target": target, "sha256": item["sha256"], "links": links, "size": info.st_size}
 
-def plan_scope_verify_asset(root, declaration, expected=None):
+def plan_scope_timed(progress, phase, action):
+    import time
+    started = time.monotonic()
+    if progress: progress({"phase": phase, "state": "started"})
+    try: return action()
+    finally:
+        if progress: progress({"phase": phase, "state": "completed", "elapsedMs": (time.monotonic() - started) * 1000})
+
+def plan_scope_verify_asset(root, declaration, expected=None, progress=None):
     import stat
-    binding = plan_scope_asset_snapshot(root, declaration)
+    binding = plan_scope_timed(progress, "assetResolutionMs", lambda: plan_scope_asset_snapshot(root, declaration))
     relative, target = binding["path"], binding["target"]
     if expected is not None and expected != binding: raise ValueError("PLAN_ASSET_BINDING_CHANGED: " + relative)
     identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
     before = os.stat(target, follow_symlinks=False)
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     digest = hashlib.sha256()
-    with os.fdopen(os.open(target, flags), "rb") as stream:
-        opened = os.fstat(stream.fileno())
-        if not stat.S_ISREG(opened.st_mode) or identity(opened) != identity(before): raise ValueError("PLAN_ASSET_REPLACED: " + relative)
-        for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""): digest.update(chunk)
-        after = os.fstat(stream.fileno())
-    resolved_after, links_after = plan_scope_asset_resolve(root, relative)
+    def read_digest():
+        processed = 0
+        with os.fdopen(os.open(target, flags), "rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not stat.S_ISREG(opened.st_mode) or identity(opened) != identity(before): raise ValueError("PLAN_ASSET_REPLACED: " + relative)
+            for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""):
+                digest.update(chunk)
+                processed += len(chunk)
+                if progress: progress({"phase": "assetHashReadMs", "path": relative, "processedBytes": processed, "totalBytes": binding["size"]})
+            return opened, os.fstat(stream.fileno())
+    opened, after = plan_scope_timed(progress, "assetHashReadMs", read_digest)
+    resolved_after, links_after = plan_scope_timed(progress, "assetResolutionMs", lambda: plan_scope_asset_resolve(root, relative))
     if identity(opened) != identity(after) or identity(after) != identity(os.stat(target, follow_symlinks=False)) or resolved_after != target or links_after != binding["links"]:
         raise ValueError("PLAN_ASSET_CHANGED_DURING_READ: " + relative)
     if digest.hexdigest() != binding["sha256"] or binding["size"] != after.st_size:
         raise ValueError("PLAN_ASSET_DIGEST_MISMATCH: " + relative)
     return binding
 
-def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, assets=None):
+def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, assets=None, progress=None):
     import ast
     import itertools
     import shlex
@@ -248,6 +262,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
         roots = python_roots.setdefault(file, set())
         if name in roots: return False
         roots.add(name)
+        if progress: progress({"phase": "dependencyAnalysisMs", "path": file, "activatedRoot": name})
         return True
     declared_outputs = set()
     config_suffixes = (".yaml", ".yml", ".json", ".toml", ".ini", ".cfg")
@@ -627,6 +642,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
         if os.path.getsize(full) > 2 * 1024 * 1024:
             fail("PLAN_SOURCE_FILE_TOO_LARGE", relative)
         raw = pathlib.Path(full).read_bytes()
+        if progress: progress({"phase": "dependencyAnalysisMs", "path": relative, "readBytes": len(raw), "filesProcessed": len(processed) + 1})
         if relative not in files: total_bytes += len(raw)
         if total_bytes > 32 * 1024 * 1024:
             fail("PLAN_SOURCE_SCOPE_BYTES_LIMIT", relative)
@@ -734,7 +750,7 @@ def plan_source_digest(manifest, assets=None):
         rows = [rows, [[key, {field: assets[key][field] for field in ("path", "allowedRoot", "target", "sha256", "links", "size")}] for key in sorted(assets)]]
     return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
 
-def verify_plan_execution_source(root, row, source):
+def verify_plan_execution_source(root, row, source, progress=None):
     manifest = source.get("manifest") if isinstance(source, dict) else None
     asset_records = source.get("assets", {}) if isinstance(source, dict) else {}
     if not isinstance(manifest, dict) or not manifest or not isinstance(asset_records, dict) or len(manifest) + len(asset_records) > 4096 or plan_source_digest(manifest, asset_records) != source.get("digest"):
@@ -744,22 +760,29 @@ def verify_plan_execution_source(root, row, source):
     if manifest.get(row["planFile"], {}).get("sha256") != row["planRevision"]:
         raise ValueError("PLAN_SOURCE_REVISION_MISMATCH")
     provenance, authorizations = {}, {}
-    paths, conservative = plan_source_scope(root, row["planFile"], row["planRevision"], manifest, provenance, authorizations)
+    paths, conservative = plan_scope_timed(progress, "dependencyAnalysisMs", lambda: plan_source_scope(root, row["planFile"], row["planRevision"], manifest, provenance, authorizations, progress))
     if set(paths) != set(manifest):
         raise ValueError("PLAN_SOURCE_DEPENDENCIES_CHANGED: " + ", ".join(sorted(set(paths) ^ set(manifest))[:12]))
-    for relative in paths:
-        try:
-            _code_sync_stat_record(root, relative, manifest[relative], verify_content=True)
-        except (ValueError, OSError) as exc:
-            raise ValueError(str(exc) + "; dependency chain: " + plan_scope_reason(relative, provenance)) from exc
+    def verify_sources():
+        for index, relative in enumerate(paths):
+            try:
+                _code_sync_stat_record(root, relative, manifest[relative], verify_content=True)
+                if progress: progress({"phase": "sourceVerificationMs", "path": relative, "filesVerified": index + 1, "totalFiles": len(paths)})
+            except (ValueError, OSError) as exc:
+                raise ValueError(str(exc) + "; dependency chain: " + plan_scope_reason(relative, provenance)) from exc
+    plan_scope_timed(progress, "sourceVerificationMs", verify_sources)
     if set(asset_records) != set(authorizations): raise ValueError("PLAN_ASSET_DEPENDENCIES_CHANGED")
     observations = {}
     for relative, declaration in authorizations.items():
-        try: observations[relative] = plan_scope_verify_asset(root, declaration, asset_records[relative])
+        try: observations[relative] = plan_scope_verify_asset(root, declaration, asset_records[relative], progress)
         except (ValueError, OSError) as error: raise ValueError(str(error) + "; dependency chain: " + plan_scope_reason(relative, provenance)) from error
     return {"schemaVersion": 1, "files": [{"path": key, **manifest[key]} for key in paths], "fileCount": len(paths), "conservative": conservative, "assetCount": len(observations), "assets": observations}
 
-def inspect_plan_code_scope(root, request):
+def inspect_plan_code_scope(root, request, progress=None):
+    timings = {}
+    def report(event):
+        if "elapsedMs" in event: timings[event["phase"]] = timings.get(event["phase"], 0) + event["elapsedMs"]
+        if progress: progress(event)
     row = {key: str(request.get(key) or "") for key in ("projectId", "planFile", "planRevision", "codeFingerprint")}
     if not all(row.values()):
         raise ValueError("PLAN_SOURCE_IDENTITY_REQUIRED")
@@ -771,22 +794,22 @@ def inspect_plan_code_scope(root, request):
             windows = task_inventory(root) if "task_inventory" in globals() else []
             original = next((p.get("executionSource") for p in windows if p.get("projectId") == row["projectId"] and p.get("planFile") == row["planFile"] and p.get("planRevision") == row["planRevision"] and p.get("codeFingerprint") == row["codeFingerprint"] and p.get("executionSource")), None)
             if original:
-                checked = verify_plan_execution_source(root, row, original)
-                return {"ok": True, "compatible": True, "readOnly": True, **row, "executionSource": original, "fileCount": checked["fileCount"], "conservative": checked["conservative"], "assetCount": checked["assetCount"], "assets": checked["assets"], "queriedAt": now_iso()}
+                checked = verify_plan_execution_source(root, row, original, report)
+                return {"ok": True, "compatible": True, "readOnly": True, **row, "executionSource": original, "fileCount": checked["fileCount"], "conservative": checked["conservative"], "assetCount": checked["assetCount"], "assets": checked["assets"], "timings": timings, "queriedAt": now_iso()}
             raise ValueError("PLAN_SOURCE_ORIGINAL_HASH_UNAVAILABLE")
         original = {item["path"]: {"size": item["size"], "sha256": item["sha256"]} for item in proof["files"]}
         if durable_code_manifest_digest(original) != row["codeFingerprint"]:
             raise ValueError("PLAN_SOURCE_ORIGINAL_HASH_INVALID")
         provenance, authorizations = {}, {}
-        paths, _ = plan_source_scope(root, row["planFile"], row["planRevision"], original, provenance, authorizations)
+        paths, _ = plan_scope_timed(report, "dependencyAnalysisMs", lambda: plan_source_scope(root, row["planFile"], row["planRevision"], original, provenance, authorizations, report))
         if any(key not in original for key in paths):
             missing = next(key for key in paths if key not in original)
             raise ValueError("PLAN_SOURCE_ORIGINAL_DEPENDENCY_MISSING: " + missing + "; dependency chain: " + plan_scope_reason(missing, provenance))
         manifest = {key: original[key] for key in paths}
-        records = {key: plan_scope_asset_snapshot(root, declaration) for key, declaration in authorizations.items()}
+        records = {key: plan_scope_timed(report, "assetResolutionMs", lambda: plan_scope_asset_snapshot(root, declaration)) for key, declaration in authorizations.items()}
         source = {"manifest": manifest, "digest": plan_source_digest(manifest, records)}
         if records: source["assets"] = records
-    checked = verify_plan_execution_source(root, row, source)
+    checked = verify_plan_execution_source(root, row, source, report)
     return {"ok": True, "compatible": True, "readOnly": True, **row, "executionSource": source,
-            "fileCount": checked["fileCount"], "conservative": checked["conservative"], "assetCount": checked["assetCount"], "assets": checked["assets"], "queriedAt": now_iso()}
+            "fileCount": checked["fileCount"], "conservative": checked["conservative"], "assetCount": checked["assetCount"], "assets": checked["assets"], "timings": timings, "queriedAt": now_iso()}
 `;

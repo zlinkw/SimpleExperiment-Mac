@@ -3919,21 +3919,7 @@ const assessment=TopologyMode_1.assessProjectTopology(mode,{hubConfigured:false,
         };
     }
     apiResolveSelectedPlan(params) {
-        const mac = this.isMacVariant?.() === true || (typeof process !== "undefined" && process.platform === "darwin");
-        if (mac) {
-            for (const key of ["planFile", "file", "planId"])
-                if (params[key] != null && params[key] !== "" && typeof params[key] !== "string") throw new Error("Plan 选择必须是字符串。");
-            if (params.planFile && params.file && params.planFile !== params.file) throw new Error("Plan 路径别名不一致。");
-        }
-        const planFile = mac ? (params.planFile || params.file || "") : String(params.planFile || params.file || "").trim();
-        const planId = mac ? (params.planId || "") : String(params.planId || "").trim();
-        if (mac && planFile) normalizePosixRelativePath(planFile, "API Plan 路径");
-        const plans = this.localPlanMetadata.plans || [];
-        if (planFile)
-            return plans.find((plan) => String(plan.planFile || plan.file || plan.planId || "") === planFile) || null;
-        if (planId)
-            return plans.find((plan) => String(plan.planId || plan.planFile || plan.file || "") === planId || String(plan.planFile || plan.file || "") === planId) || null;
-        return plans.length === 1 ? plans[0] : null;
+        return ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], params, this.isMacVariant?.() ? "darwin" : process.platform).plan || null;
     }
     async apiPrepareConfirmationPreview(params = {}) {
         try {
@@ -19419,23 +19405,22 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     }
     actionPlanTarget(message) {
         const selectionKey = value => process.platform === "darwin" ? normalizePlanSelectionKey(value) : usableSelectionKey(value);
-        const messagePlanFile = selectionKey(stringField(message, "planFile") || stringField(message, "file"));
-        const messagePlanId = selectionKey(stringField(message, "selectedPlanId") || stringField(message, "planId"));
+        const selection = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], message, process.platform);
+        const messagePlanFile = selectionKey(selection.requestedFile || (selection.requestedId ? selection.plan?.planFile || selection.plan?.file || "" : ""));
+        const messagePlanId = selectionKey(selection.requestedId || "");
         const selectedPlanFiles = uniqueStrings(stringArrayField(message, "selectedPlanFiles").map(selectionKey).filter(Boolean));
         const suppressGlobalPlan = Boolean(message && typeof message === "object" && message.suppressGlobalPlan === true);
         const inputPlan = selectionKey(this.planFileInput || "");
         const selectedPlan = selectionKey(this.selectedPlanId || "");
-        const planFile = messagePlanFile || (selectedPlanFiles.length === 1 ? selectedPlanFiles[0] : "") || (!suppressGlobalPlan ? inputPlan || selectedPlan : "") || undefined;
+        const planFile = messagePlanFile || (selectedPlanFiles.length === 1 ? selectedPlanFiles[0] : "") || (!suppressGlobalPlan && !messagePlanId ? inputPlan || selectedPlan : "") || undefined;
         return {
             planFile,
-            selectedPlanId: messagePlanId || messagePlanFile || (!suppressGlobalPlan ? selectedPlan || inputPlan : "") || planFile,
+            selectedPlanId: messagePlanId || messagePlanFile || (selectedPlanFiles.length === 1 ? selectedPlanFiles[0] : "") || (!suppressGlobalPlan ? selectedPlan || inputPlan : "") || planFile,
         };
     }
     localPlanForActionBody(body) {
-        const selectionKey = value => process.platform === "darwin" ? normalizePlanSelectionKey(value) : usableSelectionKey(value);
-        const planFile = selectionKey(String(body.options?.planFile || ""));
-        const planId = selectionKey(body.selectedPlanId || "");
-        return (this.localPlanMetadata.plans || []).find((plan) => Boolean((planFile && (plan.planFile === planFile || plan.file === planFile)) || (planId && (plan.planId === planId || plan.planFile === planId || plan.file === planId))));
+        const selected = ApiWorkflow_1.selectWorkflowPlan(this.localPlanMetadata.plans || [], body, process.platform);
+        return selected.requestedFile || selected.requestedId ? selected.plan : undefined;
     }
     planVersionForFile(planFile = "") {
         const target = process.platform === "darwin" ? normalizePlanSelectionKey(planFile) : usableSelectionKey(String(planFile || "").trim().replace(/\\/g, "/"));
@@ -25749,6 +25734,7 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     private panelDiagnosticsApi(): Record<string, unknown> {
         const identity = this.latestPanelBuildIdentityState || {};
         return {
+            planCodeScope: (this as any).planCodeScopeDiagnostics || {},
             lifecycle: this.panelLifecycleState,
             visualMode: this.panelLowEffectsMode ? "low-effects" : "standard",
             progressEvidence: WorkerProgressQuery.progressEvidenceReport([...this.lastWorkerTaskSnapshots.values()],

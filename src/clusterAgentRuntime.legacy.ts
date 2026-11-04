@@ -6,6 +6,7 @@ import { TMUX_TASK_LIFECYCLE_PYTHON } from "./runtime/TmuxTaskLifecycle";
 import { GPU_COLLECTOR_PYTHON } from "./runtime/GpuCollector";
 import { RUNTIME_LOG_DIAGNOSTICS_PYTHON } from "./runtime/RuntimeLogDiagnostics";
 import { PLAN_CODE_SCOPE_PYTHON } from "./runtime/PlanCodeScope";
+import { PLAN_CODE_SCOPE_OPERATIONS_PYTHON } from "./runtime/PlanCodeScopeOperations";
 import { SYNC_SCOPE_INDEX_PYTHON } from "./runtime/SyncScopeIndex";
 import { RUNTIME_DEPENDENCIES_PYTHON } from "./runtime/RuntimeDependencies";
 export const CLUSTER_AGENT_RUNTIME = String.raw`#!/usr/bin/env python3
@@ -2997,7 +2998,9 @@ def code_sync_request_state(root, worker_id, operation_id):
     key = (os.path.abspath(root), str(worker_id), str(operation_id))
     with CODE_SYNC_REQUEST_LOCK:
         row = CODE_SYNC_REQUESTS.get(key)
-        return copy.deepcopy({name: value for name, value in row.items() if name != "requestDigest"}) if row else None
+        value = copy.deepcopy({name: value for name, value in row.items() if name != "requestDigest"}) if row else None
+        if value and value.get("type") == "plan-code-scope": value["operationId"] = str(operation_id)
+        return value
 
 def register_code_sync_proof_request(root, payload, worker_id):
     operation_id = str(payload.get("opId") or "")
@@ -6929,6 +6932,7 @@ def api_capabilities(root, token_required=False, mode="worker_telemetry"):
                 "codeSyncProof": True,
                 "codeSyncProofAsync": True,
                 "planCodeScope": 1,
+                "planCodeScopeAsync": 1,
                 "planExternalAssets": 1,
                 "syncScopeIndex": 1,
                 "idleGpuAdmission": True,
@@ -16616,7 +16620,11 @@ def serve_http(args):
                 try:
                     if len(raw) > 1024 * 1024:
                         raise ValueError("PLAN_SOURCE_QUERY_LIMIT")
-                    return self.send_json(inspect_plan_code_scope(root, json.loads(raw.decode("utf-8"))))
+                    payload = json.loads(raw.decode("utf-8"))
+                    if payload.get("operationId"):
+                        worker = str(getattr(args, "worker_id", "") or os.environ.get("SIMPLE_EXPERIMENT_WORKER_ID") or "worker").strip()
+                        return self.send_json(start_plan_scope_request(root, payload, worker), status=202)
+                    return self.send_json(inspect_plan_code_scope(root, payload))
                 except Exception as exc:
                     return self.send_json({"ok": False, "compatible": False, "readOnly": True, "error": str(exc)}, status=400)
             if route == "/api/actions/configure-gpu-quota":
@@ -17161,6 +17169,7 @@ def main():
 
 ${RUNTIME_LOG_DIAGNOSTICS_PYTHON}
 ${PLAN_CODE_SCOPE_PYTHON}
+${PLAN_CODE_SCOPE_OPERATIONS_PYTHON}
 ${GPU_COLLECTOR_PYTHON}
 ${TMUX_TASK_LIFECYCLE_PYTHON}
 

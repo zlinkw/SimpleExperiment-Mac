@@ -26,16 +26,16 @@
         {
           "path": ".vscodeignore",
           "windowsSha256": "5db7d9a9760305b324b3ed702e1b8e093324a6a164fd8db0d02c5b84ab873781",
-          "localSha256": "7efbcc5a9ce95217cf3d2cc185e7366b452efad0cd60347af2f6571e1b683ae8",
+          "localSha256": "21c13a77e9df147491c9c57df55155ec779cfe0b34690812510e76606cef49ac",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "9f1a449391d76dd9212f6a41fc0dc433d7a2a625a8977b457e3a9ea533e1c7bb",
+          "localSha256": "5228309be5504f828a7ccb8b97b6361f7c77d81b071c12cc47fe1bb3bb1120be",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "0be49487f8170c206cf0a55d92159658326a36cf261ec6d06b4cea1c703b3588",
+          "localSha256": "7722863e8cbd0eb0b735984285742cd432a86a521ca033851c745225b8270e16",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "d3031a1c37e4209f8ff9de242c6b4563dd35b1ce8101fe47d35625f1bcbf4787",
+          "localSha256": "6269ef95f0d95d50a5ef8fafa6adf3253cf62bfa04ed774106ea30fd06411241",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -420,9 +420,9 @@
         {
           "path": "src/clusterAgentRuntime.legacy.ts",
           "windowsSha256": "4156e98fd2d40e6e5e4e2d21ea75d7e9cf0998415e3530a6d5898cf8571408f5",
-          "localSha256": "50d855ab6902bc057afba9b1c1de95515fb7dea06a541ae8bf01b44a0d0fa8c5",
+          "localSha256": "fac30df958ff121a8b27bb83488fed5a3f753690fbdb852fe6912f566da34ec9",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/clusterAgentRuntime.ts",
@@ -730,9 +730,9 @@
         {
           "path": "src/extension/PlanCodeScopeHost.ts",
           "windowsSha256": "d9dd0b7c26b22932b969516a7768da164238ceacd1f227cc84ea68bf8f39e98f",
-          "localSha256": "a3d1c0fed9d42511839c038d69c176f4879dd09b405ee800d5109cc2247316fe",
+          "localSha256": "e3895e246471ee24a13999a7db9411a57039474688373ea637bb2a70cdb46ce2",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/extension/PlanRunHost.ts",
@@ -810,9 +810,9 @@
         {
           "path": "src/extension/legacy.ts",
           "windowsSha256": "674a98dd695dc768f9152dcfa461eceb2a6daf7c5db4aa5382f2250e6c5b3b59",
-          "localSha256": "c65acef8fe441a368393344c904396a182f837c6265450220cd0f1e6aa091c38",
+          "localSha256": "35e0e0036bd40eb0a1a43cc664c31789ff5ab97062555812d129ffedc24c03e3",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/factories/CommandFactory.ts",
@@ -884,9 +884,9 @@
         {
           "path": "src/features/ApiWorkflow.legacy.ts",
           "windowsSha256": "42222ff4d6dbd968fe329953da6a156e50e913031be93f2f33424f4d32281568",
-          "localSha256": "c05705d80f40e3ff95f8693f7514a7ee7286a80cedf95063139d673edeb80a74",
+          "localSha256": "41d4aaa13ae2d5b3027d981ed0cca66be9f8c780d8762044eb761eb77acd363e",
           "classification": "platform-overlay",
-          "reason": "Restore simpleSftp business member references; extension namespaces alone use the Mac identity; macOS Plan selection matches trailing-space and case-spelling byte-exactly (darwin platform argument), Windows keeps trimming byte-identically."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/features/ApiWorkflow.ts",
@@ -969,9 +969,9 @@
         {
           "path": "src/features/DistributedPlanQueue.ts",
           "windowsSha256": "351130f06726e8114e74f1da84e49f42ca673613ce22ce43334cdda06e8f6955",
-          "localSha256": "26514535bb7fcd7c3b847d47cc31ddf3be0f23fb347718d01859da3d4b456163",
+          "localSha256": "43f2f4d583d3b635c0baf79331ea0f0924e53410be5edf3f6572dc57de8c9ea6",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/features/DistributedProjectContract.ts",
@@ -2074,9 +2074,9 @@
         {
           "path": "src/runtime/PlanCodeScope.ts",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "localSha256": "a53bf87976c1c5716b1257265ccdfa25a2632a711a64c2bbe4795979cd5645e5",
+          "localSha256": "9a5d93d66bdf34a1af265be2844307168d28be0fa9e894a9797f8e9bb6f011cf",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/runtime/PlanExistingArtifacts.ts",
@@ -2105,9 +2105,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "2ba7fd6f55070cfb96166e780a41008776d31c6afb0f620ca95ce7a5e515b79d",
+          "localSha256": "2af47eb0c863b1fdb06089512a74167d4b2b96b563ea7f5eb0826cb6e891fec6",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",
@@ -2445,8 +2445,9 @@
         {
           "path": "src/tunnel/TunnelClient.legacy.ts",
           "windowsSha256": "73d8d19ac744ef42fde67c8cf783d759fd612ffa273825236ebeb3e8b560b832",
-          "localSha256": "73d8d19ac744ef42fde67c8cf783d759fd612ffa273825236ebeb3e8b560b832",
-          "classification": "upstream-identical"
+          "localSha256": "41eea6bb723d17936c4175c58d677580731a80c4507f927733a7b5abe3415f8c",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.331: shared API/UI PLAN selection and exact identity diagnostics; read-only source operations with real progress, phase timings and same-operation timeout recovery."
         },
         {
           "path": "src/tunnel/TunnelClient.ts",
@@ -3602,6 +3603,20 @@
           "windowsSha256": "f5f95ffe4f12b6259e629d5c7bdf859b3a33157e4899a755c40f0c650c0e65d2",
           "localSha256": "f5f95ffe4f12b6259e629d5c7bdf859b3a33157e4899a755c40f0c650c0e65d2",
           "classification": "upstream-identical"
+        },
+        {
+          "path": "src/features/PlanCodeScopeOperation.ts",
+          "windowsSha256": null,
+          "localSha256": "24a5912dc5e85e5989140f2434a95eaa85759965fbd8f4e77d7dae72d248760a",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.331: read-only source verification operation, real processing evidence, phase diagnostics and original-operation recovery."
+        },
+        {
+          "path": "src/runtime/PlanCodeScopeOperations.ts",
+          "windowsSha256": null,
+          "localSha256": "aa32f9945aaa33ef783b6b7b383a07b0127385ba768d3ca3b6f596dd35a5dbcf",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.331: read-only source verification operation, real processing evidence, phase diagnostics and original-operation recovery."
         }
       ]
     },
