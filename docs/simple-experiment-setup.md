@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.326 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.327 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -414,4 +414,16 @@ Agent 持久队列的 Plan/outputDir 身份、接收回执、旧队列派发及 
 
 手动诊断可使用“同一绝对解释器 -I -S 实际 cluster_agent.py 路径 runtime-check”；所有路径从当前配置/进程读取，不照搬示例机器或端口。此命令只准备受管依赖并返回 JSON，不连接 Agent、不启动训练。Agent /health 的 runtimeDependencies 字段报告实际解释器、sys.prefix、yaml 模块来源、版本、摘要和 safeLoad 能力。能力检查实际解析含锚点、列表及多行命令的 YAML，计划仍使用 yaml.safe_load，不改回正则。
 
-本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.326，再只做依赖核验与提交前检查。
+本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.327，再只做依赖核验与提交前检查。
+
+## Scheduler 协议探测
+
+0.5.326 将离线 PyYAML 数据嵌入 Scheduler 后，旧的前 8192 字符扫描看不到后面的协议声明。即使桌面、Agent 和 Scheduler 同为 0.5.326，也可能返回 projectManagedValidation=0 等七项误判；不要把这种情况简单当作旧包未更新。
+
+Mac 0.5.327 对实际 Scheduler 文件作完整 AST 静态解析，只接受顶层、唯一且类型正确的字面量声明，并核对版本、对应实现入口及运行 Agent 已记录的配对文件摘要。不 import/exec Scheduler，不按固定文件位置判断，也不把读取窗口改成更大数字。沿用受管 runtime 的 8 MiB 文件上限，只有完整文件在预算内才解析；超限拒绝，不静默截断。
+
+/api/capabilities 中的 schedulerProtocol 给出实际文件路径、Agent/Scheduler 版本、声明、缺失项及配对摘要核验结果。status=ok 表示这次解析与配对通过；unsupported 表示真实缺少协议或实现入口；read_error 表示文件缺失、权限或文件预算问题；parse_error 表示编码、语法或声明解析失败；version_mismatch 表示实际版本不同；runtime_mismatch 表示磁盘 Scheduler 与运行 Agent 的配对文件凭据不同。桌面刷新探测和提交前检查保留这些原因，不统一要求重复升级。
+
+更新至 0.5.327 后，仍须通过原受管流程部署配对 Agent/Scheduler 并重启指定实例。首次准备的延迟核验路径和单独 ensure/restart 路径都会清除所选 Worker 的旧能力记录，其他 Worker 不受影响。之后“检测/刷新”从当前配置端点读取新能力。应核对 schedulerProtocol.status、schedulerVersion 与七项能力，不只看桌面版本号。停止/重启不自动提交训练，不清空配置、历史或结果。
+
+本机回归仅使用最终打包文件、隔离 HTTP 端点和受控生命周期回执；真实用户服务器的在线能力、目标进程及缓存刷新仍需在授权的 Mac 受管更新后核验。

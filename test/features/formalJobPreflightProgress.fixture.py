@@ -128,8 +128,11 @@ agent.read_json = lambda *args: {}
 agent.path_for = lambda *args: str(root / "not-created.json")
 agent.signal_durable_plan_queue_processor = lambda *args: None
 agent.cluster_scheduler_path = lambda _: str(child)
-agent.formal_job_path_capable = lambda _: True  # The child runs the real Scheduler preflight implementation.
-agent.execution_shell_preflight_capable = lambda _: True  # Version rejection is tested separately; this child uses the real extracted probe.
+# The executable child is only the selected preflight functions, not a complete
+# Scheduler. Capability discovery must inspect the real paired production file.
+protocol_reader = extract_runtime_functions(str(runtime / "cluster_agent.py"), ["scheduler_protocol_report"])
+protocol_reader.cluster_scheduler_path = lambda _: str(runtime / "cluster_scheduler.py")
+agent.scheduler_protocol_report = protocol_reader.scheduler_protocol_report
 agent.simple_runtime_python = lambda env: sys.executable
 agent.scalar_scheduler_module = lambda: scheduler
 def environment():

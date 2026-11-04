@@ -32,6 +32,8 @@ review_report.md
 *.log
 *.bak
 dist/runtime/__pycache__/**
+# Generated service cache is not a distribution input; vendor/python is the locked source bundle.
+dist/runtime/.python-dependencies/**
 dist/test/**
 dist/testing/**
 dist/tunnel/[M][o][b][a][X][t][e][r][m]*.js

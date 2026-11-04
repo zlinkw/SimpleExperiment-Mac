@@ -18,6 +18,9 @@ scheduler = extract_runtime_functions(str(runtime / "cluster_scheduler.py"),
     ["build_jobs", "load_plan", "formal_job_preflight_mode", "formal_job_writer", "run_job", "formal_source_fingerprint", "launch_experiment", "collect_tensorboard_metrics", "jobs_for_args", "wrapper_context"])
 agent = extract_runtime_functions(str(runtime / "cluster_agent.py"),
     ["verified_formal_job_command", "accept_durable_plan_job", "prepare_draft_run_plan", "write_durable_plan_queue", "drain_durable_plan_queue_once", "requeue_durable_plan_job"])
+# Keep all loader calls inside the same selected-function boundary, including
+# draft preparation before the later dispatch patches. Never import a full runtime.
+agent.scalar_scheduler_module = lambda: scheduler
 # 非 Windows 上正式运行参数会被 simple_conda_wrapped_args→task_shell_args 包成登录 shell 重绑命令（nt 直接透传）。
 # 本夹具回放正式预检的消息契约，fake RPC 必须拿到裸参数列表；shell 重绑行为由 executionShellEnvironment 专测钉住。
 agent.simple_conda_wrapped_args = lambda args, env: args
@@ -103,7 +106,7 @@ with patch.object(agent, "cluster_scheduler_path", lambda _: str(runtime / "clus
     persist(None, saved_queue)
 
     # An old Scheduler cannot advertise or admit the formal-path protocol.
-    with patch("builtins.open", __import__("unittest.mock", fromlist=["mock_open"]).mock_open(read_data='RUNTIME_VERSION = "0.0.1"\n')):
+    with patch("builtins.open", __import__("unittest.mock", fromlist=["mock_open"]).mock_open(read_data=b'RUNTIME_VERSION = "0.0.1"\n')):
         assert agent.formal_job_path_capable(str(root)) is False
         try:
             agent.verified_formal_job_command(str(root), command)

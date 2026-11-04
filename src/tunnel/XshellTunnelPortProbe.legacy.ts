@@ -7,6 +7,7 @@ import {
   validateAgentCapabilities,
   validateAgentHealth,
   validateFileCapabilities,
+  schedulerProtocolDiagnostic,
 } from "./AgentCapabilities";
 import { XshellRealtimeTunnelConfig } from "./XshellTunnelSetup";
 import { validateWorkerTelemetryCapabilities } from "./WorkerTelemetryApi";
@@ -404,8 +405,10 @@ export async function probeWorkerTelemetryTunnel(
       workerStateDir: String(health.workerStateDir || ""),
       workerId: String(health.workerId || ""),
       gpuCollectorProtocol: Number(health.gpuCollectorProtocol || 0),
-      message: ok ? "Worker Telemetry API 可用。" : "Worker Telemetry API 不完整。",
-      suggestion: ok ? undefined : modeSuggestion,
+      message: ok ? "Worker Telemetry API 可用。" + ((capabilities as any).schedulerProtocol?.status && (capabilities as any).schedulerProtocol.status !== "ok"
+        ? " " + schedulerProtocolDiagnostic((capabilities as any).schedulerProtocol) : "") : "Worker Telemetry API 不完整。",
+      suggestion: ok ? ((capabilities as any).schedulerProtocol?.status && (capabilities as any).schedulerProtocol.status !== "ok"
+        ? schedulerProtocolDiagnostic((capabilities as any).schedulerProtocol) : undefined) : modeSuggestion,
     };
   } catch (error) {
     const text = error instanceof Error ? error.message : String(error);

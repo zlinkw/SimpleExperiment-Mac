@@ -26,16 +26,16 @@
         {
           "path": ".vscodeignore",
           "windowsSha256": "5db7d9a9760305b324b3ed702e1b8e093324a6a164fd8db0d02c5b84ab873781",
-          "localSha256": "7df3e55e83e16c466d98dfa3976063e8bf3e2b5a8daf1e73b56e4e80049e4ea0",
+          "localSha256": "7efbcc5a9ce95217cf3d2cc185e7366b452efad0cd60347af2f6571e1b683ae8",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "873b4a921da3d418e6abcb952814fa30a0b4fce7d230038820b027b6ec8ecdd1",
+          "localSha256": "a4147919ea80bbe7a76cbefaf22319c0fb7a99c405ecc909a7042988b0935515",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "e22c3808aa905da179175787aa2c8124c8a6e70fc725e6710cd449c91b2a74c1",
+          "localSha256": "da98852b5dc10516e0d46837b111a05a22f16399ef43f1212a5bdcc7bd154748",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "7daa4d1526a703dbc37680b10df092962f19e573056ae0111e3b5751e35ee31a",
+          "localSha256": "db846b612b6c99724064074eab6f1750bbb05194a9d63bcc0e9a75d6227aa95a",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -420,9 +420,9 @@
         {
           "path": "src/clusterAgentRuntime.legacy.ts",
           "windowsSha256": "4156e98fd2d40e6e5e4e2d21ea75d7e9cf0998415e3530a6d5898cf8571408f5",
-          "localSha256": "4ccca5ffd1802f90f3386051d0f04dad98a4cea1d0d16cbd31e17a426dfa8d90",
+          "localSha256": "7017a6a5575f7466066bbd6e507bfb4dcdc681e9c6f853e11a6c6bae0b807efd",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "src/clusterAgentRuntime.ts",
@@ -809,9 +809,9 @@
         {
           "path": "src/extension/legacy.ts",
           "windowsSha256": "674a98dd695dc768f9152dcfa461eceb2a6daf7c5db4aa5382f2250e6c5b3b59",
-          "localSha256": "e4dd5568fda224126bc23e53f36037bad604d4c4fc519f5cfae475e6087372c5",
+          "localSha256": "c65acef8fe441a368393344c904396a182f837c6265450220cd0f1e6aa091c38",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "src/factories/CommandFactory.ts",
@@ -2103,9 +2103,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "8d47feb607a9a3c8e6e3c587908bfeb4c336d5a98a4853e8568fae6814ef3322",
+          "localSha256": "fb87c84452c53208ab0f8d4ed03487c3f358ee2b43f703b156eb60214e4611a3",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.326 / SFTP 0.2.107: offline locked PyYAML and isolated same-interpreter Agent precheck; no system/training environment mutation."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",
@@ -2272,8 +2272,9 @@
         {
           "path": "src/tunnel/AgentCapabilities.ts",
           "windowsSha256": "3c34523ae290f7405f6b37584b9029514e38ddfdcacc7f5e8e66bb88d585dac2",
-          "localSha256": "3c34523ae290f7405f6b37584b9029514e38ddfdcacc7f5e8e66bb88d585dac2",
-          "classification": "upstream-identical"
+          "localSha256": "fa32ceea5872ead460bb9124d403297b8708167783cba181183d5bc79ee4502f",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "src/tunnel/AgentTmuxPolicy.ts",
@@ -2568,9 +2569,9 @@
         {
           "path": "src/tunnel/XshellTunnelPortProbe.legacy.ts",
           "windowsSha256": "cbd7f1219ff7c3ba8f3179ddd6da7f4af202d03d988491d7e96c46c920bad6fc",
-          "localSha256": "a3c4af53a5319a3be9cf11df0e47adce019167406600cece497470ca758e5898",
+          "localSha256": "6924eecd1cda7f03d8136d00be4862ab9806c1b49990dc30665b7ddfa16bb2d5",
           "classification": "platform-overlay",
-          "reason": "Probe base URLs go through TunnelGateway.localBaseUrl so IPv6 literal forward hosts are bracketed in the URL authority (released Mac contract); remaining probe logic frozen."
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "src/tunnel/XshellTunnelPortProbe.ts",
@@ -3166,8 +3167,9 @@
         {
           "path": "test/features/formalJobPreflightProgress.fixture.py",
           "windowsSha256": "2aeb11ec3235593e808ea113c4e06d73eb93d1aabc6d3a0118db541dd1b50826",
-          "localSha256": "2aeb11ec3235593e808ea113c4e06d73eb93d1aabc6d3a0118db541dd1b50826",
-          "classification": "upstream-identical"
+          "localSha256": "e536924022f17039beabf96f3bd384ec0b3aefca27d691726f9bb4448c6ca779",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
         },
         {
           "path": "test/features/hubRuntimeRemoval.test.js",

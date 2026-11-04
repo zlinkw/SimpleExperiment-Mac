@@ -6816,54 +6816,99 @@ def api_version(root, mode="realtime"):
         "checkedAt": now_iso(),
     }
 
-def formal_job_path_capable(root):
+def scheduler_protocol_report(root):
+    import ast
+    base = ("FORMAL_JOB_PATH_PROTOCOL", "FORMAL_JOB_IDENTITY_ENV_PROTOCOL")
+    requirements = {
+        "declaredJobPaths": base, "formalJobIdentityEnv": base,
+        "executionShellPreflight": (*base, "EXECUTION_SHELL_PREFLIGHT_PROTOCOL"),
+        "taskShellEnvironment": (*base, "EXECUTION_SHELL_PREFLIGHT_PROTOCOL", "TASK_SHELL_ENVIRONMENT_PROTOCOL"),
+        "stagedJobPreflight": (*base, "EXECUTION_SHELL_PREFLIGHT_PROTOCOL", "TASK_SHELL_ENVIRONMENT_PROTOCOL", "FORMAL_JOB_PREFLIGHT_STAGES_PROTOCOL"),
+        "projectManagedValidation": (*base, "PROJECT_MANAGED_VALIDATION_PROTOCOL"),
+        "completedOutputPreflight": (*base, "PROJECT_MANAGED_VALIDATION_PROTOCOL"),
+    }
+    implementations = {
+        "FORMAL_JOB_PATH_PROTOCOL": "formal_job_preflight", "FORMAL_JOB_IDENTITY_ENV_PROTOCOL": "formal_job_writer",
+        "EXECUTION_SHELL_PREFLIGHT_PROTOCOL": "execution_shell_preflight", "TASK_SHELL_ENVIRONMENT_PROTOCOL": "task_shell_args",
+        "FORMAL_JOB_PREFLIGHT_STAGES_PROTOCOL": "formal_job_preflight_report", "PROJECT_MANAGED_VALIDATION_PROTOCOL": "formal_job_preflight_report",
+    }
+    report = {"status": "read_error", "path": "", "agentVersion": RUNTIME_VERSION, "schedulerVersion": None,
+              "capabilities": {name: False if name == "declaredJobPaths" else 0 for name in requirements}}
     try:
         scheduler = cluster_scheduler_path(root)
-        with open(scheduler, "r", encoding="utf-8") as stream:
-            header = stream.read(8192)
-        version = re.search(r'(?m)^RUNTIME_VERSION = "([^"]+)"', header)
-        return bool("FORMAL_JOB_PATH_PROTOCOL = 1" in header and "FORMAL_JOB_IDENTITY_ENV_PROTOCOL = 1" in header and version and version.group(1) == RUNTIME_VERSION)
-    except (OSError, TypeError):
-        return False
+        report["path"] = scheduler
+        with open(scheduler, "rb") as stream:
+            # Same 8 MiB complete-file budget as lifecycle_files, NOT a header window.
+            raw = stream.read(8 * 1024 * 1024 + 1)
+        if len(raw) > 8 * 1024 * 1024:
+            report["error"] = "Scheduler exceeds the existing 8 MiB runtime deployment limit"
+            return report
+    except (OSError, TypeError) as error:
+        report["error"] = str(error)
+        return report
+    try:
+        tree = ast.parse(raw.decode("utf-8-sig"), filename=scheduler)
+        declarations = {}
+        for node in tree.body:
+            if not isinstance(node, (ast.Assign, ast.AnnAssign)): continue
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if not isinstance(target, ast.Name) or target.id not in {"RUNTIME_VERSION", *implementations}: continue
+                if target.id in declarations or not isinstance(node.value, ast.Constant):
+                    raise ValueError("duplicate or non-literal declaration: " + target.id)
+                value = node.value.value
+                if type(value) is not (str if target.id == "RUNTIME_VERSION" else int):
+                    raise ValueError("invalid declaration type: " + target.id)
+                declarations[target.id] = value
+        if "RUNTIME_VERSION" not in declarations:
+            raise ValueError("missing literal RUNTIME_VERSION declaration")
+    except (SyntaxError, UnicodeError, ValueError) as error:
+        report.update(status="parse_error", error=str(error))
+        return report
+    report["schedulerVersion"] = declarations["RUNTIME_VERSION"]
+    if declarations["RUNTIME_VERSION"] != RUNTIME_VERSION:
+        report.update(status="version_mismatch", error="Agent and Scheduler runtime versions differ")
+        return report
+    expected = (globals().get("AGENT_LIFECYCLE_IDENTITY") or {}).get("runtimeFiles", {}).get("cluster_scheduler.py")
+    if expected and hashlib.sha256(raw).hexdigest() != expected:
+        report.update(status="runtime_mismatch", error="Scheduler bytes differ from the running Agent's paired runtime proof")
+        return report
+    functions = {node.name for node in tree.body if isinstance(node, ast.FunctionDef)}
+    missing = {name: [key for key in keys if declarations.get(key) != 1 or implementations[key] not in functions]
+               for name, keys in requirements.items()}
+    for name, keys in missing.items():
+        report["capabilities"][name] = not keys if name == "declaredJobPaths" else 0 if keys else 1
+    report.update(status="unsupported" if any(missing.values()) else "ok", declarations=declarations,
+                  missing={name: keys for name, keys in missing.items() if keys}, pairedHashVerified=bool(expected))
+    return report
+
+def formal_job_path_capable(root):
+    return scheduler_protocol_report(root)["capabilities"]["declaredJobPaths"]
 
 def execution_shell_preflight_capable(root):
-    try:
-        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
-            return formal_job_path_capable(root) and "EXECUTION_SHELL_PREFLIGHT_PROTOCOL = 1" in stream.read(8192)
-    except (OSError, TypeError):
-        return False
+    return scheduler_protocol_report(root)["capabilities"]["executionShellPreflight"] == 1
 
 def task_shell_environment_capable(root):
-    try:
-        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
-            return execution_shell_preflight_capable(root) and "TASK_SHELL_ENVIRONMENT_PROTOCOL = 1" in stream.read(8192)
-    except (OSError, TypeError):
-        return False
+    return scheduler_protocol_report(root)["capabilities"]["taskShellEnvironment"] == 1
 
 
 def staged_job_preflight_capable(root):
-    try:
-        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
-            return task_shell_environment_capable(root) and "FORMAL_JOB_PREFLIGHT_STAGES_PROTOCOL = 1" in stream.read(8192)
-    except (OSError, TypeError):
-        return False
+    return scheduler_protocol_report(root)["capabilities"]["stagedJobPreflight"] == 1
 
 def project_managed_validation_capable(root):
-    try:
-        with open(cluster_scheduler_path(root), "r", encoding="utf-8") as stream:
-            return formal_job_path_capable(root) and "PROJECT_MANAGED_VALIDATION_PROTOCOL = 1" in stream.read(8192)
-    except (OSError, TypeError):
-        return False
+    return scheduler_protocol_report(root)["capabilities"]["projectManagedValidation"] == 1
 
 def api_capabilities(root, token_required=False, mode="worker_telemetry"):
     if mode == "worker_telemetry":
+        scheduler = scheduler_protocol_report(root)
         return {
             "schemaVersion": SCHEMA_VERSION,
             "apiVersion": API_VERSION,
             "agentVersion": AGENT_VERSION,
             "runtimeVersion": RUNTIME_VERSION,
             "pluginVersion": PLUGIN_VERSION,
-            "schedulerVersion": RUNTIME_VERSION,
+            "schedulerVersion": scheduler["schedulerVersion"],
+            "schedulerProtocol": scheduler,
             "mode": "worker_telemetry",
             "actionApiVersion": 2,
             "realActionRuntime": True,
@@ -6878,14 +6923,8 @@ def api_capabilities(root, token_required=False, mode="worker_telemetry"):
                 "taskLifecycle": 2,
                 "sourceDecouple": 1,
                 "runtimeDiagnostics": 1,
-                "declaredJobPaths": formal_job_path_capable(root),
-                "formalJobIdentityEnv": 1 if formal_job_path_capable(root) else 0,
-                "executionShellPreflight": 1 if execution_shell_preflight_capable(root) else 0,
-                "taskShellEnvironment": 1 if task_shell_environment_capable(root) else 0,
-                "stagedJobPreflight": 1 if staged_job_preflight_capable(root) else 0,
+                **scheduler["capabilities"],
                 "originalSourceHashDiagnostic": 1,
-                "projectManagedValidation": 1 if project_managed_validation_capable(root) else 0,
-                "completedOutputPreflight": 1 if project_managed_validation_capable(root) else 0,
                 "durablePlanQueue": True,
                 "codeSyncProof": True,
                 "codeSyncProofAsync": True,

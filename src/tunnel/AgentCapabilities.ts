@@ -1,5 +1,22 @@
 export const expectedAgentApiVersion = "1";
 
+/** Keep a genuine unsupported protocol distinct from a broken runtime probe. */
+export function schedulerProtocolDiagnostic(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "未取得 Scheduler 协议诊断，请刷新检测并核对实际实例";
+  const item = value as Record<string, any>;
+  const reasons: Record<string, string> = {
+    read_error: "Scheduler 文件读取失败，请核对实际部署路径与读取权限",
+    parse_error: "Scheduler 文件或协议声明解析失败，请核对完整 runtime 文件",
+    version_mismatch: `Agent/Scheduler 版本不匹配：${item.agentVersion} / ${item.schedulerVersion}`,
+    runtime_mismatch: "磁盘 Scheduler 与运行 Agent 的配对文件凭据不一致，请核对部署与目标实例",
+    unsupported: "Scheduler 确实缺少所需协议声明或实现",
+    ok: "Scheduler 声明匹配，但端点未报告所需能力，请刷新并核对实际实例",
+  };
+  const details = item.error || (item.missing ? JSON.stringify(item.missing) : "");
+  return (reasons[item.status] || "未知 Scheduler 协议诊断，请核对实际实例")
+    + (item.path ? `；文件=${item.path}` : "") + (details ? `；原因=${details}` : "");
+}
+
 export interface AgentHealthResponse {
   schemaVersion: 1;
   agentVersion: string;

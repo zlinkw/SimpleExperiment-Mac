@@ -13,6 +13,7 @@ import { runAllPlans, runSelectedPlans } from "./SelectedPlanBatchHost";
 import { attachIsolatedCleanup, markPlanTerminal, promoteDispatchedPlans } from "../features/PlanIsolatedBatchLedger";
 import { planSubmissionBatchFor } from "../features/PlanSubmissionBatch";
 import * as PlanCodeScopeHost from "./PlanCodeScopeHost";
+import { schedulerProtocolDiagnostic } from "../tunnel/AgentCapabilities";
 import { currentWindowSftpDiscovery, sameProjectRoot } from "../core/SimpleSftpWindow";
 import { readProjectConnectionValue, saveProjectConnectionValues } from "../core/ProjectConnectionProfiles";
 import * as fs from "fs/promises";
@@ -9630,6 +9631,10 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 && scheduler?.protocol === 1 && ["current", "absent"].includes(scheduler.status) && !scheduler.error && !before.schedulerUpdateError) return;
             await this.agentLifecycleForTarget(target, before.status === "unhealthy" || before.status === "running" && before.runningVersion !== runtimeVersion ? "restart" : "ensure", manifest, true);
         });
+        // Even the deferred first-run path must not retain capabilities from the old process.
+        if (targets.some((target) => target.role === "hub")) this.lastProbe = undefined;
+        for (const target of targets.filter((item) => item.role !== "hub")) delete this.lastWorkerProbes[target.id];
+        this.lastFullEndpointProbeAt = 0;
         if (deferVerification) return { targets, manifest, timings };
         await this.startBackgroundTunnels(false, false, targets.map(target => target.id));
         // 手动触发(showMessage=true)：单次 verify 立即返回，避免 fetch failed/ECONNREFUSED 无意义延迟；仅自动触发(showMessage=false)才轮询重试
@@ -9666,11 +9671,6 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
                 .filter(name => (manifest as any).files?.[name] || (manifest as any).components?.[name === "cluster_agent.py" ? "hub_agent" : "cluster_scheduler"]?.sha256)
                 .map(name => `${target.label}/${name}:sha256 ok`))
             : [...verifyIssues.fatal, ...verifyIssues.warnings];
-        if (targets.some((target) => target.role === "hub"))
-            this.lastProbe = undefined;
-        for (const target of targets.filter((item) => item.role !== "hub"))
-            delete this.lastWorkerProbes[target.id];
-        this.lastFullEndpointProbeAt = 0;
         this.lastHealth = {
             state: _verifyOk ? "agent_ok" : "agent_verification_pending",
             status: _verifyOk ? "ok" : "verifying",
@@ -9714,7 +9714,13 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         const manifest = { runtimeVersion: RuntimeManifest_1.CURRENT_RUNTIME_VERSION, files: {
             "cluster_agent.py": RuntimeManifest_1.sha256Text(agent), "cluster_scheduler.py": RuntimeManifest_1.sha256Text(scheduler) } };
         const results = [];
-        for (const target of targets) results.push({ id: target.id, ...await this.agentLifecycleForTarget(target, action, manifest, params.confirm === true, params.migrationDigests?.[target.id]) });
+        for (const target of targets) {
+            results.push({ id: target.id, ...await this.agentLifecycleForTarget(target, action, manifest, params.confirm === true, params.migrationDigests?.[target.id]) });
+            if (action === "ensure" || action === "restart") {
+                delete this.lastWorkerProbes[target.id];
+                this.lastFullEndpointProbeAt = 0;
+            }
+        }
         return { ok: true, action, results };
     }
     async agentLifecycleServer(target) {
@@ -18238,7 +18244,9 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
     async postWorkerTunnelAction(workerId, action, body, options = {}) {
         if (options.requiresCapability?.includes("endpoints.projectManagedValidation")
             && !this.lastWorkerProbes?.[workerId]?.capabilities?.endpoints?.projectManagedValidation)
-            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: projectManagedValidation; 请更新匹配的 Agent/Scheduler`);
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: projectManagedValidation; ` +
+                (this.lastWorkerProbes?.[workerId]?.capabilities?.schedulerProtocol
+                    ? schedulerProtocolDiagnostic(this.lastWorkerProbes[workerId].capabilities.schedulerProtocol) : "请核对匹配的 Agent/Scheduler 并刷新能力检测"));
         this.assertActionAuthorityCurrent(options);
         workerId = this.resolveWorkerEndpointId(workerId) || workerId;
         const command = options.title || action;
@@ -18442,12 +18450,14 @@ throw new Error("HUB_REMOVED：Hub 功能已移除，请选择 Worker。");
         if (params.completedOutputVerify !== undefined && typeof params.completedOutputVerify !== "boolean")
             throw new Error("FORMAL_JOB_PREFLIGHT_INVALID_COMPLETED_OUTPUT");
         const completedOutputVerify = params.completedOutputVerify === true;
+        const protocolDetail = this.lastWorkerProbes[workerId]?.capabilities?.schedulerProtocol
+            ? schedulerProtocolDiagnostic(this.lastWorkerProbes[workerId].capabilities.schedulerProtocol) : "请核对匹配的 Agent/Scheduler 并刷新能力检测";
         if (completedOutputVerify && (environmentOnly || this.lastWorkerProbes[workerId]?.capabilities?.endpoints?.completedOutputPreflight !== 1))
-            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: completedOutputPreflight`);
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: completedOutputPreflight; ${protocolDetail}`);
         if (environmentOnly && this.lastWorkerProbes[workerId]?.capabilities?.endpoints?.executionShellPreflight !== 1)
-            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: executionShellPreflight; 请更新匹配的 Agent/Scheduler`);
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: executionShellPreflight; ${protocolDetail}`);
         if (environmentOnly && this.lastWorkerProbes[workerId]?.capabilities?.endpoints?.taskShellEnvironment !== 1)
-            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: taskShellEnvironment; 请更新匹配的 Agent/Scheduler`);
+            throw new Error(`WORKER_PROTOCOL_INCOMPATIBLE: ${workerId}: taskShellEnvironment; ${protocolDetail}`);
         const snapshot = await this.readWorkerTaskSnapshot(workerId, { fresh: true, signal });
         const row = snapshot.tasks?.find(task => task.commandId === commandId);
         if (!row || row.projectId !== DistributedPlanQueue.canonicalProjectId(root) || row.workerId !== workerId)
