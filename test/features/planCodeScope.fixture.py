@@ -315,6 +315,16 @@ open_case("from pathlib import Path\np = Path('inputs/中文 空格.txt')\nfor p
 open_case("from pathlib import Path\np = Path(runtime_path)\np.open('a')")
 open_case("from pathlib import Path\nmode='a'\nmode='r'\nPath('inputs/中文 空格.txt').open(mode)", reads=True)
 open_case("from io import open as file_open\nfile_open('inputs/missing.txt', 'r+')", error="PLAN_SOURCE_MISSING")
+for expression in ["Path('inputs/missing.txt').open(**options)", "open('inputs/missing.txt', **options)", "open('inputs/missing.txt', *options)"]:
+    open_case("from pathlib import Path\n" + expression, error="PLAN_SOURCE_MISSING", declarations=declared_input)
+for expression in ["Path('inputs/other.txt').open(**options)", "open('inputs/other.txt', **options)", "open('inputs/other.txt', *options)", "Path('inputs/other.txt').open(*options, mode='r')", "open('inputs/other.txt', *options, mode='r')"]:
+    # Declaring another file cannot erase the already known path to actual bytes.
+    write("train.py", "from pathlib import Path\n" + expression)
+    write(open_plan, "runner:\n  command: python train.py\n" + declared_input)
+    known_paths, known_notes = scope["plan_source_scope"](str(root), open_plan, sha(open_plan))
+    assert {"inputs/other.txt", "inputs/中文 空格.txt"}.issubset(known_paths), known_paths
+    assert known_notes
+    open_cases += 1
 open_case("from pathlib import Path\nPath('inputs/missing.txt').open('a+')", error="PLAN_SOURCE_MISSING")
 open_case("from pathlib import Path\nPath('../outside.txt').open()", error="PLAN_SOURCE_PATH_INVALID")
 open_case("from pathlib import Path\nPath('inputs/中文 空格.txt').open(mode='invalid')", error="PLAN_SOURCE_OPEN_MODE_INVALID")

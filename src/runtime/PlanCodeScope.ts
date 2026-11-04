@@ -297,9 +297,10 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                 offset = 0 if bound else 1
                 positional = node.args[offset] if len(node.args) > offset else None
                 keyword = next((item.value for item in node.keywords if item.arg == "mode"), None)
-                if positional is not None and keyword is not None or file_open and node.args and any(item.arg == "file" for item in node.keywords):
+                expanded_positional = any(isinstance(arg, ast.Starred) for arg in node.args)
+                if not expanded_positional and (positional is not None and keyword is not None or file_open and node.args and any(item.arg == "file" for item in node.keywords)):
                     fail("PLAN_SOURCE_OPEN_ARGUMENT_INVALID (line " + str(node.lineno) + ")", file)
-                dynamic_arguments = any(isinstance(arg, ast.Starred) for arg in node.args) or any(item.arg is None for item in node.keywords)
+                dynamic_arguments = expanded_positional or any(item.arg is None for item in node.keywords)
                 mode = positional if positional is not None else keyword
                 modes = [] if dynamic_arguments else evaluate(mode) if mode is not None else ["r"]
                 if not modes:
@@ -310,7 +311,6 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                             fail("PLAN_SOURCE_OPEN_MODE_INVALID (line " + str(node.lineno) + ")", file)
                     # '+' may consume existing bytes (notably a+); retain input checking.
                     if all("r" not in value and "+" not in value for value in modes): return None
-                if dynamic_arguments: input_node = None
             if input_node is None:
                 unknown_access[(file, node.lineno)] = (kind, "unresolved file path/arguments")
                 return None

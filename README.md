@@ -2,7 +2,7 @@
 
 Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linux GPU 实验。扩展身份、设置和应用数据与 Windows 原版独立；业务以本版声明的 Windows 冻结实现为唯一来源。
 
-**当前源码补丁为 Experiment Mac 0.5.328，配套 SFTP Mac 0.2.107；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
+**当前源码补丁为 Experiment Mac 0.5.329，配套 SFTP Mac 0.2.107；共同业务冻结基线仍为 Windows 0.5.440 / 0.2.117。** 公开安装包及 release.json 以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 和插件更新入口为准。验收范围和真机边界见 [项目事实](docs/mac-project-facts.md)，本轮范围见 [源码对齐记录](docs/windows-alignment-2026-10-29.md)。
 
 本轮沿用 Windows 的 Worker 统一流程与 Hub 退役说明，新增 [AI 最小实验接入指南](docs/experiment-integration.md)、[MultiModal 实践](docs/multimodal-integration-best-practice.md) 及设置页的复制入口。Mac 身份、系统 SSH、独立认证和 preview 更新通道保留；Mac 真机尚未验证。
 
@@ -13,6 +13,8 @@ Apple Silicon、macOS 26+ 的 VS Code 扩展，配套 SimpleSFTP Mac 管理 Linu
 0.5.321 的 `stopMacSystemTunnels` 漏绑修复已核实包含于发布包；本次根因不是该历史遗漏，也不是 Agent 的规则同步错误。此前可写上下文夹具漏掉了只读属性约束，现已修正，不能把此前隔离通过当作真机启动通过。
 
 0.5.320 修复运行前同步接入规则失败：发送给 Agent 的规则副本仅排除本机结果目录使用的 `planDatasetMapping`，不删除本机映射或用户设置；合法字段保留，未知字段和各 Worker 的真实失败继续报错。该修法参考 Windows 0.5.484 的同一协议边界，不表示整体同步到该 Windows 版本。安装 Mac 补丁后重载 VS Code 应用客户端修复；Agent 接收协议不变，既有版本和就绪检查继续按实际结果处理。本轮未部署或重启 Agent，真实服务器运行仍未验收。
+
+0.5.329 补齐展开参数的已知路径核验：Path.open(**options) 或 open(known_path, *args/**kwargs) 即使需要显式声明未知模式，也必须保留已知读取路径；声明另一份文件不能抹掉实际已知输入。追加发布，不覆盖 0.5.328；同样不修改用户项目或启动训练。
 
 0.5.328 修复源码依赖分析对文件打开参数的误判。按导入别名及可解析的 Path 来源区分内置/io.open 与 Path.open：前者的路径和模式分别是第一个、第二个参数，后者路径取接收对象、模式取第一个参数。纯 w/a/x 访问不要求日志预先存在；默认读取及带 + 的读写访问保守核验输入字节。未知接收对象、动态读取路径或未知模式须明确声明 source_dependencies，不把任意 .open 当作 Path，也不丢掉真实读取或完整性依赖。用户提供的 wrapper 第 181 行已隔离复现并回归；本轮未连接服务器或启动训练，Mac 真机仍未验收。
 
@@ -63,7 +65,7 @@ Worker按各自请求独立刷新，慢节点不阻塞其他节点；pending不�
 
 启动检查一次，此后每30分钟检查，同一配套版本仅主动提醒一次。通知 **查看更新** 展示说明，安装由上述安装入口显式确认。Mac 保留公开 preview 静态索引和同一 Release 分发，查询失败显示检查失败。安装事务、全部下载验证、SFTP先装、同版跳过、禁止降级、部分失败补装和等待本地传输使用 Windows 共同实现。
 
-共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套为 Experiment 0.5.328 / SFTP 0.2.107，请使用同一 Release 的两份 VSIX；已安装同版时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
+共同更新租约协议要求 **SimpleSFTP Mac 0.2.102 或以上**。本配套为 Experiment 0.5.329 / SFTP 0.2.107，请使用同一 Release 的两份 VSIX；已安装同版时按更新器策略跳过。旧事务回执保留并转换读取，不自动重装、清理或迁移用户产物。
 
 ## Mac 数据与 CLI
 
