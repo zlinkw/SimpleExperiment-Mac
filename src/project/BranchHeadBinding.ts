@@ -6,14 +6,15 @@
  * 当前提交树必须包含 manifest 全部路径、类型/大小/内容 SHA 与已验清单一致；比较读 git blob
  * 原始字节（cat-file --batch）而非 UTF8 字符串重编码；任何输出只含路径/大小/哈希，绝不打印
  * blob 内容或密钥。忽略/未跟踪依赖不在提交中＝如实“无法证明此 HEAD”，不 stage、不 commit、
- * 不新增数据/权重哈希系统。dirty→clean 仅元数据变化而 blob 一致时结论可复用，不重跑科研。
+ * 不读取远端资产：独立 assets 凭据参与源摘要，其授权由同一 PLAN blob 锚定，实际内容由 Agent 复验；
+ * 不把共享权重伪装为 Git blob。dirty→clean 仅元数据变化而 blob 一致时结论可复用，不重跑科研。
  *
  * 本模块纯 Node：git 执行器注入（测试用假执行器或真实临时仓），无 vscode/IO 之外的隐式依赖。
  */
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { sanitizeGitEnv } from "./GitIdentityProbe";
-import { planExecutionSourceDigest, planManifestPathSafe } from "../extension/PlanCodeScopeHost";
+import { planExecutionSourceDigest, planManifestPathSafe, type PlanExecutionSource } from "../extension/PlanCodeScopeHost";
 import { completionIdentity, hasVerifiedCompletion } from "../features/VerifiedCompletion";
 
 export type HeadBindingRunner = (args: string[], cwd: string, stdin?: string) => Promise<{ code: number; stdout: Buffer; stderr: string }>;
@@ -155,7 +156,7 @@ export type PlanHeadBinding = ManifestBindingResult & { reason?: string; headCom
 /** 绑定单个 PLAN 的已验 executionSource 到当前 HEAD：digest 自校验、PLAN 文件 revision 锚定，再逐文件核提交树。 */
 export async function bindPlanSourceToCommit(options: {
   runner: HeadBindingRunner; cwd: string; headCommit: string;
-  executionSource?: { digest: string; manifest: Record<string, { size: number; sha256: string }> };
+  executionSource?: PlanExecutionSource;
   planFile: string; revision: string;
 }): Promise<PlanHeadBinding> {
   const { runner, cwd, headCommit, executionSource, planFile, revision } = options;
@@ -165,7 +166,7 @@ export async function bindPlanSourceToCommit(options: {
     return { ...empty, ok: false, reason: "该 PLAN 没有已验 executionSource 清单，无法证明此 HEAD 来自已验源码。" };
   if (Object.keys(source.manifest).length > MANIFEST_MAX_FILES)
     return { ...empty, ok: false, reason: `已验清单 ${Object.keys(source.manifest).length} 个文件超出 ${MANIFEST_MAX_FILES} 上限，按未知处理。` };
-  if (source.digest !== planExecutionSourceDigest(source.manifest))
+  if (source.digest !== planExecutionSourceDigest(source.manifest, source.assets))
     return { ...empty, ok: false, reason: "清单摘要自校验失败（PLAN_SOURCE_BASELINE_INVALID 同口径），拒绝绑定。" };
   if (source.manifest[planFile]?.sha256 !== revision)
     return { ...empty, ok: false, reason: "清单内 PLAN 文件哈希与 plan.revision 不一致，提交身份不可信。" };

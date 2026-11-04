@@ -132,7 +132,7 @@ export type QueuedJob = {
 };
 export type QueuedPlan = {
   gpuMemoryEstimates?: PlanGpuMemoryEstimates;
-  executionSource?: { digest: string; manifest: Record<string, { size: number; sha256: string }> };
+  executionSource?: import("../extension/PlanCodeScopeHost").PlanExecutionSource;
   /** 提交时的本机 Git 溯源（分支/HEAD/脏状态/时间；origin 已剥离凭证）。纯本机展示与绑定用，
    * 绝不参与 completionIdentity、job 身份或 Worker 协议。dirty 缺失=当时未知。 */
   gitProvenance?: { schemaVersion?: number; recordedAt?: string; planFile?: string; branch?: string; localCommit?: string; dirty?: boolean; originUrl?: string };

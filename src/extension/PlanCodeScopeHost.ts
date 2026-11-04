@@ -3,7 +3,8 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import type { ProjectFileIndex } from "../features/ProjectFileIndex";
 
-export type PlanExecutionSource = { digest: string; manifest: Record<string, { size: number; sha256: string }> };
+export type PlanAssetRecord = { path: string; allowedRoot: string; target: string; sha256: string; links: { path: string; target: string }[]; size: number };
+export type PlanExecutionSource = { digest: string; manifest: Record<string, { size: number; sha256: string }>; assets?: Record<string, PlanAssetRecord> };
 const resolving = new WeakMap<object, Promise<PlanExecutionSource | undefined>>();
 // Different Plans on one Worker share execution capacity, never their source facts.
 const workerReads = new WeakMap<object, Map<string, Promise<unknown>>>();
@@ -20,8 +21,19 @@ function workerRead<T>(host: object, workerId: string, signal: AbortSignal | und
     task.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
   });
 }
-const digest = (manifest: PlanExecutionSource["manifest"]) => createHash("sha256").update(JSON.stringify(
-  Object.keys(manifest).sort().map(key => [key, { size: manifest[key].size, sha256: manifest[key].sha256 }]))).digest("hex");
+const digest = (manifest: PlanExecutionSource["manifest"], assets?: PlanExecutionSource["assets"]) => {
+  if (assets!==undefined && (!assets || typeof assets!=="object" || Array.isArray(assets))) throw Error("PLAN_ASSET_BASELINE_INVALID");
+  const rows = Object.keys(manifest).sort().map(key => [key, { size: manifest[key].size, sha256: manifest[key].sha256 }]);
+  const values = assets && Object.keys(assets).length ? [rows, Object.keys(assets).sort().map(key => {
+    const value=assets[key];
+    if (!value || value.path!==key || !planManifestPathSafe(key) || !Number.isSafeInteger(value.size) || value.size<0
+      || !/^[a-f0-9]{64}$/.test(value.sha256) || typeof value.allowedRoot!=="string" || typeof value.target!=="string" || !Array.isArray(value.links)
+      || Object.keys(value).sort().join(",")!=="allowedRoot,links,path,sha256,size,target"
+      || value.links.some(link=>!link || typeof link.path!=="string" || typeof link.target!=="string" || Object.keys(link).sort().join(",")!=="path,target")) throw Error("PLAN_ASSET_BASELINE_INVALID");
+    return [key,{path:value.path,allowedRoot:value.allowedRoot,target:value.target,sha256:value.sha256,links:value.links,size:value.size}];
+  })] : rows;
+  return createHash("sha256").update(JSON.stringify(values)).digest("hex");
+};
 /** Single source of truth for manifest self-verification (also consumed by the C3 HEAD binding). */
 export const planExecutionSourceDigest = digest;
 /** Same relative-path safety rules verifyLocalPlanSource enforces before touching the filesystem. */
@@ -61,7 +73,7 @@ function response(plan: any, value: any): PlanExecutionSource {
     || value.planFile !== plan.planFile || value.planRevision !== plan.revision || value.codeFingerprint !== plan.codeFingerprint)
     throw Error(value?.error || "PLAN_SOURCE_QUERY_IDENTITY_MISMATCH");
   const source = value.executionSource;
-  if (!source?.manifest || Object.keys(source.manifest).length > 4096 || source.digest !== digest(source.manifest)
+  if (!source?.manifest || Object.keys(source.manifest).length + Object.keys(source.assets || {}).length > 4096 || source.digest !== digest(source.manifest, source.assets)
     || source.manifest[plan.planFile]?.sha256 !== plan.revision) throw Error("PLAN_SOURCE_BASELINE_INVALID");
   return source;
 }
@@ -83,7 +95,7 @@ async function inspect(h: any, workerId: string, plan: any, source?: PlanExecuti
 /** Frozen source hashes are execution inputs. All destination observations are queried again. */
 export async function resolvePlanExecutionSource(h: any, plan: any, signal?: AbortSignal): Promise<PlanExecutionSource | undefined> {
   if (plan.executionSource) {
-    if (plan.executionSource.digest !== digest(plan.executionSource.manifest)
+    if (plan.executionSource.digest !== digest(plan.executionSource.manifest, plan.executionSource.assets)
       || plan.executionSource.manifest[plan.planFile]?.sha256 !== plan.revision) throw Error("PLAN_SOURCE_BASELINE_INVALID");
     return plan.executionSource;
   }
@@ -109,6 +121,7 @@ export async function verifyWorkerPlanSource(h: any, workerId: string, plan: any
   return source;
 }
 export async function verifyLocalPlanSource(root: string, source: PlanExecutionSource, index?: ProjectFileIndex) {
+  if (source.digest !== digest(source.manifest, source.assets)) throw Error("PLAN_SOURCE_BASELINE_INVALID");
   const load = async () => {
   const canonical = await fs.realpath(root);
   for (const [relative, expected] of Object.entries(source.manifest)) {

@@ -2,7 +2,7 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.329 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.330 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
@@ -414,7 +414,7 @@ Agent 持久队列的 Plan/outputDir 身份、接收回执、旧队列派发及 
 
 手动诊断可使用“同一绝对解释器 -I -S 实际 cluster_agent.py 路径 runtime-check”；所有路径从当前配置/进程读取，不照搬示例机器或端口。此命令只准备受管依赖并返回 JSON，不连接 Agent、不启动训练。Agent /health 的 runtimeDependencies 字段报告实际解释器、sys.prefix、yaml 模块来源、版本、摘要和 safeLoad 能力。能力检查实际解析含锚点、列表及多行命令的 YAML，计划仍使用 yaml.safe_load，不改回正则。
 
-本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.329，再只做依赖核验与提交前检查。
+本轮仅在 Windows 与本机隔离 Linux Worker 环境验证；不是用户服务器验收，也未部署、重启或自动提交用户训练。请在授权的受管更新完成后核对实际 Agent 为 0.5.330，再只做依赖核验与提交前检查。
 
 ## Scheduler 协议探测
 
@@ -436,6 +436,35 @@ Mac 0.5.327 对实际 Scheduler 文件作完整 AST 静态解析，只接受顶�
 
 未知接收对象/文件 API、未知模式或展开的 *args/**kwargs 不会被猜成文件路径或纯输出。错误包含源码文件、行号、依赖链及 source_dependencies.inputs（摘要访问用 integrity）声明指引；已知读取路径依旧收集，动态部分只能在明确声明输入后保守通过，并在 conservative 中说明。动态读取路径沿用同一显式声明契约，不自动改用户 PLAN 或代码。声明的文件仍须存在、位于项目内且通过原字节核验与大小限制。
 
-桌面、包内 Agent/Scheduler 均为 0.5.329，SFTP 沿用 0.2.107。安装和重载后，实际服务器仍须按原受管流程更新配对运行时。本轮只验证隔离依赖核验和提交前分支，不连接服务器、不启动训练，保留全部配置及历史产物。
+桌面、包内 Agent/Scheduler 均为 0.5.330，SFTP 沿用 0.2.107。安装和重载后，实际服务器仍须按原受管流程更新配对运行时。本轮只验证隔离依赖核验和提交前分支，不连接服务器、不启动训练，保留全部配置及历史产物。
 
 0.5.329 在上述契约上补齐展开参数：即使 *args/**kwargs 让模式未知，Path 接收对象或已知第一个路径参数仍须核验，不能因用户另行声明一份输入就漏掉已知文件。只对真正未知的路径依赖显式声明；已知路径缺失、越界或变化继续拒绝。0.5.328 已发布包保留，本次追加更高补丁。
+
+## 共享外部资产
+
+0.5.330 区分模块初始化、引用函数/类和脚本的 __main__ 入口。导入模块不等于运行该模块 main()；未引用函数的内部导入和读取不展开。条件分支不作运行时求值，引用类的成员按保守闭包处理；装饰器可能在定义期调用函数，被装饰体保守纳入并说明原因，因此依赖链仍不是已证明的训练调用栈。解析不了的动态导入、模块成员选择、文件加载器或星号导入须用有限的 source_dependencies.code 声明具体文件；不再扫整个 tools/ 等目录。显式 code 文件的可调用范围保守核验，不能用声明隐藏真实代码；独立 checker 需要它自己的入口/声明，不与训练调用链混同。
+
+普通源码、配置及普通输入仍拒绝软链接并保留原 2 MiB/32 MiB/4096 文件及窗口输入限制。大型预训练资产另用下列逐文件授权，不加入普通源码 manifest、不复制或上传权重、不把整个外部项目加入信任。model_path、tokenizer_path、encoder_assets_dir 的本地目录需要明确枚举资产；不执行第三方加载器猜文件，也不因为某个验收脚本被排除就忽略真实模型目录。
+
+PLAN 中由用户明确批准后填写：
+
+~~~yaml
+source_dependencies:
+  integrity: [artifacts/model_cache/encoder/weights.bin]
+  assets:
+    - path: artifacts/model_cache/encoder/weights.bin
+      allowed_root: /srv/shared/encoder
+      target: /srv/shared/encoder/weights.bin
+      sha256: 替换为可信或用户明确批准的64位小写SHA256
+      approval: user-confirmed
+~~~
+
+path 是当前项目内的逻辑相对路径；allowed_root 是经过明确批准的最小规范资产目录；target 是该文件精确规范绝对路径，不能仍是链接。授权只覆盖这一份文件，不自动允许目录内其他文件。模型配置、text 配置、tokenizer 等所需资源逐文件列出 inputs 和 assets；不能使用目录或通配符。检查工具与训练代码分别声明所需文件。
+
+现场测量摘要不是发布方摘要，也不自动代表用户批准。缺少可信预期值时，只有用户明确同意将当前文件冻结为基准后才能填写 approval: user-confirmed；插件不自动计算后自我授权，不自动修改 PLAN。填写后必须按已有确认流程同步 PLAN，由原始代码凭据和 PLAN revision 锚定授权。
+
+Agent 记录逻辑路径、允许目录、精确解析目标、每级链接及其直接目标、大小和内容摘要。授权目标必须是允许目录下的普通文件；断链、循环、越界、目标/链接绑定变化、摘要不符及读取期间文件身份变化均拒绝。SHA256 按 4 MiB 分块读取，不整文件 read_bytes()，无训练模型加载。资产使用独立 executionSource.assets 凭据并参与 source.digest；每个目标 Worker 在原检查边界重新核验，不继承另一 Worker 的现场成功。不同部署位置须明确配置匹配授权，不能自动换目录或扩大信任。
+
+桌面本机只核实普通源码，不要求 Mac 具有服务器权重路径；Git HEAD 仍只绑定源码 blob，资产授权由同一 PLAN blob 和源摘要锚定，不伪装成 Git 已包含权重。planExternalAssets=1 表示 Agent 支持此契约。更新桌面后仍须通过原受管流程更新配对 runtime；仅安装 VSIX 不改变服务器 Agent。
+
+本轮最终包只做隔离真实函数/接收分支验证，不是用户服务器验收。用户现场测得的 BioMedCLIP 原始文件摘要未获自动授权；tokenizer 逐文件选择仍须按实际加载器或用户批准的有限资源集确认。没有修改配置、链接、权重、科研环境、任务历史或结果，也没有自动提交训练。

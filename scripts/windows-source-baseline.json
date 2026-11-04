@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "37dc88607020e547d4e105e64d6b373a4328998594c05e51e5ca5caa27520988",
+          "localSha256": "9f1a449391d76dd9212f6a41fc0dc433d7a2a625a8977b457e3a9ea533e1c7bb",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.329: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "ed54650a37b8e0fa43adf4b2ca091e79d1db4aa699713ee4210f6957d1d75778",
+          "localSha256": "0be49487f8170c206cf0a55d92159658326a36cf261ec6d06b4cea1c703b3588",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.329: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "f84c8ad5c4a40acd4552facb3cde78047f54bdc3a4e14ddda32f6b7766b418c0",
+          "localSha256": "d3031a1c37e4209f8ff9de242c6b4563dd35b1ce8101fe47d35625f1bcbf4787",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.329: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -420,9 +420,9 @@
         {
           "path": "src/clusterAgentRuntime.legacy.ts",
           "windowsSha256": "4156e98fd2d40e6e5e4e2d21ea75d7e9cf0998415e3530a6d5898cf8571408f5",
-          "localSha256": "7017a6a5575f7466066bbd6e507bfb4dcdc681e9c6f853e11a6c6bae0b807efd",
+          "localSha256": "50d855ab6902bc057afba9b1c1de95515fb7dea06a541ae8bf01b44a0d0fa8c5",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.327: layout-independent Scheduler protocol/implementation/version and paired-file verification, explicit diagnostics and selected-Worker capability invalidation; offline PyYAML retained."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "src/clusterAgentRuntime.ts",
@@ -730,8 +730,9 @@
         {
           "path": "src/extension/PlanCodeScopeHost.ts",
           "windowsSha256": "d9dd0b7c26b22932b969516a7768da164238ceacd1f227cc84ea68bf8f39e98f",
-          "localSha256": "d9dd0b7c26b22932b969516a7768da164238ceacd1f227cc84ea68bf8f39e98f",
-          "classification": "upstream-identical"
+          "localSha256": "a3d1c0fed9d42511839c038d69c176f4879dd09b405ee800d5109cc2247316fe",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "src/extension/PlanRunHost.ts",
@@ -968,9 +969,9 @@
         {
           "path": "src/features/DistributedPlanQueue.ts",
           "windowsSha256": "351130f06726e8114e74f1da84e49f42ca673613ce22ce43334cdda06e8f6955",
-          "localSha256": "22dd1f4dba983f64b6b0bc4a55606b1e14c9a938da74509cdd9da68965c1e60e",
+          "localSha256": "26514535bb7fcd7c3b847d47cc31ddf3be0f23fb347718d01859da3d4b456163",
           "classification": "platform-overlay",
-          "reason": "Darwin exact POSIX identity in Plan matching, latest grouping and selected manual targets only. Preserve current protocol-2 lifecycle, declared outputs, manual retry and historical-attempt read-only guards."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "src/features/DistributedProjectContract.ts",
@@ -1881,8 +1882,9 @@
         {
           "path": "src/project/BranchHeadBinding.ts",
           "windowsSha256": "da9b488a2355b6f1b5150b4e1865994ef3edba6dfecf69770c7b70662fc4ff17",
-          "localSha256": "da9b488a2355b6f1b5150b4e1865994ef3edba6dfecf69770c7b70662fc4ff17",
-          "classification": "upstream-identical"
+          "localSha256": "46b205791e6e0a45e5c2680bc07b5751cb109da994d065fed133af4166089db6",
+          "classification": "platform-overlay",
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "src/project/BranchPlanDispatch.ts",
@@ -2072,9 +2074,9 @@
         {
           "path": "src/runtime/PlanCodeScope.ts",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "localSha256": "00df55dbe5ce8e9236d2de7a3ba0caf2ded9bd4b4ae5ef9857069caa65eecdfb",
+          "localSha256": "a53bf87976c1c5716b1257265ccdfa25a2632a711a64c2bbe4795979cd5645e5",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.329: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "src/runtime/PlanExistingArtifacts.ts",
@@ -2103,9 +2105,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "77da70dcb135ad1f9efd6bbe74e0bed4898d2ca10f0ca080aa519d8f18b88269",
+          "localSha256": "2ba7fd6f55070cfb96166e780a41008776d31c6afb0f620ca95ce7a5e515b79d",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.329: API-specific open path/mode contracts, alias-aware Path origins and lexical shadowing, explicit unresolved dependencies; read/write and integrity checks retained."
+          "reason": "Mac 0.5.330: bounded module/function/main dependency analysis and explicit dynamic code scope; per-file user-confirmed external assets, streaming integrity, desktop/Worker proof preservation."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",

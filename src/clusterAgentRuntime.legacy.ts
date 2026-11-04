@@ -6929,6 +6929,7 @@ def api_capabilities(root, token_required=False, mode="worker_telemetry"):
                 "codeSyncProof": True,
                 "codeSyncProofAsync": True,
                 "planCodeScope": 1,
+                "planExternalAssets": 1,
                 "syncScopeIndex": 1,
                 "idleGpuAdmission": True,
                 "manualDispatch": 1,

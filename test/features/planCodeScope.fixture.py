@@ -33,7 +33,7 @@ def write(relative, text):
     target.write_text(text, encoding="utf-8")
 def sha(relative):
     return hashlib.sha256((root/relative).read_bytes()).hexdigest()
-write("plans/a.yaml", "base_config: configs/a.yaml\nrunner:\n  command: python -m adapter.run -- python train.py\nnaming:\n  output: work_dirs/a\nexpectedResults:\n  - current_metrics.json\n")
+write("plans/a.yaml", "base_config: configs/a.yaml\nrunner:\n  command: python -m adapter.run -- python train.py\nnaming:\n  output: work_dirs/a\nexpectedResults:\n  - current_metrics.json\nsource_dependencies:\n  code: [plugins/one/adapter.py, vendor/impl.py]\n")
 write("configs/a.yaml", "defaults_from: configs/base.yaml\nmethod: one\n")
 write("configs/base.yaml", "batch: 4\n")
 write("adapter/__init__.py", "")
@@ -117,10 +117,10 @@ root.mkdir()
 plan = "experiments/plans/comparison/cross_encoder_completion_bus_cot_lesion_P0_v1.yaml"
 history = "experiments/results/simmlm_original_final_20261026/results.json"
 write(plan, "runner:\n  command: python train.py --config configs/train.json\n")
-write("train.py", "from experiments.cli_config import build\nfrom models.core import train\nimport json\nfrom pathlib import Path\nDATA = Path('inputs/current.json')\njson.loads(DATA.read_text())\n")
-write("experiments/cli_config.py", "from comparison_methods.osiris.study import study\n")
+write("train.py", "from experiments.cli_config import build\nfrom models.core import train\nimport json\nfrom pathlib import Path\nDATA = Path('inputs/current.json')\njson.loads(DATA.read_text())\nbuild()\n")
+write("experiments/cli_config.py", "from comparison_methods.osiris.study import study\ndef build(): return study()\n")
 write("models/core.py", "def train(): raise RuntimeError('must never execute')\n")
-write("comparison_methods/osiris/study.py", "from pathlib import Path\nfrom .final_history import actual_digest as frozen_digest\nROOT = Path(__file__).resolve().parents[2]\ndef verify_definitions():\n    if maintenance_needed:\n        frozen_digest(ROOT / 'comparison_methods/osiris_ovr/design.json')\ndef study(): pass\n")
+write("comparison_methods/osiris/study.py", "from pathlib import Path\nfrom .final_history import actual_digest as frozen_digest\nROOT = Path(__file__).resolve().parents[2]\ndef verify_definitions():\n    if maintenance_needed:\n        frozen_digest(ROOT / 'comparison_methods/osiris_ovr/design.json')\ndef study(): verify_definitions()\n")
 write("comparison_methods/osiris/final_history.py", "import hashlib\nfrom pathlib import Path\ndef actual_digest(path):\n    return hashlib.sha256(Path(path).read_bytes()).hexdigest()\n")
 write("experiments/active_registry.py", "from comparison_methods.simmlm.publication import published\n")
 write("comparison_methods/osiris_ovr/design.json", json.dumps({"definitions_sha256": {"experiments/active_registry.py": sha("experiments/active_registry.py")}}))
@@ -290,7 +290,7 @@ for imports, expression in [
     ("import pathlib as paths", "paths.Path('inputs/中文 空格.txt').open()"),
     ("import pathlib", "pathlib.Path('inputs/中文 空格.txt').read_text()"),
     ("from pathlib import Path as P", "base=P('inputs')\np=base/'中文 空格.txt'\np.open()"),
-    ("", "def reader():\n    from io import open as read_file\n    return read_file('inputs/中文 空格.txt')\n"),
+    ("", "def reader():\n    from io import open as read_file\n    return read_file('inputs/中文 空格.txt')\nreader()\n"),
 ]: open_case(imports + "\n" + expression, reads=True)
 for imports, expression in [
     ("", "open('logs/absent', 'a')"),

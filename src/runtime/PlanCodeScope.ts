@@ -27,7 +27,7 @@ def plan_scope_reason(relative, provenance):
         item = parent
     return " -> ".join(reversed(chain))
 
-def plan_scope_python_access(tree):
+def plan_scope_python_access(tree, module_name=""):
     import ast
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     frames = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
@@ -42,9 +42,12 @@ def plan_scope_python_access(tree):
         if isinstance(node, ast.Import):
             for alias in node.names: bind(frame, alias.asname or alias.name.split(".")[0], alias.name if alias.asname else alias.name.split(".")[0])
         elif isinstance(node, ast.ImportFrom):
-            for alias in node.names: bind(frame, alias.asname or alias.name, (node.module + "." + alias.name) if node.module and not node.level else None)
+            package = module_name.split(".")[:-1]
+            base = package[:len(package)-node.level+1] if node.level else []
+            base += node.module.split(".") if node.module else []
+            for alias in node.names: bind(frame, alias.asname or alias.name, ".".join(base + [alias.name]))
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            bind(frame, node.name, None)
+            bind(frame, node.name, node)
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
             for arg in node.args.posonlyargs + node.args.args + node.args.kwonlyargs: bind(node, arg.arg, None)
             for arg in (node.args.vararg, node.args.kwarg):
@@ -71,16 +74,34 @@ def plan_scope_python_access(tree):
             # Method globals do not resolve through a class's attribute namespace.
             while isinstance(frame, ast.ClassDef): frame = enclosing(frame)
         return None
+    def literal_string(node, seen=()):
+        if node in seen: return None
+        if isinstance(node, ast.Constant) and isinstance(node.value, str): return node.value
+        if isinstance(node, ast.Name):
+            values = [literal_string(value, seen + (node,)) for value in lookup(node) or []]
+            return values[0] if values and all(value == values[0] for value in values) else None
+        return None
     def symbol(node, seen=()):
         if node in seen: return None
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            parts, cursor = [node.name], enclosing(node)
+            while isinstance(cursor, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                parts.insert(0, cursor.name); cursor = enclosing(cursor)
+            prefix = module_name[:-9] if module_name.endswith(".__init__") else module_name
+            return ".".join(([prefix] if prefix else []) + parts)
         if isinstance(node, ast.Name):
             values = lookup(node)
-            if values is None: return {"open": "builtins.open", "str": "builtins.str"}.get(node.id)
+            if values is None: return {"open": "builtins.open", "str": "builtins.str", "getattr": "builtins.getattr", "__import__": "builtins.__import__"}.get(node.id)
             resolved = [value if isinstance(value, str) else symbol(value, seen + (node,)) for value in values]
             return resolved[0] if resolved and all(value == resolved[0] for value in resolved) else None
         if isinstance(node, ast.Attribute):
             base = symbol(node.value, seen + (node,))
             return base + "." + node.attr if base else None
+        if isinstance(node, ast.Call):
+            api = symbol(node.func, seen + (node,))
+            if api in ("importlib.import_module", "builtins.__import__"):
+                argument = node.args[0] if node.args else next((item.value for item in node.keywords if item.arg == "name"), None)
+                return literal_string(argument)
         return None
     def is_path(node, seen=()):
         if node in seen: return False
@@ -97,12 +118,116 @@ def plan_scope_python_access(tree):
         return False
     return symbol, is_path, lookup
 
-def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
+def plan_scope_active_nodes(tree, roots):
+    import ast
+    active = set()
+    def visit(node, class_live=False):
+        active.add(node)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for child in [*node.decorator_list, node.args, *([node.returns] if node.returns else [])]: visit(child)
+            # A decorator may invoke the function while defining it; do not drop
+            # those possible definition-time inputs just because no call is visible.
+            if "*" in roots or node.name in roots or class_live or node.decorator_list:
+                for statement in node.body: visit(statement)
+            return
+        if isinstance(node, ast.ClassDef):
+            for child in [*node.decorator_list, *node.bases, *node.keywords]: visit(child)
+            for statement in node.body: visit(statement, "*" in roots or node.name in roots)
+            return
+        if isinstance(node, ast.If) and isinstance(node.test, ast.Compare) and len(node.test.ops) == 1:
+            left, right = node.test.left, node.test.comparators[0]
+            main_test = (isinstance(left, ast.Name) and left.id == "__name__" and isinstance(right, ast.Constant) and right.value == "__main__") or (isinstance(right, ast.Name) and right.id == "__name__" and isinstance(left, ast.Constant) and left.value == "__main__")
+            if main_test and isinstance(node.test.ops[0], (ast.Eq, ast.NotEq)):
+                visit(node.test)
+                yes = ("__main__" in roots) != isinstance(node.test.ops[0], ast.NotEq)
+                for statement in node.body if yes else node.orelse: visit(statement)
+                return
+        for child in ast.iter_child_nodes(node): visit(child, class_live)
+    visit(tree)
+    return active
+
+def plan_scope_asset_declaration(item):
+    if not isinstance(item, dict) or set(item) != {"path", "allowed_root", "target", "sha256", "approval"} or item.get("approval") != "user-confirmed":
+        raise ValueError("PLAN_ASSET_AUTHORIZATION_REQUIRED: declare each source_dependencies.assets file with user-confirmed approval, allowed_root, target and trusted/user-approved sha256")
+    path = item["path"]
+    if not isinstance(path, str) or not path or path.startswith("/") or ":" in path or "\\" in path or any(ord(char) < 32 for char in path) or any(part in ("", ".", "..") for part in path.split("/")):
+        raise ValueError("PLAN_ASSET_PATH_INVALID: " + str(path))
+    if not isinstance(item["sha256"], str) or not re.fullmatch(r"[a-f0-9]{64}", item["sha256"]): raise ValueError("PLAN_ASSET_DIGEST_REQUIRED: " + path)
+    for key in ("allowed_root", "target"):
+        value = item[key]
+        if not isinstance(value, str) or not os.path.isabs(value) or os.path.normpath(value) != value: raise ValueError("PLAN_ASSET_PATH_INVALID: " + key)
+    allowed, target = item["allowed_root"], item["target"]
+    if allowed in (os.path.abspath(os.sep), os.path.expanduser("~")) or target == allowed or os.path.commonpath([allowed, target]) != allowed:
+        raise ValueError("PLAN_ASSET_UNAUTHORIZED_TARGET: " + path)
+    return dict(item)
+
+def plan_scope_asset_resolve(root, relative):
+    import stat
+    root = os.path.realpath(root)
+    links = []
+    def resolve(path, active=()):
+        path = pathlib.Path(path)
+        current = path.anchor
+        for part in path.parts[1:]:
+            if part == ".": continue
+            if part == "..": current = os.path.dirname(current); continue
+            current = os.path.join(current, part)
+            info = os.lstat(current)
+            if stat.S_ISLNK(info.st_mode):
+                if current in active: raise ValueError("PLAN_ASSET_LINK_LOOP: " + relative)
+                target = os.readlink(current)
+                label = os.path.relpath(current, root).replace(os.sep, "/") if os.path.commonpath([root, current]) == root else current
+                links.append({"path": label, "target": target})
+                destination = target if os.path.isabs(target) else os.path.join(os.path.dirname(current), target)
+                current = resolve(destination, active + (current,))
+        return current
+    try:
+        target = resolve(os.path.join(os.path.realpath(root), relative))
+    except FileNotFoundError as error: raise ValueError("PLAN_ASSET_MISSING_OR_BROKEN_LINK: " + relative) from error
+    except OSError as error: raise ValueError("PLAN_ASSET_RESOLVE_FAILED: " + relative + ": " + str(error)) from error
+    return target, links
+
+def plan_scope_asset_snapshot(root, declaration):
+    import stat
+    item = plan_scope_asset_declaration(declaration)
+    relative, allowed = item["path"], item["allowed_root"]
+    if not os.path.isdir(allowed) or os.path.realpath(allowed) != allowed or os.path.realpath(item["target"]) != item["target"]:
+        raise ValueError("PLAN_ASSET_AUTHORIZED_PATH_CHANGED: " + relative)
+    target, links = plan_scope_asset_resolve(root, relative)
+    if target != item["target"] or os.path.commonpath([allowed, target]) != allowed:
+        raise ValueError("PLAN_ASSET_UNAUTHORIZED_TARGET: " + relative + " -> " + target)
+    info = os.stat(target, follow_symlinks=False)
+    if not stat.S_ISREG(info.st_mode): raise ValueError("PLAN_ASSET_NOT_REGULAR: " + relative)
+    return {"path": relative, "allowedRoot": allowed, "target": target, "sha256": item["sha256"], "links": links, "size": info.st_size}
+
+def plan_scope_verify_asset(root, declaration, expected=None):
+    import stat
+    binding = plan_scope_asset_snapshot(root, declaration)
+    relative, target = binding["path"], binding["target"]
+    if expected is not None and expected != binding: raise ValueError("PLAN_ASSET_BINDING_CHANGED: " + relative)
+    identity = lambda value: (value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns)
+    before = os.stat(target, follow_symlinks=False)
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    digest = hashlib.sha256()
+    with os.fdopen(os.open(target, flags), "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if not stat.S_ISREG(opened.st_mode) or identity(opened) != identity(before): raise ValueError("PLAN_ASSET_REPLACED: " + relative)
+        for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b""): digest.update(chunk)
+        after = os.fstat(stream.fileno())
+    resolved_after, links_after = plan_scope_asset_resolve(root, relative)
+    if identity(opened) != identity(after) or identity(after) != identity(os.stat(target, follow_symlinks=False)) or resolved_after != target or links_after != binding["links"]:
+        raise ValueError("PLAN_ASSET_CHANGED_DURING_READ: " + relative)
+    if digest.hexdigest() != binding["sha256"] or binding["size"] != after.st_size:
+        raise ValueError("PLAN_ASSET_DIGEST_MISMATCH: " + relative)
+    return binding
+
+def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, assets=None):
     import ast
     import itertools
     import shlex
     import yaml
     provenance = provenance if provenance is not None else {}
+    assets = assets if assets is not None else {}
     provenance[plan_file] = ("", "PLAN", "config")
     def fail(code, relative):
         raise ValueError(code + ": " + relative + "; dependency chain: " + plan_scope_reason(relative, provenance))
@@ -118,6 +243,12 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
     config_inputs = set()
     ranks = {"integrity": 0, "input": 1, "code": 2, "config": 2}
     python_contexts, python_access, resources_dirty, input_documents = {}, {}, True, {}
+    python_roots = {}
+    def activate(file, name):
+        roots = python_roots.setdefault(file, set())
+        if name in roots: return False
+        roots.add(name)
+        return True
     declared_outputs = set()
     config_suffixes = (".yaml", ".yml", ".json", ".toml", ".ini", ".cfg")
     def add(relative, required=False, kind="code", parent=None, reason="import"):
@@ -127,12 +258,17 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         if relative in declared_outputs:
             if required: fail("PLAN_SOURCE_OUTPUT_OVERLAP", relative)
             return
+        if relative in assets:
+            if kind not in ("input", "integrity", "config"): fail("PLAN_ASSET_NOT_EXECUTABLE", relative)
+            return
         if plan_scope_generated(relative) and not required:
             return
         try:
             full = plan_scope_path(root, relative)
         except ValueError as exc:
-            fail(str(exc).split(":", 1)[0], relative)
+            code = str(exc).split(":", 1)[0]
+            if code == "PLAN_SOURCE_LINK" and kind in ("input", "integrity", "config"): code += " (shared runtime asset requires source_dependencies.assets authorization)"
+            fail(code, relative)
         if not os.path.isfile(full):
             if required: fail("PLAN_SOURCE_MISSING", relative)
             return
@@ -153,11 +289,11 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
             except ValueError: fail("PLAN_SOURCE_PATH_INVALID", value)
         elif re.match(r"^[a-zA-Z]:", candidate):
             fail("PLAN_SOURCE_PATH_INVALID", value)
-        elif not os.path.isfile(os.path.join(root, candidate)):
+        elif candidate not in assets and not os.path.isfile(os.path.join(root, candidate)):
             candidate = os.path.normpath(os.path.join(os.path.dirname(parent), candidate)).replace(os.sep, "/")
         add(candidate, True, kind, parent, reason)
         return candidate
-    def module(name, parent, reason, required=True):
+    def module(name, parent, reason, required=True, entry=False):
         if not name or not re.fullmatch(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*", name):
             return
         parts = name.split(".")
@@ -167,7 +303,9 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         local = "/".join(parts)
         candidates = [local + ".py", local + "/__init__.py"]
         found = [item for item in candidates if os.path.isfile(os.path.join(root, item))]
-        for item in found: add(item, True, "code", parent, reason)
+        for item in found:
+            add(item, True, "code", parent, reason)
+            if entry: activate(item, "__main__")
         if required and not found and not os.path.isdir(os.path.join(root, local)) and os.path.isdir(os.path.join(root, parts[0])):
             provenance.setdefault(candidates[0], (parent, reason, "code"))
             fail("PLAN_SOURCE_MISSING", candidates[0])
@@ -177,8 +315,9 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         for index, word in enumerate(words):
             if not isinstance(word, str): fail("PLAN_SOURCE_COMMAND_INVALID", parent)
             if word.endswith((".py", ".sh")) and not word.startswith("-"):
-                reference(word, "code", parent, reason)
-            if word == "-m" and index + 1 < len(words): module(words[index + 1], parent, reason)
+                target = reference(word, "code", parent, reason)
+                if target: activate(target, "__main__")
+            if word == "-m" and index + 1 < len(words): module(words[index + 1], parent, reason, entry=True)
             flag, separator, inline = word.partition("=")
             if flag in ("--config", "--cfg", "--config-file", "--config-path", "--input", "--input-file", "--data-manifest"):
                 argument = inline if separator else words[index + 1] if index + 1 < len(words) else ""
@@ -213,6 +352,14 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     if relative == plan_file: declared_outputs.update(scalar_paths(value))
                     continue
                 if key in metadata_keys: continue
+                if key in ("model_path", "tokenizer_path", "encoder_assets_dir") and isinstance(value, str) and value:
+                    local = value if os.path.isabs(value) else os.path.join(root, value)
+                    logical = os.path.relpath(local, root).replace(os.sep, "/")
+                    if os.path.isfile(local): reference(value, "input", relative, "local model asset " + key)
+                    elif os.path.isdir(local) or document.get("local_files_only") is True or any(path.startswith(logical.rstrip("/") + "/") for path in assets):
+                        if not any(path.startswith(logical.rstrip("/") + "/") for path in assets): fail("PLAN_ASSET_DIRECTORY_UNDECLARED (" + key + "; declare exact source_dependencies.assets files)", relative)
+                        conservative.add(relative + ": " + key + " uses explicitly enumerated asset files; third-party directory loader not executed")
+                    continue
                 if key == "command" or key.endswith("_command"):
                     command(value, relative, key)
                 elif key in config_keys or key.endswith(("_config", "_config_file")):
@@ -224,7 +371,78 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     else:
                         for name in scalar_paths(value): module(name, relative, "config import " + key)
                 elif isinstance(value, (dict, list)): config_references(value, relative, active)
+    def python_dependencies():
+        def symbol_target(value, parent, line):
+            if not isinstance(value, str): return False
+            parts = value.split(".")
+            for length in range(len(parts), 0, -1):
+                prefix = "/".join(parts[:length])
+                for candidate in (prefix + ".py", prefix + "/__init__.py"):
+                    if not os.path.isfile(os.path.join(root, candidate)): continue
+                    module(".".join(parts[:length]), parent, "referenced Python symbol line " + str(line))
+                    return activate(candidate, parts[length]) if length < len(parts) else False
+            return False
+        changed = True
+        while changed:
+            changed = False
+            active = {file: plan_scope_active_nodes(tree, python_roots.get(file, set())) for file, (tree, *_) in python_contexts.items()}
+            for file, (tree, evaluate, parents, assignments) in python_contexts.items():
+                symbol = python_access[file][0]
+                package = file.split("/")[:-1]
+                for node in ast.walk(tree):
+                    if node not in active[file]: continue
+                    if isinstance(node, ast.Import):
+                        for alias in node.names: module(alias.name, file, "import line " + str(node.lineno))
+                    elif isinstance(node, ast.ImportFrom):
+                        base = package[:len(package)-node.level+1] if node.level else []
+                        base += node.module.split(".") if node.module else []
+                        module(".".join(base), file, "import line " + str(node.lineno))
+                        for alias in node.names:
+                            if alias.name == "*":
+                                base_path = "/".join(base)
+                                local = [path for path in (base_path + ".py", base_path + "/__init__.py") if os.path.isfile(os.path.join(root, path))]
+                                if not declared["code"] or any(path not in declared["code"] for path in local): fail("PLAN_SOURCE_DYNAMIC_IMPORT_UNDECLARED (star import; declare exact module in source_dependencies.code)", file)
+                                conservative.add(file + ": star import bounded by source_dependencies.code")
+                                continue
+                            module(".".join(base + [alias.name]), file, "import attribute line " + str(node.lineno), False)
+                            if (alias.asname or alias.name) in python_roots.get(file, set()): changed = symbol_target(".".join(base + [alias.name]), file, node.lineno) or changed
+                    elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.decorator_list:
+                        conservative.add(file + ": decorated callable body conservatively inspected line " + str(node.lineno))
+                    elif isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Load):
+                        changed = symbol_target(symbol(node), file, node.lineno) or changed
+                    elif isinstance(node, ast.Call):
+                        changed = symbol_target(symbol(node.func), file, node.lineno) or changed
+                        if symbol(node.func) == "builtins.getattr" and len(node.args) > 1:
+                            base, members = symbol(node.args[0]), evaluate(node.args[1])
+                            if base and members:
+                                for member in members: changed = symbol_target(base + "." + member, file, node.lineno) or changed
+                            elif base:
+                                for candidate in (base.replace(".", "/") + ".py", base.replace(".", "/") + "/__init__.py"):
+                                    if os.path.isfile(os.path.join(root, candidate)) and candidate not in declared["code"]:
+                                        fail("PLAN_SOURCE_DYNAMIC_CALL_UNDECLARED (line " + str(node.lineno) + "; declare source_dependencies.code for " + candidate + ")", file)
+                        api = symbol(node.func)
+                        loaders = {"importlib.import_module": "import_module", "builtins.__import__": "__import__", "importlib.util.spec_from_file_location": "spec_from_file_location"}
+                        if api not in loaders: continue
+                        name = loaders[api]
+                        expression = (node.args[1] if len(node.args)>1 else next((keyword.value for keyword in node.keywords if keyword.arg == "location"), None)) if name == "spec_from_file_location" else node.args[0] if node.args else next((keyword.value for keyword in node.keywords if keyword.arg == "name"), None)
+                        values = evaluate(expression)
+                        if not values:
+                            if not declared["code"]: fail("PLAN_SOURCE_DYNAMIC_IMPORT_UNDECLARED (line " + str(node.lineno) + "; declare source_dependencies.code)", file)
+                            conservative.add(file + ": dynamic code loader line " + str(node.lineno) + " bounded by source_dependencies.code; no directory scan")
+                        for value in values:
+                            if name == "spec_from_file_location":
+                                target = reference(value, "code", file, "dynamic code loader line " + str(node.lineno))
+                                if target not in declared["code"]: fail("PLAN_SOURCE_DYNAMIC_CALL_UNDECLARED (file loader line " + str(node.lineno) + "; declare source_dependencies.code for " + str(target) + ")", file)
+                            else:
+                                module(value, file, "dynamic import line " + str(node.lineno))
+                                if not symbol(node):
+                                    for target in (value.replace(".", "/") + ".py", value.replace(".", "/") + "/__init__.py"):
+                                        if os.path.isfile(os.path.join(root, target)) and target not in declared["code"]: fail("PLAN_SOURCE_DYNAMIC_CALL_UNDECLARED (dynamic module scope line " + str(node.lineno) + "; declare source_dependencies.code for " + target + ")", file)
+            if pending: return None
+        return active
     def resource_reads():
+        active = python_dependencies()
+        if active is None: return
         functions, bindings, effects = {}, {}, {}
         for file, (tree, evaluate, parents, assignments) in python_contexts.items():
             package = file.split("/")[:-1]
@@ -247,6 +465,8 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
             if prefix.endswith(".__init__"): prefix = prefix[:-9]
             qualified[prefix + "." + name] = key
         def called(file, node):
+            canonical = python_access[file][0](node)
+            if canonical in qualified: return qualified[canonical]
             if isinstance(node, ast.Name): value = bindings[file].get(node.id)
             elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
                 base = bindings[file].get(node.value.id)
@@ -318,6 +538,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         for key, function in functions.items():
             effects[key] = set()
             for node in ast.walk(function):
+                if node not in active[key[0]]: continue
                 read = reader(key[0], node)
                 index = parameter(key[0], read[0], function) if read else None
                 if index is not None: effects[key].add((index, read[1], read[2]))
@@ -326,6 +547,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
             changed = False
             for key, function in functions.items():
                 for node in ast.walk(function):
+                    if node not in active[key[0]]: continue
                     if not isinstance(node, ast.Call): continue
                     for index, kind, structured in effects.get(called(key[0], node.func), ()):
                         callee = functions[called(key[0], node.func)]
@@ -335,6 +557,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         unresolved, results, digest_calls = [], {}, {}
         for file, (tree, evaluate, parents, assignments) in python_contexts.items():
             for node in ast.walk(tree):
+                if node not in active[file]: continue
                 if not isinstance(node, ast.Call): continue
                 reads = []
                 read = reader(file, node)
@@ -367,6 +590,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         manifest_calls = set()
         for file, (tree, evaluate, parents, assignments) in python_contexts.items():
             for loop in ast.walk(tree):
+                if loop not in active[file]: continue
                 if not isinstance(loop, ast.For): continue
                 iterator = loop.iter
                 if isinstance(iterator, ast.Call) and isinstance(iterator.func, ast.Attribute) and iterator.func.attr in ("items", "keys"): iterator = iterator.func.value
@@ -397,7 +621,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         relative, kind = pending.pop(0)
         if relative in processed and ranks[processed[relative]] >= ranks[kind]:
             continue
-        if relative not in files and len(files) >= 4096:
+        if relative not in files and len(files) + len(assets) >= 4096:
             fail("PLAN_SOURCE_SCOPE_TOO_LARGE", relative)
         full = plan_scope_path(root, relative)
         if os.path.getsize(full) > 2 * 1024 * 1024:
@@ -424,10 +648,20 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
             document = config_document(text, relative)
             if relative == plan_file and isinstance(document, dict) and "source_dependencies" in document:
                 explicit = document["source_dependencies"]
-                if not isinstance(explicit, dict) or any(key not in declared for key in explicit): fail("PLAN_SOURCE_DECLARATION_INVALID", relative)
+                if not isinstance(explicit, dict) or any(key not in {*declared, "assets"} for key in explicit): fail("PLAN_SOURCE_DECLARATION_INVALID", relative)
+                authorizations = explicit.get("assets", [])
+                if not isinstance(authorizations, list): fail("PLAN_ASSET_AUTHORIZATION_REQUIRED", relative)
+                for value in authorizations:
+                    item = plan_scope_asset_declaration(value)
+                    if item["path"] in assets: fail("PLAN_ASSET_DUPLICATE", item["path"])
+                    assets[item["path"]] = item
+                    provenance[item["path"]] = (relative, "user-confirmed source_dependencies.assets", "input")
                 for group, values in explicit.items():
+                    if group == "assets": continue
                     if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values): fail("PLAN_SOURCE_DECLARATION_INVALID", relative)
                     declared[group].update(values)
+                    if group == "code":
+                        for value in values: activate(value, "*")
                     for value in values: add(value, True, {"code": "code", "configs": "config", "inputs": "input", "integrity": "integrity"}[group], relative, "source_dependencies." + group)
             config_references(document, relative)
         if relative.endswith(".sh"):
@@ -436,7 +670,8 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
         if not relative.endswith(".py"):
             continue
         tree = ast.parse(text, filename=relative)
-        python_access[relative] = plan_scope_python_access(tree)
+        module_name = relative[:-3].replace("/", ".")
+        python_access[relative] = plan_scope_python_access(tree, module_name)
         package = relative.split("/")[:-1]
         assignments = {}
         parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
@@ -484,64 +719,32 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None):
                     return ["".join(v) for v in itertools.product(*choices)]
             return []
         python_contexts[relative] = (tree, strings, parents, assignments)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names: module(alias.name, relative, "import line " + str(node.lineno))
-            elif isinstance(node, ast.ImportFrom):
-                base = package[:len(package)-node.level+1] if node.level else []
-                base += node.module.split(".") if node.module else []
-                module(".".join(base), relative, "import line " + str(node.lineno))
-                for alias in node.names:
-                    if alias.name != "*": module(".".join(base + [alias.name]), relative, "import attribute line " + str(node.lineno), False)
-            elif isinstance(node, ast.Call) and node.args:
-                name = node.func.attr if isinstance(node.func, ast.Attribute) else node.func.id if isinstance(node.func, ast.Name) else ""
-                if name in ("import_module", "__import__", "spec_from_file_location"):
-                    expression = node.args[1] if name == "spec_from_file_location" and len(node.args)>1 else node.args[0]
-                    values = strings(expression)
-                    if not values:
-                        # Token substitution is an approximation, not an explicit missing-file declaration.
-                        values = [value for value in strings(expression, expand=True) if
-                                  os.path.isfile(os.path.join(root, value if name == "spec_from_file_location" else value.replace(".", "/") + ".py")) or
-                                  name != "spec_from_file_location" and os.path.isdir(os.path.join(root, value.replace(".", "/")))]
-                    if values:
-                        for value in values:
-                            if name == "spec_from_file_location":
-                                if os.path.isabs(value): value=os.path.relpath(value,root).replace(os.sep,"/")
-                                add(value, True, "code", relative, "dynamic code loader line " + str(node.lineno))
-                            else: module(value, relative, "dynamic import line " + str(node.lineno))
-                    else:
-                        # An unresolved dynamic loader cannot silently omit executable code.
-                        if declared["code"]:
-                            conservative.add(relative + ": dynamic code loader bounded by source_dependencies.code")
-                            continue
-                        prefix = relative.split("/")[0] + "/" if "/" in relative else ""
-                        conservative.add(relative)
-                        for item in inventory:
-                            if item.startswith(prefix) and item.endswith(".py"): add(item, parent=relative, reason="unresolved dynamic import: conservative code scope")
-                        roots = [prefix.rstrip("/")] if prefix else sorted({p.split("/")[0] for p in inventory if "/" in p and p.endswith(".py")})
-                        if not prefix:
-                            for item in pathlib.Path(root).glob("*.py"): add(item.name, parent=relative, reason="unresolved dynamic import: conservative code scope")
-                        for directory in roots:
-                            for base, dirs, names in os.walk(plan_scope_path(root, directory), followlinks=False):
-                                relbase = os.path.relpath(base, root).replace(os.sep, "/")
-                                dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(base,d)) and not plan_scope_generated(relbase + "/" + d + "/child")]
-                                for name in names:
-                                    if name.endswith(".py"): add(relbase + "/" + name, parent=relative, reason="unresolved dynamic import: conservative code scope")
+    for relative in assets:
+        if relative in declared_outputs: fail("PLAN_SOURCE_OUTPUT_OVERLAP", relative)
     return sorted(files), sorted(conservative)
 
-def plan_source_digest(manifest):
-    return hashlib.sha256(json.dumps([[key, {"size": manifest[key]["size"], "sha256": manifest[key]["sha256"]}] for key in sorted(manifest)], separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
+def plan_source_digest(manifest, assets=None):
+    rows = [[key, {"size": manifest[key]["size"], "sha256": manifest[key]["sha256"]}] for key in sorted(manifest)]
+    if assets:
+        if not isinstance(assets, dict): raise ValueError("PLAN_ASSET_BASELINE_INVALID")
+        for key, value in assets.items():
+            if not isinstance(value, dict) or set(value) != {"path", "allowedRoot", "target", "sha256", "links", "size"} or value.get("path") != key or type(value.get("size")) is not int or value["size"] < 0 or not isinstance(value.get("links"), list): raise ValueError("PLAN_ASSET_BASELINE_INVALID")
+            plan_scope_asset_declaration({"path": key, "allowed_root": value["allowedRoot"], "target": value["target"], "sha256": value["sha256"], "approval": "user-confirmed"})
+            if any(not isinstance(link, dict) or set(link) != {"path", "target"} or not all(isinstance(item, str) for item in link.values()) for link in value["links"]): raise ValueError("PLAN_ASSET_BASELINE_INVALID")
+        rows = [rows, [[key, {field: assets[key][field] for field in ("path", "allowedRoot", "target", "sha256", "links", "size")}] for key in sorted(assets)]]
+    return hashlib.sha256(json.dumps(rows, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
 
 def verify_plan_execution_source(root, row, source):
     manifest = source.get("manifest") if isinstance(source, dict) else None
-    if not isinstance(manifest, dict) or not manifest or len(manifest) > 4096 or plan_source_digest(manifest) != source.get("digest"):
+    asset_records = source.get("assets", {}) if isinstance(source, dict) else {}
+    if not isinstance(manifest, dict) or not manifest or not isinstance(asset_records, dict) or len(manifest) + len(asset_records) > 4096 or plan_source_digest(manifest, asset_records) != source.get("digest"):
         raise ValueError("PLAN_SOURCE_BASELINE_INVALID")
     if len(json.dumps(source, ensure_ascii=False).encode("utf-8")) > 65536:
         raise ValueError("PLAN_SOURCE_WINDOW_INPUT_LIMIT")
     if manifest.get(row["planFile"], {}).get("sha256") != row["planRevision"]:
         raise ValueError("PLAN_SOURCE_REVISION_MISMATCH")
-    provenance = {}
-    paths, conservative = plan_source_scope(root, row["planFile"], row["planRevision"], manifest, provenance)
+    provenance, authorizations = {}, {}
+    paths, conservative = plan_source_scope(root, row["planFile"], row["planRevision"], manifest, provenance, authorizations)
     if set(paths) != set(manifest):
         raise ValueError("PLAN_SOURCE_DEPENDENCIES_CHANGED: " + ", ".join(sorted(set(paths) ^ set(manifest))[:12]))
     for relative in paths:
@@ -549,7 +752,12 @@ def verify_plan_execution_source(root, row, source):
             _code_sync_stat_record(root, relative, manifest[relative], verify_content=True)
         except (ValueError, OSError) as exc:
             raise ValueError(str(exc) + "; dependency chain: " + plan_scope_reason(relative, provenance)) from exc
-    return {"schemaVersion": 1, "files": [{"path": key, **manifest[key]} for key in paths], "fileCount": len(paths), "conservative": conservative}
+    if set(asset_records) != set(authorizations): raise ValueError("PLAN_ASSET_DEPENDENCIES_CHANGED")
+    observations = {}
+    for relative, declaration in authorizations.items():
+        try: observations[relative] = plan_scope_verify_asset(root, declaration, asset_records[relative])
+        except (ValueError, OSError) as error: raise ValueError(str(error) + "; dependency chain: " + plan_scope_reason(relative, provenance)) from error
+    return {"schemaVersion": 1, "files": [{"path": key, **manifest[key]} for key in paths], "fileCount": len(paths), "conservative": conservative, "assetCount": len(observations), "assets": observations}
 
 def inspect_plan_code_scope(root, request):
     row = {key: str(request.get(key) or "") for key in ("projectId", "planFile", "planRevision", "codeFingerprint")}
@@ -564,19 +772,21 @@ def inspect_plan_code_scope(root, request):
             original = next((p.get("executionSource") for p in windows if p.get("projectId") == row["projectId"] and p.get("planFile") == row["planFile"] and p.get("planRevision") == row["planRevision"] and p.get("codeFingerprint") == row["codeFingerprint"] and p.get("executionSource")), None)
             if original:
                 checked = verify_plan_execution_source(root, row, original)
-                return {"ok": True, "compatible": True, "readOnly": True, **row, "executionSource": original, "fileCount": checked["fileCount"], "conservative": checked["conservative"], "queriedAt": now_iso()}
+                return {"ok": True, "compatible": True, "readOnly": True, **row, "executionSource": original, "fileCount": checked["fileCount"], "conservative": checked["conservative"], "assetCount": checked["assetCount"], "assets": checked["assets"], "queriedAt": now_iso()}
             raise ValueError("PLAN_SOURCE_ORIGINAL_HASH_UNAVAILABLE")
         original = {item["path"]: {"size": item["size"], "sha256": item["sha256"]} for item in proof["files"]}
         if durable_code_manifest_digest(original) != row["codeFingerprint"]:
             raise ValueError("PLAN_SOURCE_ORIGINAL_HASH_INVALID")
-        provenance = {}
-        paths, _ = plan_source_scope(root, row["planFile"], row["planRevision"], original, provenance)
+        provenance, authorizations = {}, {}
+        paths, _ = plan_source_scope(root, row["planFile"], row["planRevision"], original, provenance, authorizations)
         if any(key not in original for key in paths):
             missing = next(key for key in paths if key not in original)
             raise ValueError("PLAN_SOURCE_ORIGINAL_DEPENDENCY_MISSING: " + missing + "; dependency chain: " + plan_scope_reason(missing, provenance))
         manifest = {key: original[key] for key in paths}
-        source = {"manifest": manifest, "digest": plan_source_digest(manifest)}
+        records = {key: plan_scope_asset_snapshot(root, declaration) for key, declaration in authorizations.items()}
+        source = {"manifest": manifest, "digest": plan_source_digest(manifest, records)}
+        if records: source["assets"] = records
     checked = verify_plan_execution_source(root, row, source)
     return {"ok": True, "compatible": True, "readOnly": True, **row, "executionSource": source,
-            "fileCount": checked["fileCount"], "conservative": checked["conservative"], "queriedAt": now_iso()}
+            "fileCount": checked["fileCount"], "conservative": checked["conservative"], "assetCount": checked["assetCount"], "assets": checked["assets"], "queriedAt": now_iso()}
 `;
