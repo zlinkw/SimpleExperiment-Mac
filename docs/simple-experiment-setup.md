@@ -2,11 +2,25 @@
 
 面向 Apple Silicon、macOS 26 及以上的 VS Code 用户。快速入口见 [README](../README.md)，文件传输配置见 [SimpleSFTP Mac 使用说明](https://github.com/zlinkw/SimpleSFTP-Mac/blob/master/readme.md)。
 
-本文适用于 **Experiment Mac 0.5.332 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
+本文适用于 **Experiment Mac 0.5.333 / SimpleSFTP Mac 0.2.107**，公开安装包以 [Mac preview Releases](https://github.com/zlinkw/SimpleExperiment-Mac/releases) 为准，不代表 Windows 后续版本的能力。0.5.325 修复 PLAN 依赖收集将未消费的发布元数据及历史结果纳入源码的问题。包内 Agent 同为 0.5.325，部署端也须通过原受管流程更新后才能应用；本轮不代为部署或提交训练。依赖分类和动态声明见 [项目契约](plugin-project-contract.md#plan-依赖核验)。保留 0.5.324 修复的桌面发现 globs 误发给 Agent 的规则同步错误，保留 0.5.323 的冻结上下文修复，保持 preview，真机尚未验收。
 
 **当前 preview 已交付独立安装、配套更新、系统 OpenSSH 一键启动隧道（Termius 为手动备份）、项目与 runtime 上传及 Agent/tmux 指引，共同业务已同步至 Windows 0.5.440；运行结果仍须以实际检查为准。** M5 真机更新、独立认证传输和单台/多台 Worker 尚未验收，macOS 真机隧道验收同样尚未执行。Mac 不使用 Xshell 会话文件；“准备项目与 Agent”需确认后上传，隧道可一键启动或在 Termius 手动备份，Agent 启动由共同受管生命周期协议保障。
 
 完整实验接入契约见 [AI 最小接入指南](experiment-integration.md)、[MultiModal 实践](multimodal-integration-best-practice.md) 和 [项目契约](plugin-project-contract.md)。面板 **设置 → 最小实验接入指南 · 交给 AI** 可打开指南或复制完整接入任务；这是本机复制，不会自动启动训练或传输。配置参考见 [共同设置字段](configuration-reference.md)。Hub 已退役，所有当前操作只使用明确启用的一台或多台 Worker，旧控制节点字段不补出目标。
+
+## 源码快照的完整性核验
+
+0.5.333 补齐源码快照的集合身份与访问用途分析。对实际调用且符合受限静态协议的完整备份实现，按源码中的字面量根目录、显式文件、后缀及排除规则只读枚举真实成员；不执行项目函数。所有快照源文件均作为 integrity 加入原始已确认代码清单及本 PLAN 内容凭据，每次核验重枚举，集合增删或字节变化拒绝。源摘要和 copy2 的源读取保留核验；复制后副本与旧快照完成标记属于受原算法保护的输出核验，不要求启动前存在。未调用的备份函数不扩大扫描；未知算法、额外动态读取或未确认的集合不能凭无关 inputs/integrity 列表放行。有限 Path 集合、循环项类型与实际值传播同时修复，不信任返回类型注解。保留源码链接拒绝、JSON 完整性文件不递归当训练配置、原大小/数量上限及真实 Worker 错误。桌面与包内 runtime 为 0.5.333，SFTP 沿用 0.2.107；Mac 真机及用户 Agent 仍未验收，未启动备份或训练。
+
+本版支持的受限协议包括：字面量目录/显式文件生成 Path 根集合、目录 rglob 全枚举且先拒绝链接、按目录片段/后缀/显式文件筛选并排序去重、逐源文件路径和字节计算 SHA256、内容寻址的快照目录、copy2 后重算摘要并比较，以及旧快照 .complete 标记与同一源摘要的比较。插件对完整函数及相关选择/根函数的 AST 结构一致性做检查，支持函数/变量/常量和导入别名重命名，不按模块文件名、服务器、用户或绝对目录特判。根目录常量取项目源码；当前实现中 cfg 未参与选择，因此不读取或猜测科研配置。不同的 cfg 动态选择、额外读取、被改写的复制/复用验证或导入重绑定不能冒充该协议，报告 PLAN_SOURCE_SNAPSHOT_UNSUPPORTED；并非通用 Python 执行器。
+
+**当前识别出的完整快照不需要新增 source_dependencies.inputs 或手写 integrity 列表。** 插件从确认的选择逻辑生成准确成员集，逐个以 integrity 用途绑定原始已同步源码凭据，加入 executionSource.manifest/source.digest。新增/缺失成员使依赖集合比较失败，内容变化使原始 SHA256 核验失败；未进入原始已确认同步清单的文件明确报 ORIGINAL_DEPENDENCY_MISSING，不把服务器现状静默认作可信版本、不自动补传。即使旧快照存在，也不省略本次源文件核验；原有启动边界复验保留。整体并非文件系统原子快照，项目自身在复制期间和旧快照复用时的摘要核验仍保留。
+
+用途是 integrity 而非 inputs：这些字节仅用于源码复现及完整性，不因此执行 Python 或展开 YAML/JSON 里的配置继承、发布元数据和历史结果引用。实际训练另外显式使用的代码/配置仍按其真实用途分析，不能借快照分类漏掉。对无法静态证明的其他集合，本版不提供“填一个文件即可授权整个目录”的兜底，也不建议用空列表或不完整清单压掉错误；需补充可核实的完整选择/清单契约后再接入。
+
+复制后的 target.read_bytes() 与复用时 complete.read_text() 仅在完整受支持协议被证明、相应函数当前确实被引用时归为输出核验。它们不作为启动前输入，不创建占位文件，不读取或重写用户已有快照。真正复制、复制后摘要和旧标记是否匹配仍由项目原机制执行；本轮静态回归不等于实际复制/复用验收。普通 shutil.copy2 的源文件也须核验，未知接收者、混合类型集合和仅有 list[Path] 注解不获放行。
+
+目录枚举不跟随软链接；源文件、源目录、根目录、断链、循环以及被排除目录中的链接均明确拒绝，保留项目原“先拒绝链接，再筛选”顺序。排除结果/缓存不意味着扫描其 Python 依赖；这里只读取选择过程必需的目录元数据。仅导入未调用的快照工具不触发根目录枚举。核验过程只读，进度来自实际枚举/读取；不调用 backup_code、_source_roots、_selected_files，也不启动训练。
 
 ## Path 重赋值与文件访问
 

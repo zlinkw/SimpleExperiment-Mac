@@ -27,7 +27,228 @@ def plan_scope_reason(relative, provenance):
         item = parent
     return " -> ".join(reversed(chain))
 
-def plan_scope_python_access(tree, module_name=""):
+def plan_scope_snapshot_protocol(tree):
+    """Recognise the complete reviewed snapshot protocol, never execute its functions."""
+    import ast
+    import copy
+    reference = ast.parse(r'''"""Store one immutable source snapshot per plan and source revision."""
+
+from __future__ import annotations
+
+import hashlib
+import shutil
+import time
+from pathlib import Path
+
+
+_COMMON_DIRS = (
+    "data", "models", "losses", "metrics", "optimizers", "trainers", "utils",
+    "experiments", "configs", "tools", "comparison_methods",
+)
+_COMMON_FILES = ("train.py", "test.py", "environment.yml", ".vscode/settings.json",
+                 "AGENTS.md", "README.md", "docs/project-constraints.md",
+                 "docs/experiment-protocol.md", "docs/plugin-project-contract.md",
+                 "docs/comparison-integration.md", "docs/research-boundaries.md",
+                 "docs/baseline-lock.json")
+_IGNORED_DIRS = {"__pycache__", "_repos", ".runtime"}
+
+
+def _source_roots(cfg) -> list[Path]:
+    roots = [Path(name) for name in _COMMON_DIRS if Path(name).is_dir()]
+    roots.extend(Path(name) for name in _COMMON_FILES if Path(name).is_file())
+    return roots
+
+
+def _selected_files(roots: list[Path]) -> list[Path]:
+    files = []
+    for root in roots:
+        candidates = root.rglob("*") if root.is_dir() else (root,)
+        for path in candidates:
+            if path.is_symlink():
+                raise ValueError(f"代码备份不允许符号链接：{path}")
+            if (path.is_file() and not any(part in _IGNORED_DIRS for part in path.parts)
+                    and (path.suffix in {".py", ".yaml"} or path.as_posix() in _COMMON_FILES)
+                    and not any(part in {"results", "runs", "masks"} for part in path.parts)):
+                files.append(path)
+    return sorted(set(files), key=lambda path: path.as_posix())
+
+
+def _plan_root(save_dir: str | Path) -> Path:
+    output = Path(save_dir).resolve()
+    for candidate in (output, *output.parents):
+        if candidate.parent.name == "work_dirs":
+            return candidate
+    return output
+
+
+def backup_code(save_dir: str | Path, cfg) -> Path:
+    """Reuse a complete plan snapshot; different source bytes get a new revision."""
+    files = _selected_files(_source_roots(cfg))
+    digest = hashlib.sha256()
+    for path in files:
+        digest.update(path.as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    snapshot = _plan_root(save_dir) / "code_backup" / digest.hexdigest()[:24]
+    complete = snapshot / ".complete"
+    snapshot.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot.mkdir()
+        owner = True
+    except FileExistsError:
+        owner = False
+    if owner:
+        copied_digest = hashlib.sha256()
+        for source in files:
+            target = snapshot / source
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            copied_digest.update(source.as_posix().encode("utf-8"))
+            copied_digest.update(b"\0")
+            copied_digest.update(target.read_bytes())
+            copied_digest.update(b"\0")
+        if copied_digest.digest() != digest.digest():
+            raise RuntimeError(f"源码在备份期间发生变化：{snapshot}")
+        complete.write_text(digest.hexdigest() + "\n", encoding="utf-8")
+    else:
+        deadline = time.monotonic() + 120
+        while not complete.is_file():
+            if time.monotonic() >= deadline:
+                raise TimeoutError(f"代码备份未完成：{snapshot}")
+            time.sleep(0.1)
+        if complete.read_text(encoding="utf-8").strip() != digest.hexdigest():
+            raise RuntimeError(f"代码备份指纹不一致：{snapshot}")
+    Path(save_dir, "code_backup_ref.txt").write_text(str(snapshot) + "\n", encoding="utf-8")
+    return snapshot
+''')
+    def imports(module):
+        result, bound = {}, {}
+        for node in module.body:
+            if isinstance(node, ast.Import):
+                for item in node.names:
+                    name = item.asname or item.name
+                    result[name] = item.name; bound[name] = bound.get(name,0)+1
+            elif isinstance(node, ast.ImportFrom) and not node.level:
+                for item in node.names:
+                    name = item.asname or item.name
+                    result[name] = (node.module or '') + '.' + item.name; bound[name] = bound.get(name,0)+1
+            elif isinstance(node,(ast.Assign,ast.AnnAssign,ast.AugAssign)):
+                for target in node.targets if isinstance(node,ast.Assign) else [node.target]:
+                    if isinstance(target,ast.Name): bound[target.id] = bound.get(target.id,0)+1
+            elif isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):
+                bound[node.name] = bound.get(node.name,0)+1
+        return {name:value for name,value in result.items() if bound[name]==1}
+    def normalise(function, aliases, roles, bound=()):
+        value = copy.deepcopy(function)
+        local = {}
+        for arg in [*value.args.posonlyargs, *value.args.args, *value.args.kwonlyargs]: local.setdefault(arg.arg, '_local_' + str(len(local)))
+        for node in ast.walk(value):
+            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store): local.setdefault(node.id, '_local_' + str(len(local)))
+            if isinstance(node, ast.arg): local.setdefault(node.arg, '_local_' + str(len(local)))
+        class Canonical(ast.NodeTransformer):
+            def visit_Name(self, node):
+                node.id = local.get(node.id, roles.get(node.id, '_import_' + aliases[node.id].replace('.', '_') if node.id in aliases else '_bound_' + node.id if node.id in bound else node.id))
+                return node
+            def visit_arg(self, node):
+                node.arg = local[node.arg]; node.annotation = None
+                return node
+            def visit_FunctionDef(self, node):
+                node.name = '_function'; node.returns = None; node.type_comment = None
+                if node.body and isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value, ast.Constant) and isinstance(node.body[0].value.value, str): node.body = node.body[1:]
+                return self.generic_visit(node)
+        return ast.dump(Canonical().visit(value), include_attributes=False), local
+    reference_functions = {node.name: node for node in reference.body if isinstance(node, ast.FunctionDef)}
+    reference_aliases = imports(reference)
+    functions = {node.name: node for node in tree.body if isinstance(node, ast.FunctionDef)}
+    candidates = []
+    for entry in functions.values():
+        nodes = list(ast.walk(entry))
+        methods = {node.func.attr for node in nodes if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute)}
+        collectors = [node for node in nodes if isinstance(node,ast.Assign) and isinstance(node.value,ast.Call) and isinstance(node.value.func,ast.Name) and node.value.func.id in functions and len(node.value.args)==1 and isinstance(node.value.args[0],ast.Call) and isinstance(node.value.args[0].func,ast.Name) and node.value.args[0].func.id in functions]
+        if collectors and {'copy2','read_bytes','hexdigest'} <= methods: candidates.append(entry)
+    def unsupported(): return [{'entry':entry,'unsupported':True} for entry in candidates]
+    constants, counts, bound = {}, {}, set()
+    for node in tree.body:
+        if isinstance(node,ast.FunctionDef): counts[node.name] = counts.get(node.name,0)+1; bound.add(node.name)
+        elif isinstance(node,(ast.Import,ast.ImportFrom)):
+            bound.update(item.asname or item.name.split('.')[0] for item in node.names)
+        elif isinstance(node,ast.Expr) and isinstance(node.value,ast.Constant) and isinstance(node.value.value,str): pass
+        elif not isinstance(node,ast.Assign): return unsupported()
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            bound.add(node.targets[0].id)
+            counts[node.targets[0].id] = counts.get(node.targets[0].id,0)+1
+            try: constants[node.targets[0].id] = ast.literal_eval(node.value)
+            except (ValueError, TypeError): return unsupported()
+        elif isinstance(node,ast.Assign): return unsupported()
+    records = []
+    for entry in functions.values():
+        body = entry.body[1:] if entry.body and isinstance(entry.body[0], ast.Expr) and isinstance(entry.body[0].value, ast.Constant) and isinstance(entry.body[0].value.value, str) else entry.body
+        # A nested collector call is necessary, but never sufficient to authorise reads.
+        if not body or not isinstance(body[0], ast.Assign): continue
+        collection = body[0].value
+        if not isinstance(collection, ast.Call) or not isinstance(collection.func, ast.Name) or len(collection.args) != 1: continue
+        root_call = collection.args[0]
+        if not isinstance(root_call, ast.Call) or not isinstance(root_call.func, ast.Name): continue
+        selected, roots = functions.get(collection.func.id), functions.get(root_call.func.id)
+        if selected is None or roots is None: continue
+        root_body = roots.body
+        if len(root_body) != 3 or not isinstance(root_body[0], ast.Assign) or not isinstance(root_body[0].value, ast.ListComp): continue
+        dirs = root_body[0].value.generators[0].iter
+        second = root_body[1]
+        if not isinstance(dirs, ast.Name) or not isinstance(second, ast.Expr) or not isinstance(second.value, ast.Call) or len(second.value.args) != 1 or not isinstance(second.value.args[0], ast.GeneratorExp): continue
+        files = second.value.args[0].generators[0].iter
+        if not isinstance(files, ast.Name): continue
+        ignored = {node.id for node in ast.walk(selected) if isinstance(node, ast.Name) and node.id in constants and node.id != files.id}
+        other_helpers = {node.func.id for node in ast.walk(entry) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in functions} - {selected.name, roots.name}
+        if len(ignored) != 1 or len(other_helpers) != 1: continue
+        ignored_name, plan_root = next(iter(ignored)), functions[next(iter(other_helpers))]
+        roles = {entry.name:'backup_code', selected.name:'_selected_files', roots.name:'_source_roots', plan_root.name:'_plan_root', dirs.id:'_COMMON_DIRS', files.id:'_COMMON_FILES', ignored_name:'_IGNORED_DIRS'}
+        if any(counts.get(name)!=1 for name in roles): continue
+        aliases = imports(tree)
+        if any(normalise(actual, aliases, roles, bound)[0] != normalise(reference_functions[name], reference_aliases, {})[0] for name, actual in [('backup_code',entry),('_selected_files',selected),('_source_roots',roots),('_plan_root',plan_root)]): continue
+        values = [constants.get(dirs.id), constants.get(files.id), constants.get(ignored_name)]
+        if any(not isinstance(items, (tuple,list,set)) or any(not isinstance(item,str) or not item for item in items) for items in values): continue
+        local = normalise(entry, aliases, roles, bound)[1]
+        reference_local = normalise(reference_functions['backup_code'], reference_aliases, {})[1]
+        actual_name = {role: next(key for key,value in local.items() if value == reference_local[role]) for role in ('path','source','target','complete')}
+        integrity, generated = set(), set()
+        for node in ast.walk(entry):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Name): continue
+            if node.func.attr == 'read_bytes' and node.func.value.id == actual_name['path']: integrity.add(node)
+            if node.func.attr in ('read_bytes','read_text') and node.func.value.id in (actual_name['target'],actual_name['complete']): generated.add(node)
+            if node.func.attr == 'copy2': integrity.add(node)
+        records.append({'entry':entry,'collection':collection,'integrity':integrity,'generated':generated,'directories':list(values[0]),'files':list(values[1]),'ignored':set(values[2])})
+    records.extend({'entry':entry,'unsupported':True} for entry in candidates if not any(record['entry'] is entry for record in records))
+    return records
+
+def plan_scope_snapshot_members(root, protocol, progress=None):
+    """Enumerate the recognised selector exactly; metadata only, no project execution."""
+    selected, visited = set(), 0
+    def consider(relative, full):
+        if os.path.islink(full): raise ValueError('PLAN_SOURCE_LINK: ' + relative + '; source snapshot selector rejects links before filtering')
+        parts = relative.split('/')
+        if os.path.isfile(full) and not any(part in protocol['ignored'] for part in parts) and (pathlib.Path(relative).suffix in ('.py','.yaml') or relative in protocol['files']) and not any(part in ('results','runs','masks') for part in parts): selected.add(relative)
+    def scan(relative, full):
+        nonlocal visited
+        plan_scope_path(root,relative)
+        with os.scandir(full) as stream:
+            for entry in stream:
+                child = relative + '/' + entry.name
+                consider(child,entry.path)
+                visited += 1
+                if progress: progress({'phase':'dependencyAnalysisMs','path':child,'snapshotEntries':visited})
+                if entry.is_dir(follow_symlinks=False): scan(child,entry.path)
+        plan_scope_path(root,relative)
+    for relative in protocol['directories']:
+        full = plan_scope_path(root,relative)
+        if os.path.isdir(full): scan(relative,full)
+    for relative in protocol['files']:
+        full = plan_scope_path(root,relative)
+        if os.path.isfile(full): consider(relative,full)
+    return sorted(selected)
+
+def plan_scope_python_access(tree, module_name="", path_collections=()):
     import ast
     parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
     frames = (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
@@ -61,7 +282,7 @@ def plan_scope_python_access(tree, module_name=""):
                     if isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store): bind(frame, child.id, node.value if isinstance(target, ast.Name) and not isinstance(node, ast.AugAssign) else None)
         elif isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)):
             for child in ast.walk(node.target):
-                if isinstance(child, ast.Name): bind(frame, child.id, None)
+                if isinstance(child, ast.Name): bind(frame, child.id, node if isinstance(node.target, ast.Name) else None)
         elif isinstance(node, (ast.With, ast.AsyncWith)):
             for item in node.items:
                 if item.optional_vars is not None:
@@ -195,7 +416,7 @@ def plan_scope_python_access(tree, module_name=""):
             return ".".join(([prefix] if prefix else []) + parts)
         if isinstance(node, ast.Name):
             values = lookup(node)
-            if values is None: return {"open": "builtins.open", "str": "builtins.str", "getattr": "builtins.getattr", "__import__": "builtins.__import__"}.get(node.id)
+            if values is None: return {"open": "builtins.open", "str": "builtins.str", "getattr": "builtins.getattr", "__import__": "builtins.__import__", "sorted":"builtins.sorted", "set":"builtins.set", "list":"builtins.list", "tuple":"builtins.tuple"}.get(node.id)
             resolved = [value if isinstance(value, str) else symbol(value, seen + (node,)) for value in values]
             return resolved[0] if resolved and all(value == resolved[0] for value in resolved) else None
         if isinstance(node, ast.Attribute):
@@ -207,9 +428,23 @@ def plan_scope_python_access(tree, module_name=""):
                 argument = node.args[0] if node.args else next((item.value for item in node.keywords if item.arg == "name"), None)
                 return literal_string(argument)
         return None
+    def path_items(node, seen=()):
+        if node in seen: return False
+        if node in path_collections: return True
+        seen = seen + (node,)
+        if isinstance(node, ast.Name):
+            values = lookup(node)
+            return bool(values) and all(path_items(value, seen) for value in values)
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)): return bool(node.elts) and all(is_path(item, seen) for item in node.elts)
+        if isinstance(node, (ast.ListComp, ast.SetComp, ast.GeneratorExp)): return is_path(node.elt, seen)
+        if isinstance(node, ast.Call):
+            if symbol(node.func) in ('builtins.sorted','builtins.set','builtins.list','builtins.tuple') and node.args: return path_items(node.args[0],seen)
+            return isinstance(node.func,ast.Attribute) and node.func.attr in ('glob','rglob','iterdir') and is_path(node.func.value,seen)
+        return False
     def is_path(node, seen=()):
         if node in seen: return False
         seen = seen + (node,)
+        if isinstance(node, (ast.For, ast.AsyncFor, ast.comprehension)): return path_items(node.iter,seen)
         if isinstance(node, ast.Name):
             values = lookup(node)
             return bool(values) and all(is_path(value, seen) for value in values)
@@ -362,6 +597,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
     config_inputs = set()
     ranks = {"integrity": 0, "input": 1, "code": 2, "config": 2}
     python_contexts, python_access, resources_dirty, input_documents = {}, {}, True, {}
+    snapshot_collections, snapshot_integrity, snapshot_generated, snapshot_protocols = {}, {}, {}, {}
     python_roots = {}
     def activate(file, name):
         roots = python_roots.setdefault(file, set())
@@ -563,6 +799,22 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
     def resource_reads():
         active = python_dependencies()
         if active is None: return
+        for file, protocols in snapshot_protocols.items():
+            for protocol in protocols:
+                body = protocol['entry'].body
+                first = body[1] if body and isinstance(body[0],ast.Expr) and isinstance(body[0].value,ast.Constant) and isinstance(body[0].value.value,str) else body[0]
+                if first not in active[file]: continue
+                if protocol.get('unsupported'):
+                    fail('PLAN_SOURCE_SNAPSHOT_UNSUPPORTED (complete selector/copy/reuse protocol not proven; inputs/integrity lists cannot authorise an unknown snapshot algorithm)',file)
+                if protocol['collection'] in snapshot_collections[file]: continue
+                try: members = plan_scope_snapshot_members(root,protocol,progress)
+                except (ValueError,OSError) as error:
+                    raise ValueError(str(error) + '; dependency chain: ' + plan_scope_reason(file,provenance)) from error
+                snapshot_collections[file][protocol['collection']] = members
+                snapshot_integrity[file].update(protocol['integrity']); snapshot_generated[file].update(protocol['generated'])
+                for member in members: add(member,True,'integrity',file,'source snapshot member (complete selector, byte-only)')
+                conservative.add(file + ': recognised live source snapshot protocol; exact membership re-enumerated, generated copy/marker reads are output verification, project functions not executed')
+        if pending: return
         functions, effects = {}, {}
         for file, (tree, evaluate, parents, assignments) in python_contexts.items():
             for node in tree.body:
@@ -596,21 +848,34 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
                 if name in ("pathlib.Path", "pathlib.PosixPath", "pathlib.WindowsPath", "builtins.str") and node.args: return parameter(file, node.args[0], function, seen)
             return None
         unknown_access = {}
+        def hashing(file, node, seen=()):
+            if node in seen: return False
+            if isinstance(node,ast.Name):
+                values=python_access[file][2](node)
+                return bool(values) and all(hashing(file,value,seen+(node,)) for value in values)
+            return isinstance(node,ast.Call) and python_access[file][0](node.func) in ('hashlib.sha256','hashlib.sha512','hashlib.sha1','hashlib.md5','hashlib.blake2b','hashlib.blake2s')
         def reader(file, node):
             if not isinstance(node, ast.Call): return None
+            if node in snapshot_generated.get(file,()): return None
             if called(file, node.func) in functions: return None
             name = node.func.id if isinstance(node.func, ast.Name) else node.func.attr if isinstance(node.func, ast.Attribute) else ""
             symbol, is_path = python_access[file][:2]
+            if symbol(node.func) == 'shutil.copy2':
+                source = node.args[0] if node.args else next((item.value for item in node.keywords if item.arg == 'src'),None)
+                if source is None: fail('PLAN_SOURCE_COPY_SOURCE_REQUIRED',file)
+                return source, 'integrity' if node in snapshot_integrity.get(file,()) else 'input', False
             file_open = symbol(node.func) in ("builtins.open", "io.open")
             if not file_open and name not in ("open", "read_text", "read_bytes", "load_config", "read_config", "fromfile", "read_json", "read_csv"): return None
             bound = isinstance(node.func, ast.Attribute) and name in ("open", "read_text", "read_bytes") and is_path(node.func.value)
             evaluate, parents = python_contexts[file][1:3]
             kind, structured, cursor = ("config" if name in ("load_config", "read_config", "fromfile") else "input"), name in ("read_json", "read_csv"), node
+            if node in snapshot_integrity.get(file,()): kind='integrity'
             while cursor in parents and not isinstance(parents[cursor], ast.FunctionDef):
                 cursor = parents[cursor]
                 if isinstance(cursor, ast.Call):
                     outer = cursor.func.attr if isinstance(cursor.func, ast.Attribute) else cursor.func.id if isinstance(cursor.func, ast.Name) else ""
                     if outer in ("sha256", "sha512", "sha1", "md5", "blake2b", "blake2s"): kind = "integrity"
+                    if outer == 'update' and isinstance(cursor.func,ast.Attribute) and hashing(file,cursor.func.value): kind = 'integrity'
                     if outer in ("load", "loads", "safe_load"): structured = True
             if not file_open and name in ("open", "read_text", "read_bytes") and not bound:
                 unknown_access[(file, node.lineno)] = (kind, "unresolved file API/receiver")
@@ -776,7 +1041,9 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
             continue
         tree = ast.parse(text, filename=relative)
         module_name = relative[:-3].replace("/", ".")
-        python_access[relative] = plan_scope_python_access(tree, module_name)
+        protocols = plan_scope_snapshot_protocol(tree)
+        snapshot_collections[relative], snapshot_integrity[relative], snapshot_generated[relative], snapshot_protocols[relative] = {}, set(), set(), protocols
+        python_access[relative] = plan_scope_python_access(tree, module_name, [protocol['collection'] for protocol in protocols if not protocol.get('unsupported')])
         package = relative.split("/")[:-1]
         assignments = {}
         parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
@@ -787,6 +1054,7 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
             elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
                 assignments.setdefault(node.target.id, []).append(node.value)
         def strings(node, seen=(), source_file=relative, names=assignments, expand=False):
+            if isinstance(node,(ast.For,ast.AsyncFor,ast.comprehension)): return collection_values(node.iter,seen,source_file)
             if isinstance(node, ast.Constant) and isinstance(node.value, str): return [node.value]
             if isinstance(node, ast.Name):
                 if node.id == "__file__": return [source_file]
@@ -822,6 +1090,19 @@ def plan_source_scope(root, plan_file, revision, inventory=(), provenance=None, 
                 choices = [[part.value] if isinstance(part, ast.Constant) else strings(part.value,seen,source_file,names,expand) or (sorted(tokens) if expand else []) for part in node.values]
                 if len([part for part in node.values if not isinstance(part, ast.Constant)]) <= 1:
                     return ["".join(v) for v in itertools.product(*choices)]
+            return []
+        def collection_values(node, seen=(), source_file=relative):
+            if node in seen: return []
+            if node in snapshot_collections[source_file]: return snapshot_collections[source_file][node]
+            seen = seen + (node,)
+            if isinstance(node,ast.Name):
+                values = python_access[source_file][2](node) or []
+                choices = [collection_values(value,seen,source_file) for value in values]
+                return [item for group in choices for item in group] if choices and all(choices) else []
+            if isinstance(node,(ast.List,ast.Tuple,ast.Set)):
+                choices = [python_contexts[source_file][1](item,seen,source_file) for item in node.elts]
+                return [item for group in choices for item in group] if choices and all(choices) else []
+            if isinstance(node,ast.Call) and python_access[source_file][0](node.func) in ('builtins.sorted','builtins.set','builtins.list','builtins.tuple') and node.args: return collection_values(node.args[0],seen,source_file)
             return []
         python_contexts[relative] = (tree, strings, parents, assignments)
     for relative in assets:

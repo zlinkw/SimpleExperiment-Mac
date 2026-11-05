@@ -33,9 +33,9 @@
         {
           "path": "README.md",
           "windowsSha256": "f75037e2f7e0e0bb095ef2c115afbcaedbde2f6abe51b23bcb5808adf9a75459",
-          "localSha256": "76c76c972f38011dd6ccf33d37d362e4f8bb6b685ea285c57b4f7e093e6c01bf",
+          "localSha256": "96a96e2d0003bf3f031883063e159b9edc24b914819d77374a2391ecc625e518",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
+          "reason": "Mac 0.5.333: live whole source snapshot protocol, exact selector membership bound as integrity, Path collections/loops, copy-source checks and proven output verification; no project execution or unknown-read bypass."
         },
         {
           "path": "docs/configuration-reference.md",
@@ -103,16 +103,16 @@
         {
           "path": "package-lock.json",
           "windowsSha256": "02c35003a119b44ad6b1b87dc611c80d32a2fff26e5f39dec4f7acd29a3825a2",
-          "localSha256": "18e68f1dd805c2098c6256a1ddeca91421ac3b9acc4d47321d99d9068382f513",
+          "localSha256": "f4b596276591f40d2e699d20b052e14e37d7cd38fc77d7db4f59781a5621cb3d",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
+          "reason": "Mac 0.5.333: live whole source snapshot protocol, exact selector membership bound as integrity, Path collections/loops, copy-source checks and proven output verification; no project execution or unknown-read bypass."
         },
         {
           "path": "package.json",
           "windowsSha256": "ad0aa6610b74c061482220e062abfd11134b769095ac29404f81471863d17063",
-          "localSha256": "81d66ac46d58e46d823280e0b7661b5a0cc5aff932b9b4c8d7ebce691bfde2a3",
+          "localSha256": "1e69e5045f88bc2060c13ea5cba1116034e6f19ad4133e44a7ea08f3356f6a61",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
+          "reason": "Mac 0.5.333: live whole source snapshot protocol, exact selector membership bound as integrity, Path collections/loops, copy-source checks and proven output verification; no project execution or unknown-read bypass."
         },
         {
           "path": "scripts/mac-release-prepare.js",
@@ -2074,9 +2074,9 @@
         {
           "path": "src/runtime/PlanCodeScope.ts",
           "windowsSha256": "d5dee1af8103ffe3b7a2a0451f577837b235d4109d98ee050804209e636c03d0",
-          "localSha256": "a542a9128f43d1c9e8e096220e1b871d0c9b2484f5f258504da2612d9054dddd",
+          "localSha256": "561c353f11b8dd0ce0b587007652ca076236eb6ed6d6d0dc320bcd6133be53f8",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
+          "reason": "Mac 0.5.333: live whole source snapshot protocol, exact selector membership bound as integrity, Path collections/loops, copy-source checks and proven output verification; no project execution or unknown-read bypass."
         },
         {
           "path": "src/runtime/PlanExistingArtifacts.ts",
@@ -2105,9 +2105,9 @@
         {
           "path": "src/runtime/RuntimeManifest.ts",
           "windowsSha256": "0a13a8e4c3180532c76aa9825ac8f03e344a9e1af90b5053dc9f240b69401855",
-          "localSha256": "5619cba76182ecb63f3146ac3ad31f6a3deeb9ad39d3ea5aec5c57477eb98066",
+          "localSha256": "816d0c0870b8647818e1c6ce3336f0fd344bd247a7a4ef372520724f47e9e0b3",
           "classification": "platform-overlay",
-          "reason": "Mac 0.5.332: use-position reaching definitions for Path receiver types, concrete values and parameter inputs; branch/loop/exception uncertainty retained, no file API bypass."
+          "reason": "Mac 0.5.333: live whole source snapshot protocol, exact selector membership bound as integrity, Path collections/loops, copy-source checks and proven output verification; no project execution or unknown-read bypass."
         },
         {
           "path": "src/runtime/SyncScopeIndex.ts",
